@@ -44,6 +44,7 @@ interface ResolvedRoom {
  * Key tag resolution routes for cleaning station workflow.
  * Supports batch scanning of QR/NFC tags.
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function keysRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/keys/resolve - Resolve key tag codes to room information

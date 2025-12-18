@@ -48,6 +48,7 @@ declare module 'fastify' {
 /**
  * Cleaning workflow routes for batch room status updates.
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/cleaning/batch - Batch update room statuses

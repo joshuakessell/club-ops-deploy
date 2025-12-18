@@ -15,6 +15,7 @@ interface LockerCountRow {
 /**
  * Inventory routes for room and locker availability.
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/inventory/summary - Get inventory summary by status and type
@@ -61,8 +62,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           byType[roomType] = { clean: 0, cleaning: 0, dirty: 0, total: 0 };
         }
 
-        byType[roomType]![status] = count;
-        byType[roomType]!.total += count;
+        byType[roomType][status] = count;
+        byType[roomType].total += count;
 
         if (status === 'clean') overallClean += count;
         else if (status === 'cleaning') overallCleaning += count;

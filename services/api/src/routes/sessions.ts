@@ -56,6 +56,7 @@ declare module 'fastify' {
  * Session management routes.
  * Handles check-in/check-out operations.
  */
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/sessions - Create a new check-in session
