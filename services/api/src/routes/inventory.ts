@@ -148,5 +148,58 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(500).send({ error: 'Internal server error' });
     }
   });
+
+  /**
+   * GET /v1/inventory/rooms - Get all rooms with details
+   * 
+   * Returns all rooms with status, last change, assigned member, and cleaner info.
+   */
+  fastify.get('/v1/inventory/rooms', async (_request, reply: FastifyReply) => {
+    try {
+      const result = await query<{
+        id: string;
+        number: string;
+        type: string;
+        status: string;
+        floor: number;
+        last_status_change: Date;
+        assigned_to: string | null;
+        assigned_member_name: string | null;
+        override_flag: boolean;
+      }>(
+        `SELECT 
+          r.id,
+          r.number,
+          r.type,
+          r.status,
+          r.floor,
+          r.last_status_change,
+          r.assigned_to,
+          m.name as assigned_member_name,
+          r.override_flag
+         FROM rooms r
+         LEFT JOIN members m ON r.assigned_to = m.id
+         WHERE r.type != 'LOCKER'
+         ORDER BY r.number`
+      );
+
+      const rooms = result.rows.map(row => ({
+        id: row.id,
+        number: row.number,
+        type: row.type,
+        status: row.status,
+        floor: row.floor,
+        lastStatusChange: row.last_status_change,
+        assignedTo: row.assigned_to || undefined,
+        assignedMemberName: row.assigned_member_name || undefined,
+        overrideFlag: row.override_flag,
+      }));
+
+      return reply.send({ rooms });
+    } catch (error) {
+      fastify.log.error(error, 'Failed to fetch rooms');
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
 }
 

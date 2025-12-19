@@ -35,32 +35,82 @@ export type WebSocketPayload =
   | SessionUpdatedPayload;
 
 /**
+ * Client metadata for lane-scoped broadcasts.
+ */
+interface ClientMetadata {
+  socket: WebSocket;
+  lane?: string;
+  subscribedEvents?: Set<WebSocketEventType>;
+}
+
+/**
  * WebSocket broadcaster for sending real-time updates to connected clients.
  * Follows AGENTS.md requirement: "Realtime is push-based"
+ * Supports lane-scoped broadcasts for SESSION_UPDATED events.
  */
 export interface Broadcaster {
-  addClient(id: string, socket: WebSocket): void;
+  addClient(id: string, socket: WebSocket, lane?: string): void;
   removeClient(id: string): void;
+  updateClientLane(id: string, lane?: string): void;
+  subscribeClient(id: string, events: WebSocketEventType[]): void;
   broadcast<T>(event: WebSocketEvent<T>): void;
+  broadcastToLane<T>(event: WebSocketEvent<T>, lane: string): void;
   broadcastRoomStatusChanged(payload: RoomStatusChangedPayload): void;
   broadcastInventoryUpdated(payload: InventoryUpdatedPayload): void;
   broadcastRoomAssigned(payload: RoomAssignedPayload): void;
   broadcastRoomReleased(payload: RoomReleasedPayload): void;
-  broadcastSessionUpdated(payload: SessionUpdatedPayload): void;
+  broadcastSessionUpdated(payload: SessionUpdatedPayload, lane: string): void;
   getClientCount(): number;
 }
 
 export function createBroadcaster(): Broadcaster {
-  const clients = new Map<string, WebSocket>();
+  const clients = new Map<string, ClientMetadata>();
 
   function broadcast<T>(event: WebSocketEvent<T>): void {
     const message = JSON.stringify(event);
     const failedClients: string[] = [];
 
-    for (const [id, socket] of clients) {
+    for (const [id, metadata] of clients) {
+      // Check if client is subscribed to this event type
+      if (metadata.subscribedEvents && !metadata.subscribedEvents.has(event.type)) {
+        continue;
+      }
+
       try {
-        if (socket.readyState === socket.OPEN) {
-          socket.send(message);
+        if (metadata.socket.readyState === metadata.socket.OPEN) {
+          metadata.socket.send(message);
+        } else {
+          failedClients.push(id);
+        }
+      } catch {
+        failedClients.push(id);
+      }
+    }
+
+    // Clean up failed clients
+    for (const id of failedClients) {
+      clients.delete(id);
+    }
+  }
+
+  function broadcastToLane<T>(event: WebSocketEvent<T>, lane: string): void {
+    const message = JSON.stringify(event);
+    const failedClients: string[] = [];
+
+    for (const [id, metadata] of clients) {
+      // Only send to clients in the specified lane
+      if (metadata.lane !== lane) {
+        continue;
+      }
+
+      // Check if client is subscribed to this event type
+      if (metadata.subscribedEvents && !metadata.subscribedEvents.has(event.type)) {
+        continue;
+      }
+
+      try {
+        if (metadata.socket.readyState === metadata.socket.OPEN) {
+          metadata.socket.send(message);
         } else {
           failedClients.push(id);
         }
@@ -84,15 +134,31 @@ export function createBroadcaster(): Broadcaster {
   }
 
   return {
-    addClient(id: string, socket: WebSocket) {
-      clients.set(id, socket);
+    addClient(id: string, socket: WebSocket, lane?: string) {
+      clients.set(id, { socket, lane, subscribedEvents: undefined });
     },
 
     removeClient(id: string) {
       clients.delete(id);
     },
 
+    updateClientLane(id: string, lane?: string) {
+      const metadata = clients.get(id);
+      if (metadata) {
+        metadata.lane = lane;
+      }
+    },
+
+    subscribeClient(id: string, events: WebSocketEventType[]) {
+      const metadata = clients.get(id);
+      if (metadata) {
+        metadata.subscribedEvents = new Set(events);
+      }
+    },
+
     broadcast,
+
+    broadcastToLane,
 
     /**
      * Broadcast a room status change event.
@@ -126,8 +192,12 @@ export function createBroadcaster(): Broadcaster {
       broadcast(createEvent('ROOM_RELEASED', payload));
     },
 
-    broadcastSessionUpdated(payload: SessionUpdatedPayload) {
-      broadcast(createEvent('SESSION_UPDATED', payload));
+    /**
+     * Broadcast a session updated event to a specific lane.
+     * Called when a lane session is created or updated.
+     */
+    broadcastSessionUpdated(payload: SessionUpdatedPayload, lane: string) {
+      broadcastToLane(createEvent('SESSION_UPDATED', payload), lane);
     },
 
     getClientCount() {

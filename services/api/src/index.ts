@@ -4,11 +4,16 @@ import websocket from '@fastify/websocket';
 import type { WebSocket } from 'ws';
 
 import { 
-  healthRoutes, 
-  sessionRoutes, 
+  healthRoutes,
+  authRoutes,
+  sessionRoutes,
+  laneRoutes,
   inventoryRoutes, 
   keysRoutes, 
-  cleaningRoutes 
+  cleaningRoutes,
+  adminRoutes,
+  agreementRoutes,
+  upgradeRoutes
 } from './routes/index.js';
 import { createBroadcaster, type Broadcaster } from './websocket/broadcaster.js';
 import { initializeDatabase, closeDatabase } from './db/index.js';
@@ -66,18 +71,29 @@ async function main() {
 
   // Register routes
   await fastify.register(healthRoutes);
+  await fastify.register(authRoutes);
   await fastify.register(sessionRoutes);
+  await fastify.register(laneRoutes);
   await fastify.register(inventoryRoutes);
   await fastify.register(keysRoutes);
   await fastify.register(cleaningRoutes);
+  await fastify.register(adminRoutes);
+  await fastify.register(agreementRoutes);
+  await fastify.register(upgradeRoutes);
 
   // WebSocket endpoint
-  fastify.get('/ws', { websocket: true }, (connection, _req) => {
+  fastify.get('/ws', { websocket: true }, (connection, req) => {
     const clientId = crypto.randomUUID();
     const socket = connection.socket as unknown as WebSocket;
-    fastify.log.info({ clientId }, 'WebSocket client connected');
-
-    broadcaster.addClient(clientId, socket);
+    
+    // Extract lane from query string if present
+    const url = req.url || '';
+    const urlObj = new URL(url, `http://${req.headers.host || 'localhost'}`);
+    const lane = urlObj.searchParams.get('lane') || undefined;
+    
+    fastify.log.info({ clientId, lane }, 'WebSocket client connected');
+    
+    broadcaster.addClient(clientId, socket, lane);
 
     connection.on('message', (message: Buffer) => {
       try {
@@ -87,8 +103,13 @@ async function main() {
         // Handle subscription messages
         if (data.type === 'subscribe' && Array.isArray(data.events)) {
           fastify.log.info({ clientId, events: data.events }, 'Client subscribed to events');
-          // In a more advanced implementation, we could track subscriptions per client
-          // For now, all clients receive all broadcasts
+          broadcaster.subscribeClient(clientId, data.events as string[]);
+        }
+
+        // Handle lane update
+        if (data.type === 'setLane' && typeof data.lane === 'string') {
+          fastify.log.info({ clientId, lane: data.lane }, 'Client lane updated');
+          broadcaster.updateClientLane(clientId, data.lane);
         }
       } catch {
         fastify.log.warn({ clientId }, 'Received invalid JSON from client');

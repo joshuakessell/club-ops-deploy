@@ -152,6 +152,57 @@ pnpm test
 pnpm --filter @club-ops/shared test:watch
 ```
 
+### Local Test Flow: Agreement and Upgrade
+
+To test the agreement signing and upgrade disclaimer flows:
+
+1. **Seed the database** (includes active agreement):
+   ```bash
+   pnpm --filter @club-ops/api seed
+   ```
+
+2. **Start development servers**:
+   ```bash
+   pnpm dev
+   ```
+
+3. **Create a check-in**:
+   - Use the employee-register app to scan ID and membership
+   - Create a session with a room assignment
+   - The customer-kiosk will show the rental options
+
+4. **Customer signs placeholder agreement**:
+   - After selecting a rental option, the agreement screen appears
+   - The agreement shows a blank scroll area (no text yet)
+   - Customer must:
+     - Check "I agree" checkbox
+     - Sign on the signature pad
+     - Click "Submit"
+   - The screen cannot be bypassed - "Signature required to continue" is displayed
+
+5. **Optionally join waitlist** (shows upgrade disclaimer):
+   - Customer clicks "Join Waitlist for Upgrade"
+   - Upgrade disclaimer modal appears with:
+     - "Upgrade availability and time estimates are not guarantees."
+     - "Upgrade fees are charged only if an upgrade becomes available and you choose to accept it."
+     - "Upgrades do not extend your stay. Your checkout time remains the same as your original 6-hour check-in."
+     - "The full upgrade fee applies even if limited time remains."
+   - Customer clicks "OK" to acknowledge
+   - Disclaimer acknowledgment is logged to audit_log
+
+6. **Perform upgrade later** (shows disclaimer OK; no agreement re-sign):
+   - When upgrade becomes available, customer accepts it
+   - Upgrade disclaimer modal appears again
+   - Customer acknowledges with "OK"
+   - **No agreement re-signing required** (upgrades don't require agreement)
+   - checkout_at remains unchanged (original check-in + 6 hours)
+
+**Key Points:**
+- Agreement is required for initial check-in and renewal (6-hour blocks)
+- Agreement is NOT required for upgrades
+- Upgrade disclaimer is shown only when joining waitlist or accepting upgrade
+- checkout_at never changes on upgrade (always checkin_at + 6 hours)
+
 ## 📝 License
 
 Private - Internal use only.

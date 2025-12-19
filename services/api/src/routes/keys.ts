@@ -1,16 +1,17 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { query } from '../db/index.js';
+import { requireAuth } from '../auth/middleware.js';
 import { RoomStatus } from '@club-ops/shared';
 
 /**
- * Schema for resolving key tags to rooms.
+ * Schema for resolving a single key tag to room information.
  */
-const ResolveKeysSchema = z.object({
-  tagCodes: z.array(z.string().min(1)).min(1).max(50), // Max 50 tags per request
+const ResolveKeySchema = z.object({
+  token: z.string().min(1),
 });
 
-type ResolveKeysInput = z.infer<typeof ResolveKeysSchema>;
+type ResolveKeyInput = z.infer<typeof ResolveKeySchema>;
 
 interface KeyTagRow {
   id: string;
@@ -47,20 +48,21 @@ interface ResolvedRoom {
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function keysRoutes(fastify: FastifyInstance): Promise<void> {
   /**
-   * POST /v1/keys/resolve - Resolve key tag codes to room information
+   * POST /v1/keys/resolve - Resolve a single scan token to room information
    * 
-   * Used by cleaning stations to batch-scan room tags and determine
-   * which rooms are being processed. Returns room statuses for
-   * determining the primary action or showing resolution UI.
+   * Used by cleaning stations to resolve individual QR/NFC tags.
+   * Returns room information for a single token.
    */
-  fastify.post('/v1/keys/resolve', async (
-    request: FastifyRequest<{ Body: ResolveKeysInput }>,
+  fastify.post('/v1/keys/resolve', {
+    preHandler: [requireAuth],
+  }, async (
+    request: FastifyRequest<{ Body: ResolveKeyInput }>,
     reply: FastifyReply
   ) => {
-    let body: ResolveKeysInput;
+    let body: ResolveKeyInput;
 
     try {
-      body = ResolveKeysSchema.parse(request.body);
+      body = ResolveKeySchema.parse(request.body);
     } catch (error) {
       return reply.status(400).send({
         error: 'Validation failed',
@@ -69,104 +71,53 @@ export async function keysRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
-      // Find all matching key tags
+      // Find matching key tag
       const tagResult = await query<KeyTagRow>(
         `SELECT id, room_id, tag_code, tag_type, is_active
          FROM key_tags
-         WHERE tag_code = ANY($1) AND is_active = true`,
-        [body.tagCodes]
+         WHERE tag_code = $1 AND is_active = true`,
+        [body.token]
       );
 
       if (tagResult.rows.length === 0) {
         return reply.status(404).send({
-          error: 'No active key tags found',
-          notFound: body.tagCodes,
+          error: 'Key tag not found or inactive',
+          token: body.token,
         });
       }
 
-      // Get room IDs from found tags
-      const roomIds = tagResult.rows.map(tag => tag.room_id);
-      const tagByRoomId = new Map(tagResult.rows.map(tag => [tag.room_id, tag]));
+      const tag = tagResult.rows[0]!;
 
       // Fetch room details
       const roomResult = await query<RoomRow>(
         `SELECT id, number, type, status, floor, override_flag
          FROM rooms
-         WHERE id = ANY($1)`,
-        [roomIds]
+         WHERE id = $1`,
+        [tag.room_id]
       );
 
-      // Build resolved rooms array
-      const resolvedRooms: ResolvedRoom[] = [];
-      const foundTagCodes = new Set<string>();
-
-      for (const room of roomResult.rows) {
-        const tag = tagByRoomId.get(room.id);
-        if (tag) {
-          foundTagCodes.add(tag.tag_code);
-          resolvedRooms.push({
-            roomId: room.id,
-            roomNumber: room.number,
-            roomType: room.type,
-            status: room.status as RoomStatus,
-            floor: room.floor,
-            tagCode: tag.tag_code,
-            tagType: tag.tag_type,
-            overrideFlag: room.override_flag,
-          });
-        }
+      if (roomResult.rows.length === 0) {
+        return reply.status(404).send({
+          error: 'Room not found',
+          token: body.token,
+        });
       }
 
-      // Identify tags that weren't found
-      const notFound = body.tagCodes.filter(code => !foundTagCodes.has(code));
+      const room = roomResult.rows[0]!;
 
-      // Analyze statuses for primary action determination
-      const statusCounts: Record<string, number> = {
-        DIRTY: 0,
-        CLEANING: 0,
-        CLEAN: 0,
-      };
-
-      for (const room of resolvedRooms) {
-        statusCounts[room.status] = (statusCounts[room.status] || 0) + 1;
-      }
-
-      // Determine if all rooms have the same status (for single-action button)
-      const uniqueStatuses = Object.entries(statusCounts)
-        .filter(([, count]) => count > 0)
-        .map(([status]) => status);
-
-      const isMixedStatus = uniqueStatuses.length > 1;
-
-      // Determine primary action based on scanned statuses
-      let primaryAction: string | null = null;
-      if (!isMixedStatus && uniqueStatuses.length === 1) {
-        const status = uniqueStatuses[0];
-        // Primary action is the next step in the cleaning flow
-        switch (status) {
-          case 'DIRTY':
-            primaryAction = 'START_CLEANING'; // DIRTY → CLEANING
-            break;
-          case 'CLEANING':
-            primaryAction = 'MARK_CLEAN'; // CLEANING → CLEAN
-            break;
-          case 'CLEAN':
-            primaryAction = 'MARK_DIRTY'; // CLEAN → DIRTY (room used)
-            break;
-        }
-      }
-
+      // Return single room info with all queried fields
       return reply.send({
-        rooms: resolvedRooms,
-        statusCounts,
-        isMixedStatus,
-        primaryAction,
-        notFound: notFound.length > 0 ? notFound : undefined,
-        totalResolved: resolvedRooms.length,
-        totalRequested: body.tagCodes.length,
+        roomId: room.id,
+        roomNumber: room.number,
+        roomType: room.type,
+        status: room.status as RoomStatus,
+        floor: room.floor,
+        overrideFlag: room.override_flag,
+        tagCode: tag.tag_code,
+        tagType: tag.tag_type,
       });
     } catch (error) {
-      fastify.log.error(error, 'Failed to resolve key tags');
+      fastify.log.error(error, 'Failed to resolve key tag');
       return reply.status(500).send({ error: 'Internal server error' });
     }
   });

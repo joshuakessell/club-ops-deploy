@@ -1,5 +1,6 @@
 import { query, initializeDatabase, closeDatabase } from './index.js';
 import { RoomStatus, RoomType } from '@club-ops/shared';
+import { hashQrToken, hashPin } from '../auth/utils.js';
 
 interface RoomSeed {
   number: string;
@@ -76,6 +77,79 @@ async function seed() {
     seedRooms.forEach(room => {
       console.log(`  - ${room.tagCode} → Room ${room.number} (${room.status})`);
     });
+
+    // Seed staff users
+    console.log('\nSeeding staff users...');
+    
+    const staffUsers = [
+      {
+        name: 'John Staff',
+        role: 'STAFF',
+        qrToken: 'STAFF-001',
+        pin: '1234',
+      },
+      {
+        name: 'Jane Admin',
+        role: 'ADMIN',
+        qrToken: 'ADMIN-001',
+        pin: '5678',
+      },
+      {
+        name: 'Bob Cleaner',
+        role: 'STAFF',
+        qrToken: 'STAFF-002',
+        pin: '9999',
+      },
+    ];
+
+    // Check if staff already exist
+    const existingStaff = await query<{ count: string }>(
+      'SELECT COUNT(*) as count FROM staff'
+    );
+    
+    if (parseInt(existingStaff.rows[0]?.count || '0', 10) > 0) {
+      console.log('⚠️  Staff users already exist. Skipping staff seed.');
+    } else {
+      for (const staff of staffUsers) {
+        const qrTokenHash = hashQrToken(staff.qrToken);
+        const pinHash = await hashPin(staff.pin);
+
+        await query(
+          `INSERT INTO staff (name, role, qr_token_hash, pin_hash, active)
+           VALUES ($1, $2, $3, $4, true)`,
+          [staff.name, staff.role, qrTokenHash, pinHash]
+        );
+
+        console.log(`✓ Seeded staff: ${staff.name} (${staff.role})`);
+      }
+
+      console.log('\n✅ Staff users seeded successfully');
+      console.log('\nStaff login credentials for testing:');
+      staffUsers.forEach(staff => {
+        console.log(`  - ${staff.name} (${staff.role}):`);
+        console.log(`    QR Token: ${staff.qrToken}`);
+        console.log(`    PIN: ${staff.pin}`);
+      });
+    }
+
+    // Seed active agreement
+    console.log('\nSeeding active agreement...');
+    
+    const existingAgreement = await query<{ count: string }>(
+      'SELECT COUNT(*) as count FROM agreements WHERE active = true'
+    );
+    
+    if (parseInt(existingAgreement.rows[0]?.count || '0', 10) > 0) {
+      console.log('⚠️  Active agreement already exists. Skipping agreement seed.');
+    } else {
+      await query(
+        `INSERT INTO agreements (version, title, body_text, active)
+         VALUES ($1, $2, $3, true)`,
+        ['placeholder-v1', 'Club Agreement', '']
+      );
+      console.log('✓ Seeded active agreement: placeholder-v1');
+      console.log('✅ Agreement seeded successfully');
+    }
 
   } catch (error) {
     console.error('❌ Seed failed:', error);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
 import { RoomStatus, isAdjacentTransition } from '@club-ops/shared';
+import { LockScreen, type StaffSession } from './LockScreen';
 
 interface ResolvedRoom {
   roomId: string;
@@ -26,11 +27,25 @@ interface OverrideModalState {
   roomNumber: string;
   fromStatus: RoomStatus;
   toStatus: RoomStatus;
+  rowIndex: number;
 }
 
 const API_BASE = '/api';
 
 function App() {
+  // Session state - stored in memory only, not localStorage
+  const [session, setSession] = useState<StaffSession | null>(null);
+  
+  const deviceId = useState(() => {
+    // Generate or retrieve device ID
+    let id = localStorage.getItem('device_id');
+    if (!id) {
+      id = `device-${crypto.randomUUID()}`;
+      localStorage.setItem('device_id', id);
+    }
+    return id;
+  })[0];
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
@@ -48,7 +63,27 @@ function App() {
   const [overrideReason, setOverrideReason] = useState('');
   const [resolveStatuses, setResolveStatuses] = useState<Record<string, RoomStatus>>({});
   const [overrideReasons, setOverrideReasons] = useState<Record<string, string>>({});
-  const [staffId] = useState('staff-1'); // TODO: Get from auth context
+
+  const handleLogin = (newSession: StaffSession) => {
+    setSession(newSession);
+  };
+
+  const handleLogout = () => {
+    setSession(null);
+    setScannedItems([]);
+    setViewMode('scan');
+  };
+
+  // Show lock screen if not authenticated
+  if (!session) {
+    return (
+      <LockScreen
+        onLogin={handleLogin}
+        deviceType="kiosk"
+        deviceId={deviceId}
+      />
+    );
+  }
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -153,6 +188,10 @@ function App() {
   }, []);
 
   const handleScan = useCallback(async (tagCode: string) => {
+    if (!session?.sessionToken) {
+      return;
+    }
+
     // Deduplicate: check if already scanned
     if (scannedItemsRef.current.some((item) => item.tagCode === tagCode)) {
       return;
@@ -163,17 +202,30 @@ function App() {
     try {
       const response = await fetch(`${API_BASE}/v1/keys/resolve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tagCodes: [tagCode] }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ token: tagCode }),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to resolve key: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to resolve key: ${response.statusText}`);
       }
 
       const data = await response.json();
-      if (data.rooms && data.rooms.length > 0) {
-        const room = data.rooms[0] as ResolvedRoom;
+      if (data.roomId && data.roomNumber && data.status) {
+        const room: ResolvedRoom = {
+          roomId: data.roomId,
+          roomNumber: data.roomNumber,
+          roomType: data.roomType || 'STANDARD', // Fallback for backwards compatibility
+          status: data.status as RoomStatus,
+          floor: data.floor ?? 0, // Fallback for backwards compatibility
+          tagCode: data.tagCode || tagCode, // Use API value if available, otherwise use scanned tagCode
+          tagType: data.tagType || 'QR', // Fallback for backwards compatibility
+          overrideFlag: data.overrideFlag ?? false, // Fallback for backwards compatibility
+        };
         setScannedItems((prev) => [
           ...prev,
           {
@@ -189,7 +241,7 @@ function App() {
     } finally {
       setIsProcessing(false);
     }
-  }, []);
+  }, [session]);
 
   // Keep handleScan ref in sync
   useEffect(() => {
@@ -229,56 +281,78 @@ function App() {
   };
 
   const handleBeginCleaning = async () => {
-    if (scannedItems.length === 0) return;
+    if (scannedItems.length === 0 || !session?.sessionToken) return;
 
     setIsProcessing(true);
     try {
       const response = await fetch(`${API_BASE}/v1/cleaning/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
         body: JSON.stringify({
-          roomIds: scannedItems.map((item) => item.room.roomId),
-          targetStatus: RoomStatus.CLEANING,
-          staffId,
-          override: false,
+          deviceId,
+          scanned: scannedItems.map((item) => ({
+            token: item.tagCode,
+            roomId: item.room.roomId,
+            fromStatus: item.room.status,
+            toStatus: RoomStatus.CLEANING,
+            override: false,
+          })),
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to update rooms: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to update rooms: ${response.statusText}`);
       }
 
       clearAll();
+      // Return to lock screen after successful action
+      handleLogout();
     } catch (error) {
       console.error('Failed to begin cleaning:', error);
+      alert(error instanceof Error ? error.message : 'Failed to begin cleaning');
     } finally {
       setIsProcessing(false);
     }
   };
 
   const handleFinishCleaning = async () => {
-    if (scannedItems.length === 0) return;
+    if (scannedItems.length === 0 || !session?.sessionToken) return;
 
     setIsProcessing(true);
     try {
       const response = await fetch(`${API_BASE}/v1/cleaning/batch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
         body: JSON.stringify({
-          roomIds: scannedItems.map((item) => item.room.roomId),
-          targetStatus: RoomStatus.CLEAN,
-          staffId,
-          override: false,
+          deviceId,
+          scanned: scannedItems.map((item) => ({
+            token: item.tagCode,
+            roomId: item.room.roomId,
+            fromStatus: item.room.status,
+            toStatus: RoomStatus.CLEAN,
+            override: false,
+          })),
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to update rooms: ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to update rooms: ${response.statusText}`);
       }
 
       clearAll();
+      // Return to lock screen after successful action
+      handleLogout();
     } catch (error) {
       console.error('Failed to finish cleaning:', error);
+      alert(error instanceof Error ? error.message : 'Failed to finish cleaning');
     } finally {
       setIsProcessing(false);
     }
@@ -294,7 +368,7 @@ function App() {
     setViewMode('resolve');
   };
 
-  const handleStatusChange = (roomId: string, newStatus: RoomStatus) => {
+  const handleStatusChange = (roomId: string, newStatus: RoomStatus, rowIndex: number) => {
     const currentItem = scannedItems.find((item) => item.room.roomId === roomId);
     if (!currentItem) return;
 
@@ -307,6 +381,7 @@ function App() {
         roomNumber: currentItem.room.roomNumber,
         fromStatus: currentStatus,
         toStatus: newStatus,
+        rowIndex,
       });
       return;
     }
@@ -336,20 +411,19 @@ function App() {
   };
 
   const saveResolvedStatuses = async () => {
+    if (!session?.sessionToken) return;
+
     setIsProcessing(true);
 
     try {
-      // Group rooms by target status
-      const statusGroups: Record<RoomStatus, string[]> = {
-        [RoomStatus.DIRTY]: [],
-        [RoomStatus.CLEANING]: [],
-        [RoomStatus.CLEAN]: [],
-      };
-
-      const overrideRooms: Array<{
+      // Build scanned array with all rooms and their target statuses
+      const scanned: Array<{
+        token: string;
         roomId: string;
         fromStatus: RoomStatus;
         toStatus: RoomStatus;
+        override: boolean;
+        overrideReason?: string;
       }> = [];
 
       scannedItems.forEach((item) => {
@@ -357,72 +431,62 @@ function App() {
         const currentStatus = item.room.status;
 
         if (targetStatus === currentStatus) {
-          // No change needed
+          // No change needed, skip
           return;
         }
 
         // Check if override is needed
-        if (!isAdjacentTransition(currentStatus, targetStatus)) {
-          overrideRooms.push({
-            roomId: item.room.roomId,
-            fromStatus: currentStatus,
-            toStatus: targetStatus,
-          });
-        } else {
-          statusGroups[targetStatus].push(item.room.roomId);
-        }
+        const needsOverride = !isAdjacentTransition(currentStatus, targetStatus);
+        const reason = overrideReasons[item.room.roomId];
+
+        scanned.push({
+          token: item.tagCode,
+          roomId: item.room.roomId,
+          fromStatus: currentStatus,
+          toStatus: targetStatus,
+          override: needsOverride,
+          overrideReason: needsOverride ? (reason || 'Override required') : undefined,
+        });
       });
 
-      // Process each status group
-      const promises: Promise<Response>[] = [];
-
-      // Process normal transitions
-      for (const [status, roomIds] of Object.entries(statusGroups)) {
-        if (roomIds.length > 0) {
-          promises.push(
-            fetch(`${API_BASE}/v1/cleaning/batch`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                roomIds,
-                targetStatus: status as RoomStatus,
-                staffId,
-                override: false,
-              }),
-            })
-          );
-        }
+      if (scanned.length === 0) {
+        clearAll();
+        handleLogout();
+        return;
       }
 
-      // Process override transitions (one call per room since each needs its own reason)
-      for (const overrideRoom of overrideRooms) {
-        const reason = overrideReasons[overrideRoom.roomId] || 'Override required';
-        promises.push(
-          fetch(`${API_BASE}/v1/cleaning/batch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              roomIds: [overrideRoom.roomId],
-              targetStatus: overrideRoom.toStatus,
-              staffId,
-              override: true,
-              overrideReason: reason,
-            }),
-          })
-        );
+      // Single API call with all scanned rooms
+      const response = await fetch(`${API_BASE}/v1/cleaning/batch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          deviceId,
+          scanned,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Some room updates failed');
       }
 
-      const responses = await Promise.all(promises);
+      const result = await response.json();
       
-      // Check if any requests failed
-      const failed = responses.some((r) => !r.ok);
+      // Check if any rooms failed
+      const failed = result.rooms?.some((r: { success: boolean }) => !r.success);
       if (failed) {
         throw new Error('Some room updates failed');
       }
 
       clearAll();
+      // Return to lock screen after successful action
+      handleLogout();
     } catch (error) {
       console.error('Failed to save resolved statuses:', error);
+      alert(error instanceof Error ? error.message : 'Failed to save resolved statuses');
     } finally {
       setIsProcessing(false);
     }
@@ -443,26 +507,57 @@ function App() {
               <div>New Status</div>
             </div>
 
-            {scannedItems.map((item) => {
+            {scannedItems.map((item, index) => {
               const currentStatus = item.room.status;
               const newStatus = resolveStatuses[item.room.roomId] ?? currentStatus;
+              const needsOverride = overrideReasons[item.room.roomId] !== undefined;
 
               return (
                 <div key={item.room.roomId} className="resolve-row">
                   <div className="resolve-room-number">{item.room.roomNumber}</div>
                   <div className="resolve-current-status">{currentStatus}</div>
                   <div className="resolve-status-controls">
-                    {Object.values(RoomStatus).map((status) => (
+                    <div className="status-slider">
+                      <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        value={Object.values(RoomStatus).indexOf(newStatus)}
+                        onChange={(e) => {
+                          const statusIndex = parseInt(e.target.value, 10);
+                          const targetStatus = Object.values(RoomStatus)[statusIndex] as RoomStatus;
+                          handleStatusChange(item.room.roomId, targetStatus, index);
+                        }}
+                        className="status-range-input"
+                      />
+                      <div className="status-labels">
+                        {Object.values(RoomStatus).map((status) => (
+                          <span
+                            key={status}
+                            className={`status-label ${newStatus === status ? 'active' : ''}`}
+                          >
+                            {status}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    {needsOverride && (
                       <button
-                        key={status}
-                        className={`status-button ${
-                          newStatus === status ? 'active' : ''
-                        }`}
-                        onClick={() => handleStatusChange(item.room.roomId, status)}
+                        className="button-override-edit"
+                        onClick={() => {
+                          setOverrideModal({
+                            roomId: item.room.roomId,
+                            roomNumber: item.room.roomNumber,
+                            fromStatus: currentStatus,
+                            toStatus: newStatus,
+                            rowIndex: index,
+                          });
+                          setOverrideReason(overrideReasons[item.room.roomId] || '');
+                        }}
                       >
-                        {status}
+                        Edit Override
                       </button>
-                    ))}
+                    )}
                   </div>
                 </div>
               );
@@ -484,7 +579,12 @@ function App() {
         </div>
 
         {overrideModal && (
-          <div className="modal-overlay">
+          <div className="modal-overlay" onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setOverrideModal(null);
+              setOverrideReason('');
+            }
+          }}>
             <div className="modal-content">
               <h2>Override Required</h2>
               <p>

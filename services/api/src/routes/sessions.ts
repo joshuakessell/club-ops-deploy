@@ -11,7 +11,8 @@ const CreateSessionSchema = z.object({
   memberId: z.string().uuid(),
   roomId: z.string().uuid().optional(),
   lockerId: z.string().uuid().optional(),
-  expectedDuration: z.number().int().positive().default(60), // in minutes
+  expectedDuration: z.number().int().positive().default(360), // in minutes (6 hours default)
+  checkinType: z.enum(['INITIAL', 'RENEWAL', 'UPGRADE']).optional().default('INITIAL'),
 });
 
 type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
@@ -20,11 +21,14 @@ interface SessionRow {
   id: string;
   member_id: string;
   member_name: string;
+  membership_number: string | null;
   room_id: string | null;
   locker_id: string | null;
   check_in_time: Date;
   expected_duration: number;
   status: string;
+  lane: string | null;
+  agreement_signed?: boolean;
 }
 
 interface MemberRow {
@@ -216,11 +220,16 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         // 5. Create the session
+        // For initial check-ins and renewals, always use 6 hours (360 minutes)
+        // checkout_at is always check_in_time + 6 hours
+        const duration = body.checkinType === 'UPGRADE' ? body.expectedDuration : 360;
+        const checkoutAt = new Date(Date.now() + 360 * 60 * 1000); // 6 hours from now
+        
         const sessionResult = await client.query<SessionRow>(
-          `INSERT INTO sessions (member_id, member_name, room_id, locker_id, expected_duration, status)
-           VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+          `INSERT INTO sessions (member_id, member_name, room_id, locker_id, expected_duration, status, checkin_type, checkout_at)
+           VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $7)
            RETURNING id, member_id, member_name, room_id, locker_id, check_in_time, expected_duration, status`,
-          [body.memberId, member.name, assignedRoomId, assignedLockerId, body.expectedDuration]
+          [body.memberId, member.name, assignedRoomId, assignedLockerId, duration, body.checkinType || 'INITIAL', checkoutAt]
         );
 
         // 6. Log the check-in to audit log
@@ -261,6 +270,12 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
         await broadcastInventoryUpdate(fastify.broadcaster);
       }
 
+      // Get agreement_signed status
+      const agreementStatusResult = await query<{ agreement_signed: boolean }>(
+        'SELECT agreement_signed FROM sessions WHERE id = $1',
+        [session.id]
+      );
+
       return reply.status(201).send({
         id: session.id,
         memberId: session.member_id,
@@ -270,6 +285,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
         checkInTime: session.check_in_time,
         expectedDuration: session.expected_duration,
         status: session.status,
+        agreementSigned: agreementStatusResult.rows[0]?.agreement_signed || false,
       });
 
     } catch (error) {
@@ -288,7 +304,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/v1/sessions/active', async (_request, reply: FastifyReply) => {
     try {
       const result = await query<SessionRow>(
-        `SELECT id, member_id, member_name, room_id, locker_id, check_in_time, expected_duration, status
+        `SELECT id, member_id, member_name, room_id, locker_id, check_in_time, expected_duration, status, agreement_signed
          FROM sessions 
          WHERE status = 'ACTIVE'
          ORDER BY check_in_time DESC`
@@ -303,6 +319,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
         checkInTime: row.check_in_time,
         expectedDuration: row.expected_duration,
         status: row.status,
+        agreementSigned: (row as SessionRow & { agreement_signed?: boolean }).agreement_signed || false,
       }));
 
       return reply.send({ sessions });
@@ -317,9 +334,11 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Used by employee register when scanning customer ID.
    * Creates a new session or updates existing one with customer name.
+   * Requires lane parameter for lane-scoped sessions.
    */
   const ScanIdSchema = z.object({
     idNumber: z.string().min(1),
+    lane: z.string().min(1),
   });
 
   fastify.post('/v1/sessions/scan-id', async (
@@ -349,33 +368,48 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: 'Member account is not active' });
       }
 
-      // Check for existing active session or create new one
+      // Check for existing active session in this lane or create new one
       const existingSession = await query<SessionRow>(
-        `SELECT id, member_id, member_name, room_id, locker_id, check_in_time, expected_duration, status
+        `SELECT id, member_id, member_name, membership_number, room_id, locker_id, check_in_time, expected_duration, status, lane, agreement_signed
          FROM sessions 
-         WHERE member_id = $1 AND status = 'ACTIVE'
+         WHERE lane = $1 AND status = 'ACTIVE'
+         ORDER BY check_in_time DESC
          LIMIT 1`,
-        [member.id]
+        [body.lane]
       );
 
       let session: SessionRow;
       if (existingSession.rows.length > 0) {
-        session = existingSession.rows[0]!;
+        // Update existing session with new member info
+        const existing = existingSession.rows[0]!;
+        await query(
+          `UPDATE sessions 
+           SET member_id = $1, member_name = $2, membership_number = $3, updated_at = NOW()
+           WHERE id = $4
+           RETURNING id, member_id, member_name, membership_number, room_id, locker_id, check_in_time, expected_duration, status, lane`,
+          [member.id, member.name, member.membership_number, existing.id]
+        );
+        session = {
+          ...existing,
+          member_id: member.id,
+          member_name: member.name,
+          membership_number: member.membership_number,
+        };
       } else {
         // Create new session
-        const newSessionResult = await query<SessionRow>(
-          `INSERT INTO sessions (member_id, member_name, expected_duration, status)
-           VALUES ($1, $2, 60, 'ACTIVE')
-           RETURNING id, member_id, member_name, room_id, locker_id, check_in_time, expected_duration, status`,
-          [member.id, member.name]
-        );
+          const newSessionResult = await query<SessionRow>(
+            `INSERT INTO sessions (member_id, member_name, membership_number, expected_duration, status, lane, checkout_at)
+             VALUES ($1, $2, $3, 360, 'ACTIVE', $4, NOW() + INTERVAL '6 hours')
+             RETURNING id, member_id, member_name, membership_number, room_id, locker_id, check_in_time, expected_duration, status, lane, agreement_signed`,
+            [member.id, member.name, member.membership_number, body.lane]
+          );
         session = newSessionResult.rows[0]!;
       }
 
       // Determine allowed rentals
       const allowedRentals = getAllowedRentals(member.membership_number);
 
-      // Broadcast SESSION_UPDATED event
+      // Broadcast SESSION_UPDATED event to the specific lane
       const payload: SessionUpdatedPayload = {
         sessionId: session.id,
         customerName: session.member_name,
@@ -383,7 +417,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
         allowedRentals,
       };
 
-      fastify.broadcaster.broadcastSessionUpdated(payload);
+      fastify.broadcaster.broadcastSessionUpdated(payload, body.lane);
 
       return reply.status(200).send({
         sessionId: session.id,
@@ -408,9 +442,11 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Used by employee register when scanning membership card.
    * Updates existing session with membership number and recalculates allowed rentals.
+   * Requires lane parameter for lane-scoped sessions.
    */
   const ScanMembershipSchema = z.object({
     membershipNumber: z.string().min(1),
+    lane: z.string().min(1),
     sessionId: z.string().uuid().optional(),
   });
 
@@ -439,47 +475,59 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: 'Member account is not active' });
       }
 
-      // Find or create session
+      // Find or create session in this lane
       let session: SessionRow;
       if (body.sessionId) {
         const sessionResult = await query<SessionRow>(
-          `SELECT id, member_id, member_name, room_id, locker_id, check_in_time, expected_duration, status
+          `SELECT id, member_id, member_name, membership_number, room_id, locker_id, check_in_time, expected_duration, status, lane, agreement_signed
            FROM sessions 
-           WHERE id = $1 AND status = 'ACTIVE'
+           WHERE id = $1 AND lane = $2 AND status = 'ACTIVE'
            LIMIT 1`,
-          [body.sessionId]
+          [body.sessionId, body.lane]
         );
         if (sessionResult.rows.length === 0) {
-          return reply.status(404).send({ error: 'Session not found' });
+          return reply.status(404).send({ error: 'Session not found in this lane' });
         }
         session = sessionResult.rows[0]!;
       } else {
-        // Find existing active session for this member
+        // Find existing active session in this lane
         const existingSession = await query<SessionRow>(
-          `SELECT id, member_id, member_name, room_id, locker_id, check_in_time, expected_duration, status
+          `SELECT id, member_id, member_name, membership_number, room_id, locker_id, check_in_time, expected_duration, status, lane, agreement_signed
            FROM sessions 
-           WHERE member_id = $1 AND status = 'ACTIVE'
+           WHERE lane = $1 AND status = 'ACTIVE'
+           ORDER BY check_in_time DESC
            LIMIT 1`,
-          [member.id]
+          [body.lane]
         );
         if (existingSession.rows.length > 0) {
           session = existingSession.rows[0]!;
         } else {
           // Create new session
           const newSessionResult = await query<SessionRow>(
-            `INSERT INTO sessions (member_id, member_name, expected_duration, status)
-             VALUES ($1, $2, 60, 'ACTIVE')
-             RETURNING id, member_id, member_name, room_id, locker_id, check_in_time, expected_duration, status`,
-            [member.id, member.name]
+            `INSERT INTO sessions (member_id, member_name, membership_number, expected_duration, status, lane, checkout_at)
+             VALUES ($1, $2, $3, 360, 'ACTIVE', $4, NOW() + INTERVAL '6 hours')
+             RETURNING id, member_id, member_name, membership_number, room_id, locker_id, check_in_time, expected_duration, status, lane, agreement_signed`,
+            [member.id, member.name, member.membership_number, body.lane]
           );
           session = newSessionResult.rows[0]!;
         }
       }
 
+      // Update session with membership number if not already set
+      if (!session.membership_number && member.membership_number) {
+        await query(
+          `UPDATE sessions 
+           SET membership_number = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [member.membership_number, session.id]
+        );
+        session.membership_number = member.membership_number;
+      }
+
       // Determine allowed rentals (now with membership number)
       const allowedRentals = getAllowedRentals(member.membership_number);
 
-      // Broadcast SESSION_UPDATED event
+      // Broadcast SESSION_UPDATED event to the specific lane
       const payload: SessionUpdatedPayload = {
         sessionId: session.id,
         customerName: session.member_name,
@@ -487,11 +535,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
         allowedRentals,
       };
 
-      fastify.broadcaster.broadcast({
-        type: 'SESSION_UPDATED',
-        payload,
-        timestamp: new Date().toISOString(),
-      });
+      fastify.broadcaster.broadcastSessionUpdated(payload, body.lane);
 
       return reply.status(200).send({
         sessionId: session.id,
