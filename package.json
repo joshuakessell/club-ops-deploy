@@ -4,9 +4,10 @@
   "private": true,
   "description": "Multi-application system for managing club check-ins, room inventory, cleaning workflows, and operational metrics",
   "scripts": {
-    "dev": "concurrently -n api,kiosk,register,dashboard,cleaning -c blue,green,yellow,magenta,cyan \"pnpm --filter @club-ops/api dev\" \"pnpm --filter @club-ops/customer-kiosk dev\" \"pnpm --filter @club-ops/employee-register dev\" \"pnpm --filter @club-ops/office-dashboard dev\" \"pnpm --filter @club-ops/cleaning-station-kiosk dev\"",
+    "kill-ports": "node scripts/kill-ports.js",
+    "dev": "pnpm kill-ports && concurrently -n api,kiosk,register,dashboard,cleaning -c blue,green,yellow,magenta,cyan \"pnpm --filter @club-ops/api dev\" \"pnpm --filter @club-ops/customer-kiosk dev\" \"pnpm --filter @club-ops/employee-register dev\" \"pnpm --filter @club-ops/office-dashboard dev\" \"pnpm --filter @club-ops/cleaning-station-kiosk dev\"",
     "build": "pnpm -r build",
-    "test": "pnpm -r test",
+    "test": "pnpm kill-ports && pnpm -r test",
     "lint": "pnpm -r lint",
     "doctor": "node scripts/doctor.js",
     "typecheck": "pnpm -r typecheck",
