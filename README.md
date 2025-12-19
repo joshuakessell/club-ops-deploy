@@ -23,26 +23,44 @@ club-operations-pos/
 
 - **Node.js** >= 18.0.0
 - **pnpm** >= 8.0.0
+- **Docker Desktop** (for local PostgreSQL)
 
-### Installation
+### Local Setup
+
+Follow these steps in order to get the development environment running:
 
 ```bash
-# Install all dependencies
+# 1. Install all dependencies
 pnpm install
+
+# 2. Start PostgreSQL in Docker
+pnpm --filter @club-ops/api db:start
+
+# 3. Run database migrations
+pnpm --filter @club-ops/api db:migrate
+
+# 4. Seed the database with sample data
+pnpm --filter @club-ops/api seed
+
+# 5. Start all services in development mode
+pnpm dev
 ```
 
 ### Development
 
+After setup, you can start all services with:
+
 ```bash
-# Run API + all apps concurrently
 pnpm dev
 ```
 
 This starts:
 - **API Server**: http://localhost:3001
+  - Health check: http://localhost:3001/health
 - **Customer Kiosk**: http://localhost:5173
-- **Employee Register**: http://localhost:5174
-- **Office Dashboard**: http://localhost:5175
+- **Cleaning Station Kiosk**: http://localhost:5174
+- **Employee Register**: http://localhost:5175
+- **Office Dashboard**: http://localhost:5176
 
 WebSocket endpoint: `ws://localhost:3001/ws`
 
@@ -60,21 +78,39 @@ WebSocket endpoint: `ws://localhost:3001/ws`
 
 ### Database Setup
 
-The API uses PostgreSQL. For local development:
+The API uses PostgreSQL running in Docker. The database is configured to use port **5433** (mapped from container port 5432) to avoid conflicts with local PostgreSQL installations.
+
+**Database commands** (run from repo root):
 
 ```bash
-# Navigate to the API service
-cd services/api
-
 # Start PostgreSQL in Docker
-pnpm db:start
+pnpm --filter @club-ops/api db:start
+
+# Stop PostgreSQL
+pnpm --filter @club-ops/api db:stop
 
 # Run database migrations
-pnpm db:migrate
+pnpm --filter @club-ops/api db:migrate
 
 # Check migration status
-pnpm db:migrate:status
+pnpm --filter @club-ops/api db:migrate:status
+
+# Rollback last migration
+pnpm --filter @club-ops/api db:migrate:rollback
+
+# Reset database (drops all data and reruns migrations)
+pnpm --filter @club-ops/api db:reset
+
+# Seed database with sample data
+pnpm --filter @club-ops/api seed
 ```
+
+**Database Configuration:**
+- Host: `localhost`
+- Port: `5433`
+- Database: `club_operations`
+- User: `clubops`
+- Password: `clubops_dev`
 
 See [services/api/README.md](./services/api/README.md) for detailed database documentation.
 
