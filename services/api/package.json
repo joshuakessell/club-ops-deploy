@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "pnpm exec tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
@@ -14,10 +14,11 @@
     "typecheck": "tsc --noEmit",
     "db:start": "docker compose up -d",
     "db:stop": "docker compose down",
-    "db:migrate": "tsx src/db/migrate.ts",
-    "db:migrate:status": "tsx src/db/migrate.ts status",
-    "db:migrate:rollback": "tsx src/db/migrate.ts rollback",
-    "db:reset": "docker compose down -v && docker compose up -d"
+    "db:migrate": "pnpm exec tsx src/db/migrate.ts",
+    "db:migrate:status": "pnpm exec tsx src/db/migrate.ts status",
+    "db:migrate:rollback": "pnpm exec tsx src/db/migrate.ts rollback",
+    "db:reset": "docker compose down -v && docker compose up -d",
+    "seed": "pnpm exec tsx src/db/seed.ts"
   },
   "dependencies": {
     "@club-ops/shared": "workspace:*",

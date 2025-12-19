@@ -22,7 +22,7 @@ docker ps
 
 This starts a PostgreSQL 16 container with:
 - **Host**: localhost
-- **Port**: 5432
+- **Port**: 5433 (mapped from container port 5432 to avoid conflicts on Windows)
 - **Database**: club_operations
 - **User**: clubops
 - **Password**: clubops_dev
@@ -37,7 +37,24 @@ pnpm db:migrate
 pnpm db:migrate:status
 ```
 
-### 3. Start the API Server
+### 3. Seed the Database
+
+```bash
+# Insert seed data (rooms, key tags with QR scan tokens)
+pnpm seed
+```
+
+This creates:
+- 10 rooms with various statuses (DIRTY, CLEANING, CLEAN)
+- Key tags with QR scan tokens (e.g., `ROOM-101`, `ROOM-102`, etc.)
+- Mix of room types (STANDARD, DELUXE, VIP, LOCKER)
+
+**Scan tokens for testing:**
+- `ROOM-101`, `ROOM-102`, `ROOM-201` → DIRTY rooms
+- `ROOM-103`, `ROOM-202` → CLEANING rooms
+- `ROOM-104`, `ROOM-105`, `ROOM-203`, `ROOM-301`, `LOCKER-01` → CLEAN rooms
+
+### 4. Start the API Server
 
 ```bash
 # Development mode (with hot reload)
@@ -63,6 +80,7 @@ The API server will be available at:
 | `pnpm db:migrate:status` | Show migration status |
 | `pnpm db:migrate:rollback` | Rollback last migration record |
 | `pnpm db:reset` | Reset database (destroys all data) |
+| `pnpm seed` | Insert seed data (rooms and key tags) |
 
 ## Environment Variables
 
@@ -77,7 +95,7 @@ cp .env.example .env
 | `PORT` | 3001 | API server port |
 | `HOST` | 0.0.0.0 | API server host |
 | `DB_HOST` | localhost | PostgreSQL host |
-| `DB_PORT` | 5432 | PostgreSQL port |
+| `DB_PORT` | 5433 | PostgreSQL port (host port, container uses 5432) |
 | `DB_NAME` | club_operations | Database name |
 | `DB_USER` | clubops | Database user |
 | `DB_PASSWORD` | clubops_dev | Database password |
@@ -159,6 +177,71 @@ await transaction(async (client) => {
 });
 ```
 
+## Testing the Cleaning Station Kiosk
+
+After seeding the database, you can test the cleaning station workflow:
+
+### 1. Test Key Resolution
+
+```bash
+# Resolve a single key tag
+curl -X POST http://localhost:3001/v1/keys/resolve \
+  -H "Content-Type: application/json" \
+  -d '{"tagCodes": ["ROOM-101"]}'
+
+# Resolve multiple key tags (batch scan)
+curl -X POST http://localhost:3001/v1/keys/resolve \
+  -H "Content-Type: application/json" \
+  -d '{"tagCodes": ["ROOM-101", "ROOM-102", "ROOM-103"]}'
+```
+
+Expected response includes:
+- `rooms`: Array of resolved rooms with statuses
+- `statusCounts`: Count of rooms by status
+- `isMixedStatus`: Whether rooms have different statuses
+- `primaryAction`: Suggested action based on statuses
+
+### 2. Test Batch Cleaning Update
+
+```bash
+# First, resolve tags to get room IDs
+RESPONSE=$(curl -s -X POST http://localhost:3001/v1/keys/resolve \
+  -H "Content-Type: application/json" \
+  -d '{"tagCodes": ["ROOM-101"]}')
+
+# Extract room ID (adjust based on your JSON parser)
+ROOM_ID=$(echo $RESPONSE | jq -r '.rooms[0].roomId')
+
+# Update room status (DIRTY → CLEANING)
+curl -X POST http://localhost:3001/v1/cleaning/batch \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"roomIds\": [\"$ROOM_ID\"],
+    \"targetStatus\": \"CLEANING\",
+    \"staffId\": \"staff-001\",
+    \"override\": false
+  }"
+```
+
+The batch endpoint:
+- ✅ Uses database transactions (all-or-nothing)
+- ✅ Uses row locking (`FOR UPDATE`) to prevent race conditions
+- ✅ Broadcasts WebSocket events for status changes
+- ✅ Updates inventory counts via WebSocket
+
+### 3. Verify WebSocket Events
+
+Connect to the WebSocket endpoint to see real-time updates:
+
+```javascript
+const ws = new WebSocket('ws://localhost:3001/ws');
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  console.log('WebSocket event:', data);
+  // Expect: ROOM_STATUS_CHANGED and INVENTORY_UPDATED events
+};
+```
+
 ## Troubleshooting
 
 ### Cannot connect to database
@@ -177,9 +260,7 @@ await transaction(async (client) => {
 
 ### Port 5432 already in use
 
-Another PostgreSQL instance may be running. Either:
-- Stop the other instance, or
-- Change the port in `docker-compose.yml` and `DB_PORT` environment variable
+The Docker Compose configuration uses port 5433 on the host (mapped to container port 5432) to avoid conflicts with other PostgreSQL instances. If you need to use a different port, update both `docker-compose.yml` and the `DB_PORT` environment variable.
 
 
 

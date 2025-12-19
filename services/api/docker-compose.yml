@@ -3,7 +3,7 @@ services:
     image: postgres:16-alpine
     container_name: club-ops-postgres
     ports:
-      - '5432:5432'
+      - '5433:5432'
     environment:
       POSTGRES_USER: clubops
       POSTGRES_PASSWORD: clubops_dev
