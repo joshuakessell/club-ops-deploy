@@ -1691,7 +1691,7 @@ function App() {
                     borderRadius: '6px',
                     fontSize: '1rem',
                     fontWeight: 600,
-                    cursor: isSubmitting || paymentStatus === 'PAID' ? 'not-allowed' : 'pointer',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   }}
                 >
                   Clear

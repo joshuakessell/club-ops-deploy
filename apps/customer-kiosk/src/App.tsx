@@ -79,6 +79,7 @@ function App() {
   const [waitlistBackupType, setWaitlistBackupType] = useState<string | null>(null);
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const isDrawingRef = useRef(false);
+  const idleTimeoutRef = useRef<number | null>(null);
 
   // Get lane from URL query param or localStorage, default to 'lane-1'
   const lane = (() => {
@@ -148,8 +149,12 @@ function App() {
           // Handle completion status
           if ((payload as any).status === 'COMPLETED') {
             setView('complete');
+            // Clear any existing timeout to prevent race conditions
+            if (idleTimeoutRef.current !== null) {
+              clearTimeout(idleTimeoutRef.current);
+            }
             // Return to idle after delay
-            setTimeout(() => {
+            idleTimeoutRef.current = window.setTimeout(() => {
               setView('idle');
               setSession({
                 sessionId: null,
@@ -168,7 +173,8 @@ function App() {
               setShowWaitlistModal(false);
               setWaitlistDesiredType(null);
               setWaitlistBackupType(null);
-            }, 3000);
+              idleTimeoutRef.current = null;
+            }, 5000);
           }
         } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
           const payload = message.payload as CustomerConfirmationRequiredPayload;
@@ -284,6 +290,16 @@ function App() {
     // Upgrades don't require agreement signing - that's only for initial check-ins and renewals
   };
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (idleTimeoutRef.current !== null) {
+        clearTimeout(idleTimeoutRef.current);
+        idleTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   // Initialize signature canvas
   useEffect(() => {
     const canvas = signatureCanvasRef.current;
@@ -375,9 +391,13 @@ function App() {
 
       setView('complete');
       
+      // Clear any existing timeout to prevent race conditions
+      if (idleTimeoutRef.current !== null) {
+        clearTimeout(idleTimeoutRef.current);
+      }
       // Return to idle after a delay (will be handled by WebSocket COMPLETED status)
-      // Keep this as fallback
-      setTimeout(() => {
+      // Keep this as fallback only if WebSocket doesn't send COMPLETED status
+      idleTimeoutRef.current = window.setTimeout(() => {
         setView('idle');
         setSession({
           sessionId: null,
@@ -396,6 +416,7 @@ function App() {
         setShowWaitlistModal(false);
         setWaitlistDesiredType(null);
         setWaitlistBackupType(null);
+        idleTimeoutRef.current = null;
       }, 5000);
     } catch (error) {
       console.error('Failed to sign agreement:', error);
@@ -655,6 +676,59 @@ function App() {
                 Decline
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Waitlist Modal */}
+      {showWaitlistModal && waitlistDesiredType && (
+        <div className="modal-overlay" onClick={() => setShowWaitlistModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>None Available - Join Waiting List?</h2>
+            <div className="disclaimer-text">
+              <p>
+                <strong>{getRentalDisplayName(waitlistDesiredType)}</strong> is currently unavailable.
+              </p>
+              <p>To join the waitlist, please select a backup rental that is available now.</p>
+              <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '1rem' }}>
+                You will be charged for the backup rental. If an upgrade becomes available, you may accept it (upgrade fees apply).
+              </p>
+            </div>
+            <div style={{ marginTop: '1.5rem' }}>
+              <p style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Select backup rental:</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {session.allowedRentals
+                  .filter(rental => rental !== waitlistDesiredType)
+                  .map(rental => {
+                    const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
+                    const isAvailable = availableCount > 0;
+                    
+                    return (
+                      <button
+                        key={rental}
+                        className="modal-ok-btn"
+                        onClick={() => handleWaitlistBackupSelection(rental)}
+                        disabled={!isAvailable || isSubmitting}
+                        style={{
+                          opacity: isAvailable ? 1 : 0.5,
+                          cursor: isAvailable && !isSubmitting ? 'pointer' : 'not-allowed',
+                        }}
+                      >
+                        {getRentalDisplayName(rental)}
+                        {!isAvailable && ' (Unavailable)'}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+            <button
+              className="modal-ok-btn"
+              onClick={() => setShowWaitlistModal(false)}
+              disabled={isSubmitting}
+              style={{ marginTop: '1rem', backgroundColor: '#64748b' }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

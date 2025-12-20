@@ -791,8 +791,9 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           throw { statusCode: 400, message: 'Visit contains invalid block types' };
         }
 
-        // 6. Calculate total hours - should be 12 hours
-        const totalHours = calculateTotalHours(blocks);
+        // 6. Calculate total hours - should be 12 hours (two 6-hour blocks)
+        // Pass 0 as second parameter since we just want the total, not adding renewal hours
+        const totalHours = calculateTotalHours(blocks, 0);
         if (totalHours !== 12) {
           throw {
             statusCode: 400,
