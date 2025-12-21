@@ -422,7 +422,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           rental_type: string;
           ends_at: Date;
         }>(
-          `SELECT id, visit_id, room_id, locker_id, rental_type, ends_at FROM checkin_blocks WHERE id = $1 FOR UPDATE`,
+          `SELECT id, visit_id, room_id, locker_id, rental_type::text as rental_type, ends_at FROM checkin_blocks WHERE id = $1 FOR UPDATE`,
           [waitlist.checkin_block_id]
         );
 

@@ -189,7 +189,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
       if (tag.room_id) {
         blockResult = await query<CheckinBlockRow>(
           `SELECT cb.id, cb.visit_id, cb.block_type, cb.starts_at, cb.ends_at,
-                  cb.rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote
+                  cb.rental_type::text as rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote
            FROM checkin_blocks cb
            JOIN visits v ON cb.visit_id = v.id
            WHERE cb.room_id = $1 AND v.ended_at IS NULL
@@ -200,7 +200,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
       } else if (tag.locker_id) {
         blockResult = await query<CheckinBlockRow>(
           `SELECT cb.id, cb.visit_id, cb.block_type, cb.starts_at, cb.ends_at,
-                  cb.rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote
+                  cb.rental_type::text as rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote
            FROM checkin_blocks cb
            JOIN visits v ON cb.visit_id = v.id
            WHERE cb.locker_id = $1 AND v.ended_at IS NULL
@@ -336,7 +336,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         // 1. Verify the block exists and is active
         const blockResult = await client.query<CheckinBlockRow & { customer_id: string }>(
           `SELECT cb.id, cb.visit_id, cb.block_type, cb.starts_at, cb.ends_at,
-                  cb.rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote,
+                  cb.rental_type::text as rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote,
                   v.customer_id
            FROM checkin_blocks cb
            JOIN visits v ON cb.visit_id = v.id
@@ -416,7 +416,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
       // 6. Get customer and room/locker info for WebSocket event
       const blockResult = await query<CheckinBlockRow & { customer_id: string }>(
         `SELECT cb.id, cb.visit_id, cb.block_type, cb.starts_at, cb.ends_at,
-                cb.rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote,
+                cb.rental_type::text as rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote,
                 v.customer_id
          FROM checkin_blocks cb
          JOIN visits v ON cb.visit_id = v.id
@@ -837,7 +837,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         // 2. Get the checkin block
         const blockResult = await client.query<CheckinBlockRow & { customer_id: string }>(
           `SELECT cb.id, cb.visit_id, cb.block_type, cb.starts_at, cb.ends_at,
-                  cb.rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote,
+                  cb.rental_type::text as rental_type, cb.room_id, cb.locker_id, cb.session_id, cb.has_tv_remote,
                   v.customer_id
            FROM checkin_blocks cb
            JOIN visits v ON cb.visit_id = v.id

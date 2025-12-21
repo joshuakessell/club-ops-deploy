@@ -71,11 +71,12 @@ describe('Agreement and Upgrade Flows', () => {
     if (!dbAvailable) return;
 
     // Clean up test data - delete in order to respect foreign key constraints
-    // Delete child records first
-    await pool.query('DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id = $1)', [testCustomerId]);
+    // Delete child records first (use CASCADE where possible, or delete in dependency order)
+    await pool.query('DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id = $1 OR visit_id IN (SELECT id FROM visits WHERE customer_id = $1))', [testCustomerId]);
     await pool.query('DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
     await pool.query('DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
-    await pool.query('DELETE FROM sessions WHERE customer_id = $1', [testCustomerId]);
+    await pool.query('DELETE FROM sessions WHERE customer_id = $1 OR visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
+    await pool.query('DELETE FROM checkout_requests WHERE customer_id = $1', [testCustomerId]);
     await pool.query('DELETE FROM visits WHERE customer_id = $1', [testCustomerId]);
     // Note: audit_log cleanup not needed - staff_id can be NULL and tests use mocked staff IDs
     await pool.query('DELETE FROM rooms WHERE id = $1 OR number = $2', [testRoomId, 'TEST-101']);

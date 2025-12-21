@@ -406,7 +406,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
         // 2. Get all existing blocks for this visit
         const blocksResult = await client.query<CheckinBlockRow>(
-          `SELECT id, visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, session_id, agreement_signed
+          `SELECT id, visit_id, block_type, starts_at, ends_at, rental_type::text as rental_type, room_id, locker_id, session_id, agreement_signed
            FROM checkin_blocks WHERE visit_id = $1 ORDER BY ends_at DESC`,
           [visit.id]
         );
@@ -623,7 +623,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
         // Search by membership number
         visitsResult = await query<VisitRow & { customer_name: string; membership_number: string | null }>(
           `SELECT v.id, v.customer_id, v.started_at, v.ended_at, v.created_at, v.updated_at,
-                  m.name as customer_name, m.membership_number
+                  c.name as customer_name, c.membership_number
            FROM visits v
            JOIN customers c ON v.customer_id = c.id
            WHERE v.ended_at IS NULL AND c.membership_number = $1
@@ -637,7 +637,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
                   c.name as customer_name, c.membership_number
            FROM visits v
            JOIN customers c ON v.customer_id = c.id
-           WHERE v.ended_at IS NULL AND m.name ILIKE $1
+           WHERE v.ended_at IS NULL AND c.name ILIKE $1
            ORDER BY v.started_at DESC
            LIMIT 20`,
           [`%${customerName}%`]
@@ -663,7 +663,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
       const activeVisits = await Promise.all(
         visitsResult.rows.map(async (visit) => {
           const blocksResult = await query<CheckinBlockRow>(
-            `SELECT id, visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, session_id, agreement_signed, created_at, updated_at
+            `SELECT id, visit_id, block_type, starts_at, ends_at, rental_type::text as rental_type, room_id, locker_id, session_id, agreement_signed, created_at, updated_at
              FROM checkin_blocks WHERE visit_id = $1 ORDER BY ends_at DESC`,
             [visit.id]
           );
@@ -760,7 +760,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
         // 2. Get all blocks for this visit
         const blocksResult = await client.query<CheckinBlockRow>(
-          `SELECT id, visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id
+          `SELECT id, visit_id, block_type, starts_at, ends_at, rental_type::text as rental_type, room_id, locker_id
            FROM checkin_blocks WHERE visit_id = $1 ORDER BY ends_at DESC`,
           [visit.id]
         );
@@ -814,7 +814,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
         if (roomId) {
           const roomResult = await client.query<RoomRow>(
-            `SELECT id, number, status, assigned_to FROM rooms WHERE id = $1 FOR UPDATE`,
+            `SELECT id, number, status, assigned_to_customer_id FROM rooms WHERE id = $1 FOR UPDATE`,
             [roomId]
           );
 

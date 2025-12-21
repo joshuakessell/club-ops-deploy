@@ -79,7 +79,7 @@ interface LockerRow {
   id: string;
   number: string;
   status: string;
-  assigned_to: string | null;
+  assigned_to_customer_id: string | null;
 }
 
 /**
