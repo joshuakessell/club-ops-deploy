@@ -7,3 +7,4 @@ CREATE INDEX IF NOT EXISTS idx_checkin_blocks_tv_remote ON checkin_blocks(has_tv
 
 
 
+

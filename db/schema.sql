@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS staff (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Staff sessions table (from migration 010)
+-- Staff sessions table (from migration 010, updated in 031)
 CREATE TABLE IF NOT EXISTS staff_sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
@@ -188,7 +188,8 @@ CREATE TABLE IF NOT EXISTS staff_sessions (
   session_token VARCHAR(255) UNIQUE NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   revoked_at TIMESTAMPTZ,
-  expires_at TIMESTAMPTZ NOT NULL
+  expires_at TIMESTAMPTZ NOT NULL,
+  reauth_ok_until TIMESTAMPTZ -- Added in migration 031
 );
 
 -- Staff WebAuthn credentials table (from migration 022)
@@ -397,7 +398,7 @@ CREATE TABLE IF NOT EXISTS checkout_requests (
   claimed_at TIMESTAMPTZ,
   claim_expires_at TIMESTAMPTZ,
   customer_checklist_json JSONB NOT NULL,
-  status checkout_request_status NOT NULL DEFAULT 'REQUESTED',
+  status checkout_request_status NOT NULL DEFAULT 'SUBMITTED', -- Updated in migration 035
   late_minutes INTEGER NOT NULL DEFAULT 0,
   late_fee_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
   ban_applied BOOLEAN NOT NULL DEFAULT false,
@@ -467,6 +468,7 @@ CREATE INDEX IF NOT EXISTS idx_staff_sessions_staff_id ON staff_sessions(staff_i
 CREATE INDEX IF NOT EXISTS idx_staff_sessions_token ON staff_sessions(session_token) WHERE revoked_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_staff_sessions_device ON staff_sessions(device_id, device_type);
 CREATE INDEX IF NOT EXISTS idx_staff_sessions_active ON staff_sessions(staff_id, revoked_at) WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_staff_sessions_reauth_ok ON staff_sessions(session_token, reauth_ok_until) WHERE revoked_at IS NULL AND reauth_ok_until IS NOT NULL; -- Added in migration 031
 
 -- Cleaning events indexes
 CREATE INDEX IF NOT EXISTS idx_cleaning_events_room ON cleaning_events(room_id);

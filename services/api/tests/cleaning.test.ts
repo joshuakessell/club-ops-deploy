@@ -171,8 +171,15 @@ describe('Cleaning Batch Endpoint', () => {
 
   afterAll(async () => {
     if (dbAvailable) {
-      // Clean up test staff
+      // Clean up test staff (must delete dependent records first)
       if (testStaffId) {
+        // Delete cleaning_events that reference this staff
+        await pool.query('DELETE FROM cleaning_events WHERE staff_id = $1', [testStaffId]);
+        // Delete cleaning_batches that reference this staff
+        await pool.query('DELETE FROM cleaning_batches WHERE staff_id = $1', [testStaffId]);
+        // Delete audit_log entries that reference this staff
+        await pool.query('DELETE FROM audit_log WHERE staff_id = $1', [testStaffId]);
+        // Now safe to delete staff
         await pool.query('DELETE FROM staff WHERE id = $1', [testStaffId]);
       }
       if (fastify) await fastify.close();

@@ -276,7 +276,7 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       // Find staff by ID or name (must be active)
       const staffResult = await query<{ id: string; name: string; active: boolean }>(
         `SELECT id, name, active FROM staff 
-         WHERE (id = $1 OR name ILIKE $1)
+         WHERE (id::text = $1 OR name ILIKE $1)
          AND active = true
          LIMIT 1`,
         [body.staffLookup]

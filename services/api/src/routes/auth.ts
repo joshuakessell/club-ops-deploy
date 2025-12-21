@@ -57,10 +57,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       const result = await transaction(async (client) => {
         // Find staff by ID or name (must be active)
+        // Use separate queries to avoid type conflicts between UUID and text
         const staffResult = await client.query<StaffRow>(
           `SELECT id, name, role, pin_hash, active
            FROM staff
-           WHERE (id = $1 OR name ILIKE $1)
+           WHERE (id::text = $1 OR name ILIKE $1)
            AND pin_hash IS NOT NULL
            AND active = true
            LIMIT 1`,

@@ -258,7 +258,7 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
             await client.query(
               `INSERT INTO audit_log 
                (staff_id, action, entity_type, entity_id, old_value, new_value, metadata)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+               VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb)`,
               [
                 staffId,
                 'ROOM_STATUS_CHANGE',
@@ -273,7 +273,7 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
             await client.query(
               `INSERT INTO audit_log 
                (staff_id, action, entity_type, entity_id, old_value, new_value)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
+               VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
               [
                 staffId,
                 'ROOM_STATUS_CHANGE',
@@ -360,8 +360,13 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
     } catch (error) {
-      fastify.log.error(error, 'Failed to process cleaning batch');
-      return reply.status(500).send({ error: 'Internal server error' });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      fastify.log.error({ error: errorMessage, stack: errorStack }, 'Failed to process cleaning batch');
+      return reply.status(500).send({
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'test' ? errorMessage : undefined,
+      });
     }
   });
 
