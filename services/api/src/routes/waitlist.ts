@@ -72,7 +72,7 @@ interface RoomRow {
   number: string;
   type: string;
   status: string;
-  assigned_to: string | null;
+  assigned_to_customer_id: string | null;
 }
 
 interface LockerRow {
@@ -117,12 +117,12 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           r.number as room_number,
           l.number as locker_number,
           v.customer_id,
-          m.name as customer_name,
-          m.membership_number
+          c.name as customer_name,
+          c.membership_number
         FROM waitlist w
         JOIN checkin_blocks cb ON w.checkin_block_id = cb.id
         JOIN visits v ON w.visit_id = v.id
-        LEFT JOIN members m ON v.customer_id = m.id
+        LEFT JOIN customers c ON v.customer_id = c.id
         LEFT JOIN rooms r ON cb.room_id = r.id
         LEFT JOIN lockers l ON cb.locker_id = l.id
       `;
@@ -223,7 +223,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
 
         // Verify room is available and matches desired tier
         const roomResult = await client.query<RoomRow>(
-          `SELECT id, number, type, status, assigned_to FROM rooms WHERE id = $1 FOR UPDATE`,
+          `SELECT id, number, type, status, assigned_to_customer_id FROM rooms WHERE id = $1 FOR UPDATE`,
           [body.roomId]
         );
 
@@ -237,7 +237,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           throw { statusCode: 400, message: `Room ${room.number} is not available (status: ${room.status})` };
         }
 
-        if (room.assigned_to) {
+        if (room.assigned_to_customer_id) {
           throw { statusCode: 409, message: `Room ${room.number} is already assigned` };
         }
 

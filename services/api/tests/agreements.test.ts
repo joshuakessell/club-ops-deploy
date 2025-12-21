@@ -27,7 +27,7 @@ describe('Agreement and Upgrade Flows', () => {
   let pool: pg.Pool;
   let dbAvailable = false;
 
-  const testMemberId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const testCustomerId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const testRoomId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
   const testAgreementId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
@@ -72,22 +72,22 @@ describe('Agreement and Upgrade Flows', () => {
 
     // Clean up test data - delete in order to respect foreign key constraints
     // Delete child records first
-    await pool.query('DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE member_id = $1)', [testMemberId]);
-    await pool.query('DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testMemberId]);
-    await pool.query('DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testMemberId]);
-    await pool.query('DELETE FROM sessions WHERE member_id = $1', [testMemberId]);
-    await pool.query('DELETE FROM visits WHERE customer_id = $1', [testMemberId]);
+    await pool.query('DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id = $1)', [testCustomerId]);
+    await pool.query('DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
+    await pool.query('DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
+    await pool.query('DELETE FROM sessions WHERE customer_id = $1', [testCustomerId]);
+    await pool.query('DELETE FROM visits WHERE customer_id = $1', [testCustomerId]);
     // Note: audit_log cleanup not needed - staff_id can be NULL and tests use mocked staff IDs
     await pool.query('DELETE FROM rooms WHERE id = $1 OR number = $2', [testRoomId, 'TEST-101']);
     await pool.query('DELETE FROM agreements WHERE id = $1', [testAgreementId]);
-    await pool.query('DELETE FROM members WHERE id = $1 OR membership_number = $2', [testMemberId, 'TEST-001']);
+    await pool.query('DELETE FROM customers WHERE id = $1 OR membership_number = $2', [testCustomerId, 'TEST-001']);
 
-    // Insert test member with ON CONFLICT handling
+    // Insert test customer with ON CONFLICT handling
     await pool.query(
-      `INSERT INTO members (id, name, membership_number, is_active)
-       VALUES ($1, 'Test Member', 'TEST-001', true)
-       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, membership_number = EXCLUDED.membership_number, is_active = EXCLUDED.is_active`,
-      [testMemberId]
+      `INSERT INTO customers (id, name, membership_number)
+       VALUES ($1, 'Test Customer', 'TEST-001')
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, membership_number = EXCLUDED.membership_number`,
+      [testCustomerId]
     );
 
     // Insert test room with ON CONFLICT handling (handle number conflicts)
@@ -138,7 +138,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: '/v1/sessions',
         payload: {
-          memberId: testMemberId,
+          customerId: testCustomerId,
           roomId: testRoomId,
           expectedDuration: 360,
           checkinType: 'INITIAL',
@@ -185,7 +185,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: '/v1/sessions',
         payload: {
-          memberId: testMemberId,
+          customerId: testCustomerId,
           roomId: testRoomId,
           expectedDuration: 360,
           checkinType: 'RENEWAL',
@@ -213,7 +213,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: '/v1/sessions',
         payload: {
-          memberId: testMemberId,
+          customerId: testCustomerId,
           roomId: testRoomId,
           expectedDuration: 360,
           checkinType: 'UPGRADE',
@@ -242,7 +242,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: '/v1/sessions',
         payload: {
-          memberId: testMemberId,
+          customerId: testCustomerId,
           roomId: testRoomId,
           expectedDuration: 360,
           checkinType: 'INITIAL',
@@ -275,7 +275,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: '/v1/sessions',
         payload: {
-          memberId: testMemberId,
+          customerId: testCustomerId,
           roomId: testRoomId,
           expectedDuration: 360,
           checkinType: 'INITIAL',
@@ -323,7 +323,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: '/v1/sessions',
         payload: {
-          memberId: testMemberId,
+          customerId: testCustomerId,
           roomId: testRoomId,
           expectedDuration: 360,
           checkinType: 'INITIAL',
@@ -373,7 +373,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: '/v1/sessions',
         payload: {
-          memberId: testMemberId,
+          customerId: testCustomerId,
           roomId: testRoomId,
           expectedDuration: 360,
           checkinType: 'INITIAL',
@@ -407,7 +407,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: '/v1/sessions',
         payload: {
-          memberId: testMemberId,
+          customerId: testCustomerId,
           roomId: testRoomId,
           expectedDuration: 360,
           checkinType: 'INITIAL',

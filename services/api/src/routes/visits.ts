@@ -322,7 +322,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           customerName: customer.name,
           membershipNumber: customer.membership_number || undefined,
           allowedRentals,
-          mode: 'INITIAL',
+          mode: 'CHECKIN',
           blockEndsAt: result.block.endsAt.toISOString(),
           visitId: result.visit.id,
         };

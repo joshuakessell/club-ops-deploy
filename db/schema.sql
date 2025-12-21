@@ -54,7 +54,7 @@ CREATE TYPE block_type AS ENUM ('INITIAL', 'RENEWAL', 'FINAL2H');
 CREATE TYPE waitlist_status AS ENUM ('ACTIVE', 'OFFERED', 'COMPLETED', 'CANCELLED', 'EXPIRED');
 
 -- Checkout request status enum (from migration 019)
-CREATE TYPE checkout_request_status AS ENUM ('REQUESTED', 'CLAIMED', 'COMPLETED', 'CANCELLED');
+CREATE TYPE checkout_request_status AS ENUM ('SUBMITTED', 'CLAIMED', 'VERIFIED', 'CANCELLED');
 
 -- Audit action enum (from migration 008, expanded in later migrations)
 CREATE TYPE audit_action AS ENUM (
@@ -349,7 +349,7 @@ CREATE TABLE IF NOT EXISTS lane_sessions (
   price_quote_json JSONB,
   disclaimers_ack_json JSONB,
   payment_intent_id UUID REFERENCES payment_intents(id) ON DELETE SET NULL,
-  checkin_mode VARCHAR(20) DEFAULT 'INITIAL', -- Added in migration 027
+  checkin_mode VARCHAR(20) DEFAULT 'CHECKIN', -- Added in migration 027, updated in 035 to match SCHEMA_OVERVIEW
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -531,7 +531,7 @@ CREATE INDEX IF NOT EXISTS idx_checkout_requests_customer ON checkout_requests(c
 CREATE INDEX IF NOT EXISTS idx_checkout_requests_occupancy ON checkout_requests(occupancy_id);
 CREATE INDEX IF NOT EXISTS idx_checkout_requests_kiosk ON checkout_requests(kiosk_device_id);
 CREATE INDEX IF NOT EXISTS idx_checkout_requests_claimed ON checkout_requests(claimed_by_staff_id) WHERE claimed_by_staff_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_checkout_requests_active ON checkout_requests(status) WHERE status IN ('REQUESTED', 'CLAIMED');
+CREATE INDEX IF NOT EXISTS idx_checkout_requests_active ON checkout_requests(status) WHERE status IN ('SUBMITTED', 'CLAIMED');
 CREATE INDEX IF NOT EXISTS idx_checkout_requests_claim_expires ON checkout_requests(claim_expires_at) WHERE claim_expires_at IS NOT NULL;
 
 -- Late checkout events indexes

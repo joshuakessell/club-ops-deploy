@@ -1,10 +1,10 @@
 -- Migration 034: Normalize identity on customers and enforce rental_type enum
--- This migration:
--- 1. Backfills customers from members
--- 2. Adds customer_id columns and backfills data
--- 3. Swaps foreign keys from members to customers
--- 4. Constrains checkin_blocks.rental_type to enum
--- 5. Adds guardrails for deprecated room types
+-- This migration aligns the database with SCHEMA_OVERVIEW.md naming standards:
+-- 1. Backfills customers from legacy members table
+-- 2. Adds customer_id columns and backfills data from members
+-- 3. Swaps foreign keys from members to customers (customers become canonical identity)
+-- 4. Constrains checkin_blocks.rental_type to rental_type enum (replaces VARCHAR)
+-- 5. Adds guardrails for deprecated room types (prevents DELUXE/VIP)
 
 BEGIN;
 
@@ -177,28 +177,53 @@ WHERE l.assigned_to = m.id
 -- STEP 4: Swap foreign keys - Replace old columns with new ones
 -- ============================================================================
 
--- For visits: Drop old FK, rename new column
+-- For visits: Drop old FK and constraint on customer_id_new, rename new column
 ALTER TABLE visits DROP CONSTRAINT IF EXISTS visits_customer_id_fkey;
+ALTER TABLE visits DROP CONSTRAINT IF EXISTS visits_customer_id_new_fkey;
 ALTER TABLE visits DROP COLUMN IF EXISTS customer_id;
 ALTER TABLE visits RENAME COLUMN customer_id_new TO customer_id;
 ALTER TABLE visits ALTER COLUMN customer_id SET NOT NULL;
 ALTER TABLE visits ADD CONSTRAINT visits_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
 
--- For lane_sessions: Drop old FK, rename new column
+-- For lane_sessions: Drop old FK and constraint on customer_id_new, rename new column
 ALTER TABLE lane_sessions DROP CONSTRAINT IF EXISTS lane_sessions_customer_id_fkey;
+ALTER TABLE lane_sessions DROP CONSTRAINT IF EXISTS lane_sessions_customer_id_new_fkey;
 ALTER TABLE lane_sessions DROP COLUMN IF EXISTS customer_id;
 ALTER TABLE lane_sessions RENAME COLUMN customer_id_new TO customer_id;
 ALTER TABLE lane_sessions ADD CONSTRAINT lane_sessions_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL;
 
--- For checkout_requests: Drop old FK, rename new column
+-- For checkout_requests: Drop old FK and constraint on customer_id_new, rename new column
 ALTER TABLE checkout_requests DROP CONSTRAINT IF EXISTS checkout_requests_customer_id_fkey;
+DO $$
+BEGIN
+  -- Drop the _new constraint if it exists
+  IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'checkout_requests' AND constraint_name = 'checkout_requests_customer_id_new_fkey') THEN
+    ALTER TABLE checkout_requests DROP CONSTRAINT checkout_requests_customer_id_new_fkey;
+  END IF;
+  -- Rename the constraint if the column was renamed but constraint wasn't
+  IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'checkout_requests' AND constraint_name = 'checkout_requests_customer_id_new_fkey' AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'checkout_requests' AND column_name = 'customer_id')) THEN
+    ALTER TABLE checkout_requests RENAME CONSTRAINT checkout_requests_customer_id_new_fkey TO checkout_requests_customer_id_fkey;
+  END IF;
+END $$;
 ALTER TABLE checkout_requests DROP COLUMN IF EXISTS customer_id;
-ALTER TABLE checkout_requests RENAME COLUMN customer_id_new TO customer_id;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'checkout_requests' AND column_name = 'customer_id_new') THEN
+    ALTER TABLE checkout_requests RENAME COLUMN customer_id_new TO customer_id;
+  END IF;
+END $$;
 ALTER TABLE checkout_requests ALTER COLUMN customer_id SET NOT NULL;
-ALTER TABLE checkout_requests ADD CONSTRAINT checkout_requests_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
+-- Ensure the constraint exists with the correct name
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'checkout_requests' AND constraint_name = 'checkout_requests_customer_id_fkey') THEN
+    ALTER TABLE checkout_requests ADD CONSTRAINT checkout_requests_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
+  END IF;
+END $$;
 
--- For late_checkout_events: Drop old FK, rename new column
+-- For late_checkout_events: Drop old FK and constraint on customer_id_new, rename new column
 ALTER TABLE late_checkout_events DROP CONSTRAINT IF EXISTS late_checkout_events_customer_id_fkey;
+ALTER TABLE late_checkout_events DROP CONSTRAINT IF EXISTS late_checkout_events_customer_id_new_fkey;
 ALTER TABLE late_checkout_events DROP COLUMN IF EXISTS customer_id;
 ALTER TABLE late_checkout_events RENAME COLUMN customer_id_new TO customer_id;
 ALTER TABLE late_checkout_events ALTER COLUMN customer_id SET NOT NULL;

@@ -13,18 +13,15 @@ declare module 'fastify' {
 
 interface SessionRow {
   id: string;
-  member_id: string | null;
-  member_name: string;
-  membership_number: string | null;
+  customer_id: string;
   lane: string;
   status: string;
 }
 
-interface MemberRow {
+interface CustomerRow {
   id: string;
   name: string;
   membership_number: string | null;
-  is_active: boolean;
 }
 
 /**
@@ -129,35 +126,74 @@ export async function laneRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await transaction(async (client) => {
         // Check for existing active session in this lane
         const existingSession = await client.query<SessionRow>(
-          `SELECT id, member_id, member_name, membership_number, lane, status
-           FROM sessions 
-           WHERE lane = $1 AND status = 'ACTIVE'
-           ORDER BY created_at DESC
+          `SELECT s.id, s.customer_id, s.lane, s.status
+           FROM sessions s
+           WHERE s.lane = $1 AND s.status = 'ACTIVE'
+           ORDER BY s.created_at DESC
            LIMIT 1`,
           [laneId]
         );
 
         let session: SessionRow;
-        const membershipNumber = body.membershipNumber || null;
+        let customerName: string;
+        let membershipNumber: string | null = body.membershipNumber || null;
+        let customerId: string | null = null;
 
         if (existingSession.rows.length > 0) {
-          // Update existing session
+          // Update existing session - get customer info
           const existing = existingSession.rows[0]!;
-          const updateResult = await client.query<SessionRow>(
-            `UPDATE sessions 
-             SET member_name = $1, membership_number = $2, updated_at = NOW()
-             WHERE id = $3
-             RETURNING id, member_id, member_name, membership_number, lane, status`,
-            [body.customerName, membershipNumber, existing.id]
-          );
-          session = updateResult.rows[0]!;
+          if (existing.customer_id) {
+            const customerResult = await client.query<CustomerRow>(
+              `SELECT id, name, membership_number FROM customers WHERE id = $1`,
+              [existing.customer_id]
+            );
+            if (customerResult.rows.length > 0) {
+              const customer = customerResult.rows[0]!;
+              customerName = customer.name;
+              membershipNumber = customer.membership_number;
+              customerId = customer.id;
+            } else {
+              customerName = body.customerName;
+            }
+          } else {
+            customerName = body.customerName;
+          }
+          session = existing;
         } else {
+          // Create or find customer
+          if (membershipNumber) {
+            const customerResult = await client.query<CustomerRow>(
+              `SELECT id, name, membership_number FROM customers WHERE membership_number = $1 LIMIT 1`,
+              [membershipNumber]
+            );
+            if (customerResult.rows.length > 0) {
+              customerId = customerResult.rows[0]!.id;
+              customerName = customerResult.rows[0]!.name;
+            } else {
+              // Create new customer
+              const newCustomerResult = await client.query<CustomerRow>(
+                `INSERT INTO customers (name, membership_number) VALUES ($1, $2) RETURNING id, name, membership_number`,
+                [body.customerName, membershipNumber]
+              );
+              customerId = newCustomerResult.rows[0]!.id;
+              customerName = newCustomerResult.rows[0]!.name;
+            }
+          } else {
+            // Create new customer without membership
+            const newCustomerResult = await client.query<CustomerRow>(
+              `INSERT INTO customers (name) VALUES ($1) RETURNING id, name, membership_number`,
+              [body.customerName]
+            );
+            customerId = newCustomerResult.rows[0]!.id;
+            customerName = newCustomerResult.rows[0]!.name;
+          }
+
           // Create new session
           const newSessionResult = await client.query<SessionRow>(
-            `INSERT INTO sessions (member_name, membership_number, expected_duration, status, lane)
-             VALUES ($1, $2, 60, 'ACTIVE', $3)
-             RETURNING id, member_id, member_name, membership_number, lane, status`,
-            [body.customerName, membershipNumber, laneId]
+            `INSERT INTO sessions (customer_id, status, lane)
+             VALUES ($1, 'ACTIVE', $2)
+             RETURNING id, customer_id, lane, status`,
+            [customerId, laneId]
           );
           session = newSessionResult.rows[0]!;
         }
@@ -168,8 +204,8 @@ export async function laneRoutes(fastify: FastifyInstance): Promise<void> {
         // Broadcast SESSION_UPDATED event to the specific lane
         const payload: SessionUpdatedPayload = {
           sessionId: session.id,
-          customerName: session.member_name,
-          membershipNumber: session.membership_number || undefined,
+          customerName,
+          membershipNumber: membershipNumber || undefined,
           allowedRentals,
         };
 
@@ -177,8 +213,8 @@ export async function laneRoutes(fastify: FastifyInstance): Promise<void> {
 
         return {
           sessionId: session.id,
-          customerName: session.member_name,
-          membershipNumber: session.membership_number || undefined,
+          customerName,
+          membershipNumber: membershipNumber || undefined,
           allowedRentals,
         };
       });

@@ -154,8 +154,9 @@ export interface ActiveVisit {
 
 /**
  * Checkout request status.
+ * Matches SCHEMA_OVERVIEW.md canonical definition.
  */
-export type CheckoutRequestStatus = 'REQUESTED' | 'CLAIMED' | 'COMPLETED' | 'CANCELLED';
+export type CheckoutRequestStatus = 'SUBMITTED' | 'CLAIMED' | 'VERIFIED' | 'CANCELLED';
 
 /**
  * Customer checklist items for checkout.

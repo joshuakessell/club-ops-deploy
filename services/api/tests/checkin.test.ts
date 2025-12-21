@@ -19,7 +19,7 @@ describe('Check-in Flow', () => {
   let staffToken: string;
   let staffId: string;
   let laneId: string;
-  let memberId: string;
+  let customerId: string;
   let dbAvailable = false;
 
   beforeAll(async () => {
@@ -56,7 +56,7 @@ describe('Check-in Flow', () => {
   beforeEach(async () => {
     if (!dbAvailable) return;
     
-    // Create test staff member
+    // Create test staff
     const pinHash = await hashPin('1234');
     const staffResult = await query<{ id: string }>(
       `INSERT INTO staff (name, role, pin_hash, active)
@@ -77,22 +77,22 @@ describe('Check-in Flow', () => {
     );
 
     // Clean up any existing test data first - delete in order to respect foreign key constraints
-    await query(`DELETE FROM checkout_requests WHERE customer_id IN (SELECT id FROM members WHERE membership_number = '12345')`);
-    await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE member_id IN (SELECT id FROM members WHERE membership_number = '12345'))`);
-    await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM members WHERE membership_number = '12345'))`);
-    await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM members WHERE membership_number = '12345'))`);
-    await query(`DELETE FROM sessions WHERE member_id IN (SELECT id FROM members WHERE membership_number = '12345') OR visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM members WHERE membership_number = '12345'))`);
-    await query(`DELETE FROM visits WHERE customer_id IN (SELECT id FROM members WHERE membership_number = '12345')`);
-    await query(`DELETE FROM lane_sessions WHERE customer_id IN (SELECT id FROM members WHERE membership_number = '12345')`);
-    await query(`DELETE FROM members WHERE membership_number = '12345'`);
+    await query(`DELETE FROM checkout_requests WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345')`);
+    await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`);
+    await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`);
+    await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`);
+    await query(`DELETE FROM sessions WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345') OR visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`);
+    await query(`DELETE FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345')`);
+    await query(`DELETE FROM lane_sessions WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345')`);
+    await query(`DELETE FROM customers WHERE membership_number = '12345'`);
     
-    // Create test member
-    const memberResult = await query<{ id: string }>(
-      `INSERT INTO members (name, membership_number, is_active)
-       VALUES ('Test Customer', '12345', true)
+    // Create test customer
+    const customerResult = await query<{ id: string }>(
+      `INSERT INTO customers (name, membership_number)
+       VALUES ('Test Customer', '12345')
        RETURNING id`
     );
-    memberId = memberResult.rows[0]!.id;
+    customerId = customerResult.rows[0]!.id;
 
     laneId = 'LANE_1';
   });
@@ -101,16 +101,16 @@ describe('Check-in Flow', () => {
     if (!dbAvailable) return;
     
     // Clean up test data - delete in order to respect foreign key constraints
-    await query(`DELETE FROM checkout_requests WHERE customer_id = $1`, [memberId]);
-    await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE member_id = $1)`, [memberId]);
-    await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [memberId]);
-    await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [memberId]);
-    await query(`DELETE FROM sessions WHERE member_id = $1 OR visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [memberId]);
-    await query(`DELETE FROM visits WHERE customer_id = $1`, [memberId]);
+    await query(`DELETE FROM checkout_requests WHERE customer_id = $1`, [customerId]);
+    await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id = $1)`, [customerId]);
+    await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [customerId]);
+    await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [customerId]);
+    await query(`DELETE FROM sessions WHERE customer_id = $1 OR visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [customerId]);
+    await query(`DELETE FROM visits WHERE customer_id = $1`, [customerId]);
     await query(`DELETE FROM lane_sessions WHERE lane_id = $1 OR lane_id = 'LANE_2'`, [laneId]);
     await query(`DELETE FROM payment_intents`);
     await query(`DELETE FROM staff_sessions WHERE staff_id = $1`, [staffId]);
-    await query(`DELETE FROM members WHERE id = $1 OR membership_number = '12345'`, [memberId]);
+    await query(`DELETE FROM customers WHERE id = $1 OR membership_number = '12345'`, [customerId]);
     await query(`DELETE FROM staff WHERE id = $1`, [staffId]);
     await query(`DELETE FROM rooms WHERE number IN ('101', '102', '103', '104')`);
   });
@@ -305,11 +305,11 @@ describe('Check-in Flow', () => {
       expect(data.roomNumber).toBe('101');
 
       // Verify room is assigned
-      const roomCheck = await query<{ assigned_to: string | null }>(
-        `SELECT assigned_to FROM rooms WHERE id = $1`,
+      const roomCheck = await query<{ assigned_to_customer_id: string | null }>(
+        `SELECT assigned_to_customer_id FROM rooms WHERE id = $1`,
         [roomId]
       );
-      expect(roomCheck.rows[0]!.assigned_to).toBeTruthy();
+      expect(roomCheck.rows[0]!.assigned_to_customer_id).toBeTruthy();
     }));
 
     it('should prevent double-booking with race condition', runIfDbAvailable(async () => {
@@ -321,22 +321,20 @@ describe('Check-in Flow', () => {
       );
       const roomId = roomResult.rows[0]!.id;
 
-      // Create two members for the race condition test - use ON CONFLICT to handle duplicates
-      const member1Result = await query<{ id: string }>(
-        `INSERT INTO members (name, membership_number, is_active)
-         VALUES ('Test Customer 1', '11111', true)
-         ON CONFLICT (membership_number) DO UPDATE SET name = EXCLUDED.name, is_active = EXCLUDED.is_active
+      // Create two customers for the race condition test
+      const customer1Result = await query<{ id: string }>(
+        `INSERT INTO customers (name, membership_number)
+         VALUES ('Test Customer 1', '11111')
          RETURNING id`
       );
-      const member1Id = member1Result.rows[0]!.id;
+      const customer1Id = customer1Result.rows[0]!.id;
 
-      const member2Result = await query<{ id: string }>(
-        `INSERT INTO members (name, membership_number, is_active)
-         VALUES ('Test Customer 2', '22222', true)
-         ON CONFLICT (membership_number) DO UPDATE SET name = EXCLUDED.name, is_active = EXCLUDED.is_active
+      const customer2Result = await query<{ id: string }>(
+        `INSERT INTO customers (name, membership_number)
+         VALUES ('Test Customer 2', '22222')
          RETURNING id`
       );
-      const member2Id = member2Result.rows[0]!.id;
+      const customer2Id = customer2Result.rows[0]!.id;
 
       // Start two sessions
       await app.inject({
@@ -415,15 +413,15 @@ describe('Check-in Flow', () => {
       expect(successCount).toBe(1);
       expect(failureCount).toBe(1);
 
-      // Clean up test members - delete in order to respect foreign key constraints
-      await query(`DELETE FROM checkout_requests WHERE customer_id IN ($1, $2)`, [member1Id, member2Id]);
-      await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE member_id IN ($1, $2))`, [member1Id, member2Id]);
-      await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [member1Id, member2Id]);
-      await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [member1Id, member2Id]);
-      await query(`DELETE FROM sessions WHERE member_id IN ($1, $2) OR visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [member1Id, member2Id]);
-      await query(`DELETE FROM visits WHERE customer_id IN ($1, $2)`, [member1Id, member2Id]);
-      await query(`DELETE FROM lane_sessions WHERE customer_id IN ($1, $2)`, [member1Id, member2Id]);
-      await query(`DELETE FROM members WHERE id IN ($1, $2) OR membership_number IN ('11111', '22222')`, [member1Id, member2Id]);
+      // Clean up test customers - delete in order to respect foreign key constraints
+      await query(`DELETE FROM checkout_requests WHERE customer_id IN ($1, $2)`, [customer1Id, customer2Id]);
+      await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id IN ($1, $2))`, [customer1Id, customer2Id]);
+      await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [customer1Id, customer2Id]);
+      await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [customer1Id, customer2Id]);
+      await query(`DELETE FROM sessions WHERE customer_id IN ($1, $2) OR visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [customer1Id, customer2Id]);
+      await query(`DELETE FROM visits WHERE customer_id IN ($1, $2)`, [customer1Id, customer2Id]);
+      await query(`DELETE FROM lane_sessions WHERE customer_id IN ($1, $2)`, [customer1Id, customer2Id]);
+      await query(`DELETE FROM customers WHERE id IN ($1, $2) OR membership_number IN ('11111', '22222')`, [customer1Id, customer2Id]);
     }));
   });
 
@@ -618,7 +616,7 @@ describe('Check-in Flow', () => {
       // Verify visit and check-in block created
       const visitResult = await query<{ id: string }>(
         `SELECT id FROM visits WHERE customer_id = $1`,
-        [memberId]
+        [customerId]
       );
       expect(visitResult.rows.length).toBeGreaterThan(0);
 

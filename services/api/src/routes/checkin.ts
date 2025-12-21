@@ -38,7 +38,7 @@ interface LaneSessionRow {
   price_quote_json: unknown;
   disclaimers_ack_json: unknown;
   payment_intent_id: string | null;
-  checkin_mode: string | null; // 'INITIAL' or 'RENEWAL'
+  checkin_mode: string | null; // 'CHECKIN' or 'RENEWAL' (matches SCHEMA_OVERVIEW LaneSessionMode)
   created_at: Date;
   updated_at: Date;
 }
@@ -53,29 +53,20 @@ interface CustomerRow {
   banned_until: Date | null;
 }
 
-interface MemberRow {
-  id: string;
-  name: string;
-  membership_number: string | null;
-  dob: Date | null;
-  membership_card_type: string | null;
-  membership_valid_until: Date | null;
-  banned_until: Date | null;
-}
 
 interface RoomRow {
   id: string;
   number: string;
   type: string;
   status: string;
-  assigned_to: string | null;
+  assigned_to_customer_id: string | null;
 }
 
 interface LockerRow {
   id: string;
   number: string;
   status: string;
-  assigned_to: string | null;
+  assigned_to_customer_id: string | null;
 }
 
 interface PaymentIntentRow {
@@ -196,7 +187,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   }, async (
     request: FastifyRequest<{
       Params: { laneId: string };
-      Body: { idScanValue: string; membershipScanValue?: string; checkinMode?: 'INITIAL' | 'RENEWAL'; visitId?: string };
+      Body: { idScanValue: string; membershipScanValue?: string; checkinMode?: 'CHECKIN' | 'RENEWAL'; visitId?: string };
     }>,
     reply: FastifyReply
   ) => {
@@ -205,11 +196,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const { laneId } = request.params;
-    const { idScanValue, membershipScanValue, checkinMode = 'INITIAL', visitId } = request.body;
+    const { idScanValue, membershipScanValue, checkinMode = 'CHECKIN', visitId } = request.body;
 
     // Validate checkinMode
-    if (checkinMode !== 'INITIAL' && checkinMode !== 'RENEWAL') {
-      return reply.status(400).send({ error: 'Invalid checkinMode. Must be INITIAL or RENEWAL' });
+    if (checkinMode !== 'CHECKIN' && checkinMode !== 'RENEWAL') {
+      return reply.status(400).send({ error: 'Invalid checkinMode. Must be CHECKIN or RENEWAL' });
     }
 
     // For RENEWAL mode, visitId is required
@@ -234,22 +225,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
         // Try to find existing customer by membership number
         if (membershipNumber) {
-          const memberResult = await client.query<MemberRow>(
+          const customerResult = await client.query<CustomerRow>(
             `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until
-             FROM members
+             FROM customers
              WHERE membership_number = $1
              LIMIT 1`,
             [membershipNumber]
           );
 
-          if (memberResult.rows.length > 0) {
-            const member = memberResult.rows[0]!;
-            customerId = member.id;
-            customerName = member.name;
+          if (customerResult.rows.length > 0) {
+            const customer = customerResult.rows[0]!;
+            customerId = customer.id;
+            customerName = customer.name;
             
             // Check if banned
-            if (member.banned_until && new Date() < member.banned_until) {
-              throw { statusCode: 403, message: 'Customer is banned until ' + member.banned_until.toISOString() };
+            if (customer.banned_until && new Date() < customer.banned_until) {
+              throw { statusCode: 403, message: 'Customer is banned until ' + customer.banned_until.toISOString() };
             }
           }
         }
@@ -351,7 +342,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           customerName: session.customer_display_name || '',
           membershipNumber: session.membership_number || undefined,
           allowedRentals,
-          mode: checkinMode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+          mode: checkinMode === 'RENEWAL' ? 'RENEWAL' : 'CHECKIN',
           blockEndsAt: blockEndsAt ? blockEndsAt.toISOString() : undefined,
           visitId: visitIdForSession || undefined,
           status: session.status,
@@ -518,7 +509,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         // Lock and validate resource availability
         if (resourceType === 'room') {
           const roomResult = await client.query<RoomRow>(
-            `SELECT id, number, type, status, assigned_to FROM rooms
+            `SELECT id, number, type, status, assigned_to_customer_id FROM rooms
              WHERE id = $1 FOR UPDATE`,
             [resourceId]
           );
@@ -533,7 +524,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 400, message: `Room ${room.number} is not available (status: ${room.status})` };
           }
 
-          if (room.assigned_to) {
+          if (room.assigned_to_customer_id) {
             throw { statusCode: 409, message: `Room ${room.number} is already assigned (race condition)` };
           }
 
@@ -544,7 +535,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           // Assign room
           await client.query(
-            `UPDATE rooms SET assigned_to = $1, updated_at = NOW() WHERE id = $2`,
+            `UPDATE rooms SET assigned_to_customer_id = $1, updated_at = NOW() WHERE id = $2`,
             [session.customer_id || session.id, resourceId]
           );
 
@@ -567,8 +558,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             [
               request.staff.staffId,
               resourceId,
-              JSON.stringify({ assigned_to: null }),
-              JSON.stringify({ assigned_to: session.customer_id || session.id, lane_session_id: session.id }),
+              JSON.stringify({ assigned_to_customer_id: null }),
+              JSON.stringify({ assigned_to_customer_id: session.customer_id || session.id, lane_session_id: session.id }),
             ]
           );
 
@@ -602,7 +593,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         } else {
           // Locker assignment
           const lockerResult = await client.query<LockerRow>(
-            `SELECT id, number, status, assigned_to FROM lockers
+            `SELECT id, number, status, assigned_to_customer_id FROM lockers
              WHERE id = $1 FOR UPDATE`,
             [resourceId]
           );
@@ -613,13 +604,13 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const locker = lockerResult.rows[0]!;
 
-          if (locker.assigned_to) {
+          if (locker.assigned_to_customer_id) {
             throw { statusCode: 409, message: `Locker ${locker.number} is already assigned (race condition)` };
           }
 
           // Assign locker
           await client.query(
-            `UPDATE lockers SET assigned_to = $1, updated_at = NOW() WHERE id = $2`,
+            `UPDATE lockers SET assigned_to_customer_id = $1, updated_at = NOW() WHERE id = $2`,
             [session.customer_id || session.id, resourceId]
           );
 
@@ -642,8 +633,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             [
               request.staff.staffId,
               resourceId,
-              JSON.stringify({ assigned_to: null }),
-              JSON.stringify({ assigned_to: session.customer_id || session.id, lane_session_id: session.id }),
+              JSON.stringify({ assigned_to_customer_id: null }),
+              JSON.stringify({ assigned_to_customer_id: session.customer_id || session.id, lane_session_id: session.id }),
             ]
           );
 
@@ -751,15 +742,15 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         let membershipValidUntil: Date | undefined;
 
         if (session.customer_id) {
-          const memberResult = await client.query<MemberRow>(
-            `SELECT dob, membership_card_type, membership_valid_until FROM members WHERE id = $1`,
+          const customerResult = await client.query<CustomerRow>(
+            `SELECT dob, membership_card_type, membership_valid_until FROM customers WHERE id = $1`,
             [session.customer_id]
           );
-          if (memberResult.rows.length > 0) {
-            const member = memberResult.rows[0]!;
-            customerAge = calculateAge(member.dob);
-            membershipCardType = (member.membership_card_type as 'NONE' | 'SIX_MONTH') || undefined;
-            membershipValidUntil = member.membership_valid_until || undefined;
+          if (customerResult.rows.length > 0) {
+            const customer = customerResult.rows[0]!;
+            customerAge = calculateAge(customer.dob);
+            membershipCardType = (customer.membership_card_type as 'NONE' | 'SIX_MONTH') || undefined;
+            membershipValidUntil = customer.membership_valid_until || undefined;
           }
         }
 
@@ -954,7 +945,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               customerName: session.customer_display_name || '',
               membershipNumber: session.membership_number || undefined,
               allowedRentals: getAllowedRentals(session.membership_number),
-              mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+              mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : (session.checkin_mode === 'CHECKIN' ? 'CHECKIN' : 'CHECKIN'), // Support legacy INITIAL
               status: newStatus,
             };
             fastify.broadcaster.broadcastSessionUpdated(payload, session.lane_id);
@@ -1087,7 +1078,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               customerName: session.customer_display_name || '',
               membershipNumber: session.membership_number || undefined,
               allowedRentals: getAllowedRentals(session.membership_number),
-              mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+              mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : (session.checkin_mode === 'CHECKIN' ? 'CHECKIN' : 'CHECKIN'), // Support legacy INITIAL
               status: 'COMPLETED',
             };
             fastify.broadcaster.broadcastSessionUpdated(completionPayload, laneId);
@@ -1153,12 +1144,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           if (session.assigned_resource_id) {
             if (session.assigned_resource_type === 'room') {
               await client.query(
-                `UPDATE rooms SET assigned_to = NULL, updated_at = NOW() WHERE id = $1`,
+                `UPDATE rooms SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
                 [session.assigned_resource_id]
               );
             } else if (session.assigned_resource_type === 'locker') {
               await client.query(
-                `UPDATE lockers SET assigned_to = NULL, updated_at = NOW() WHERE id = $1`,
+                `UPDATE lockers SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
                 [session.assigned_resource_id]
               );
             }
@@ -1207,6 +1198,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const isRenewal = session.checkin_mode === 'RENEWAL';
+    const isCheckin = session.checkin_mode === 'CHECKIN' || session.checkin_mode === 'INITIAL'; // Support legacy INITIAL
     const rentalType = (session.desired_rental_type || session.backup_rental_type || 'LOCKER') as string;
 
     let visitId: string;
@@ -1258,7 +1250,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000); // 6 hours from previous checkout
       blockType = 'RENEWAL';
     } else {
-      // For INITIAL: create new visit
+      // For CHECKIN: create new visit
       const visitResult = await client.query<{ id: string }>(
         `INSERT INTO visits (customer_id, started_at)
          VALUES ($1, NOW())
@@ -1271,7 +1263,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       // Create check-in block (6 hours from now)
       startsAt = new Date();
       endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000);
-      blockType = 'INITIAL';
+      blockType = 'INITIAL'; // block_type enum uses INITIAL, not CHECKIN (this is correct per schema)
     }
 
     const blockResult = await client.query<{ id: string }>(

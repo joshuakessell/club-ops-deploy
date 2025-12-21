@@ -92,7 +92,7 @@ interface CheckinBlockRow {
   has_tv_remote: boolean;
 }
 
-interface MemberRow {
+interface CustomerRow {
   id: string;
   name: string;
   membership_number: string | null;
@@ -236,18 +236,18 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
 
       const customerId = visitResult.rows[0]!.customer_id;
 
-      const memberResult = await query<MemberRow>(
-        'SELECT id, name, membership_number, banned_until FROM members WHERE id = $1',
+      const customerResult = await query<CustomerRow>(
+        'SELECT id, name, membership_number, banned_until FROM customers WHERE id = $1',
         [customerId]
       );
 
-      if (memberResult.rows.length === 0) {
+      if (customerResult.rows.length === 0) {
         return reply.status(404).send({
           error: 'Customer not found',
         });
       }
 
-      const member = memberResult.rows[0]!;
+      const customer = customerResult.rows[0]!;
 
       // 4. Get room/locker details
       let roomNumber: string | undefined;
@@ -283,9 +283,9 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
       const result: ResolvedCheckoutKey = {
         keyTagId: tag.id,
         occupancyId: block.id,
-        customerId: member.id,
-        customerName: member.name,
-        membershipNumber: member.membership_number || undefined,
+        customerId: customer.id,
+        customerName: customer.name,
+        membershipNumber: customer.membership_number || undefined,
         rentalType: block.rental_type,
         roomId: block.room_id || undefined,
         roomNumber,
@@ -353,7 +353,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         // 2. Check for existing active request
         const existingRequest = await client.query<CheckoutRequestRow>(
           `SELECT id FROM checkout_requests
-           WHERE occupancy_id = $1 AND status IN ('REQUESTED', 'CLAIMED')`,
+           WHERE occupancy_id = $1 AND status IN ('SUBMITTED', 'CLAIMED')`,
           [body.occupancyId]
         );
 
@@ -425,11 +425,11 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
       );
       const block = blockResult.rows[0]!;
 
-      const memberResult = await query<MemberRow>(
-        'SELECT id, name, membership_number FROM members WHERE id = $1',
+      const customerResult = await query<CustomerRow>(
+        'SELECT id, name, membership_number FROM customers WHERE id = $1',
         [block.customer_id]
       );
-      const member = memberResult.rows[0]!;
+      const customer = customerResult.rows[0]!;
 
       let roomNumber: string | undefined;
       let lockerNumber: string | undefined;
@@ -458,9 +458,9 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
       if (fastify.broadcaster) {
         const summary: CheckoutRequestSummary = {
           requestId: result.id,
-          customerId: member.id,
-          customerName: member.name,
-          membershipNumber: member.membership_number || undefined,
+          customerId: customer.id,
+          customerName: customer.name,
+          membershipNumber: customer.membership_number || undefined,
           rentalType: block.rental_type,
           roomNumber,
           lockerNumber,
@@ -537,7 +537,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
 
         const checkoutRequest = requestResult.rows[0]!;
 
-        if (checkoutRequest.status !== 'REQUESTED') {
+        if (checkoutRequest.status !== 'SUBMITTED') {
           // Check if claim expired
           if (checkoutRequest.status === 'CLAIMED' && checkoutRequest.claim_expires_at) {
             const now = new Date();
@@ -854,14 +854,14 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         // 3. Update room to DIRTY or locker to AVAILABLE
         if (block.room_id) {
           await client.query(
-            `UPDATE rooms SET status = $1, assigned_to = NULL, updated_at = NOW() WHERE id = $2`,
+            `UPDATE rooms SET status = $1, assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $2`,
             [RoomStatus.DIRTY, block.room_id]
           );
         }
 
         if (block.locker_id) {
           await client.query(
-            `UPDATE lockers SET status = $1, assigned_to = NULL, updated_at = NOW() WHERE id = $2`,
+            `UPDATE lockers SET status = $1, assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $2`,
             [RoomStatus.CLEAN, block.locker_id] // CLEAN = AVAILABLE for lockers
           );
         }
@@ -885,7 +885,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
           const banUntil = new Date();
           banUntil.setDate(banUntil.getDate() + 30); // 30 days from now
           await client.query(
-            `UPDATE members SET banned_until = $1, updated_at = NOW() WHERE id = $2`,
+            `UPDATE customers SET banned_until = $1, updated_at = NOW() WHERE id = $2`,
             [banUntil, checkoutRequest.customer_id]
           );
         }
@@ -910,7 +910,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         const now = new Date();
         await client.query(
           `UPDATE checkout_requests
-           SET status = 'COMPLETED', completed_at = $1, updated_at = NOW()
+           SET status = 'VERIFIED', completed_at = $1, updated_at = NOW()
            WHERE id = $2`,
           [now, checkoutRequest.id]
         );

@@ -29,10 +29,11 @@ export enum BlockType {
 }
 
 /**
- * Check-in mode: Initial check-in or Renewal.
+ * Check-in mode: Check-in or Renewal.
+ * Matches SCHEMA_OVERVIEW.md canonical definition (LaneSessionMode).
  */
 export enum CheckinMode {
-  INITIAL = 'INITIAL',
+  CHECKIN = 'CHECKIN',
   RENEWAL = 'RENEWAL',
 }
 

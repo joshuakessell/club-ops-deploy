@@ -34,7 +34,7 @@ const AcceptUpgradeSchema = z.object({
 
 interface SessionRow {
   id: string;
-  member_id: string;
+  customer_id: string;
   checkin_type: string | null;
   checkout_at: Date | null;
   room_id: string | null;
@@ -45,7 +45,7 @@ interface RoomRow {
   number: string;
   type: string;
   status: string;
-  assigned_to: string | null;
+  assigned_to_customer_id: string | null;
 }
 
 /**
@@ -140,7 +140,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
       await transaction(async (client) => {
         // 1. Verify session exists
         const sessionResult = await client.query<SessionRow>(
-          `SELECT id, member_id, checkin_type, checkout_at, room_id
+          `SELECT id, customer_id, checkin_type, checkout_at, room_id
            FROM sessions
            WHERE id = $1 AND status = 'ACTIVE'
            FOR UPDATE`,
@@ -223,7 +223,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await transaction(async (client) => {
         // 1. Get session and verify it exists
         const sessionResult = await client.query<SessionRow>(
-          `SELECT id, member_id, checkin_type, checkout_at, room_id
+          `SELECT id, customer_id, checkin_type, checkout_at, room_id
            FROM sessions
            WHERE id = $1 AND status = 'ACTIVE'
            FOR UPDATE`,
@@ -239,7 +239,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
 
         // 2. Get new room and verify it's available
         const roomResult = await client.query<RoomRow>(
-          `SELECT id, number, type, status, assigned_to
+          `SELECT id, number, type, status, assigned_to_customer_id
            FROM rooms
            WHERE id = $1
            FOR UPDATE`,
@@ -256,7 +256,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           throw { statusCode: 400, message: `Room ${newRoom.number} is not available (status: ${newRoom.status})` };
         }
 
-        if (newRoom.assigned_to) {
+        if (newRoom.assigned_to_customer_id) {
           throw { statusCode: 409, message: `Room ${newRoom.number} is already assigned` };
         }
 
@@ -264,18 +264,28 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
         if (session.room_id) {
           await client.query(
             `UPDATE rooms 
-             SET assigned_to = NULL, updated_at = NOW()
+             SET assigned_to_customer_id = NULL, updated_at = NOW()
              WHERE id = $1`,
             [session.room_id]
           );
         }
 
         // 4. Assign new room
+        // Get customer_id from session
+        const customerIdResult = await client.query<{ customer_id: string }>(
+          `SELECT customer_id FROM sessions WHERE id = $1`,
+          [session.id]
+        );
+        const customerId = customerIdResult.rows[0]?.customer_id;
+        if (!customerId) {
+          throw { statusCode: 400, message: 'Session has no customer_id' };
+        }
+
         await client.query(
           `UPDATE rooms 
-           SET assigned_to = $1, updated_at = NOW()
+           SET assigned_to_customer_id = $1, updated_at = NOW()
            WHERE id = $2`,
-          [session.member_id, body.newRoomId]
+          [customerId, body.newRoomId]
         );
 
         // 5. Update session - mark as upgrade, but DO NOT change checkout_at
@@ -424,7 +434,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
 
         // 3. Get new room and verify availability
         const newRoomResult = await client.query<RoomRow>(
-          `SELECT id, number, type, status, assigned_to FROM rooms WHERE id = $1 FOR UPDATE`,
+          `SELECT id, number, type, status, assigned_to_customer_id FROM rooms WHERE id = $1 FOR UPDATE`,
           [roomId]
         );
 
@@ -438,7 +448,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           throw { statusCode: 400, message: `Room ${newRoom.number} is not available (status: ${newRoom.status})` };
         }
 
-        if (newRoom.assigned_to) {
+        if (newRoom.assigned_to_customer_id) {
           throw { statusCode: 409, message: `Room ${newRoom.number} is already assigned` };
         }
 
@@ -643,7 +653,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           // Room becomes DIRTY (used linens)
           await client.query(
             `UPDATE rooms 
-             SET assigned_to = NULL, status = 'DIRTY', last_status_change = NOW(), updated_at = NOW()
+             SET assigned_to_customer_id = NULL, status = 'DIRTY', last_status_change = NOW(), updated_at = NOW()
              WHERE id = $1`,
             [oldResourceId]
           );
@@ -651,7 +661,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           // Locker becomes AVAILABLE (CLEAN)
           await client.query(
             `UPDATE lockers 
-             SET assigned_to = NULL, status = 'CLEAN', updated_at = NOW()
+             SET assigned_to_customer_id = NULL, status = 'CLEAN', updated_at = NOW()
              WHERE id = $1`,
             [oldResourceId]
           );
@@ -660,7 +670,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
         // 6. Assign new room (becomes OCCUPIED)
         await client.query(
           `UPDATE rooms 
-           SET assigned_to = (SELECT customer_id FROM visits WHERE id = $1),
+           SET assigned_to_customer_id = (SELECT customer_id FROM visits WHERE id = $1),
                status = 'OCCUPIED',
                last_status_change = NOW(),
                updated_at = NOW()

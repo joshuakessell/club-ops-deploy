@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import Fastify, { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { checkoutRoutes } from '../src/routes/checkout.js';
@@ -67,7 +67,7 @@ declare module 'fastify' {
 describe('Checkout Flow', () => {
   let fastify: FastifyInstance;
   let pool: pg.Pool;
-  let testMemberId: string;
+  let testCustomerId: string;
   let testRoomId: string;
   let testLockerId: string;
   let testKeyTagId: string;
@@ -88,13 +88,13 @@ describe('Checkout Flow', () => {
 
     pool = new pg.Pool(config);
 
-    // Create test data
-    const memberResult = await pool.query(
-      `INSERT INTO members (name, membership_number, is_active)
-       VALUES ('Test Customer', '12345', true)
+    // Create test data - create customer instead of member
+    const customerResult = await pool.query(
+      `INSERT INTO customers (name, membership_number)
+       VALUES ('Test Customer', '12345')
        RETURNING id`
     );
-    testMemberId = memberResult.rows[0]!.id;
+    testCustomerId = customerResult.rows[0]!.id;
 
     const roomResult = await pool.query(
       `INSERT INTO rooms (number, type, status, floor)
@@ -138,7 +138,7 @@ describe('Checkout Flow', () => {
       `INSERT INTO visits (customer_id, started_at, ended_at)
        VALUES ($1, NOW() - INTERVAL '7 hours', NULL)
        RETURNING id`,
-      [testMemberId]
+      [testCustomerId]
     );
     testVisitId = visitResult.rows[0]!.id;
 
@@ -151,15 +151,15 @@ describe('Checkout Flow', () => {
     testBlockId = blockResult.rows[0]!.id;
 
     await pool.query(
-      `UPDATE rooms SET assigned_to = $1 WHERE id = $2`,
-      [testMemberId, testRoomId]
+      `UPDATE rooms SET assigned_to_customer_id = $1 WHERE id = $2`,
+      [testCustomerId, testRoomId]
     );
   });
 
   afterAll(async () => {
     // Clean up test data
-    await pool.query('DELETE FROM checkout_requests WHERE customer_id = $1', [testMemberId]);
-    await pool.query('DELETE FROM late_checkout_events WHERE customer_id = $1', [testMemberId]);
+    await pool.query('DELETE FROM checkout_requests WHERE customer_id = $1', [testCustomerId]);
+    await pool.query('DELETE FROM late_checkout_events WHERE customer_id = $1', [testCustomerId]);
     await pool.query('DELETE FROM checkin_blocks WHERE visit_id = $1', [testVisitId]);
     await pool.query('DELETE FROM visits WHERE id = $1', [testVisitId]);
     await pool.query('DELETE FROM key_tags WHERE id = $1', [testKeyTagId]);
@@ -167,7 +167,7 @@ describe('Checkout Flow', () => {
     await pool.query('DELETE FROM lockers WHERE id = $1', [testLockerId]);
     await pool.query('DELETE FROM staff_sessions WHERE staff_id = $1', [testStaffId]);
     await pool.query('DELETE FROM staff WHERE id = $1', [testStaffId]);
-    await pool.query('DELETE FROM members WHERE id = $1', [testMemberId]);
+    await pool.query('DELETE FROM customers WHERE id = $1', [testCustomerId]);
     await pool.end();
   });
 
@@ -189,17 +189,14 @@ describe('Checkout Flow', () => {
 
   describe('Late fee calculations', () => {
     it('should calculate $0 fee for < 30 minutes late', async () => {
-      // Delete old block and create a new one that ended 15 minutes ago
-      await pool.query('DELETE FROM checkin_blocks WHERE id = $1', [testBlockId]);
-      const blockResult = await pool.query(
-        `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, rental_type, room_id)
-         VALUES ($1, 'INITIAL', NOW() - INTERVAL '6 hours 15 minutes', NOW() - INTERVAL '15 minutes', 'STANDARD', $2)
-         RETURNING id`,
-        [testVisitId, testRoomId]
+      // Update existing block to end 15 minutes ago
+      await pool.query(
+        `UPDATE checkin_blocks 
+         SET starts_at = NOW() - INTERVAL '6 hours 15 minutes', 
+             ends_at = NOW() - INTERVAL '15 minutes'
+         WHERE id = $1`,
+        [testBlockId]
       );
-      const blockId = blockResult.rows[0]!.id;
-      // Update testBlockId for subsequent tests
-      testBlockId = blockId;
 
       const response = await fastify.inject({
         method: 'POST',
@@ -219,8 +216,6 @@ describe('Checkout Flow', () => {
       expect(data.lateMinutes).toBeLessThan(30);
       expect(data.lateFeeAmount).toBe(0);
       expect(data.banApplied).toBe(false);
-
-      await pool.query('DELETE FROM checkin_blocks WHERE id = $1', [blockId]);
     });
 
     it('should calculate $15 fee for 30-59 minutes late', async () => {
@@ -302,20 +297,20 @@ describe('Checkout Flow', () => {
   });
 
   describe('Ban enforcement', () => {
-    it('should prevent check-in for banned member', async () => {
-      // Ban the member
+    it('should prevent check-in for banned customer', async () => {
+      // Ban the customer
       const banUntil = new Date();
       banUntil.setDate(banUntil.getDate() + 30);
       await pool.query(
-        `UPDATE members SET banned_until = $1 WHERE id = $2`,
-        [banUntil, testMemberId]
+        `UPDATE customers SET banned_until = $1 WHERE id = $2`,
+        [banUntil, testCustomerId]
       );
 
       const response = await fastify.inject({
         method: 'POST',
         url: '/v1/visits',
         payload: {
-          customerId: testMemberId,
+          customerId: testCustomerId,
           rentalType: 'STANDARD',
           roomId: testRoomId,
         },
@@ -326,7 +321,7 @@ describe('Checkout Flow', () => {
       expect(data.error).toContain('banned');
 
       // Clean up
-      await pool.query(`UPDATE members SET banned_until = NULL WHERE id = $1`, [testMemberId]);
+      await pool.query(`UPDATE customers SET banned_until = NULL WHERE id = $1`, [testCustomerId]);
     });
   });
 
@@ -376,7 +371,7 @@ describe('Checkout Flow', () => {
         `INSERT INTO checkout_requests (occupancy_id, customer_id, kiosk_device_id, customer_checklist_json, late_minutes, late_fee_amount)
          VALUES ($1, $2, 'test-kiosk', '{}', 45, 15)
          RETURNING id`,
-        [testBlockId, testMemberId]
+        [testBlockId, testCustomerId]
       );
       const requestId = requestResult.rows[0]!.id;
 
@@ -403,7 +398,7 @@ describe('Checkout Flow', () => {
         `INSERT INTO checkout_requests (occupancy_id, customer_id, kiosk_device_id, customer_checklist_json, late_minutes, late_fee_amount, claimed_by_staff_id, status, items_confirmed, fee_paid)
          VALUES ($1, $2, 'test-kiosk', '{}', 0, 0, $3, 'CLAIMED', true, true)
          RETURNING id`,
-        [testBlockId, testMemberId, testStaffId]
+        [testBlockId, testCustomerId, testStaffId]
       );
       const requestId = requestResult.rows[0]!.id;
 
@@ -429,7 +424,7 @@ describe('Checkout Flow', () => {
 
       // Clean up
       await pool.query('DELETE FROM checkout_requests WHERE id = $1', [requestId]);
-      await pool.query('UPDATE rooms SET status = $1, assigned_to = NULL WHERE id = $2', [RoomStatus.CLEAN, testRoomId]);
+      await pool.query('UPDATE rooms SET status = $1, assigned_to_customer_id = NULL WHERE id = $2', [RoomStatus.CLEAN, testRoomId]);
       await pool.query('UPDATE visits SET ended_at = NULL WHERE id = $1', [testVisitId]);
     });
   });

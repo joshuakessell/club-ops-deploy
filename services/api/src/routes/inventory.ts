@@ -134,18 +134,18 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/inventory/available', async (_request, reply: FastifyReply) => {
     try {
-      const result = await query<{ number: string; status: string; assigned_to: string | null }>(
-        `SELECT number, status, assigned_to
+      const result = await query<{ number: string; status: string; assigned_to_customer_id: string | null }>(
+        `SELECT number, status, assigned_to_customer_id
          FROM rooms
-         WHERE status = 'CLEAN' 
-           AND assigned_to IS NULL
+         WHERE status = 'CLEAN'
+           AND assigned_to_customer_id IS NULL
            AND type != 'LOCKER'`
       );
 
       const lockerResult = await query<{ count: string }>(
         `SELECT COUNT(*) as count
          FROM lockers
-         WHERE status = 'CLEAN' AND assigned_to IS NULL`
+         WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL`
       );
 
       // Group by tier using room number mapping
@@ -194,14 +194,14 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
         id: string;
         number: string;
         status: string;
-        assigned_to: string | null;
+        assigned_to_customer_id: string | null;
         checkout_at: Date | null;
       }>(
         `SELECT 
           r.id,
           r.number,
           r.status,
-          r.assigned_to,
+          r.assigned_to_customer_id,
           cb.ends_at as checkout_at
          FROM rooms r
          LEFT JOIN checkin_blocks cb ON cb.room_id = r.id 
@@ -232,7 +232,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           status: row.status,
         };
 
-        if (row.status === 'CLEAN' && !row.assigned_to) {
+        if (row.status === 'CLEAN' && !row.assigned_to_customer_id) {
           // Available now
           byTier[tier].available.push(roomInfo);
         } else if (row.checkout_at) {
@@ -260,9 +260,9 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
         id: string;
         number: string;
         status: string;
-        assigned_to: string | null;
+        assigned_to_customer_id: string | null;
       }>(
-        `SELECT id, number, status, assigned_to
+        `SELECT id, number, status, assigned_to_customer_id
          FROM lockers
          ORDER BY number`
       );
@@ -273,7 +273,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
       };
 
       for (const locker of lockerResult.rows) {
-        if (locker.status === 'CLEAN' && !locker.assigned_to) {
+        if (locker.status === 'CLEAN' && !locker.assigned_to_customer_id) {
           lockers.available.push({ id: locker.id, number: locker.number });
         } else {
           lockers.assigned.push({ id: locker.id, number: locker.number });
@@ -304,8 +304,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
         status: string;
         floor: number;
         last_status_change: Date;
-        assigned_to: string | null;
-        assigned_member_name: string | null;
+        assigned_to_customer_id: string | null;
+        assigned_customer_name: string | null;
         override_flag: boolean;
       }>(
         `SELECT 
@@ -315,11 +315,11 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           r.status,
           r.floor,
           r.last_status_change,
-          r.assigned_to,
-          m.name as assigned_member_name,
+          r.assigned_to_customer_id,
+          c.name as assigned_customer_name,
           r.override_flag
          FROM rooms r
-         LEFT JOIN members m ON r.assigned_to = m.id
+         LEFT JOIN customers c ON r.assigned_to_customer_id = c.id
          WHERE r.type != 'LOCKER'
          ORDER BY r.number`
       );
@@ -331,8 +331,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
         status: row.status,
         floor: row.floor,
         lastStatusChange: row.last_status_change,
-        assignedTo: row.assigned_to || undefined,
-        assignedMemberName: row.assigned_member_name || undefined,
+        assignedTo: row.assigned_to_customer_id || undefined,
+        assignedMemberName: row.assigned_customer_name || undefined,
         overrideFlag: row.override_flag,
       }));
 
@@ -361,8 +361,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
         status: string;
         floor: number;
         last_status_change: Date;
-        assigned_to: string | null;
-        assigned_member_name: string | null;
+        assigned_to_customer_id: string | null;
+        assigned_customer_name: string | null;
         override_flag: boolean;
         checkin_at: Date | null;
         checkout_at: Date | null;
@@ -374,13 +374,13 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           r.status,
           r.floor,
           r.last_status_change,
-          r.assigned_to,
-          m.name as assigned_member_name,
+          r.assigned_to_customer_id,
+          c.name as assigned_customer_name,
           r.override_flag,
-          s.check_in_time as checkin_at,
+          s.checkin_at,
           s.checkout_at
          FROM rooms r
-         LEFT JOIN members m ON r.assigned_to = m.id
+         LEFT JOIN customers c ON r.assigned_to_customer_id = c.id
          LEFT JOIN sessions s ON s.room_id = r.id AND s.status = 'ACTIVE'
          WHERE r.type != 'LOCKER'
          ORDER BY r.number`
@@ -391,8 +391,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
         id: string;
         number: string;
         status: string;
-        assigned_to: string | null;
-        assigned_member_name: string | null;
+        assigned_to_customer_id: string | null;
+        assigned_customer_name: string | null;
         checkin_at: Date | null;
         checkout_at: Date | null;
       }>(
@@ -400,12 +400,12 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           l.id,
           l.number,
           l.status,
-          l.assigned_to,
-          m.name as assigned_member_name,
-          s.check_in_time as checkin_at,
+          l.assigned_to_customer_id,
+          c.name as assigned_customer_name,
+          s.checkin_at,
           s.checkout_at
          FROM lockers l
-         LEFT JOIN members m ON l.assigned_to = m.id
+         LEFT JOIN customers c ON l.assigned_to_customer_id = c.id
          LEFT JOIN sessions s ON s.locker_id = l.id AND s.status = 'ACTIVE'
          ORDER BY l.number`
       );
@@ -417,8 +417,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
         status: row.status,
         floor: row.floor,
         lastStatusChange: row.last_status_change,
-        assignedTo: row.assigned_to || undefined,
-        assignedMemberName: row.assigned_member_name || undefined,
+        assignedTo: row.assigned_to_customer_id || undefined,
+        assignedMemberName: row.assigned_customer_name || undefined,
         overrideFlag: row.override_flag,
         checkinAt: row.checkin_at ? new Date(row.checkin_at).toISOString() : undefined,
         checkoutAt: row.checkout_at ? new Date(row.checkout_at).toISOString() : undefined,
@@ -428,8 +428,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
         id: row.id,
         number: row.number,
         status: row.status,
-        assignedTo: row.assigned_to || undefined,
-        assignedMemberName: row.assigned_member_name || undefined,
+        assignedTo: row.assigned_to_customer_id || undefined,
+        assignedMemberName: row.assigned_customer_name || undefined,
         checkinAt: row.checkin_at ? new Date(row.checkin_at).toISOString() : undefined,
         checkoutAt: row.checkout_at ? new Date(row.checkout_at).toISOString() : undefined,
       }));

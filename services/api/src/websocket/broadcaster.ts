@@ -22,7 +22,7 @@ import type {
 export interface RoomAssignedPayload {
   roomId: string;
   sessionId: string;
-  memberId: string;
+  customerId: string;
 }
 
 /**

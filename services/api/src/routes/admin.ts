@@ -335,8 +335,8 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           r.number as room_number,
           r.type as room_type,
           s.id as session_id,
-          COALESCE(s.member_name, m.name) as customer_name,
-          m.membership_number,
+          COALESCE(s.member_name, c.name) as customer_name,
+          c.membership_number,
           COALESCE(s.check_in_time, s.checkin_at) as check_in_time,
           COALESCE(s.expected_duration, 360) as expected_duration,
           COALESCE(
@@ -345,7 +345,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           ) as checkout_at
          FROM sessions s
          JOIN rooms r ON s.room_id = r.id
-         LEFT JOIN members m ON s.member_id = m.id
+         LEFT JOIN customers c ON s.customer_id = c.id
          WHERE s.status = 'ACTIVE'
            AND s.room_id IS NOT NULL
          ORDER BY checkout_at ASC`

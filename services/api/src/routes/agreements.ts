@@ -26,11 +26,14 @@ interface AgreementRow {
 
 interface SessionRow {
   id: string;
-  member_id: string;
-  member_name: string;
-  membership_number: string | null;
+  customer_id: string;
   checkin_type: string | null;
-  agreement_signed: boolean;
+}
+
+interface CustomerRow {
+  id: string;
+  name: string;
+  membership_number: string | null;
 }
 
 /**
@@ -107,7 +110,7 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await transaction(async (client) => {
         // 1. Get the session and verify it exists
         const sessionResult = await client.query<SessionRow>(
-          `SELECT id, member_id, member_name, membership_number, checkin_type, agreement_signed
+          `SELECT id, customer_id, checkin_type
            FROM sessions
            WHERE id = $1
            FOR UPDATE`,
@@ -120,7 +123,19 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
 
         const session = sessionResult.rows[0]!;
 
-        // 2. Verify this is an initial check-in or renewal (not upgrade)
+        // 2. Get customer info
+        const customerResult = await client.query<CustomerRow>(
+          `SELECT id, name, membership_number FROM customers WHERE id = $1`,
+          [session.customer_id]
+        );
+
+        if (customerResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'Customer not found' };
+        }
+
+        const customer = customerResult.rows[0]!;
+
+        // 3. Verify this is an initial check-in or renewal (not upgrade)
         if (session.checkin_type === 'UPGRADE') {
           throw { 
             statusCode: 400, 
@@ -128,15 +143,27 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
           };
         }
 
-        // 3. Check if already signed
-        if (session.agreement_signed) {
+        // 4. Get the checkin_block_id from the session's visit (if exists) and check if already signed
+        const blockResult = await client.query<{ id: string; agreement_signed: boolean }>(
+          `SELECT cb.id, cb.agreement_signed
+           FROM checkin_blocks cb
+           JOIN sessions s ON cb.session_id = s.id
+           WHERE s.id = $1
+           ORDER BY cb.created_at DESC
+           LIMIT 1`,
+          [session.id]
+        );
+
+        if (blockResult.rows.length > 0 && blockResult.rows[0]!.agreement_signed) {
           throw { 
             statusCode: 400, 
             message: 'Agreement already signed for this check-in' 
           };
         }
 
-        // 4. Get the active agreement
+        const checkinBlockId = blockResult.rows[0]?.id || null;
+
+        // 5. Get the active agreement
         const agreementResult = await client.query<AgreementRow>(
           `SELECT id, version, title, body_text
            FROM agreements
@@ -150,19 +177,6 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         const agreement = agreementResult.rows[0]!;
-
-        // 5. Get the checkin_block_id from the session's visit (if exists)
-        const blockResult = await client.query<{ id: string }>(
-          `SELECT cb.id 
-           FROM checkin_blocks cb
-           JOIN sessions s ON cb.session_id = s.id
-           WHERE s.id = $1
-           ORDER BY cb.created_at DESC
-           LIMIT 1`,
-          [session.id]
-        );
-
-        const checkinBlockId = blockResult.rows[0]?.id || null;
 
         // 6. Store the signature
         const signatureResult = await client.query<{ id: string }>(
@@ -178,8 +192,8 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
             agreement.id,
             session.id,
             checkinBlockId,
-            session.member_name,
-            session.membership_number,
+            customer.name,
+            customer.membership_number,
             body.signaturePngBase64 || null,
             body.signatureStrokesJson ? JSON.stringify(body.signatureStrokesJson) : null,
             agreement.body_text,
@@ -191,13 +205,7 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
           ]
         );
 
-        // 7. Mark session and block as agreement signed
-        await client.query(
-          `UPDATE sessions 
-           SET agreement_signed = true, updated_at = NOW()
-           WHERE id = $1`,
-          [session.id]
-        );
+        // 7. Mark block as agreement signed (sessions table doesn't have agreement_signed column)
 
         if (checkinBlockId) {
           await client.query(

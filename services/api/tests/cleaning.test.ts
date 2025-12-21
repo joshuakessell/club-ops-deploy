@@ -132,21 +132,21 @@ describe('Cleaning Batch Endpoint', () => {
       return;
     }
 
-    // Create test staff member for cleaning operations
-    const staffResult = await pool.query<{ id: string }>(
-      `INSERT INTO staff (name, role, active)
-       VALUES ('Test Cleaning Staff', 'STAFF', true)
-       ON CONFLICT DO NOTHING
-       RETURNING id`
+    // Create test staff for cleaning operations
+    // First try to get existing staff
+    const existingStaff = await pool.query<{ id: string }>(
+      `SELECT id FROM staff WHERE name = 'Test Cleaning Staff' LIMIT 1`
     );
-    if (staffResult.rows.length > 0) {
-      testStaffId = staffResult.rows[0]!.id;
-    } else {
-      // If staff already exists, get it
-      const existingStaff = await pool.query<{ id: string }>(
-        `SELECT id FROM staff WHERE name = 'Test Cleaning Staff' LIMIT 1`
-      );
+    if (existingStaff.rows.length > 0) {
       testStaffId = existingStaff.rows[0]!.id;
+    } else {
+      // Create new staff
+      const staffResult = await pool.query<{ id: string }>(
+        `INSERT INTO staff (name, role, active)
+         VALUES ('Test Cleaning Staff', 'STAFF', true)
+         RETURNING id`
+      );
+      testStaffId = staffResult.rows[0]!.id;
     }
     // Update the mock to use the real staff ID
     mockStaffConfig.staffId = testStaffId;
@@ -370,12 +370,14 @@ describe('Cleaning Batch Endpoint', () => {
 
       // Verify audit log entry
       const auditResult = await pool.query(
-        `SELECT action, override_reason FROM audit_log 
-         WHERE entity_id = $1 AND action = 'OVERRIDE'`,
+        `SELECT action, metadata FROM audit_log 
+         WHERE entity_id = $1 AND action = 'ROOM_STATUS_CHANGE'`,
         [testRoomIds.dirty]
       );
       expect(auditResult.rows.length).toBe(1);
-      expect(auditResult.rows[0].override_reason).toBe('Manager inspection confirmed room is clean');
+      const metadata = auditResult.rows[0].metadata as { override?: boolean; overrideReason?: string };
+      expect(metadata.override).toBe(true);
+      expect(metadata.overrideReason).toBe('Manager inspection confirmed room is clean');
     }));
 
     it('should reject override without reason', runIfDbAvailable(async () => {
