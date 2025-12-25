@@ -138,6 +138,14 @@ export async function documentsRoutes(fastify: FastifyInstance): Promise<void> {
       // Compute SHA256 hash
       const hash = createHash('sha256').update(buffer).digest('hex');
 
+      // Validate inputs to prevent path traversal
+      if (employeeId.includes('..')) {
+        return reply.status(400).send({ error: 'Invalid employee ID' });
+      }
+      if (filename.includes('..')) {
+        return reply.status(400).send({ error: 'Invalid filename' });
+      }
+
       // Create storage path
       const employeeDir = join(UPLOADS_DIR, employeeId);
       await fs.mkdir(employeeDir, { recursive: true });
@@ -237,7 +245,10 @@ export async function documentsRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
-      // Read file
+      // Validate storage key to prevent path traversal
+      if (doc.storage_key.includes('..')) {
+        return reply.status(400).send({ error: 'Invalid file path' });
+      }
       const filePath = join(UPLOADS_DIR, doc.storage_key);
       
       try {
