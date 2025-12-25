@@ -8,6 +8,9 @@ import { RegistersView } from './RegistersView';
 import { DevicesView } from './DevicesView';
 import { ShiftsView } from './ShiftsView';
 import { TimeclockView } from './TimeclockView';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { Box } from '@mui/material';
 
 interface HealthStatus {
   status: string;
@@ -34,6 +37,195 @@ interface InventorySummary {
 }
 
 const API_BASE = '/api';
+
+// Material Design Dark Theme - Matching Dashboard Aesthetic
+const theme = createTheme({
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: '#8b5cf6',        // Purple
+      light: '#a78bfa',
+      dark: '#7c3aed',
+    },
+    secondary: {
+      main: '#0ea5e9',        // Sky Blue
+      light: '#38bdf8',
+      dark: '#0284c7',
+    },
+    success: {
+      main: '#22c55e',
+      light: '#4ade80',
+      dark: '#16a34a',
+    },
+    warning: {
+      main: '#f59e0b',
+      light: '#fbbf24',
+      dark: '#d97706',
+    },
+    error: {
+      main: '#ef4444',
+      light: '#f87171',
+      dark: '#dc2626',
+    },
+    info: {
+      main: '#3b82f6',
+      light: '#60a5fa',
+      dark: '#2563eb',
+    },
+    background: {
+      default: '#111827',     // Dark gray-900
+      paper: '#1f2937',       // Dark gray-800
+    },
+    text: {
+      primary: '#f9fafb',      // Light gray-50
+      secondary: '#9ca3af',   // Gray-400
+    },
+    divider: '#374151',       // Gray-700
+  },
+  typography: {
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    h4: {
+      fontWeight: 600,
+      letterSpacing: '-0.02em',
+      color: '#f9fafb',
+    },
+    h5: {
+      fontWeight: 600,
+      letterSpacing: '-0.01em',
+      color: '#f9fafb',
+    },
+    h6: {
+      fontWeight: 600,
+      color: '#f9fafb',
+    },
+    button: {
+      textTransform: 'none',
+      fontWeight: 600,
+    },
+    body1: {
+      color: '#f9fafb',
+    },
+    body2: {
+      color: '#9ca3af',
+    },
+  },
+  shape: {
+    borderRadius: 12,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          padding: '10px 24px',
+          fontSize: '0.9375rem',
+          boxShadow: '0 1px 5px rgba(0, 0, 0, 0.3), 0 2px 2px rgba(0, 0, 0, 0.2)',
+          transition: 'all 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+          '&:hover': {
+            boxShadow: '0 1px 8px rgba(0, 0, 0, 0.3), 0 3px 4px rgba(0, 0, 0, 0.2)',
+            transform: 'translateY(-2px)',
+          },
+          '&:active': {
+            transform: 'translateY(0)',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+          },
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          backgroundColor: '#1f2937',
+          border: '1px solid #374151',
+          boxShadow: '0 1px 5px rgba(0, 0, 0, 0.3), 0 2px 2px rgba(0, 0, 0, 0.2)',
+          transition: 'all 200ms cubic-bezier(0.4, 0, 0.2, 1)',
+          '&:hover': {
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.3), 0 7px 13px rgba(0, 0, 0, 0.2)',
+            transform: 'translateY(-2px)',
+            borderColor: '#4b5563',
+          },
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundColor: '#1f2937',
+          border: '1px solid #374151',
+        },
+      },
+    },
+    MuiAppBar: {
+      styleOverrides: {
+        root: {
+          backgroundColor: '#1f2937',
+          borderBottom: '1px solid #374151',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+        },
+      },
+    },
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          backgroundColor: '#1f2937',
+          borderRight: '1px solid #374151',
+          boxShadow: '0 1px 5px rgba(0, 0, 0, 0.3), 0 2px 2px rgba(0, 0, 0, 0.2)',
+        },
+      },
+    },
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          borderColor: '#374151',
+        },
+        head: {
+          backgroundColor: '#1f2937',
+          color: '#9ca3af',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          fontSize: '0.75rem',
+          letterSpacing: '0.05em',
+        },
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: {
+          '&:hover': {
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+          },
+        },
+      },
+    },
+    MuiInputBase: {
+      styleOverrides: {
+        root: {
+          backgroundColor: '#111827',
+          '&:hover': {
+            borderColor: '#4b5563',
+          },
+          '&.Mui-focused': {
+            borderColor: '#8b5cf6',
+            boxShadow: '0 0 0 3px rgba(139, 92, 246, 0.1)',
+          },
+        },
+      },
+    },
+    MuiOutlinedInput: {
+      styleOverrides: {
+        root: {
+          borderColor: '#374151',
+          '&:hover .MuiOutlinedInput-notchedOutline': {
+            borderColor: '#4b5563',
+          },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+            borderColor: '#8b5cf6',
+          },
+        },
+      },
+    },
+  },
+});
 
 function App() {
   const [session, setSession] = useState<StaffSession | null>(() => {
@@ -93,27 +285,37 @@ function App() {
   // Show lock screen if not authenticated
   if (!session) {
     return (
-      <LockScreen
-        onLogin={handleLogin}
-        deviceType="desktop"
-        deviceId={deviceId}
-      />
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <LockScreen
+          onLogin={handleLogin}
+          deviceType="desktop"
+          deviceId={deviceId}
+        />
+      </ThemeProvider>
     );
   }
 
   // Render routes - protect admin routes
+  // John Erikson has limited access (only schedule view)
+  // Cruz and other admins have full access
   const isAdmin = session.role === 'ADMIN';
+  const isLimitedAccess = session.name === 'John Erikson';
+  const hasFullAccess = isAdmin && !isLimitedAccess;
   
   return (
-    <Routes>
-      <Route path="/admin" element={isAdmin ? <AdminView session={session} /> : <NotAuthorizedView />} />
-      <Route path="/admin/staff" element={isAdmin ? <StaffManagement session={session} /> : <NotAuthorizedView />} />
-      <Route path="/admin/registers" element={isAdmin ? <RegistersView session={session} /> : <NotAuthorizedView />} />
-      <Route path="/admin/devices" element={isAdmin ? <DevicesView session={session} /> : <NotAuthorizedView />} />
-      <Route path="/admin/shifts" element={isAdmin ? <ShiftsView session={session} /> : <NotAuthorizedView />} />
-      <Route path="/admin/timeclock" element={isAdmin ? <TimeclockView session={session} /> : <NotAuthorizedView />} />
-      <Route path="/" element={<DashboardContent session={session} />} />
-    </Routes>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Routes>
+        <Route path="/admin" element={hasFullAccess ? <AdminView session={session} /> : <NotAuthorizedView />} />
+        <Route path="/admin/staff" element={hasFullAccess ? <StaffManagement session={session} /> : <NotAuthorizedView />} />
+        <Route path="/admin/registers" element={hasFullAccess ? <RegistersView session={session} /> : <NotAuthorizedView />} />
+        <Route path="/admin/devices" element={hasFullAccess ? <DevicesView session={session} /> : <NotAuthorizedView />} />
+        <Route path="/admin/shifts" element={(hasFullAccess || isLimitedAccess) ? <ShiftsView session={session} limitedAccess={isLimitedAccess} /> : <NotAuthorizedView />} />
+        <Route path="/admin/timeclock" element={hasFullAccess ? <TimeclockView session={session} /> : <NotAuthorizedView />} />
+        <Route path="/" element={<DashboardContent session={session} onLogout={handleLogout} />} />
+      </Routes>
+    </ThemeProvider>
   );
 }
 
@@ -142,7 +344,19 @@ function NotAuthorizedView() {
   );
 }
 
-function DashboardContent({ session }: { session: StaffSession }) {
+interface LaneSession {
+  id: string;
+  laneId: string;
+  status: string;
+  customerName?: string;
+  membershipNumber?: string;
+  desiredRentalType?: string;
+  assignedResource?: { type: 'room' | 'locker'; number: string };
+  staffName?: string;
+  createdAt: string;
+}
+
+function DashboardContent({ session, onLogout }: { session: StaffSession; onLogout: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [health, setHealth] = useState<HealthStatus | null>(null);
@@ -150,24 +364,11 @@ function DashboardContent({ session }: { session: StaffSession }) {
   const [activeTab, setActiveTab] = useState<'rooms' | 'lockers' | 'staff'>('rooms');
   const [inventory, setInventory] = useState<InventorySummary | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
-
-  const handleLogout = async () => {
-    if (session?.sessionToken) {
-      try {
-        await fetch(`${API_BASE}/v1/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.sessionToken}`,
-          },
-        });
-      } catch (error) {
-        console.error('Logout error:', error);
-      }
-    }
-    // Clear session and reload
-    localStorage.removeItem('staff_session');
-    window.location.href = '/';
-  };
+  const [laneSessions, setLaneSessions] = useState<LaneSession[]>([]);
+  
+  const isAdmin = session.role === 'ADMIN';
+  const isLimitedAccess = session.name === 'John Erikson';
+  const hasFullAccess = isAdmin && !isLimitedAccess;
 
   useEffect(() => {
     // Check API health
@@ -310,23 +511,23 @@ function DashboardContent({ session }: { session: StaffSession }) {
           >
             🏁 Check-ins
           </button>
-          {session.role === 'ADMIN' && (
-            <>
-              <button
-                className={`nav-item ${location.pathname === '/admin/shifts' ? 'active' : ''}`}
-                onClick={() => navigate('/admin/shifts')}
-              >
-                📅 Shifts
-              </button>
-              <button
-                className={`nav-item ${location.pathname === '/admin/timeclock' ? 'active' : ''}`}
-                onClick={() => navigate('/admin/timeclock')}
-              >
-                ⏰ Timeclock
-              </button>
-            </>
+          {(hasFullAccess || isLimitedAccess) && (
+            <button
+              className={`nav-item ${location.pathname === '/admin/shifts' ? 'active' : ''}`}
+              onClick={() => navigate('/admin/shifts')}
+            >
+              📅 Shifts
+            </button>
           )}
-          {session.role === 'ADMIN' && (
+          {hasFullAccess && (
+            <button
+              className={`nav-item ${location.pathname === '/admin/timeclock' ? 'active' : ''}`}
+              onClick={() => navigate('/admin/timeclock')}
+            >
+              ⏰ Timeclock
+            </button>
+          )}
+          {hasFullAccess && (
             <>
               <button
                 className={`nav-item ${location.pathname === '/admin/staff' ? 'active' : ''}`}
@@ -376,18 +577,21 @@ function DashboardContent({ session }: { session: StaffSession }) {
               {session.name} ({session.role})
             </span>
             <button
-              onClick={handleLogout}
+              onClick={onLogout}
               style={{
                 marginLeft: '1rem',
                 padding: '0.5rem 1rem',
-                background: 'var(--error)',
+                background: '#d32f2f',
                 border: 'none',
                 borderRadius: '0.375rem',
                 color: 'white',
                 fontSize: '0.875rem',
                 fontWeight: 600,
                 cursor: 'pointer',
+                transition: 'background 0.2s',
               }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#c62828'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#d32f2f'}
             >
               Sign Out
             </button>

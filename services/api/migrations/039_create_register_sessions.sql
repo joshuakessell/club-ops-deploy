@@ -41,3 +41,6 @@ CREATE INDEX IF NOT EXISTS idx_register_sessions_employee
 ON register_sessions(employee_id);
 
 
+
+
+

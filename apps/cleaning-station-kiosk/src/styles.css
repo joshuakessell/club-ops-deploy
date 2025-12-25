@@ -1,17 +1,17 @@
-/* Kiosk-style: full screen, black background, white text/buttons */
+/* Shared design tokens are imported in main.tsx */
 :root {
-  --bg: #000000;
-  --text: #ffffff;
-  --text-muted: #888888;
-  --border: #333333;
-  --button-bg: #ffffff;
-  --button-text: #000000;
-  --button-hover: #e0e0e0;
-  --button-secondary-bg: #333333;
-  --button-secondary-text: #ffffff;
-  --status-dirty: #ff4444;
-  --status-cleaning: #ffaa00;
-  --status-clean: #44ff44;
+  --bg: var(--cs-bg);
+  --text: var(--cs-text);
+  --text-muted: var(--cs-text-muted);
+  --border: var(--cs-border);
+  --button-bg: var(--cs-primary);
+  --button-text: var(--cs-white);
+  --button-hover: var(--cs-primary-dark);
+  --button-secondary-bg: var(--cs-bg-card);
+  --button-secondary-text: var(--cs-text);
+  --status-dirty: var(--cs-error);
+  --status-cleaning: var(--cs-warning);
+  --status-clean: var(--cs-success);
 }
 
 * {
@@ -129,9 +129,16 @@ body {
   justify-content: space-between;
   padding: 1rem;
   margin-bottom: 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--cs-bg-card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--cs-radius-lg);
+  box-shadow: var(--cs-elevation-1);
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+}
+
+.scanned-item:hover {
+  box-shadow: var(--cs-elevation-2);
+  border-color: var(--cs-border-light);
 }
 
 .scanned-info {
@@ -202,10 +209,11 @@ body {
   font-size: 1.125rem;
   font-weight: 600;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--cs-radius-lg);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   min-height: 48px;
+  box-shadow: var(--cs-elevation-2);
 }
 
 .button-primary {
@@ -215,21 +223,32 @@ body {
 
 .button-primary:hover:not(:disabled) {
   background: var(--button-hover);
+  box-shadow: var(--cs-elevation-3);
+  transform: translateY(-2px);
+}
+
+.button-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--cs-elevation-1);
 }
 
 .button-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .button-secondary {
   background: var(--button-secondary-bg);
   color: var(--button-secondary-text);
-  border: 2px solid var(--border);
+  border: 1px solid var(--border);
 }
 
 .button-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--cs-bg-hover);
+  border-color: var(--cs-primary);
+  box-shadow: var(--cs-elevation-2);
+  transform: translateY(-1px);
 }
 
 .button-large {
@@ -478,10 +497,11 @@ body {
 .lock-screen-content {
   width: 100%;
   max-width: 500px;
-  background: var(--bg);
-  border: 2px solid var(--border);
-  border-radius: 1rem;
+  background: var(--cs-bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-xl);
   padding: 2rem;
+  box-shadow: var(--cs-elevation-5);
 }
 
 .lock-screen-header {
@@ -632,16 +652,24 @@ body {
   padding: 1.5rem;
   background: var(--button-bg);
   border: none;
-  border-radius: 0.75rem;
+  border-radius: var(--cs-radius-lg);
   color: var(--button-text);
   font-size: 1.25rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+  box-shadow: var(--cs-elevation-2);
 }
 
 .pin-submit-button:hover:not(:disabled) {
   background: var(--button-hover);
+  box-shadow: var(--cs-elevation-3);
+  transform: translateY(-2px);
+}
+
+.pin-submit-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--cs-elevation-1);
 }
 
 .pin-submit-button:disabled {

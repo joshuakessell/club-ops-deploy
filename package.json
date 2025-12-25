@@ -2,6 +2,7 @@
   "name": "club-operations-pos",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Multi-application system for managing club check-ins, room inventory, cleaning workflows, and operational metrics",
   "scripts": {
     "kill-ports": "node scripts/kill-ports.js",
@@ -17,17 +18,33 @@
     "spec:check": "node scripts/spec-compliance.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^9.15.0",
     "@types/node": "^20.10.0",
     "concurrently": "^8.2.2",
-    "eslint": "^8.55.0",
+    "eslint": "^9.15.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "eslint-plugin-react-refresh": "^0.4.12",
+    "globals": "^15.11.0",
     "prettier": "^3.1.1",
     "tsx": "^4.6.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.0.0"
   },
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
   },
-  "packageManager": "pnpm@8.12.0"
+  "packageManager": "pnpm@8.12.0",
+  "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "eslint": "9"
+      }
+    },
+    "publicHoistPattern": [
+      "*eslint*",
+      "*typescript-eslint*"
+    ]
+  }
 }
 

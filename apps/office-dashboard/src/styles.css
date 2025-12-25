@@ -1,15 +1,16 @@
+/* Shared design tokens are imported in main.tsx */
 :root {
-  --primary: #8b5cf6;
-  --primary-dark: #7c3aed;
-  --bg: #111827;
-  --bg-sidebar: #1f2937;
-  --bg-card: #1f2937;
-  --text: #f9fafb;
-  --text-muted: #9ca3af;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --border: #374151;
+  --primary: var(--cs-primary);
+  --primary-dark: var(--cs-primary-dark);
+  --bg: var(--cs-bg);
+  --bg-sidebar: var(--cs-bg-sidebar);
+  --bg-card: var(--cs-bg-card);
+  --text: var(--cs-text);
+  --text-muted: var(--cs-text-muted);
+  --success: var(--cs-success);
+  --warning: var(--cs-warning);
+  --error: var(--cs-error);
+  --border: var(--cs-border);
 }
 
 .dashboard {
@@ -24,6 +25,7 @@
   display: flex;
   flex-direction: column;
   padding: 1.5rem 1rem;
+  box-shadow: var(--cs-elevation-2);
 }
 
 .logo {
@@ -117,6 +119,7 @@
   padding: 1rem 2rem;
   border-bottom: 1px solid var(--border);
   background: var(--bg-sidebar);
+  box-shadow: var(--cs-elevation-1);
 }
 
 .topbar h1 {
@@ -143,9 +146,17 @@
 .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: var(--cs-radius-xl);
   padding: 1.5rem;
   text-align: center;
+  box-shadow: var(--cs-elevation-2);
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+}
+
+.stat-card:hover {
+  box-shadow: var(--cs-elevation-4);
+  transform: translateY(-2px);
+  border-color: var(--cs-border-light);
 }
 
 .stat-value {
@@ -169,7 +180,9 @@
 .panel {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: var(--cs-radius-xl);
+  box-shadow: var(--cs-elevation-2);
+  overflow: hidden;
 }
 
 .panel-header {
@@ -644,14 +657,16 @@
 .kpi-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: var(--cs-radius-xl);
   padding: 1.5rem;
   text-align: center;
-  transition: all 0.2s;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+  box-shadow: var(--cs-elevation-2);
 }
 
 .kpi-card:hover {
-  border-color: var(--primary);
+  border-color: var(--cs-border-light);
+  box-shadow: var(--cs-elevation-4);
   transform: translateY(-2px);
 }
 

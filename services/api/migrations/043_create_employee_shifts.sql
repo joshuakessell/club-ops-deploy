@@ -23,3 +23,6 @@ CREATE INDEX IF NOT EXISTS idx_employee_shifts_dates ON employee_shifts(starts_a
 CREATE INDEX IF NOT EXISTS idx_employee_shifts_status ON employee_shifts(status);
 CREATE INDEX IF NOT EXISTS idx_employee_shifts_shift_code ON employee_shifts(shift_code);
 
+
+
+

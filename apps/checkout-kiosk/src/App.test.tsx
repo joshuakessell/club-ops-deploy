@@ -17,7 +17,7 @@ describe('App', () => {
     vi.clearAllMocks();
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
-      json: async () => ({}),
+      json: () => Promise.resolve({}),
     });
   });
 

@@ -1,14 +1,15 @@
+/* Shared design tokens are imported in main.tsx */
 :root {
-  --primary: #0ea5e9;
-  --primary-dark: #0284c7;
-  --bg: #0c1222;
-  --bg-card: #1a2332;
-  --text: #f8fafc;
-  --text-muted: #94a3b8;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --error: #ef4444;
-  --border: #2d3a4f;
+  --primary: var(--cs-secondary);
+  --primary-dark: var(--cs-secondary-dark);
+  --bg: var(--cs-bg);
+  --bg-card: var(--cs-bg-card);
+  --text: var(--cs-text);
+  --text-muted: var(--cs-text-muted);
+  --success: var(--cs-success);
+  --warning: var(--cs-warning);
+  --error: var(--cs-error);
+  --border: var(--cs-border);
 }
 
 .container {
@@ -80,8 +81,16 @@
 .inventory-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: var(--cs-radius-xl);
   padding: 1.25rem;
+  box-shadow: var(--cs-elevation-2);
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+}
+
+.inventory-card:hover {
+  box-shadow: var(--cs-elevation-4);
+  transform: translateY(-2px);
+  border-color: var(--cs-border-light);
 }
 
 .inventory-card h3 {
@@ -130,17 +139,20 @@
   padding: 1.5rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: var(--cs-radius-xl);
   color: var(--text);
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+  box-shadow: var(--cs-elevation-2);
 }
 
 .action-btn:hover {
   background: var(--primary);
   border-color: var(--primary);
+  box-shadow: var(--cs-elevation-4);
+  transform: translateY(-2px);
 }
 
 .btn-icon {
@@ -169,8 +181,9 @@
   max-width: 500px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: var(--cs-radius-xl);
   padding: 2rem;
+  box-shadow: var(--cs-elevation-5);
 }
 
 .lock-screen-header {
@@ -321,16 +334,24 @@
   padding: 1rem;
   background: var(--primary);
   border: none;
-  border-radius: 0.5rem;
+  border-radius: var(--cs-radius-lg);
   color: var(--text);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+  box-shadow: var(--cs-elevation-2);
 }
 
 .pin-submit-button:hover:not(:disabled) {
   background: var(--primary-dark);
+  box-shadow: var(--cs-elevation-3);
+  transform: translateY(-2px);
+}
+
+.pin-submit-button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--cs-elevation-1);
 }
 
 .pin-submit-button:disabled {
@@ -625,15 +646,16 @@
 }
 
 .sign-in-modal {
-  background: #1a1a1a;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-xl);
   padding: 2rem;
   max-width: 500px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
+  box-shadow: var(--cs-elevation-5);
 }
 
 .sign-in-modal-close {
@@ -695,20 +717,23 @@
 
 .employee-item {
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.5rem;
-  color: #fff;
+  background: var(--cs-bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-lg);
+  color: var(--text);
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   text-align: left;
+  box-shadow: var(--cs-elevation-1);
 }
 
 .employee-item:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--cs-bg-active);
+  border-color: var(--primary);
+  box-shadow: var(--cs-elevation-2);
+  transform: translateY(-1px);
 }
 
 .employee-item:disabled {

@@ -255,3 +255,6 @@ export async function shiftsRoutes(fastify: FastifyInstance): Promise<void> {
   });
 }
 
+
+
+

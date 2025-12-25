@@ -18,3 +18,6 @@ CREATE INDEX IF NOT EXISTS idx_employee_documents_employee ON employee_documents
 CREATE INDEX IF NOT EXISTS idx_employee_documents_type ON employee_documents(doc_type);
 CREATE INDEX IF NOT EXISTS idx_employee_documents_uploaded_by ON employee_documents(uploaded_by);
 
+
+
+

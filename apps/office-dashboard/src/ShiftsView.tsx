@@ -60,8 +60,18 @@ export function ShiftsView({ session }: ShiftsViewProps) {
   }, []);
 
   useEffect(() => {
+    // For limited access, auto-filter to current employee
+    if (limitedAccess && employees.length > 0) {
+      const currentEmployee = employees.find(e => e.name === session.name);
+      if (currentEmployee && employeeFilter !== currentEmployee.id) {
+        setEmployeeFilter(currentEmployee.id);
+      }
+    }
+  }, [limitedAccess, employees, session.name, employeeFilter]);
+
+  useEffect(() => {
     fetchShifts();
-  }, [dateFrom, dateTo, employeeFilter]);
+  }, [dateFrom, dateTo, employeeFilter, limitedAccess]);
 
   const fetchEmployees = async () => {
     try {
@@ -83,7 +93,16 @@ export function ShiftsView({ session }: ShiftsViewProps) {
       const params = new URLSearchParams();
       if (dateFrom) params.append('from', `${dateFrom}T00:00:00Z`);
       if (dateTo) params.append('to', `${dateTo}T23:59:59Z`);
-      if (employeeFilter) params.append('employeeId', employeeFilter);
+      
+      // For limited access, filter to current employee only
+      if (limitedAccess) {
+        const currentEmployee = employees.find(e => e.name === session.name);
+        if (currentEmployee) {
+          params.append('employeeId', currentEmployee.id);
+        }
+      } else if (employeeFilter) {
+        params.append('employeeId', employeeFilter);
+      }
 
       const response = await fetch(`${API_BASE}/v1/admin/shifts?${params}`, {
         headers: { 'Authorization': `Bearer ${session.sessionToken}` },
@@ -206,26 +225,33 @@ export function ShiftsView({ session }: ShiftsViewProps) {
             }}
           />
         </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Employee</label>
-          <select
-            value={employeeFilter}
-            onChange={(e) => setEmployeeFilter(e.target.value)}
-            style={{
-              padding: '0.5rem',
-              background: '#111827',
-              border: '1px solid #374151',
-              borderRadius: '6px',
-              color: '#f9fafb',
-              minWidth: '200px',
-            }}
-          >
-            <option value="">All Employees</option>
-            {employees.map(emp => (
-              <option key={emp.id} value={emp.id}>{emp.name}</option>
-            ))}
-          </select>
-        </div>
+        {!limitedAccess && (
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Employee</label>
+            <select
+              value={employeeFilter}
+              onChange={(e) => setEmployeeFilter(e.target.value)}
+              style={{
+                padding: '0.5rem',
+                background: '#111827',
+                border: '1px solid #374151',
+                borderRadius: '6px',
+                color: '#f9fafb',
+                minWidth: '200px',
+              }}
+            >
+              <option value="">All Employees</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>{emp.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {limitedAccess && (
+          <div style={{ padding: '0.5rem', background: '#1e3a5f', borderRadius: '6px', color: '#93c5fd' }}>
+            <strong>View Only:</strong> You can view your schedule only
+          </div>
+        )}
       </div>
 
       {/* Shifts grouped by date */}
@@ -292,23 +318,28 @@ export function ShiftsView({ session }: ShiftsViewProps) {
                           {shift.flags.noShow && <span style={{ color: '#ef4444' }}>❌ No Show</span>}
                         </td>
                         <td style={{ padding: '0.75rem' }}>
-                          <button
-                            onClick={() => {
-                              setSelectedShift(shift);
-                              setShowEditModal(true);
-                            }}
-                            style={{
-                              padding: '0.5rem 1rem',
-                              background: '#374151',
-                              border: 'none',
-                              borderRadius: '6px',
-                              color: '#f9fafb',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                            }}
-                          >
-                            Edit
-                          </button>
+                          {!limitedAccess && (
+                            <button
+                              onClick={() => {
+                                setSelectedShift(shift);
+                                setShowEditModal(true);
+                              }}
+                              style={{
+                                padding: '0.5rem 1rem',
+                                background: '#374151',
+                                border: 'none',
+                                borderRadius: '6px',
+                                color: '#f9fafb',
+                                cursor: 'pointer',
+                                fontSize: '0.875rem',
+                              }}
+                            >
+                              Edit
+                            </button>
+                          )}
+                          {limitedAccess && (
+                            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>View Only</span>
+                          )}
                         </td>
                       </tr>
                     );

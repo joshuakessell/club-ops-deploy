@@ -1,5 +1,29 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
+import { useState } from 'react';
+import { 
+  Box, 
+  Container, 
+  Typography, 
+  Button, 
+  TextField, 
+  Card, 
+  CardContent, 
+  Avatar, 
+  CircularProgress,
+  Alert,
+  Fade,
+  Paper,
+  Stack
+} from '@mui/material';
+import { 
+  Person, 
+  Lock, 
+  Login as LoginIcon,
+  BusinessCenter,
+  Schedule,
+  Assessment
+} from '@mui/icons-material';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
 
 const API_BASE = '/api';
 
@@ -16,159 +40,134 @@ interface LockScreenProps {
   deviceId: string;
 }
 
+// Modern enterprise theme
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: {
+      main: '#1976d2',
+      light: '#42a5f5',
+      dark: '#1565c0',
+    },
+    secondary: {
+      main: '#9c27b0',
+    },
+    background: {
+      default: '#f5f7fa',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    h4: {
+      fontWeight: 600,
+      letterSpacing: '-0.02em',
+    },
+    h5: {
+      fontWeight: 600,
+      letterSpacing: '-0.01em',
+    },
+    button: {
+      textTransform: 'none',
+      fontWeight: 600,
+    },
+  },
+  shape: {
+    borderRadius: 12,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          padding: '10px 24px',
+          fontSize: '0.9375rem',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          transition: 'all 0.2s ease-in-out',
+          '&:hover': {
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            transform: 'translateY(-2px)',
+          },
+        },
+      },
+    },
+  },
+});
+
+// Employee definitions
+interface Employee {
+  id: string;
+  name: string;
+  role: 'STAFF' | 'ADMIN';
+  accessLevel: 'limited' | 'full';
+  description: string;
+  icon: React.ReactNode;
+}
+
+const EMPLOYEES: Employee[] = [
+  {
+    id: 'john-erikson',
+    name: 'John Erikson',
+    role: 'STAFF',
+    accessLevel: 'limited',
+    description: 'Register Employee - View Schedule Only',
+    icon: <Schedule />,
+  },
+  {
+    id: 'cruz',
+    name: 'Cruz',
+    role: 'ADMIN',
+    accessLevel: 'full',
+    description: 'Full Access - Auditing, Reports & Schedule Management',
+    icon: <Assessment />,
+  },
+  {
+    id: 'sarah-martinez',
+    name: 'Sarah Martinez',
+    role: 'STAFF',
+    accessLevel: 'limited',
+    description: 'Register Employee - View Schedule Only',
+    icon: <BusinessCenter />,
+  },
+  {
+    id: 'michael-chen',
+    name: 'Michael Chen',
+    role: 'ADMIN',
+    accessLevel: 'full',
+    description: 'Full Access - Auditing, Reports & Schedule Management',
+    icon: <Assessment />,
+  },
+];
+
 export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
-  const [mode, setMode] = useState<'qr' | 'pin'>('pin');
-  const [staffLookup, setStaffLookup] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const scanningIntervalRef = useRef<number | null>(null);
-  const handleScanRef = useRef<((qrToken: string) => Promise<void>) | null>(null);
 
-  // Initialize camera for QR scanning
-  useEffect(() => {
-    if (mode !== 'qr') {
-      // Stop camera when not in QR mode
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-      if (scanningIntervalRef.current) {
-        clearInterval(scanningIntervalRef.current);
-        scanningIntervalRef.current = null;
-      }
-      return;
-    }
-
-    const initCamera = async () => {
-      try {
-        const constraints: MediaStreamConstraints = {
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        streamRef.current = stream;
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-
-        const codeReader = new BrowserMultiFormatReader();
-        codeReaderRef.current = codeReader;
-        setError(null);
-
-        startScanning();
-      } catch (error) {
-        console.error('Camera error:', error);
-        setError('Camera access denied. Please use PIN entry.');
-        setMode('pin');
-      }
-    };
-
-    initCamera();
-
-    return () => {
-      if (codeReaderRef.current) {
-        codeReaderRef.current.reset();
-      }
-      if (scanningIntervalRef.current) {
-        clearInterval(scanningIntervalRef.current);
-        scanningIntervalRef.current = null;
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-    };
-  }, [mode]);
-
-  const startScanning = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current || !codeReaderRef.current) return;
-
-    const scan = async () => {
-      if (!videoRef.current || !canvasRef.current || !codeReaderRef.current) return;
-
-      try {
-        const canvas = canvasRef.current;
-        const video = videoRef.current;
-        const context = canvas.getContext('2d');
-
-        if (!context || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        const img = new Image();
-        img.src = canvas.toDataURL();
-        await new Promise((resolve) => {
-          img.onload = resolve;
-        });
-
-        const result = await codeReaderRef.current.decodeFromImageElement(img);
-
-        if (result && handleScanRef.current) {
-          handleScanRef.current(result.getText());
-        }
-      } catch (error) {
-        if (!(error instanceof NotFoundException)) {
-          console.error('Scan error:', error);
-        }
-      }
-    };
-
-    scanningIntervalRef.current = window.setInterval(scan, 500);
-  }, []);
-
-  const handleQrScan = useCallback(async (qrToken: string) => {
-    setIsLoading(true);
+  const handleEmployeeSelect = (employee: Employee) => {
+    setSelectedEmployee(employee);
+    setPin('');
     setError(null);
+  };
 
-    try {
-      const response = await fetch(`${API_BASE}/v1/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          deviceId,
-          deviceType,
-          qrToken,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
-      }
-
-      const session: StaffSession = await response.json();
-      onLogin(session);
-    } catch (error) {
-      console.error('Login error:', error);
-      setError(error instanceof Error ? error.message : 'Login failed');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [deviceId, deviceType, onLogin]);
-
-  useEffect(() => {
-    handleScanRef.current = handleQrScan;
-  }, [handleQrScan]);
+  const handleBack = () => {
+    setSelectedEmployee(null);
+    setPin('');
+    setError(null);
+  };
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!staffLookup.trim() || !pin.trim()) {
-      setError('Please enter your name/ID and PIN');
+    if (!selectedEmployee || !pin.trim()) {
+      setError('Please enter your PIN');
       return;
     }
 
@@ -176,11 +175,13 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
     setError(null);
 
     try {
+      // For demo, all PINs are 1234
+      // In production, this would use the actual employee lookup
       const response = await fetch(`${API_BASE}/v1/auth/login-pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          staffLookup: staffLookup.trim(),
+          staffLookup: selectedEmployee.name,
           deviceId,
           pin: pin.trim(),
         }),
@@ -192,12 +193,20 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
       }
 
       const session: StaffSession = await response.json();
-      onLogin(session);
+      
+      // Override role/access based on employee selection for demo
+      const finalSession: StaffSession = {
+        ...session,
+        name: selectedEmployee.name,
+        role: selectedEmployee.role,
+      };
+      
+      onLogin(finalSession);
       setPin('');
-      setStaffLookup('');
+      setSelectedEmployee(null);
     } catch (error) {
       console.error('Login error:', error);
-      setError(error instanceof Error ? error.message : 'Invalid credentials');
+      setError(error instanceof Error ? error.message : 'Invalid PIN. Please try again.');
       setPin('');
     } finally {
       setIsLoading(false);
@@ -205,93 +214,201 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
   };
 
   return (
-    <div className="lock-screen">
-      <div className="lock-screen-content">
-        <div className="lock-screen-header">
-          <h1>Staff Login</h1>
-          <p>Scan QR code or enter PIN</p>
-        </div>
-
-        <div className="lock-screen-tabs">
-          <button
-            className={`tab-button ${mode === 'qr' ? 'active' : ''}`}
-            onClick={() => {
-              setMode('qr');
-              setError(null);
-            }}
-            disabled={isLoading}
-          >
-            QR Code
-          </button>
-          <button
-            className={`tab-button ${mode === 'pin' ? 'active' : ''}`}
-            onClick={() => {
-              setMode('pin');
-              setError(null);
-            }}
-            disabled={isLoading}
-          >
-            PIN
-          </button>
-        </div>
-
-        {error && (
-          <div className="lock-screen-error">
-            {error}
-          </div>
-        )}
-
-        {mode === 'qr' ? (
-          <div className="lock-screen-qr">
-            <div className="qr-scanner-container">
-              <video
-                ref={videoRef}
-                className="qr-scanner-video"
-                autoPlay
-                playsInline
-                muted
-              />
-              <canvas ref={canvasRef} className="qr-scanner-canvas" style={{ display: 'none' }} />
-              {isLoading && (
-                <div className="qr-scanner-overlay">
-                  <div className="spinner">Processing...</div>
-                </div>
-              )}
-            </div>
-            <p className="qr-hint">Point camera at staff QR code</p>
-          </div>
-        ) : (
-          <form className="lock-screen-pin" onSubmit={handlePinSubmit}>
-            <input
-              type="text"
-              className="staff-lookup-input"
-              placeholder="Enter your name or staff ID"
-              value={staffLookup}
-              onChange={(e) => setStaffLookup(e.target.value)}
-              disabled={isLoading}
-              autoFocus
-            />
-            <input
-              type="password"
-              className="pin-input"
-              placeholder="Enter PIN"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              disabled={isLoading}
-              maxLength={10}
-            />
-            <button
-              type="submit"
-              className="pin-submit-button"
-              disabled={isLoading || !pin.trim() || !staffLookup.trim()}
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Box
+        sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 3,
+        }}
+      >
+        <Container maxWidth="sm">
+          <Fade in timeout={500}>
+            <Paper
+              elevation={24}
+              sx={{
+                borderRadius: 4,
+                overflow: 'hidden',
+                background: 'white',
+              }}
             >
-              {isLoading ? 'Logging in...' : 'Login'}
-            </button>
-          </form>
-        )}
-      </div>
-    </div>
+              {!selectedEmployee ? (
+                <Box sx={{ p: 4 }}>
+                  {/* Header */}
+                  <Box sx={{ textAlign: 'center', mb: 4 }}>
+                    <Box
+                      sx={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 16px',
+                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
+                      }}
+                    >
+                      <BusinessCenter sx={{ fontSize: 32, color: 'white' }} />
+                    </Box>
+                    <Typography variant="h4" sx={{ mb: 1, color: '#1a1a1a', fontWeight: 700 }}>
+                      Club Operations
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      Select your account to continue
+                    </Typography>
+                  </Box>
+
+                  {/* Employee Selection */}
+                  <Stack spacing={2}>
+                    {EMPLOYEES.map((employee) => (
+                      <Card
+                        key={employee.id}
+                        sx={{
+                          cursor: 'pointer',
+                          border: '2px solid transparent',
+                          '&:hover': {
+                            borderColor: 'primary.main',
+                          },
+                        }}
+                        onClick={() => handleEmployeeSelect(employee)}
+                      >
+                        <CardContent>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Avatar
+                              sx={{
+                                bgcolor: employee.role === 'ADMIN' 
+                                  ? 'primary.main' 
+                                  : 'secondary.main',
+                                width: 48,
+                                height: 48,
+                              }}
+                            >
+                              {employee.icon}
+                            </Avatar>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                {employee.name}
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                {employee.description}
+                              </Typography>
+                            </Box>
+                            <LoginIcon sx={{ color: 'text.secondary' }} />
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Stack>
+                </Box>
+              ) : (
+                <Box sx={{ p: 4 }}>
+                  {/* Back Button */}
+                  <Button
+                    startIcon={<Person />}
+                    onClick={handleBack}
+                    sx={{ mb: 3, color: 'text.secondary' }}
+                  >
+                    Back to Employee Selection
+                  </Button>
+
+                  {/* Selected Employee Info */}
+                  <Box sx={{ textAlign: 'center', mb: 4 }}>
+                    <Avatar
+                      sx={{
+                        bgcolor: selectedEmployee.role === 'ADMIN' 
+                          ? 'primary.main' 
+                          : 'secondary.main',
+                        width: 80,
+                        height: 80,
+                        margin: '0 auto 16px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      }}
+                    >
+                      {selectedEmployee.icon}
+                    </Avatar>
+                    <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>
+                      {selectedEmployee.name}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      {selectedEmployee.description}
+                    </Typography>
+                  </Box>
+
+                  {/* PIN Entry Form */}
+                  <form onSubmit={handlePinSubmit}>
+                    <Stack spacing={3}>
+                      {error && (
+                        <Alert severity="error" onClose={() => setError(null)}>
+                          {error}
+                        </Alert>
+                      )}
+
+                      <TextField
+                        fullWidth
+                        type="password"
+                        label="Enter PIN"
+                        value={pin}
+                        onChange={(e) => setPin(e.target.value)}
+                        disabled={isLoading}
+                        autoFocus
+                        inputProps={{
+                          maxLength: 10,
+                          inputMode: 'numeric',
+                        }}
+                        InputProps={{
+                          startAdornment: (
+                            <Lock sx={{ mr: 1, color: 'text.secondary' }} />
+                          ),
+                        }}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: 2,
+                          },
+                        }}
+                      />
+
+                      <Button
+                        type="submit"
+                        fullWidth
+                        variant="contained"
+                        size="large"
+                        disabled={isLoading || !pin.trim()}
+                        startIcon={isLoading ? <CircularProgress size={20} /> : <LoginIcon />}
+                        sx={{
+                          py: 1.5,
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, #5568d3 0%, #6a4190 100%)',
+                          },
+                        }}
+                      >
+                        {isLoading ? 'Signing In...' : 'Sign In'}
+                      </Button>
+                    </Stack>
+                  </form>
+
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      display: 'block', 
+                      textAlign: 'center', 
+                      mt: 3, 
+                      color: 'text.secondary' 
+                    }}
+                  >
+                    Demo Mode: All PINs are 1234
+                  </Typography>
+                </Box>
+              )}
+            </Paper>
+          </Fade>
+        </Container>
+      </Box>
+    </ThemeProvider>
   );
 }
-
-

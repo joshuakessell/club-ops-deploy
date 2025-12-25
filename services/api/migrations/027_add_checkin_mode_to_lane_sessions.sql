@@ -13,3 +13,6 @@ UPDATE lane_sessions SET checkin_mode = 'INITIAL' WHERE checkin_mode IS NULL;
 
 
 
+
+
+

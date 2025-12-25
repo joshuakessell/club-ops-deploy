@@ -1,9 +1,9 @@
-/* Black and white theme only */
+/* Shared design tokens are imported in main.tsx */
 :root {
-  --bg: #000000;
-  --text: #ffffff;
-  --text-muted: #cccccc;
-  --border: #666666;
+  --bg: var(--cs-bg);
+  --text: var(--cs-text);
+  --text-muted: var(--cs-text-muted);
+  --border: var(--cs-border);
 }
 
 * {
@@ -52,21 +52,28 @@ body {
 
 .start-checkout-btn {
   padding: 1.5rem 3rem;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--cs-primary);
+  color: var(--cs-white);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--cs-radius-xl);
   font-size: clamp(1.25rem, 3vw, 2rem);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   min-height: 64px;
   animation: fadeIn 0.5s ease-in 0.3s both;
+  box-shadow: var(--cs-elevation-3);
 }
 
 .start-checkout-btn:hover {
-  background: var(--text-muted);
+  background: var(--cs-primary-dark);
+  box-shadow: var(--cs-elevation-4);
   transform: translateY(-2px);
+}
+
+.start-checkout-btn:active {
+  transform: translateY(0);
+  box-shadow: var(--cs-elevation-2);
 }
 
 /* Active session state */
@@ -165,16 +172,19 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 1.5rem;
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-lg);
+  background: var(--cs-bg-card);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+  box-shadow: var(--cs-elevation-1);
 }
 
 .checklist-item:hover {
-  border-color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--cs-primary);
+  background: var(--cs-bg-hover);
+  box-shadow: var(--cs-elevation-2);
+  transform: translateY(-1px);
 }
 
 .checklist-item input[type="checkbox"] {
@@ -191,11 +201,12 @@ body {
 
 .checklist-notice {
   padding: 1.5rem;
-  border: 2px solid var(--border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-lg);
+  background: var(--cs-bg-card);
   font-size: clamp(0.875rem, 1.5vw, 1rem);
   line-height: 1.6;
+  box-shadow: var(--cs-elevation-1);
 }
 
 .checklist-notice ul {
@@ -210,21 +221,28 @@ body {
 
 .continue-btn {
   padding: 1.5rem 3rem;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--cs-primary);
+  color: var(--cs-white);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--cs-radius-lg);
   font-size: clamp(1.125rem, 2vw, 1.5rem);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   min-height: 64px;
   width: 100%;
+  box-shadow: var(--cs-elevation-2);
 }
 
 .continue-btn:hover:not(:disabled) {
-  background: var(--text-muted);
+  background: var(--cs-primary-dark);
+  box-shadow: var(--cs-elevation-4);
   transform: translateY(-2px);
+}
+
+.continue-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--cs-elevation-1);
 }
 
 .continue-btn:disabled {

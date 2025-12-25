@@ -1,9 +1,9 @@
-/* Black and white theme only */
+/* Shared design tokens are imported in main.tsx */
 :root {
-  --bg: #000000;
-  --text: #ffffff;
-  --text-muted: #cccccc;
-  --border: #666666;
+  --bg: var(--cs-bg);
+  --text: var(--cs-text);
+  --text-muted: var(--cs-text-muted);
+  --border: var(--cs-border);
 }
 
 * {
@@ -134,14 +134,15 @@ body {
 }
 
 .package-option {
-  border: 2px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-xl);
   padding: 2rem;
   text-align: center;
-  background: transparent;
-  transition: all 250ms ease;
+  background: var(--cs-bg-card);
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   cursor: pointer;
   animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  box-shadow: var(--cs-elevation-2);
 }
 
 .package-option:nth-child(1) {
@@ -161,8 +162,9 @@ body {
 }
 
 .package-option:hover {
-  border-color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--cs-primary);
+  background: var(--cs-bg-hover);
+  box-shadow: var(--cs-elevation-4);
   transform: translateY(-4px);
 }
 
@@ -190,13 +192,14 @@ body {
 }
 
 .agreement-scroll-area {
-  border: 2px solid var(--border);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-xl);
   padding: 2rem;
   min-height: 300px;
   max-height: 400px;
   overflow-y: auto;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--cs-bg-card);
+  box-shadow: var(--cs-elevation-2);
 }
 
 .agreement-placeholder {
@@ -267,20 +270,27 @@ body {
 
 .submit-agreement-btn {
   padding: 1rem 2rem;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--cs-primary);
+  color: var(--cs-white);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--cs-radius-lg);
   font-size: clamp(1rem, 2vw, 1.25rem);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   min-height: 56px;
+  box-shadow: var(--cs-elevation-2);
 }
 
 .submit-agreement-btn:hover:not(:disabled) {
-  background: var(--text-muted);
+  background: var(--cs-primary-dark);
+  box-shadow: var(--cs-elevation-4);
   transform: translateY(-2px);
+}
+
+.submit-agreement-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--cs-elevation-1);
 }
 
 .submit-agreement-btn:disabled {
@@ -343,15 +353,16 @@ body {
 }
 
 .modal-content {
-  background: var(--bg);
-  border: 2px solid var(--border);
-  border-radius: 12px;
+  background: var(--cs-bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-xl);
   padding: 2rem;
   max-width: 600px;
   width: 90%;
   max-height: 80vh;
   overflow-y: auto;
-  animation: slideUp 0.3s ease;
+  animation: slideUp 0.3s var(--cs-ease-decelerate);
+  box-shadow: var(--cs-elevation-5);
 }
 
 @keyframes slideUp {
@@ -388,19 +399,22 @@ body {
 .modal-ok-btn {
   width: 100%;
   padding: 1rem;
-  background: var(--text);
-  color: var(--bg);
+  background: var(--cs-primary);
+  color: var(--cs-white);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--cs-radius-lg);
   font-size: clamp(1rem, 2vw, 1.125rem);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   min-height: 56px;
+  box-shadow: var(--cs-elevation-2);
 }
 
 .modal-ok-btn:hover:not(:disabled) {
-  background: var(--text-muted);
+  background: var(--cs-primary-dark);
+  box-shadow: var(--cs-elevation-3);
+  transform: translateY(-2px);
 }
 
 .modal-ok-btn:disabled {

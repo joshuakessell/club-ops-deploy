@@ -240,9 +240,21 @@ export interface CheckoutChecklist {
 }
 
 export interface ResolvedCheckoutKey {
-  type: 'room' | 'locker';
-  id: string;
-  number: string;
+  keyTagId: string;
+  occupancyId: string;
+  customerId: string;
+  customerName: string;
+  membershipNumber?: string;
+  rentalType: string;
+  roomId?: string;
+  roomNumber?: string;
+  lockerId?: string;
+  lockerNumber?: string;
+  scheduledCheckoutAt: Date | string;
+  hasTvRemote: boolean;
+  lateMinutes: number;
+  lateFeeAmount: number;
+  banApplied: boolean;
 }
 
 export interface CheckoutRequestSummary {

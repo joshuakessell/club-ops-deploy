@@ -14,3 +14,6 @@ ON devices(enabled)
 WHERE enabled = true;
 
 
+
+
+

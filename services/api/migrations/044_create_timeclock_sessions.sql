@@ -23,3 +23,6 @@ CREATE INDEX IF NOT EXISTS idx_timeclock_sessions_shift ON timeclock_sessions(sh
 CREATE INDEX IF NOT EXISTS idx_timeclock_sessions_dates ON timeclock_sessions(clock_in_at, clock_out_at);
 CREATE INDEX IF NOT EXISTS idx_timeclock_sessions_open ON timeclock_sessions(clock_out_at) WHERE clock_out_at IS NULL;
 
+
+
+

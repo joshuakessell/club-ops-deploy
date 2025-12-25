@@ -3,13 +3,54 @@ import type { WebSocketEvent, ResolvedCheckoutKey, CheckoutChecklist, CheckoutCo
 import { Html5Qrcode } from 'html5-qrcode';
 import logoImage from './assets/the-clubs-logo.png';
 
+// Explicitly type the image import to avoid type inference issues
+const logoImageSrc = String(logoImage);
+
 const API_BASE = '/api';
+
+// Type guards for API responses
+type ApiErrorShape = { error?: string; requestId?: string };
+function isApiErrorShape(v: unknown): v is ApiErrorShape {
+  return typeof v === 'object' && v !== null && ('error' in v || 'requestId' in v);
+}
+
+function isResolvedCheckoutKey(v: unknown): v is ResolvedCheckoutKey {
+  if (typeof v !== 'object' || v === null) return false;
+  const obj = v as Record<string, unknown>;
+  return (
+    typeof obj.occupancyId === 'string' &&
+    typeof obj.rentalType === 'string' &&
+    typeof obj.lateFeeAmount === 'number' &&
+    typeof obj.hasTvRemote === 'boolean' &&
+    typeof obj.customerName === 'string'
+  );
+}
+
+function assertResolvedCheckoutKey(v: unknown): ResolvedCheckoutKey {
+  if (!isResolvedCheckoutKey(v)) {
+    throw new Error('Invalid ResolvedCheckoutKey format');
+  }
+  return v;
+}
+
+type CheckoutRequestResponse = { requestId: string };
+function isCheckoutRequestResponse(v: unknown): v is CheckoutRequestResponse {
+  return typeof v === 'object' && v !== null && 'requestId' in v && typeof (v as { requestId: unknown }).requestId === 'string';
+}
+
+function isWebSocketEvent(v: unknown): v is WebSocketEvent {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'type' in v &&
+    typeof (v as { type: unknown }).type === 'string' &&
+    'payload' in v
+  );
+}
 
 type AppView = 'idle' | 'scanning' | 'checklist' | 'waiting' | 'complete';
 
-interface ResolvedKeyData extends ResolvedCheckoutKey {
-  // Already includes all needed fields
-}
+type ResolvedKeyData = ResolvedCheckoutKey;
 
 function App() {
   const [view, setView] = useState<AppView>('idle');
@@ -17,7 +58,6 @@ function App() {
   const [checklist, setChecklist] = useState<CheckoutChecklist>({});
   const [requestId, setRequestId] = useState<string | null>(null);
   const [lateFeeAmount, setLateFeeAmount] = useState<number>(0);
-  const [wsConnected, setWsConnected] = useState(false);
   const qrCodeScannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerRef = useRef<HTMLDivElement>(null);
   const kioskDeviceId = useState(() => {
@@ -35,7 +75,6 @@ function App() {
 
     ws.onopen = () => {
       console.log('WebSocket connected');
-      setWsConnected(true);
       
       // Subscribe to checkout events
       ws.send(JSON.stringify({
@@ -46,12 +85,17 @@ function App() {
 
     ws.onclose = () => {
       console.log('WebSocket disconnected');
-      setWsConnected(false);
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = (event: MessageEvent) => {
       try {
-        const message: WebSocketEvent = JSON.parse(event.data);
+        const dataString = typeof event.data === 'string' ? event.data : String(event.data);
+        const parsed = JSON.parse(dataString) as unknown;
+        if (!isWebSocketEvent(parsed)) {
+          console.error('Invalid WebSocket message format:', parsed);
+          return;
+        }
+        const message = parsed;
         console.log('WebSocket message:', message);
 
         if (message.type === 'CHECKOUT_COMPLETED') {
@@ -70,8 +114,8 @@ function App() {
             }, 10000);
           }
         }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+      } catch (err: unknown) {
+        console.error('Failed to parse WebSocket message:', err);
       }
     };
 
@@ -95,17 +139,19 @@ function App() {
         },
         (decodedText) => {
           // QR code decoded
-          handleQRScanned(decodedText);
+          void handleQRScanned(decodedText).catch((err: unknown) => {
+            console.error('Error handling QR scan:', err);
+          });
         },
-        (errorMessage) => {
+        (_errorMessage) => {
           // Ignore errors (scanner will keep trying)
         }
       );
-    } catch (error) {
-      console.error('Failed to start QR scanner:', error);
-      alert('Failed to start camera. Please check permissions.');
-      setView('idle');
-    }
+      } catch (err: unknown) {
+        console.error('Failed to start QR scanner:', err);
+        alert('Failed to start camera. Please check permissions.');
+        setView('idle');
+      }
   };
 
   // Handle QR code scan
@@ -115,8 +161,8 @@ function App() {
       try {
         await qrCodeScannerRef.current.stop();
         qrCodeScannerRef.current.clear();
-      } catch (error) {
-        console.error('Error stopping scanner:', error);
+      } catch (err: unknown) {
+        console.error('Error stopping scanner:', err);
       }
       qrCodeScannerRef.current = null;
     }
@@ -135,13 +181,17 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to resolve key');
+        const errorData = await response.json() as unknown;
+        const errorMessage = isApiErrorShape(errorData) ? errorData.error : 'Failed to resolve key';
+        throw new Error(errorMessage);
       }
 
-      const data: ResolvedKeyData = await response.json();
-      setResolvedKey(data);
-      setLateFeeAmount(data.lateFeeAmount);
+      const responseData: unknown = await response.json();
+      // Type assertion is safe because assertResolvedCheckoutKey validates and narrows the type
+      const data: ResolvedKeyData = assertResolvedCheckoutKey(responseData);
+      setResolvedKey(data); // eslint-disable-line @typescript-eslint/no-unsafe-assignment -- Type guard ensures data is ResolvedKeyData
+      const feeAmount: number = typeof data.lateFeeAmount === 'number' && Number.isFinite(data.lateFeeAmount) ? data.lateFeeAmount : 0;
+      setLateFeeAmount(feeAmount);
 
       // Initialize checklist based on rental type
       const newChecklist: CheckoutChecklist = {};
@@ -158,9 +208,10 @@ function App() {
       }
       setChecklist(newChecklist);
       setView('checklist');
-    } catch (error) {
-      console.error('Failed to resolve key:', error);
-      alert(error instanceof Error ? error.message : 'Failed to resolve key. Please try again.');
+    } catch (err: unknown) {
+      console.error('Failed to resolve key:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to resolve key. Please try again.';
+      alert(errorMessage);
       setView('idle');
     }
   };
@@ -184,23 +235,28 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          occupancyId: resolvedKey.occupancyId,
-          kioskDeviceId,
+          occupancyId: String(resolvedKey.occupancyId),
+          kioskDeviceId: String(kioskDeviceId),
           checklist,
         }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create checkout request');
+        const errorData = await response.json() as unknown;
+        const errorMessage = isApiErrorShape(errorData) ? errorData.error : 'Failed to create checkout request';
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      setRequestId(data.requestId);
+      const responseData = await response.json() as unknown;
+      if (!isCheckoutRequestResponse(responseData)) {
+        throw new Error('Invalid response format');
+      }
+      setRequestId(responseData.requestId);
       setView('waiting');
-    } catch (error) {
-      console.error('Failed to submit checkout:', error);
-      alert(error instanceof Error ? error.message : 'Failed to submit checkout. Please try again.');
+    } catch (err: unknown) {
+      console.error('Failed to submit checkout:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to submit checkout. Please try again.';
+      alert(errorMessage);
     }
   };
 
@@ -224,8 +280,8 @@ function App() {
   if (view === 'idle') {
     return (
       <div className="idle-container">
-        <img src={logoImage} alt="Club Dallas" className="logo-idle" />
-        <button className="start-checkout-btn" onClick={handleStartCheckout}>
+        <img src={logoImageSrc} alt="Club Dallas" className="logo-idle" />
+        <button className="start-checkout-btn" onClick={() => void handleStartCheckout()}>
           Start Checkout
         </button>
       </div>
@@ -236,7 +292,7 @@ function App() {
   if (view === 'scanning') {
     return (
       <div className="active-container">
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
+        <img src={logoImageSrc} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="scan-container">
             <p className="scan-instructions">
@@ -255,7 +311,7 @@ function App() {
     
     return (
       <div className="active-container">
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
+        <img src={logoImageSrc} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="checklist-container">
             <h1 className="checklist-title">Please verify items returned</h1>
@@ -267,7 +323,7 @@ function App() {
                     <input
                       type="checkbox"
                       id="lockerKey"
-                      checked={checklist.lockerKey || false}
+                      checked={checklist.lockerKey === true}
                       onChange={() => handleChecklistToggle('lockerKey')}
                     />
                     <label htmlFor="lockerKey">Locker key</label>
@@ -276,7 +332,7 @@ function App() {
                     <input
                       type="checkbox"
                       id="towel"
-                      checked={checklist.towel || false}
+                      checked={checklist.towel === true}
                       onChange={() => handleChecklistToggle('towel')}
                     />
                     <label htmlFor="towel">Towel</label>
@@ -288,7 +344,7 @@ function App() {
                     <input
                       type="checkbox"
                       id="roomKey"
-                      checked={checklist.roomKey || false}
+                      checked={checklist.roomKey === true}
                       onChange={() => handleChecklistToggle('roomKey')}
                     />
                     <label htmlFor="roomKey">Room key</label>
@@ -297,7 +353,7 @@ function App() {
                     <input
                       type="checkbox"
                       id="bedSheets"
-                      checked={checklist.bedSheets || false}
+                      checked={checklist.bedSheets === true}
                       onChange={() => handleChecklistToggle('bedSheets')}
                     />
                     <label htmlFor="bedSheets">Bed sheets</label>
@@ -307,7 +363,7 @@ function App() {
                       <input
                         type="checkbox"
                         id="tvRemote"
-                        checked={checklist.tvRemote || false}
+                        checked={checklist.tvRemote === true}
                         onChange={() => handleChecklistToggle('tvRemote')}
                       />
                       <label htmlFor="tvRemote">TV remote</label>
@@ -328,7 +384,7 @@ function App() {
 
             <button
               className="continue-btn"
-              onClick={handleSubmitCheckout}
+              onClick={() => void handleSubmitCheckout()}
               disabled={!isChecklistComplete()}
             >
               Continue
@@ -343,7 +399,7 @@ function App() {
   if (view === 'waiting' && resolvedKey) {
     return (
       <div className="active-container">
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
+        <img src={logoImageSrc} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="waiting-container">
             <h1 className="waiting-title">Please hand your items to staff for verification.</h1>
@@ -362,7 +418,7 @@ function App() {
   if (view === 'complete') {
     return (
       <div className="active-container">
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
+        <img src={logoImageSrc} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="complete-container">
             <h1 className="complete-title">
@@ -378,6 +434,7 @@ function App() {
 }
 
 export default App;
+
 
 
 

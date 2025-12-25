@@ -17,15 +17,13 @@
     "pretest": "pnpm build",
     "test": "pnpm exec vitest run",
     "test:watch": "pnpm exec vitest",
-    "lint": "pnpm exec eslint src --ext .ts",
+    "lint": "npx eslint src",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^6.14.0",
-    "@typescript-eslint/parser": "^6.14.0",
     "typescript": "^5.3.3",
     "vitest": "^1.1.0"
   }
