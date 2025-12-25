@@ -33,6 +33,7 @@ function findFiles(dir, extensions, excludeDirs = ['node_modules', '.git', 'dist
     for (const entry of entries) {
       if (excludeDirs.includes(entry)) continue;
       
+      if (entry.includes('..')) throw new Error('Invalid file path');
       const fullPath = join(dir, entry);
       const stat = statSync(fullPath);
       
