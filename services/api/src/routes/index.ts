@@ -19,3 +19,6 @@ export { visitRoutes } from './visits.js';
 export { checkoutRoutes } from './checkout.js';
 export { checkinRoutes } from './checkin.js';
 export { registerRoutes } from './registers.js';
+export { shiftsRoutes } from './shifts.js';
+export { timeclockRoutes } from './timeclock.js';
+export { documentsRoutes } from './documents.js';

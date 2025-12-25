@@ -2418,6 +2418,7 @@ function App() {
         }}
       />
     </div>
+    </RegisterSignIn>
   );
 }
 

@@ -442,6 +442,66 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
         [staff.id, sessionId]
       );
 
+      // Create or update timeclock session for cleaning station sign-in (WebAuthn)
+      // Only if employee is not already signed into a register
+      const registerSession = await query<{ count: string }>(
+        `SELECT COUNT(*) as count FROM register_sessions
+         WHERE employee_id = $1 AND signed_out_at IS NULL`,
+        [staff.id]
+      );
+
+      // If not signed into register, assume cleaning station sign-in
+      if (parseInt(registerSession.rows[0]?.count || '0', 10) === 0) {
+        const now = new Date();
+        // Find nearest scheduled shift
+        const shiftResult = await query<{
+          id: string;
+          starts_at: Date;
+          ends_at: Date;
+        }>(
+          `SELECT id, starts_at, ends_at
+           FROM employee_shifts
+           WHERE employee_id = $1
+           AND status != 'CANCELED'
+           AND (
+             (starts_at <= $2 AND ends_at >= $2)
+             OR (starts_at > $2 AND starts_at <= $2 + INTERVAL '60 minutes')
+           )
+           ORDER BY ABS(EXTRACT(EPOCH FROM (starts_at - $2::timestamp)))
+           LIMIT 1`,
+          [staff.id, now]
+        );
+
+        const shiftId = shiftResult.rows.length > 0 ? shiftResult.rows[0]!.id : null;
+
+        // Check if employee already has an open timeclock session
+        const existingTimeclock = await query<{ id: string }>(
+          `SELECT id FROM timeclock_sessions
+           WHERE employee_id = $1 AND clock_out_at IS NULL`,
+          [staff.id]
+        );
+
+        if (existingTimeclock.rows.length === 0) {
+          // Create new timeclock session for cleaning station
+          await query(
+            `INSERT INTO timeclock_sessions 
+             (employee_id, shift_id, clock_in_at, source, notes)
+             VALUES ($1, $2, $3, 'OFFICE_DASHBOARD', NULL)`,
+            [staff.id, shiftId, now]
+          );
+        } else {
+          // Update existing session to attach shift if not already attached
+          if (shiftId) {
+            await query(
+              `UPDATE timeclock_sessions
+               SET shift_id = $1
+               WHERE id = $2 AND shift_id IS NULL`,
+              [shiftId, existingTimeclock.rows[0]!.id]
+            );
+          }
+        }
+      }
+
       return reply.send({
         verified: true,
         staffId: staff.id,

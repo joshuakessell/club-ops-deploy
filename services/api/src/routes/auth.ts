@@ -103,6 +103,66 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
           [staff.id, sessionId]
         );
 
+        // Create or update timeclock session for cleaning station sign-in
+        // Only if employee is not already signed into a register
+        const registerSession = await client.query<{ count: string }>(
+          `SELECT COUNT(*) as count FROM register_sessions
+           WHERE employee_id = $1 AND signed_out_at IS NULL`,
+          [staff.id]
+        );
+
+        // If not signed into register, assume cleaning station sign-in
+        if (parseInt(registerSession.rows[0]?.count || '0', 10) === 0) {
+          const now = new Date();
+          // Find nearest scheduled shift
+          const shiftResult = await client.query<{
+            id: string;
+            starts_at: Date;
+            ends_at: Date;
+          }>(
+            `SELECT id, starts_at, ends_at
+             FROM employee_shifts
+             WHERE employee_id = $1
+             AND status != 'CANCELED'
+             AND (
+               (starts_at <= $2 AND ends_at >= $2)
+               OR (starts_at > $2 AND starts_at <= $2 + INTERVAL '60 minutes')
+             )
+             ORDER BY ABS(EXTRACT(EPOCH FROM (starts_at - $2::timestamp)))
+             LIMIT 1`,
+            [staff.id, now]
+          );
+
+          const shiftId = shiftResult.rows.length > 0 ? shiftResult.rows[0]!.id : null;
+
+          // Check if employee already has an open timeclock session
+          const existingTimeclock = await client.query<{ id: string }>(
+            `SELECT id FROM timeclock_sessions
+             WHERE employee_id = $1 AND clock_out_at IS NULL`,
+            [staff.id]
+          );
+
+          if (existingTimeclock.rows.length === 0) {
+            // Create new timeclock session for cleaning station
+            await client.query(
+              `INSERT INTO timeclock_sessions 
+               (employee_id, shift_id, clock_in_at, source, notes)
+               VALUES ($1, $2, $3, 'OFFICE_DASHBOARD', NULL)`,
+              [staff.id, shiftId, now]
+            );
+          } else {
+            // Update existing session to attach shift if not already attached
+            if (shiftId) {
+              await client.query(
+                `UPDATE timeclock_sessions
+                 SET shift_id = $1
+                 WHERE id = $2 AND shift_id IS NULL`,
+                [shiftId, existingTimeclock.rows[0]!.id]
+              );
+            }
+          }
+        }
+
         return {
           staffId: staff.id,
           name: staff.name,
@@ -173,6 +233,32 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
            VALUES ($1, 'STAFF_LOGOUT', 'staff_session', $2)`,
           [staffId, sessionId]
         );
+
+        // Close timeclock session if employee is no longer signed into any register or cleaning station
+        const otherRegisterSession = await query<{ count: string }>(
+          `SELECT COUNT(*) as count FROM register_sessions
+           WHERE employee_id = $1 AND signed_out_at IS NULL`,
+          [staffId]
+        );
+
+        const otherStaffSession = await query<{ count: string }>(
+          `SELECT COUNT(*) as count FROM staff_sessions
+           WHERE staff_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
+          [staffId]
+        );
+
+        // Only close timeclock if no other active sessions
+        if (
+          parseInt(otherRegisterSession.rows[0]?.count || '0', 10) === 0 &&
+          parseInt(otherStaffSession.rows[0]?.count || '0', 10) === 0
+        ) {
+          await query(
+            `UPDATE timeclock_sessions
+             SET clock_out_at = NOW()
+             WHERE employee_id = $1 AND clock_out_at IS NULL`,
+            [staffId]
+          );
+        }
       }
 
       return reply.send({ success: true });

@@ -402,6 +402,56 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
 
         const session = sessionResult.rows[0]!;
 
+        // Create or update timeclock session for register sign-in
+        const now = new Date();
+        // Find nearest scheduled shift
+        const shiftResult = await client.query<{
+          id: string;
+          starts_at: Date;
+          ends_at: Date;
+        }>(
+          `SELECT id, starts_at, ends_at
+           FROM employee_shifts
+           WHERE employee_id = $1
+           AND status != 'CANCELED'
+           AND (
+             (starts_at <= $2 AND ends_at >= $2)
+             OR (starts_at > $2 AND starts_at <= $2 + INTERVAL '60 minutes')
+           )
+           ORDER BY ABS(EXTRACT(EPOCH FROM (starts_at - $2::timestamp)))
+           LIMIT 1`,
+          [body.employeeId, now]
+        );
+
+        const shiftId = shiftResult.rows.length > 0 ? shiftResult.rows[0]!.id : null;
+
+        // Check if employee already has an open timeclock session
+        const existingTimeclock = await client.query<{ id: string }>(
+          `SELECT id FROM timeclock_sessions
+           WHERE employee_id = $1 AND clock_out_at IS NULL`,
+          [body.employeeId]
+        );
+
+        if (existingTimeclock.rows.length === 0) {
+          // Create new timeclock session
+          await client.query(
+            `INSERT INTO timeclock_sessions 
+             (employee_id, shift_id, clock_in_at, source, notes)
+             VALUES ($1, $2, $3, 'EMPLOYEE_REGISTER', NULL)`,
+            [body.employeeId, shiftId, now]
+          );
+        } else {
+          // Update existing session to attach shift if not already attached
+          if (shiftId) {
+            await client.query(
+              `UPDATE timeclock_sessions
+               SET shift_id = $1
+               WHERE id = $2 AND shift_id IS NULL`,
+              [shiftId, existingTimeclock.rows[0]!.id]
+            );
+          }
+        }
+
         // Get employee info
         const employeeResult = await client.query<EmployeeRow>(
           `SELECT id, name, role FROM staff WHERE id = $1`,
@@ -572,13 +622,40 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
           throw new Error('Register session does not belong to authenticated employee');
         }
 
-        // Sign out
-        await client.query(
-          `UPDATE register_sessions
-           SET signed_out_at = NOW()
-           WHERE id = $1`,
-          [session.id]
-        );
+                    // Sign out
+                    await client.query(
+                      `UPDATE register_sessions
+                       SET signed_out_at = NOW()
+                       WHERE id = $1`,
+                      [session.id]
+                    );
+
+                    // Close timeclock session if employee is no longer signed into any register or cleaning station
+                    // Check if employee has any other active sessions (register or staff_sessions for cleaning)
+                    const otherRegisterSession = await client.query<{ count: string }>(
+                      `SELECT COUNT(*) as count FROM register_sessions
+                       WHERE employee_id = $1 AND signed_out_at IS NULL`,
+                      [session.employee_id]
+                    );
+
+                    const otherStaffSession = await client.query<{ count: string }>(
+                      `SELECT COUNT(*) as count FROM staff_sessions
+                       WHERE staff_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
+                      [session.employee_id]
+                    );
+
+                    // Only close timeclock if no other active sessions
+                    if (
+                      parseInt(otherRegisterSession.rows[0]?.count || '0', 10) === 0 &&
+                      parseInt(otherStaffSession.rows[0]?.count || '0', 10) === 0
+                    ) {
+                      await client.query(
+                        `UPDATE timeclock_sessions
+                         SET clock_out_at = NOW()
+                         WHERE employee_id = $1 AND clock_out_at IS NULL`,
+                        [session.employee_id]
+                      );
+                    }
 
         // Log audit action
         await client.query(

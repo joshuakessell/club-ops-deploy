@@ -696,6 +696,75 @@ function StaffDetailModal({
   onPinReset: () => void;
   sessionToken: string;
 }) {
+  const [activeTab, setActiveTab] = useState<'details' | 'passkeys' | 'documents'>('details');
+  const [documents, setDocuments] = useState<Array<{
+    id: string;
+    docType: string;
+    filename: string;
+    mimeType: string;
+    uploadedAt: string;
+    notes: string | null;
+  }>>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'documents') {
+      fetchDocuments();
+    }
+  }, [activeTab, staff.id]);
+
+  const fetchDocuments = async () => {
+    setLoadingDocs(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/admin/employees/${staff.id}/documents`, {
+        headers: { 'Authorization': `Bearer ${sessionToken}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setDocuments(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch documents:', error);
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  const handleUpload = async (file: File, docType: string, notes?: string) => {
+    try {
+      // Convert file to base64 for POC
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1];
+        const response = await fetch(`${API_BASE}/v1/admin/employees/${staff.id}/documents`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            docType,
+            filename: file.name,
+            mimeType: file.type,
+            fileData: base64,
+            notes,
+          }),
+        });
+        if (response.ok) {
+          await fetchDocuments();
+          setShowUploadModal(false);
+        } else {
+          alert('Failed to upload document');
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Failed to upload document:', error);
+      alert('Failed to upload document');
+    }
+  };
+
   return (
     <div
       style={{
@@ -742,32 +811,84 @@ function StaffDetailModal({
           </button>
         </div>
 
-        <div style={{ marginBottom: '2rem' }}>
-          <p><strong>Role:</strong> {staff.role}</p>
-          <p><strong>Status:</strong> {staff.active ? 'Active' : 'Inactive'}</p>
-          <p><strong>Created:</strong> {new Date(staff.createdAt).toLocaleString()}</p>
-          <p><strong>Last Login:</strong> {staff.lastLogin ? new Date(staff.lastLogin).toLocaleString() : 'Never'}</p>
-        </div>
-
-        <div style={{ marginBottom: '1.5rem' }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #374151' }}>
           <button
-            onClick={onPinReset}
+            onClick={() => setActiveTab('details')}
             style={{
               padding: '0.75rem 1.5rem',
-              background: '#374151',
+              background: activeTab === 'details' ? '#374151' : 'transparent',
               border: 'none',
-              borderRadius: '6px',
+              borderBottom: activeTab === 'details' ? '2px solid #10b981' : '2px solid transparent',
               color: '#f9fafb',
               cursor: 'pointer',
               fontSize: '1rem',
-              marginRight: '1rem',
             }}
           >
-            Reset PIN
+            Details
+          </button>
+          <button
+            onClick={() => setActiveTab('passkeys')}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: activeTab === 'passkeys' ? '#374151' : 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'passkeys' ? '2px solid #10b981' : '2px solid transparent',
+              color: '#f9fafb',
+              cursor: 'pointer',
+              fontSize: '1rem',
+            }}
+          >
+            Passkeys
+          </button>
+          <button
+            onClick={() => setActiveTab('documents')}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: activeTab === 'documents' ? '#374151' : 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'documents' ? '2px solid #10b981' : '2px solid transparent',
+              color: '#f9fafb',
+              cursor: 'pointer',
+              fontSize: '1rem',
+            }}
+          >
+            Documents
           </button>
         </div>
 
-        <h3 style={{ marginBottom: '1rem', fontSize: '1.25rem' }}>Passkeys</h3>
+        {activeTab === 'details' && (
+          <>
+            <div style={{ marginBottom: '2rem' }}>
+              <p><strong>Role:</strong> {staff.role}</p>
+              <p><strong>Status:</strong> {staff.active ? 'Active' : 'Inactive'}</p>
+              <p><strong>Created:</strong> {new Date(staff.createdAt).toLocaleString()}</p>
+              <p><strong>Last Login:</strong> {staff.lastLogin ? new Date(staff.lastLogin).toLocaleString() : 'Never'}</p>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <button
+                onClick={onPinReset}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: '#374151',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: '#f9fafb',
+                  cursor: 'pointer',
+                  fontSize: '1rem',
+                  marginRight: '1rem',
+                }}
+              >
+                Reset PIN
+              </button>
+            </div>
+          </>
+        )}
+
+        {activeTab === 'passkeys' && (
+          <>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1.25rem' }}>Passkeys</h3>
         {passkeys.length === 0 ? (
           <p style={{ color: '#9ca3af' }}>No passkeys registered</p>
         ) : (
@@ -831,6 +952,238 @@ function StaffDetailModal({
             </tbody>
           </table>
         )}
+          </>
+        )}
+
+        {activeTab === 'documents' && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '1.25rem' }}>Documents</h3>
+              <button
+                onClick={() => setShowUploadModal(true)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: '#10b981',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                }}
+              >
+                Upload Document
+              </button>
+            </div>
+            {loadingDocs ? (
+              <p style={{ color: '#9ca3af' }}>Loading documents...</p>
+            ) : documents.length === 0 ? (
+              <p style={{ color: '#9ca3af' }}>No documents uploaded</p>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #374151' }}>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Type</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Filename</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Uploaded</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.map(doc => (
+                    <tr key={doc.id} style={{ borderBottom: '1px solid #374151' }}>
+                      <td style={{ padding: '0.75rem' }}>{doc.docType}</td>
+                      <td style={{ padding: '0.75rem' }}>{doc.filename}</td>
+                      <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                        {new Date(doc.uploadedAt).toLocaleString()}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <a
+                          href={`${API_BASE}/v1/admin/documents/${doc.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            padding: '0.5rem 1rem',
+                            background: '#374151',
+                            borderRadius: '6px',
+                            color: '#f9fafb',
+                            textDecoration: 'none',
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          Download
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Upload Document Modal */}
+      {showUploadModal && (
+        <UploadDocumentModal
+          onClose={() => setShowUploadModal(false)}
+          onUpload={handleUpload}
+        />
+      )}
+    </div>
+  );
+}
+
+function UploadDocumentModal({
+  onClose,
+  onUpload,
+}: {
+  onClose: () => void;
+  onUpload: (file: File, docType: string, notes?: string) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [docType, setDocType] = useState('OTHER');
+  const [notes, setNotes] = useState('');
+  const [uploading, setUploading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!file) {
+      alert('Please select a file');
+      return;
+    }
+    setUploading(true);
+    try {
+      await onUpload(file, docType, notes || undefined);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.75)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{
+          background: '#1f2937',
+          borderRadius: '8px',
+          padding: '2rem',
+          maxWidth: '500px',
+          width: '90%',
+          border: '1px solid #374151',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1.5rem' }}>
+          Upload Document
+        </h2>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+            Document Type
+          </label>
+          <select
+            value={docType}
+            onChange={(e) => setDocType(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              background: '#111827',
+              border: '1px solid #374151',
+              borderRadius: '6px',
+              color: '#f9fafb',
+              fontSize: '1rem',
+            }}
+          >
+            <option value="ID">ID</option>
+            <option value="W4">W4</option>
+            <option value="I9">I9</option>
+            <option value="OFFER_LETTER">Offer Letter</option>
+            <option value="NDA">NDA</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+            File
+          </label>
+          <input
+            type="file"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              background: '#111827',
+              border: '1px solid #374151',
+              borderRadius: '6px',
+              color: '#f9fafb',
+              fontSize: '1rem',
+            }}
+          />
+        </div>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+            Notes (optional)
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            style={{
+              width: '100%',
+              padding: '0.75rem',
+              background: '#111827',
+              border: '1px solid #374151',
+              borderRadius: '6px',
+              color: '#f9fafb',
+              fontSize: '1rem',
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+          <button
+            onClick={onClose}
+            disabled={uploading}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: '#374151',
+              border: 'none',
+              borderRadius: '6px',
+              color: '#f9fafb',
+              cursor: uploading ? 'not-allowed' : 'pointer',
+              fontSize: '1rem',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={uploading || !file}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: uploading || !file ? '#6b7280' : '#10b981',
+              border: 'none',
+              borderRadius: '6px',
+              color: '#fff',
+              cursor: uploading || !file ? 'not-allowed' : 'pointer',
+              fontSize: '1rem',
+              fontWeight: 600,
+            }}
+          >
+            {uploading ? 'Uploading...' : 'Upload'}
+          </button>
+        </div>
       </div>
     </div>
   );

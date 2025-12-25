@@ -13,6 +13,24 @@ If implementation conflicts with these files, the agent MUST either:
 
 ---
 
+## Command Execution Requirements
+
+**CRITICAL: All terminal commands MUST be executed using bash with elevated sudo privileges.**
+
+- Agents MUST use bash shell for all terminal commands (not cmd.exe or PowerShell)
+- All commands MUST be prefixed with `sudo` and executed via bash: `sudo bash -c "command"`
+- Examples:
+  - `sudo bash -c "pnpm install"` (not `pnpm install`)
+  - `sudo bash -c "pnpm dev"` (not `pnpm dev`)
+  - `sudo bash -c "pnpm test"` (not `pnpm test`)
+  - `sudo bash -c "node scripts/kill-ports.js"` (not `node scripts/kill-ports.js`)
+- This applies to ALL commands, including package management, testing, building, and script execution
+- Use this format even if the command might not strictly require sudo - it ensures consistent behavior and prevents permission issues
+
+This ensures consistent behavior across different environments and prevents permission-related issues that agents have been experiencing with cmd commands.
+
+---
+
 ## Project Architecture
 
 ### Applications (Monorepo)

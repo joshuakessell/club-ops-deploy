@@ -294,6 +294,6 @@ export interface RegisterSessionUpdatedPayload {
   deviceId: string | null;
   createdAt: string | null;
   lastHeartbeatAt: string | null;
-  reason: 'CONFIRMED' | 'SIGNED_OUT' | 'FORCED_SIGN_OUT' | 'TTL_EXPIRED';
+  reason: 'CONFIRMED' | 'SIGNED_OUT' | 'FORCED_SIGN_OUT' | 'TTL_EXPIRED' | 'DEVICE_DISABLED';
 }
 

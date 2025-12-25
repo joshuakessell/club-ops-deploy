@@ -20,11 +20,15 @@ import {
   visitRoutes,
   checkoutRoutes,
   checkinRoutes,
-  registerRoutes
+  registerRoutes,
+  shiftsRoutes,
+  timeclockRoutes,
+  documentsRoutes
 } from './routes/index.js';
 import { createBroadcaster, type Broadcaster } from './websocket/broadcaster.js';
 import { initializeDatabase, closeDatabase } from './db/index.js';
 import { cleanupAbandonedRegisterSessions } from './routes/registers.js';
+import { seedDemoData } from './db/seed-demo.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -83,6 +87,12 @@ async function main() {
     try {
       await initializeDatabase();
       fastify.log.info('Database connection initialized');
+      
+      // Seed demo data if DEMO_MODE is enabled
+      if (process.env.DEMO_MODE === 'true') {
+        fastify.log.info('DEMO_MODE enabled, seeding demo data...');
+        await seedDemoData();
+      }
     } catch (err) {
       fastify.log.error(err, 'Failed to initialize database');
       process.exit(1);
@@ -107,6 +117,9 @@ async function main() {
   await fastify.register(checkoutRoutes);
   await fastify.register(checkinRoutes);
   await fastify.register(registerRoutes);
+  await fastify.register(shiftsRoutes);
+  await fastify.register(timeclockRoutes);
+  await fastify.register(documentsRoutes);
 
   // WebSocket endpoint
   fastify.get('/ws', { websocket: true }, (connection, req) => {

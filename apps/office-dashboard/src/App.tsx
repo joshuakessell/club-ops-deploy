@@ -6,6 +6,8 @@ import { AdminView } from './AdminView';
 import { StaffManagement } from './StaffManagement';
 import { RegistersView } from './RegistersView';
 import { DevicesView } from './DevicesView';
+import { ShiftsView } from './ShiftsView';
+import { TimeclockView } from './TimeclockView';
 
 interface HealthStatus {
   status: string;
@@ -108,6 +110,8 @@ function App() {
       <Route path="/admin/staff" element={isAdmin ? <StaffManagement session={session} /> : <NotAuthorizedView />} />
       <Route path="/admin/registers" element={isAdmin ? <RegistersView session={session} /> : <NotAuthorizedView />} />
       <Route path="/admin/devices" element={isAdmin ? <DevicesView session={session} /> : <NotAuthorizedView />} />
+      <Route path="/admin/shifts" element={isAdmin ? <ShiftsView session={session} /> : <NotAuthorizedView />} />
+      <Route path="/admin/timeclock" element={isAdmin ? <TimeclockView session={session} /> : <NotAuthorizedView />} />
       <Route path="/" element={<DashboardContent session={session} />} />
     </Routes>
   );
@@ -306,6 +310,22 @@ function DashboardContent({ session }: { session: StaffSession }) {
           >
             🏁 Check-ins
           </button>
+          {session.role === 'ADMIN' && (
+            <>
+              <button
+                className={`nav-item ${location.pathname === '/admin/shifts' ? 'active' : ''}`}
+                onClick={() => navigate('/admin/shifts')}
+              >
+                📅 Shifts
+              </button>
+              <button
+                className={`nav-item ${location.pathname === '/admin/timeclock' ? 'active' : ''}`}
+                onClick={() => navigate('/admin/timeclock')}
+              >
+                ⏰ Timeclock
+              </button>
+            </>
+          )}
           {session.role === 'ADMIN' && (
             <>
               <button
