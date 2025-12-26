@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Box, 
   Container, 
@@ -110,46 +110,45 @@ interface Employee {
   icon: React.ReactNode;
 }
 
-const EMPLOYEES: Employee[] = [
-  {
-    id: 'john-erikson',
-    name: 'John Erikson',
-    role: 'STAFF',
-    accessLevel: 'limited',
-    description: 'Register Employee - View Schedule Only',
-    icon: <Schedule />,
-  },
-  {
-    id: 'cruz',
-    name: 'Cruz',
-    role: 'ADMIN',
-    accessLevel: 'full',
-    description: 'Full Access - Auditing, Reports & Schedule Management',
-    icon: <Assessment />,
-  },
-  {
-    id: 'sarah-martinez',
-    name: 'Sarah Martinez',
-    role: 'STAFF',
-    accessLevel: 'limited',
-    description: 'Register Employee - View Schedule Only',
-    icon: <BusinessCenter />,
-  },
-  {
-    id: 'michael-chen',
-    name: 'Michael Chen',
-    role: 'ADMIN',
-    accessLevel: 'full',
-    description: 'Full Access - Auditing, Reports & Schedule Management',
-    icon: <Assessment />,
-  },
-];
-
 export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(true);
+
+  // Fetch employees from API
+  useEffect(() => {
+    const loadEmployees = async () => {
+      try {
+        const response = await fetch(`${API_BASE}/v1/auth/staff`);
+        if (response.ok) {
+          const data = await response.json();
+          const staffList: Employee[] = (data.staff || []).map((staff: { id: string; name: string; role: 'STAFF' | 'ADMIN' }) => ({
+            id: staff.id,
+            name: staff.name,
+            role: staff.role,
+            accessLevel: staff.role === 'ADMIN' ? 'full' : 'limited',
+            description: staff.role === 'ADMIN' 
+              ? 'Full Access - Auditing, Reports & Schedule Management'
+              : 'Register Employee - View Schedule Only',
+            icon: staff.role === 'ADMIN' ? <Assessment /> : <Schedule />,
+          }));
+          setEmployees(staffList);
+        } else {
+          setError('Failed to load staff list');
+        }
+      } catch (error) {
+        console.error('Failed to load employees:', error);
+        setError('Failed to load staff list');
+      } finally {
+        setIsLoadingEmployees(false);
+      }
+    };
+
+    loadEmployees();
+  }, []);
 
   const handleEmployeeSelect = (employee: Employee) => {
     setSelectedEmployee(employee);
@@ -175,8 +174,6 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
     setError(null);
 
     try {
-      // For demo, all PINs are 1234
-      // In production, this would use the actual employee lookup
       const response = await fetch(`${API_BASE}/v1/auth/login-pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -184,29 +181,33 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
           staffLookup: selectedEmployee.name,
           deviceId,
           pin: pin.trim(),
+          deviceType: deviceType, // Pass device type for proper session creation
         }),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
+        let errorMessage = 'Login failed';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || 'Login failed';
+          console.error('Login API error:', errorData);
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          errorMessage = `Login failed (${response.status} ${response.statusText})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const session: StaffSession = await response.json();
       
-      // Override role/access based on employee selection for demo
-      const finalSession: StaffSession = {
-        ...session,
-        name: selectedEmployee.name,
-        role: selectedEmployee.role,
-      };
-      
-      onLogin(finalSession);
+      // Use the session data from the server (authenticated and verified)
+      onLogin(session);
       setPin('');
       setSelectedEmployee(null);
     } catch (error) {
       console.error('Login error:', error);
-      setError(error instanceof Error ? error.message : 'Invalid PIN. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Invalid PIN. Please try again.';
+      setError(errorMessage);
       setPin('');
     } finally {
       setIsLoading(false);
@@ -264,8 +265,20 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                   </Box>
 
                   {/* Employee Selection */}
-                  <Stack spacing={2}>
-                    {EMPLOYEES.map((employee) => (
+                  {isLoadingEmployees ? (
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                      <CircularProgress />
+                      <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                        Loading staff...
+                      </Typography>
+                    </Box>
+                  ) : employees.length === 0 ? (
+                    <Alert severity="error">
+                      No active staff members found. Please contact an administrator.
+                    </Alert>
+                  ) : (
+                    <Stack spacing={2}>
+                      {employees.map((employee) => (
                       <Card
                         key={employee.id}
                         sx={{
@@ -302,8 +315,9 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                           </Box>
                         </CardContent>
                       </Card>
-                    ))}
-                  </Stack>
+                      ))}
+                    </Stack>
+                  )}
                 </Box>
               ) : (
                 <Box sx={{ p: 4 }}>
@@ -353,12 +367,17 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                         type="password"
                         label="Enter PIN"
                         value={pin}
-                        onChange={(e) => setPin(e.target.value)}
+                        onChange={(e) => {
+                          // Only allow numeric input
+                          const value = e.target.value.replace(/\D/g, '');
+                          setPin(value);
+                        }}
                         disabled={isLoading}
                         autoFocus
                         inputProps={{
                           maxLength: 10,
                           inputMode: 'numeric',
+                          pattern: '[0-9]*',
                         }}
                         InputProps={{
                           startAdornment: (
@@ -368,6 +387,12 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                         sx={{
                           '& .MuiOutlinedInput-root': {
                             borderRadius: 2,
+                          },
+                          '& input': {
+                            textAlign: 'center',
+                            fontSize: '1.5rem',
+                            letterSpacing: '0.5rem',
+                            fontFamily: 'monospace',
                           },
                         }}
                       />
@@ -391,18 +416,6 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                       </Button>
                     </Stack>
                   </form>
-
-                  <Typography 
-                    variant="caption" 
-                    sx={{ 
-                      display: 'block', 
-                      textAlign: 'center', 
-                      mt: 3, 
-                      color: 'text.secondary' 
-                    }}
-                  >
-                    Demo Mode: All PINs are 1234
-                  </Typography>
                 </Box>
               )}
             </Paper>

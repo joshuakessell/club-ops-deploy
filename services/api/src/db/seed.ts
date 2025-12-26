@@ -89,16 +89,10 @@ async function seed() {
         pin: '1234',
       },
       {
-        name: 'Jane Admin',
+        name: 'Cruz Martinez',
         role: 'ADMIN',
-        qrToken: 'ADMIN-001',
-        pin: '5678',
-      },
-      {
-        name: 'Bob Cleaner',
-        role: 'STAFF',
         qrToken: 'STAFF-002',
-        pin: '9999',
+        pin: '1234',
       },
     ];
 
@@ -108,8 +102,46 @@ async function seed() {
     );
     
     if (parseInt(existingStaff.rows[0]?.count || '0', 10) > 0) {
-      console.log('⚠️  Staff users already exist. Skipping staff seed.');
+      console.log('⚠️  Staff users already exist. Updating existing staff to match seed data...');
+      
+      // Update existing staff if they match old names or create new ones
+      for (const staff of staffUsers) {
+        const qrTokenHash = hashQrToken(staff.qrToken);
+        const pinHash = await hashPin(staff.pin);
+
+        // Check if staff with this name or matching old names exists
+        const existing = await query<{ id: string; name: string }>(
+          `SELECT id, name FROM staff 
+           WHERE name = $1 
+           OR (name = 'John Staff' AND $1 = 'John Erikson')
+           OR (name = 'Jane Admin' AND $1 = 'Cruz Martinez')
+           LIMIT 1`,
+          [staff.name]
+        );
+
+        if (existing.rows.length > 0) {
+          // Update existing staff
+          await query(
+            `UPDATE staff 
+             SET name = $1, role = $2, qr_token_hash = $3, pin_hash = $4, active = true
+             WHERE id = $5`,
+            [staff.name, staff.role, qrTokenHash, pinHash, existing.rows[0]!.id]
+          );
+          console.log(`✓ Updated staff: ${existing.rows[0]!.name} → ${staff.name} (${staff.role})`);
+        } else {
+          // Create new staff if doesn't exist
+          await query(
+            `INSERT INTO staff (name, role, qr_token_hash, pin_hash, active)
+             VALUES ($1, $2, $3, $4, true)`,
+            [staff.name, staff.role, qrTokenHash, pinHash]
+          );
+          console.log(`✓ Seeded staff: ${staff.name} (${staff.role})`);
+        }
+      }
+
+      console.log('\n✅ Staff users updated successfully');
     } else {
+      // No existing staff, create new ones
       for (const staff of staffUsers) {
         const qrTokenHash = hashQrToken(staff.qrToken);
         const pinHash = await hashPin(staff.pin);
@@ -124,13 +156,14 @@ async function seed() {
       }
 
       console.log('\n✅ Staff users seeded successfully');
-      console.log('\nStaff login credentials for testing:');
-      staffUsers.forEach(staff => {
-        console.log(`  - ${staff.name} (${staff.role}):`);
-        console.log(`    QR Token: ${staff.qrToken}`);
-        console.log(`    PIN: ${staff.pin}`);
-      });
     }
+
+    console.log('\nStaff login credentials for testing:');
+    staffUsers.forEach(staff => {
+      console.log(`  - ${staff.name} (${staff.role}):`);
+      console.log(`    QR Token: ${staff.qrToken}`);
+      console.log(`    PIN: ${staff.pin}`);
+    });
 
     // Seed active agreement
     console.log('\nSeeding active agreement...');

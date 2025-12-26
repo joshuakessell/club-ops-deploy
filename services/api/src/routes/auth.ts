@@ -16,6 +16,7 @@ const LoginPinSchema = z.object({
   staffLookup: z.string().min(1), // staff ID or name
   deviceId: z.string().min(1),
   pin: z.string().min(1),
+  deviceType: z.enum(['tablet', 'kiosk', 'desktop']).optional(), // Optional device type
 });
 
 type LoginPinInput = z.infer<typeof LoginPinSchema>;
@@ -33,6 +34,45 @@ interface StaffRow {
  * Authentication routes.
  */
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
+  /**
+   * GET /v1/auth/staff - Get list of active staff for login selection
+   * 
+   * Public endpoint that returns active staff members (name, id, role only).
+   * Used by login screens to show available staff for selection.
+   */
+  fastify.get('/v1/auth/staff', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    try {
+      const result = await query<{
+        id: string;
+        name: string;
+        role: string;
+      }>(
+        `SELECT id, name, role
+         FROM staff
+         WHERE active = true
+         AND pin_hash IS NOT NULL
+         ORDER BY name`
+      );
+
+      return reply.send({
+        staff: result.rows.map(row => ({
+          id: row.id,
+          name: row.name,
+          role: row.role,
+        })),
+      });
+    } catch (error) {
+      request.log.error(error, 'Failed to fetch staff list');
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to fetch staff list',
+      });
+    }
+  });
+
   /**
    * POST /v1/auth/login-pin - Staff login with PIN
    * 
@@ -57,10 +97,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       const result = await transaction(async (client) => {
         // Find staff by ID or name (must be active)
+        // Use separate conditions to avoid type mismatch (UUID vs VARCHAR)
         const staffResult = await client.query<StaffRow>(
           `SELECT id, name, role, pin_hash, active
            FROM staff
-           WHERE (id = $1 OR name ILIKE $1)
+           WHERE (id::text = $1 OR name ILIKE $1)
            AND pin_hash IS NOT NULL
            AND active = true
            LIMIT 1`,
@@ -87,12 +128,15 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         const sessionToken = generateSessionToken();
         const expiresAt = getSessionExpiry();
 
+        // Use provided device type or default to 'tablet'
+        const deviceType = body.deviceType || 'tablet';
+        
         // Create session and get the session ID
         const sessionResult = await client.query<{ id: string }>(
           `INSERT INTO staff_sessions (staff_id, device_id, device_type, session_token, expires_at)
-           VALUES ($1, $2, 'tablet', $3, $4)
+           VALUES ($1, $2, $3, $4, $5)
            RETURNING id`,
-          [staff.id, body.deviceId, sessionToken, expiresAt]
+          [staff.id, body.deviceId, deviceType, sessionToken, expiresAt]
         );
         const sessionId = sessionResult.rows[0]!.id;
 
@@ -103,64 +147,96 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
           [staff.id, sessionId]
         );
 
-        // Create or update timeclock session for cleaning station sign-in
+        // Create or update timeclock session for office dashboard sign-in
         // Only if employee is not already signed into a register
-        const registerSession = await client.query<{ count: string }>(
-          `SELECT COUNT(*) as count FROM register_sessions
-           WHERE employee_id = $1 AND signed_out_at IS NULL`,
-          [staff.id]
-        );
-
-        // If not signed into register, assume cleaning station sign-in
-        if (parseInt(registerSession.rows[0]?.count || '0', 10) === 0) {
-          const now = new Date();
-          // Find nearest scheduled shift
-          const shiftResult = await client.query<{
-            id: string;
-            starts_at: Date;
-            ends_at: Date;
-          }>(
-            `SELECT id, starts_at, ends_at
-             FROM employee_shifts
-             WHERE employee_id = $1
-             AND status != 'CANCELED'
-             AND (
-               (starts_at <= $2 AND ends_at >= $2)
-               OR (starts_at > $2 AND starts_at <= $2 + INTERVAL '60 minutes')
-             )
-             ORDER BY ABS(EXTRACT(EPOCH FROM (starts_at - $2::timestamp)))
-             LIMIT 1`,
-            [staff.id, now]
-          );
-
-          const shiftId = shiftResult.rows.length > 0 ? shiftResult.rows[0]!.id : null;
-
-          // Check if employee already has an open timeclock session
-          const existingTimeclock = await client.query<{ id: string }>(
-            `SELECT id FROM timeclock_sessions
-             WHERE employee_id = $1 AND clock_out_at IS NULL`,
+        // This is optional - if tables don't exist, skip gracefully
+        try {
+          const registerSession = await client.query<{ count: string }>(
+            `SELECT COUNT(*) as count FROM register_sessions
+             WHERE employee_id = $1 AND signed_out_at IS NULL`,
             [staff.id]
           );
 
-          if (existingTimeclock.rows.length === 0) {
-            // Create new timeclock session for cleaning station
-            await client.query(
-              `INSERT INTO timeclock_sessions 
-               (employee_id, shift_id, clock_in_at, source, notes)
-               VALUES ($1, $2, $3, 'OFFICE_DASHBOARD', NULL)`,
-              [staff.id, shiftId, now]
-            );
-          } else {
-            // Update existing session to attach shift if not already attached
-            if (shiftId) {
-              await client.query(
-                `UPDATE timeclock_sessions
-                 SET shift_id = $1
-                 WHERE id = $2 AND shift_id IS NULL`,
-                [shiftId, existingTimeclock.rows[0]!.id]
+          // If not signed into register, try to create timeclock session
+          if (parseInt(registerSession.rows[0]?.count || '0', 10) === 0) {
+            // Check if timeclock_sessions table exists by trying a simple query
+            try {
+              const now = new Date();
+              
+              // Check if employee already has an open timeclock session
+              const existingTimeclock = await client.query<{ id: string }>(
+                `SELECT id FROM timeclock_sessions
+                 WHERE employee_id = $1 AND clock_out_at IS NULL`,
+                [staff.id]
               );
+
+              if (existingTimeclock.rows.length === 0) {
+                // Try to find nearest scheduled shift (if employee_shifts table exists)
+                let shiftId: string | null = null;
+                try {
+                  const shiftResult = await client.query<{
+                    id: string;
+                    starts_at: Date;
+                    ends_at: Date;
+                  }>(
+                    `SELECT id, starts_at, ends_at
+                     FROM employee_shifts
+                     WHERE employee_id = $1
+                     AND status != 'CANCELED'
+                     AND (
+                       (starts_at <= $2 AND ends_at >= $2)
+                       OR (starts_at > $2 AND starts_at <= $2 + INTERVAL '60 minutes')
+                     )
+                     ORDER BY ABS(EXTRACT(EPOCH FROM (starts_at - $2::timestamp)))
+                     LIMIT 1`,
+                    [staff.id, now]
+                  );
+                  shiftId = shiftResult.rows.length > 0 ? shiftResult.rows[0]!.id : null;
+                } catch {
+                  // employee_shifts table doesn't exist, skip shift lookup
+                }
+
+                // Create new timeclock session for office dashboard
+                await client.query(
+                  `INSERT INTO timeclock_sessions 
+                   (employee_id, shift_id, clock_in_at, source, notes)
+                   VALUES ($1, $2, $3, 'OFFICE_DASHBOARD', NULL)`,
+                  [staff.id, shiftId, now]
+                );
+              } else {
+                // Update existing session to attach shift if not already attached
+                try {
+                  const shiftResult = await client.query<{ id: string }>(
+                    `SELECT id FROM employee_shifts
+                     WHERE employee_id = $1
+                     AND status != 'CANCELED'
+                     AND (
+                       (starts_at <= $2 AND ends_at >= $2)
+                       OR (starts_at > $2 AND starts_at <= $2 + INTERVAL '60 minutes')
+                     )
+                     ORDER BY ABS(EXTRACT(EPOCH FROM (starts_at - $2::timestamp)))
+                     LIMIT 1`,
+                    [staff.id, new Date()]
+                  );
+                  const shiftId = shiftResult.rows.length > 0 ? shiftResult.rows[0]!.id : null;
+                  if (shiftId) {
+                    await client.query(
+                      `UPDATE timeclock_sessions
+                       SET shift_id = $1
+                       WHERE id = $2 AND shift_id IS NULL`,
+                      [shiftId, existingTimeclock.rows[0]!.id]
+                    );
+                  }
+                } catch {
+                  // employee_shifts table doesn't exist, skip shift update
+                }
+              }
+            } catch {
+              // timeclock_sessions table doesn't exist, skip timeclock logic
             }
           }
+        } catch {
+          // register_sessions or timeclock tables don't exist, skip timeclock logic
         }
 
         return {
@@ -181,9 +257,10 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error) {
       request.log.error(error, 'Login error');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return reply.status(500).send({
         error: 'Internal Server Error',
-        message: 'Failed to process login',
+        message: `Failed to process login: ${errorMessage}`,
       });
     }
   });

@@ -13,7 +13,9 @@
     "./styles": {
       "types": "./dist/styles.d.ts",
       "import": "./dist/styles.js"
-    }
+    },
+    "./src/styles/tokens.css": "./src/styles/tokens.css",
+    "./src/styles/components.css": "./src/styles/components.css"
   },
   "scripts": {
     "build": "tsc",

@@ -14,13 +14,13 @@ async function createStaff() {
   const adminPin = await hashPin('5678');
   await query(
     'INSERT INTO staff (name, role, pin_hash, active) VALUES ($1, $2, $3, true)',
-    ['Jane Admin', 'ADMIN', adminPin]
+    ['Cruz Martinez', 'ADMIN', adminPin]
   );
 
   const staffPin = await hashPin('1234');
   await query(
     'INSERT INTO staff (name, role, pin_hash, active) VALUES ($1, $2, $3, true)',
-    ['John Staff', 'STAFF', staffPin]
+    ['John Erikson', 'STAFF', staffPin]
   );
 
   console.log('✓ Created staff members');
