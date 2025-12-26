@@ -7,6 +7,7 @@
   "scripts": {
     "kill-ports": "node scripts/kill-ports.js",
     "dev": "pnpm kill-ports && concurrently -n api,kiosk,register,dashboard,cleaning,checkout -c blue,green,yellow,magenta,cyan,red \"pnpm --filter @club-ops/api dev\" \"pnpm --filter @club-ops/customer-kiosk dev\" \"pnpm --filter @club-ops/employee-register dev\" \"pnpm --filter @club-ops/office-dashboard dev\" \"pnpm --filter @club-ops/cleaning-station-kiosk dev\" \"pnpm --filter @club-ops/checkout-kiosk dev\"",
+    "dev:cloud": "concurrently -n api,kiosk,register,dashboard,cleaning,checkout -c blue,green,yellow,magenta,cyan,red \"pnpm --filter @club-ops/api dev\" \"pnpm --filter @club-ops/customer-kiosk dev\" \"pnpm --filter @club-ops/employee-register dev\" \"pnpm --filter @club-ops/office-dashboard dev\" \"pnpm --filter @club-ops/cleaning-station-kiosk dev\" \"pnpm --filter @club-ops/checkout-kiosk dev\"",
     "dev-test": "pnpm kill-ports && concurrently -n api,kiosk,register -c blue,green,yellow \"pnpm --filter @club-ops/api dev\" \"pnpm --filter @club-ops/customer-kiosk dev\" \"pnpm --filter @club-ops/employee-register dev\"",
     "build": "pnpm -r build",
     "test": "pnpm kill-ports && pnpm -r test",

@@ -1,0 +1,25 @@
+FROM node:20-bookworm
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    git ca-certificates curl bash python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN corepack enable && corepack prepare pnpm@8.12.0 --activate
+
+WORKDIR /workspace
+
+# Install deps with good caching
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/*/package.json ./apps/
+COPY packages/*/package.json ./packages/
+COPY services/*/package.json ./services/
+
+RUN pnpm install --frozen-lockfile
+
+COPY . .
+
+EXPOSE 3001 5173 5174 5175 5176 5177
+
+CMD ["bash"]
+

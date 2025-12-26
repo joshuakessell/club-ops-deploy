@@ -1,27 +1,31 @@
 /* Shared design tokens are imported in main.tsx */
 :root {
-  --primary: var(--cs-primary);
-  --primary-dark: var(--cs-primary-dark);
-  --bg: var(--cs-bg);
-  --bg-sidebar: var(--cs-bg-sidebar);
-  --bg-card: var(--cs-bg-card);
-  --text: var(--cs-text);
-  --text-muted: var(--cs-text-muted);
+  /* Override with new dashboard colors */
+  --primary: #2B66B8;
+  --primary-light: #4F7FD0;
+  --primary-dark: #1E4F93;
+  --bg: #282828;
+  --bg-sidebar: #2B2B2D;
+  --bg-card: #2B2B2D;
+  --text: #EFF0F1;
+  --text-muted: #A0A1A2;
   --success: var(--cs-success);
   --warning: var(--cs-warning);
   --error: var(--cs-error);
-  --border: var(--cs-border);
+  --border: #3F4042;
+  --border-hover: #2B66B8;
 }
 
 .dashboard {
   display: flex;
   min-height: 100vh;
+  background: #282828;
 }
 
 .sidebar {
   width: 240px;
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border);
+  background: #2B2B2D;
+  border-right: 1px solid #3F4042;
   display: flex;
   flex-direction: column;
   padding: 1.5rem 1rem;
@@ -69,7 +73,7 @@
 }
 
 .nav-item:hover {
-  background: rgba(139, 92, 246, 0.1);
+  background: rgba(43, 102, 184, 0.1);
   color: var(--text);
 }
 
@@ -117,8 +121,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem 2rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-sidebar);
+  border-bottom: 1px solid #3F4042;
+  background: #2B2B2D;
   box-shadow: var(--cs-elevation-1);
 }
 
@@ -134,6 +138,7 @@
   flex: 1;
   padding: 2rem;
   overflow-y: auto;
+  background: #282828;
 }
 
 .stats-grid {
@@ -146,17 +151,43 @@
 .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--cs-radius-xl);
+  border-radius: 12px;
   padding: 1.5rem;
   text-align: center;
-  box-shadow: var(--cs-elevation-2);
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25);
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(43,102,184,0.85), transparent);
+  z-index: 1;
+}
+
+.stat-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 40%;
+  background: radial-gradient(ellipse at top left, rgba(43,102,184,0.14), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .stat-card:hover {
-  box-shadow: var(--cs-elevation-4);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.4), 0 4px 8px rgba(0,0,0,0.3);
   transform: translateY(-2px);
-  border-color: var(--cs-border-light);
+  border-color: var(--border-hover);
 }
 
 .stat-value {
@@ -180,9 +211,39 @@
 .panel {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--cs-radius-xl);
-  box-shadow: var(--cs-elevation-2);
+  border-radius: 12px;
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25);
   overflow: hidden;
+  position: relative;
+}
+
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(43,102,184,0.85), transparent);
+  z-index: 1;
+}
+
+.panel::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 40%;
+  background: radial-gradient(ellipse at top left, rgba(43,102,184,0.14), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.panel:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.4), 0 4px 8px rgba(0,0,0,0.3);
 }
 
 .panel-header {
@@ -266,8 +327,40 @@
 .inventory-type-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: 12px;
   padding: 1rem;
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+.inventory-type-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(43,102,184,0.85), transparent);
+  z-index: 1;
+}
+
+.inventory-type-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 40%;
+  background: radial-gradient(ellipse at top left, rgba(43,102,184,0.14), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.inventory-type-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.4), 0 4px 8px rgba(0,0,0,0.3);
 }
 
 .inventory-type-card h3 {
@@ -332,7 +425,7 @@
 }
 
 .rooms-table tbody tr:hover {
-  background: rgba(139, 92, 246, 0.05);
+  background: rgba(43, 102, 184, 0.05);
 }
 
 .room-number {
@@ -657,16 +750,42 @@
 .kpi-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--cs-radius-xl);
+  border-radius: 12px;
   padding: 1.5rem;
   text-align: center;
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25);
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
-  box-shadow: var(--cs-elevation-2);
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(43,102,184,0.85), transparent);
+  z-index: 1;
+}
+
+.kpi-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 40%;
+  background: radial-gradient(ellipse at top left, rgba(43,102,184,0.14), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .kpi-card:hover {
-  border-color: var(--cs-border-light);
-  box-shadow: var(--cs-elevation-4);
+  border-color: var(--border-hover);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.4), 0 4px 8px rgba(0,0,0,0.3);
   transform: translateY(-2px);
 }
 
@@ -726,7 +845,7 @@
 }
 
 .expirations-table tbody tr:hover {
-  background: rgba(139, 92, 246, 0.05);
+  background: rgba(43, 102, 184, 0.05);
 }
 
 .expirations-table .expired-row {
@@ -819,8 +938,40 @@
 .metric-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
+  border-radius: 12px;
   padding: 1.5rem;
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(43,102,184,0.85), transparent);
+  z-index: 1;
+}
+
+.metric-card::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 40%;
+  background: radial-gradient(ellipse at top left, rgba(43,102,184,0.14), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.metric-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.4), 0 4px 8px rgba(0,0,0,0.3);
 }
 
 .metric-card h3 {
@@ -881,5 +1032,46 @@
 
 .btn-secondary:hover {
   background: var(--bg-sidebar);
+}
+
+/* Raised module class for consistent card styling */
+.csRaisedCard {
+  background: #2B2B2D;
+  border: 1px solid #3F4042;
+  border-radius: 12px;
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25);
+  position: relative;
+  overflow: hidden;
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.csRaisedCard::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(43,102,184,0.85), transparent);
+  z-index: 1;
+}
+
+.csRaisedCard::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 40%;
+  background: radial-gradient(ellipse at top left, rgba(43,102,184,0.14), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.csRaisedCard:hover {
+  border-color: #2B66B8;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.4), 0 4px 8px rgba(0,0,0,0.3);
+  transform: translateY(-2px);
 }
 
