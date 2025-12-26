@@ -189,7 +189,7 @@ function App() {
       const responseData: unknown = await response.json();
       // Type assertion is safe because assertResolvedCheckoutKey validates and narrows the type
       const data: ResolvedKeyData = assertResolvedCheckoutKey(responseData);
-      setResolvedKey(data); // eslint-disable-line @typescript-eslint/no-unsafe-assignment -- Type guard ensures data is ResolvedKeyData
+      setResolvedKey(data);
       const feeAmount: number = typeof data.lateFeeAmount === 'number' && Number.isFinite(data.lateFeeAmount) ? data.lateFeeAmount : 0;
       setLateFeeAmount(feeAmount);
 
