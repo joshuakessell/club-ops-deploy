@@ -19,7 +19,8 @@
     "db:migrate:status": "node --import tsx src/db/migrate.ts status",
     "db:migrate:rollback": "node --import tsx src/db/migrate.ts rollback",
     "db:reset": "docker compose down -v && docker compose up -d",
-    "seed": "node --import tsx src/db/seed.ts"
+    "seed": "node --import tsx src/db/seed.ts",
+    "update-staff": "node --import tsx scripts/update-staff-names.ts"
   },
   "dependencies": {
     "@club-ops/shared": "workspace:*",

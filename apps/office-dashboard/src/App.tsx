@@ -321,11 +321,11 @@ function App() {
   }
 
   // Render routes - protect admin routes
-  // John Erikson has limited access (only schedule view)
-  // Cruz and other admins have full access
+  // STAFF role has limited access (only schedule view)
+  // ADMIN role has full access
   const isAdmin = session.role === 'ADMIN';
-  const isLimitedAccess = session.name === 'John Erikson';
-  const hasFullAccess = isAdmin && !isLimitedAccess;
+  const isLimitedAccess = session.role === 'STAFF';
+  const hasFullAccess = isAdmin;
   
   return (
     <ThemeProvider theme={theme}>
@@ -391,8 +391,8 @@ function DashboardContent({ session, onLogout }: { session: StaffSession; onLogo
   const [laneSessions, setLaneSessions] = useState<LaneSession[]>([]);
   
   const isAdmin = session.role === 'ADMIN';
-  const isLimitedAccess = session.name === 'John Erikson';
-  const hasFullAccess = isAdmin && !isLimitedAccess;
+  const isLimitedAccess = session.role === 'STAFF';
+  const hasFullAccess = isAdmin;
 
   useEffect(() => {
     // Check API health
