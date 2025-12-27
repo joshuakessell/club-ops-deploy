@@ -26,3 +26,4 @@ CREATE INDEX IF NOT EXISTS idx_timeclock_sessions_open ON timeclock_sessions(clo
 
 
 
+
