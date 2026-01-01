@@ -193,3 +193,16 @@ export async function requireReauthForAdmin(
   // Then check re-authentication
   await requireReauth(request, reply);
 }
+
+/**
+ * Optional authentication middleware.
+ * Attaches staff info to request if a valid token is present, but never 401s.
+ * Use this for kiosk-facing endpoints where auth is optional.
+ */
+export async function optionalAuth(
+  request: FastifyRequest,
+  _reply: FastifyReply
+): Promise<void> {
+  // Try to extract staff, but don't fail if not present
+  await extractStaffFromToken(request);
+}

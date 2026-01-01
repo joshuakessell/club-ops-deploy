@@ -113,6 +113,22 @@ export interface SessionUpdatedPayload {
   proposedBy?: 'CUSTOMER' | 'EMPLOYEE';
   selectionConfirmed?: boolean;
   selectionConfirmedBy?: 'CUSTOMER' | 'EMPLOYEE';
+  customerPrimaryLanguage?: 'EN' | 'ES';
+  customerDobMonthDay?: string;
+  customerLastVisitAt?: string;
+  customerNotes?: string;
+  pastDueBalance?: number;
+  pastDueBlocked?: boolean;
+  pastDueBypassed?: boolean;
+  paymentIntentId?: string;
+  paymentStatus?: 'DUE' | 'PAID';
+  paymentMethod?: 'CASH' | 'CREDIT';
+  paymentTotal?: number;
+  paymentFailureReason?: string;
+  agreementSigned?: boolean;
+  assignedResourceType?: 'room' | 'locker';
+  assignedResourceNumber?: string;
+  checkoutAt?: string;
 }
 
 /**
