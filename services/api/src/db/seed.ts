@@ -18,18 +18,28 @@ const seedRooms: RoomSeed[] = [
   // DIRTY rooms
   { number: '101', type: RoomType.STANDARD, status: RoomStatus.DIRTY, floor: 1, tagCode: 'ROOM-101' },
   { number: '102', type: RoomType.STANDARD, status: RoomStatus.DIRTY, floor: 1, tagCode: 'ROOM-102' },
-  { number: '201', type: RoomType.SPECIAL, status: RoomStatus.DIRTY, floor: 2, tagCode: 'ROOM-201' },
   
   // CLEANING rooms
   { number: '103', type: RoomType.STANDARD, status: RoomStatus.CLEANING, floor: 1, tagCode: 'ROOM-103' },
-  { number: '202', type: RoomType.DOUBLE, status: RoomStatus.CLEANING, floor: 2, tagCode: 'ROOM-202' },
+  { number: '216', type: RoomType.DOUBLE, status: RoomStatus.CLEANING, floor: 2, tagCode: 'ROOM-216' },
   
-  // CLEAN rooms
+  // CLEAN rooms - intentionally low counts for demo
+  // STANDARD rooms
   { number: '104', type: RoomType.STANDARD, status: RoomStatus.CLEAN, floor: 1, tagCode: 'ROOM-104' },
   { number: '105', type: RoomType.STANDARD, status: RoomStatus.CLEAN, floor: 1, tagCode: 'ROOM-105' },
-  { number: '203', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-203' },
-  { number: '301', type: RoomType.SPECIAL, status: RoomStatus.CLEAN, floor: 3, tagCode: 'ROOM-301' },
+  { number: '106', type: RoomType.STANDARD, status: RoomStatus.CLEAN, floor: 1, tagCode: 'ROOM-106' },
+  { number: '107', type: RoomType.STANDARD, status: RoomStatus.CLEAN, floor: 1, tagCode: 'ROOM-107' },
+  
+  // DOUBLE rooms - <5 available (only 2 clean)
+  { number: '218', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-218' },
+  { number: '225', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-225' },
+  
+  // SPECIAL rooms - 0 available (none seeded as CLEAN)
+  // Note: Room 201, 232, 256 are SPECIAL but not seeded as CLEAN
+  
+  // Lockers
   { number: 'L01', type: RoomType.LOCKER, status: RoomStatus.CLEAN, floor: 0, tagCode: 'LOCKER-01' },
+  { number: 'L02', type: RoomType.LOCKER, status: RoomStatus.CLEAN, floor: 0, tagCode: 'LOCKER-02' },
 ];
 
 async function seed() {
@@ -89,10 +99,28 @@ async function seed() {
         pin: '1234',
       },
       {
-        name: 'Cruz Martinez',
+        name: 'Manager Club',
         role: 'ADMIN',
         qrToken: 'STAFF-002',
-        pin: '1234',
+        pin: '123456',
+      },
+      {
+        name: 'Manager Dallas',
+        role: 'ADMIN',
+        qrToken: 'STAFF-003',
+        pin: '654321',
+      },
+      {
+        name: 'Employee One',
+        role: 'STAFF',
+        qrToken: 'STAFF-004',
+        pin: '5678',
+      },
+      {
+        name: 'Employee Two',
+        role: 'STAFF',
+        qrToken: 'STAFF-005',
+        pin: '9012',
       },
     ];
 

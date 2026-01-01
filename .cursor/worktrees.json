@@ -1,0 +1,9 @@
+{
+  "setup-worktree-unix": [
+    "mkdir -p \"$ROOT_WORKTREE_PATH/.cursor\"",
+    "cat > \"$ROOT_WORKTREE_PATH/.cursor/post-agent-approval.sh\" <<'EOF'\n#!/usr/bin/env bash\nset -euo pipefail\n\n# Run this AFTER you click “Apply” on the chosen agent worktree.\n# Installs deps, starts DB, runs migrations, seeds, then runs sanity checks.\n\nREPO_ROOT=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")/..\" && pwd)\"\ncd \"$REPO_ROOT\"\n\n# Ensure pnpm is available if using Corepack\nif command -v corepack >/dev/null 2>&1; then\n  corepack enable >/dev/null 2>&1 || true\nfi\n\npnpm install --frozen-lockfile\n\n# DB (Postgres via docker compose), then migrate + seed\npnpm --filter @club-ops/api db:start\npnpm --filter @club-ops/api db:migrate\npnpm --filter @club-ops/api seed || true\n\n# Sanity checks\npnpm typecheck\npnpm lint\n\necho \"✅ Post-approval setup complete\"\nEOF",
+    "chmod +x \"$ROOT_WORKTREE_PATH/.cursor/post-agent-approval.sh\"",
+    "echo \"✅ Post-approval script created at: $ROOT_WORKTREE_PATH/.cursor/post-agent-approval.sh\"",
+    "echo \"Run it after you Apply the approved agent: .cursor/post-agent-approval.sh\""
+  ]
+}

@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { query, transaction, serializableTransaction } from '../db/index.js';
-import { requireAuth } from '../auth/middleware.js';
+import { requireAuth, optionalAuth } from '../auth/middleware.js';
+import { verifyPin } from '../auth/utils.js';
+import { generateAgreementPdf } from '../utils/pdf-generator.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { 
   SessionUpdatedPayload,
@@ -50,6 +52,13 @@ interface LaneSessionRow {
   selection_confirmed: boolean;
   selection_confirmed_by: string | null;
   selection_locked_at: Date | null;
+  past_due_bypassed?: boolean;
+  past_due_bypassed_by_staff_id?: string | null;
+  past_due_bypassed_at?: Date | null;
+  last_payment_decline_reason?: string | null;
+  last_payment_decline_at?: Date | null;
+  last_past_due_decline_reason?: string | null;
+  last_past_due_decline_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -62,6 +71,9 @@ interface CustomerRow {
   membership_card_type: string | null;
   membership_valid_until: Date | null;
   banned_until: Date | null;
+  past_due_balance?: number;
+  primary_language?: string;
+  notes?: string;
 }
 
 interface MemberRow {
@@ -95,6 +107,10 @@ interface PaymentIntentRow {
   amount: number;
   status: string;
   quote_json: unknown;
+  payment_method?: string;
+  failure_reason?: string;
+  failure_at?: Date | null;
+  register_number?: number | null;
 }
 
 /**
@@ -399,6 +415,20 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         // Determine allowed rentals
         const allowedRentals = getAllowedRentals(membershipNumber);
 
+        // Get customer past-due balance if customer exists
+        let pastDueBalance = 0;
+        let pastDueBlocked = false;
+        if (session.customer_id) {
+          const customerInfo = await client.query<CustomerRow>(
+            `SELECT past_due_balance FROM customers WHERE id = $1`,
+            [session.customer_id]
+          );
+          if (customerInfo.rows.length > 0) {
+            pastDueBalance = parseFloat(String(customerInfo.rows[0]!.past_due_balance || 0));
+            pastDueBlocked = pastDueBalance > 0 && !(session.past_due_bypassed || false);
+          }
+        }
+
         // Broadcast SESSION_UPDATED event
         const payload: SessionUpdatedPayload = {
           sessionId: session.id,
@@ -409,6 +439,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           blockEndsAt: blockEndsAt ? blockEndsAt.toISOString() : undefined,
           visitId: visitIdForSession || undefined,
           status: session.status,
+          pastDueBalance: pastDueBalance > 0 ? pastDueBalance : undefined,
+          pastDueBlocked,
+          pastDueBypassed: session.past_due_bypassed || false,
         };
 
         fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
@@ -610,6 +643,20 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           session = newSessionResult.rows[0]!;
         }
 
+        // Get customer past-due balance if customer exists
+        let pastDueBalance = 0;
+        let pastDueBlocked = false;
+        if (session.customer_id) {
+          const customerInfo = await client.query<CustomerRow>(
+            `SELECT past_due_balance FROM customers WHERE id = $1`,
+            [session.customer_id]
+          );
+          if (customerInfo.rows.length > 0) {
+            pastDueBalance = parseFloat(String(customerInfo.rows[0]!.past_due_balance || 0));
+            pastDueBlocked = pastDueBalance > 0 && !(session.past_due_bypassed || false);
+          }
+        }
+
         // Broadcast SESSION_UPDATED event
         const payload: SessionUpdatedPayload = {
           sessionId: session.id,
@@ -619,6 +666,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           mode: (session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL') as 'INITIAL' | 'RENEWAL',
           visitId: undefined,
           status: session.status,
+          pastDueBalance: pastDueBalance > 0 ? pastDueBalance : undefined,
+          pastDueBlocked,
+          pastDueBypassed: session.past_due_bypassed || false,
         };
 
         fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
@@ -740,7 +790,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Does not lock the selection; requires confirmation.
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.post('/v1/checkin/lane/:laneId/propose-selection', async (
+  fastify.post('/v1/checkin/lane/:laneId/propose-selection', {
+    preHandler: [optionalAuth],
+  }, async (
     request: FastifyRequest<{
       Params: { laneId: string };
       Body: { 
@@ -752,9 +804,6 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }>,
     reply: FastifyReply
   ) => {
-    if (!request.staff) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
 
     const { laneId } = request.params;
     const { rentalType, proposedBy, waitlistDesiredType, backupRentalType } = request.body;
@@ -784,6 +833,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         const session = sessionResult.rows[0]!;
+
+        // Check past-due blocking
+        const { blocked } = await checkPastDueBlocked(client, session.customer_id, session.past_due_bypassed || false);
+        if (blocked && proposedBy === 'CUSTOMER') {
+          throw { statusCode: 403, message: 'Past due balance must be cleared before selection' };
+        }
 
         // If already locked, cannot propose new selection
         if (session.selection_confirmed) {
@@ -857,7 +912,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Confirm the proposed selection (first confirmation locks it).
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.post('/v1/checkin/lane/:laneId/confirm-selection', async (
+  fastify.post('/v1/checkin/lane/:laneId/confirm-selection', {
+    preHandler: [optionalAuth],
+  }, async (
     request: FastifyRequest<{
       Params: { laneId: string };
       Body: { 
@@ -866,9 +923,6 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }>,
     reply: FastifyReply
   ) => {
-    if (!request.staff) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
 
     const { laneId } = request.params;
     const { confirmedBy } = request.body;
@@ -898,6 +952,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         const session = sessionResult.rows[0]!;
+
+        // Check past-due blocking
+        const { blocked } = await checkPastDueBlocked(client, session.customer_id, session.past_due_bypassed || false);
+        if (blocked && confirmedBy === 'CUSTOMER') {
+          throw { statusCode: 403, message: 'Past due balance must be cleared before confirmation' };
+        }
 
         if (!session.proposed_rental_type) {
           throw { statusCode: 400, message: 'No selection proposed yet' };
@@ -984,7 +1044,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Acknowledge a locked selection (required for the other side to proceed).
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.post('/v1/checkin/lane/:laneId/acknowledge-selection', async (
+  fastify.post('/v1/checkin/lane/:laneId/acknowledge-selection', {
+    preHandler: [optionalAuth],
+  }, async (
     request: FastifyRequest<{
       Params: { laneId: string };
       Body: { 
@@ -993,9 +1055,6 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }>,
     reply: FastifyReply
   ) => {
-    if (!request.staff) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
 
     const { laneId } = request.params;
     const { acknowledgedBy } = request.body;
@@ -1069,16 +1128,15 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Called when customer selects an unavailable rental type.
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.get('/v1/checkin/lane/:laneId/waitlist-info', async (
+  fastify.get('/v1/checkin/lane/:laneId/waitlist-info', {
+    preHandler: [optionalAuth],
+  }, async (
     request: FastifyRequest<{
       Params: { laneId: string };
       Querystring: { desiredTier: string; currentTier?: string };
     }>,
     reply: FastifyReply
   ) => {
-    if (!request.staff) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
 
     const { laneId } = request.params;
     const { desiredTier, currentTier } = request.query;
@@ -1659,10 +1717,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/checkin/lane/:laneId/sign-agreement
    * 
-   * Store agreement signature and link to check-in block.
+   * Store agreement signature, generate PDF, auto-assign resource, and create check-in block.
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.post('/v1/checkin/lane/:laneId/sign-agreement', async (
+  fastify.post('/v1/checkin/lane/:laneId/sign-agreement', {
+    preHandler: [optionalAuth],
+  }, async (
     request: FastifyRequest<{
       Params: { laneId: string };
       Body: { signaturePayload: string; sessionId?: string }; // PNG data URL or vector points JSON
@@ -1706,72 +1766,272 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         // Check payment is paid
-        if (session.payment_intent_id) {
-          const intentResult = await client.query<PaymentIntentRow>(
-            `SELECT status FROM payment_intents WHERE id = $1`,
-            [session.payment_intent_id]
+        if (!session.payment_intent_id) {
+          throw { statusCode: 400, message: 'Payment intent must be created before signing agreement' };
+        }
+
+        const intentResult = await client.query<PaymentIntentRow>(
+          `SELECT status FROM payment_intents WHERE id = $1`,
+          [session.payment_intent_id]
+        );
+        if (intentResult.rows.length === 0 || intentResult.rows[0]!.status !== 'PAID') {
+          throw { statusCode: 400, message: 'Payment must be marked as paid before signing agreement' };
+        }
+
+        // Get customer info for PDF
+        const customerResult = session.customer_id
+          ? await client.query<CustomerRow>(
+              `SELECT name, membership_number FROM customers WHERE id = $1`,
+              [session.customer_id]
+            )
+          : { rows: [] };
+
+        const customerName = customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
+        const membershipNumber = customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+
+        // Get active agreement text
+        const agreementResult = await client.query<{ body_text: string; version: string; title: string }>(
+          `SELECT body_text, version, title FROM agreements WHERE active = true ORDER BY created_at DESC LIMIT 1`
+        );
+
+        if (agreementResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active agreement found' };
+        }
+
+        const agreement = agreementResult.rows[0]!;
+
+        // Store signature (extract base64 from data URL if needed)
+        const signatureData = signaturePayload.startsWith('data:') 
+          ? signaturePayload.split(',')[1] 
+          : signaturePayload;
+
+        const signedAt = new Date();
+
+        // Generate PDF
+        const pdfBuffer = await generateAgreementPdf({
+          customerName,
+          membershipNumber,
+          agreementText: agreement.body_text,
+          signatureImageBase64: signatureData,
+          signedAt,
+        });
+
+        // Auto-assign resource if not already assigned
+        let assignedResourceId = session.assigned_resource_id;
+        let assignedResourceType = session.assigned_resource_type;
+        let assignedResourceNumber: string | undefined;
+
+        if (!assignedResourceId) {
+          const rentalType = session.desired_rental_type || session.backup_rental_type || 'LOCKER';
+
+          if (rentalType === 'LOCKER' || rentalType === 'GYM_LOCKER') {
+            // Assign first CLEAN locker
+            const lockerResult = await client.query<LockerRow>(
+              `SELECT id, number FROM lockers
+               WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL
+               ORDER BY number
+               LIMIT 1
+               FOR UPDATE SKIP LOCKED`
+            );
+
+            if (lockerResult.rows.length > 0) {
+              const locker = lockerResult.rows[0]!;
+              assignedResourceId = locker.id;
+              assignedResourceType = 'locker';
+              assignedResourceNumber = locker.number;
+
+              await client.query(
+                `UPDATE lockers SET assigned_to = $1, updated_at = NOW() WHERE id = $2`,
+                [session.customer_id || session.id, locker.id]
+              );
+            } else {
+              throw { statusCode: 409, message: 'No available lockers' };
+            }
+          } else {
+            // Assign first CLEAN room of desired tier
+            const tier = rentalType as 'STANDARD' | 'DOUBLE' | 'SPECIAL';
+            const roomResult = await client.query<RoomRow>(
+              `SELECT r.id, r.number FROM rooms r
+               WHERE r.status = 'CLEAN' 
+                 AND r.assigned_to_customer_id IS NULL
+                 AND r.type != 'LOCKER'
+               ORDER BY r.number
+               LIMIT 1
+               FOR UPDATE SKIP LOCKED`
+            );
+
+            if (roomResult.rows.length > 0) {
+              const room = roomResult.rows[0]!;
+              const roomTier = getRoomTier(room.number);
+
+              // Verify tier matches (or allow cross-tier assignment)
+              assignedResourceId = room.id;
+              assignedResourceType = 'room';
+              assignedResourceNumber = room.number;
+
+              await client.query(
+                `UPDATE rooms SET assigned_to = $1, updated_at = NOW() WHERE id = $2`,
+                [session.customer_id || session.id, room.id]
+              );
+            } else {
+              throw { statusCode: 409, message: 'No available rooms' };
+            }
+          }
+
+          // Update session with assigned resource
+          await client.query(
+            `UPDATE lane_sessions
+             SET assigned_resource_id = $1,
+                 assigned_resource_type = $2,
+                 updated_at = NOW()
+             WHERE id = $3`,
+            [assignedResourceId, assignedResourceType, session.id]
           );
-          if (intentResult.rows.length > 0 && intentResult.rows[0]!.status !== 'PAID') {
-            throw { statusCode: 400, message: 'Payment must be marked as paid before signing agreement' };
+        } else {
+          // Resource already assigned, get number for PDF
+          if (session.assigned_resource_type === 'room') {
+            const roomResult = await client.query<{ number: string }>(
+              `SELECT number FROM rooms WHERE id = $1`,
+              [assignedResourceId]
+            );
+            assignedResourceNumber = roomResult.rows[0]?.number;
+          } else {
+            const lockerResult = await client.query<{ number: string }>(
+              `SELECT number FROM lockers WHERE id = $1`,
+              [assignedResourceId]
+            );
+            assignedResourceNumber = lockerResult.rows[0]?.number;
           }
         }
 
-        // Store signature (simplified - convert PNG data URL to binary if needed)
-        // For now, store as text/JSON
-        const signatureData = signaturePayload.startsWith('data:') 
-          ? signaturePayload.split(',')[1] // Extract base64
-          : signaturePayload;
-
-        // Update session with signature
+        // Store signature in session
         await client.query(
           `UPDATE lane_sessions
            SET disclaimers_ack_json = $1,
-               status = CASE 
-                 WHEN payment_intent_id IS NOT NULL AND 
-                      (SELECT status FROM payment_intents WHERE id = lane_sessions.payment_intent_id) = 'PAID'
-                 THEN 'COMPLETED'
-                 ELSE status
-               END,
                updated_at = NOW()
            WHERE id = $2`,
-          [JSON.stringify({ signature: signatureData, signedAt: new Date().toISOString() }), session.id]
+          [JSON.stringify({ signature: signatureData, signedAt: signedAt.toISOString() }), session.id]
         );
 
-        // Completion guardrails: Only complete if all conditions are met
-        if (session.payment_intent_id && session.assigned_resource_id) {
-          const intentResult = await client.query<PaymentIntentRow>(
-            `SELECT status FROM payment_intents WHERE id = $1`,
-            [session.payment_intent_id]
+        // Complete check-in: create visit and check-in block with PDF
+        const staffId = request.staff?.staffId || 'system';
+        
+        // Get updated session with assigned resource
+        const updatedSessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions WHERE id = $1`,
+          [session.id]
+        );
+        const updatedSession = updatedSessionResult.rows[0]!;
+
+        // Create visit and block (reuse completeCheckIn logic but store PDF)
+        const isRenewal = updatedSession.checkin_mode === 'RENEWAL';
+        const rentalType = (updatedSession.desired_rental_type || updatedSession.backup_rental_type || 'LOCKER') as string;
+
+        let visitId: string;
+        let startsAt: Date;
+        let endsAt: Date;
+        let blockType: 'INITIAL' | 'RENEWAL';
+
+        if (isRenewal) {
+          const visitResult = await client.query<{ id: string }>(
+            `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+            [updatedSession.customer_id]
           );
-          
-          // Check payment is paid
-          const paymentPaid = intentResult.rows.length > 0 && intentResult.rows[0]!.status === 'PAID';
-          
-          // Check signature is stored
-          const signatureStored = !!session.disclaimers_ack_json;
-          
-          // Check resource is assigned
-          const resourceAssigned = !!session.assigned_resource_id && !!session.assigned_resource_type;
-          
-          // Only complete if all conditions met
-          if (paymentPaid && signatureStored && resourceAssigned) {
-            // Complete check-in: create visit and check-in block, transition room/locker to OCCUPIED
-            // Use a default staff ID if not available (for public endpoint)
-            const staffId = request.staff?.staffId || 'system';
-            await completeCheckIn(client, session, staffId);
-            
-            // Broadcast completion
-            const completionPayload: SessionUpdatedPayload = {
-              sessionId: session.id,
-              customerName: session.customer_display_name || '',
-              membershipNumber: session.membership_number || undefined,
-              allowedRentals: getAllowedRentals(session.membership_number),
-              mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
-              status: 'COMPLETED',
-            };
-            fastify.broadcaster.broadcastSessionUpdated(completionPayload, laneId);
+
+          if (visitResult.rows.length === 0) {
+            throw { statusCode: 400, message: 'No active visit found for renewal' };
           }
+
+          visitId = visitResult.rows[0]!.id;
+
+          const blocksResult = await client.query<{ ends_at: Date }>(
+            `SELECT ends_at FROM checkin_blocks WHERE visit_id = $1 ORDER BY ends_at DESC`,
+            [visitId]
+          );
+
+          if (blocksResult.rows.length === 0) {
+            throw { statusCode: 400, message: 'Visit has no blocks' };
+          }
+
+          const latestBlockEnd = blocksResult.rows[0]!.ends_at;
+          startsAt = latestBlockEnd;
+          endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000);
+          blockType = 'RENEWAL';
+        } else {
+          const visitResult = await client.query<{ id: string }>(
+            `INSERT INTO visits (customer_id, started_at) VALUES ($1, NOW()) RETURNING id`,
+            [updatedSession.customer_id]
+          );
+          visitId = visitResult.rows[0]!.id;
+          startsAt = new Date();
+          endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000);
+          blockType = 'INITIAL';
         }
+
+        // Create checkin_block with PDF
+        const blockResult = await client.query<{ id: string }>(
+          `INSERT INTO checkin_blocks 
+           (visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, agreement_signed, agreement_pdf, agreement_signed_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9)
+           RETURNING id`,
+          [
+            visitId,
+            blockType,
+            startsAt,
+            endsAt,
+            rentalType,
+            assignedResourceType === 'room' ? assignedResourceId : null,
+            assignedResourceType === 'locker' ? assignedResourceId : null,
+            pdfBuffer,
+            signedAt,
+          ]
+        );
+
+        const blockId = blockResult.rows[0]!.id;
+
+        // Transition resource to OCCUPIED
+        if (assignedResourceType === 'room') {
+          await client.query(
+            `UPDATE rooms SET status = 'OCCUPIED', last_status_change = NOW(), updated_at = NOW() WHERE id = $1`,
+            [assignedResourceId]
+          );
+        } else if (assignedResourceType === 'locker') {
+          await client.query(
+            `UPDATE lockers SET status = 'OCCUPIED', updated_at = NOW() WHERE id = $1`,
+            [assignedResourceId]
+          );
+        }
+
+        // Update session status
+        await client.query(
+          `UPDATE lane_sessions SET status = 'COMPLETED', updated_at = NOW() WHERE id = $1`,
+          [session.id]
+        );
+
+        // Broadcast assignment and completion
+        const assignmentPayload: AssignmentCreatedPayload = {
+          sessionId: session.id,
+          roomId: assignedResourceType === 'room' ? assignedResourceId : undefined,
+          roomNumber: assignedResourceType === 'room' ? assignedResourceNumber : undefined,
+          lockerId: assignedResourceType === 'locker' ? assignedResourceId : undefined,
+          lockerNumber: assignedResourceType === 'locker' ? assignedResourceNumber : undefined,
+          rentalType,
+        };
+        fastify.broadcaster.broadcastAssignmentCreated(assignmentPayload, laneId);
+
+        const completionPayload: SessionUpdatedPayload = {
+          sessionId: session.id,
+          customerName: session.customer_display_name || '',
+          membershipNumber: session.membership_number || undefined,
+          allowedRentals: getAllowedRentals(session.membership_number),
+          mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+          status: 'COMPLETED',
+          agreementSigned: true,
+          assignedResourceType: assignedResourceType as 'room' | 'locker',
+          assignedResourceNumber,
+          checkoutAt: endsAt.toISOString(),
+        };
+        fastify.broadcaster.broadcastSessionUpdated(completionPayload, laneId);
 
         return { success: true, sessionId: session.id };
       });
@@ -2122,6 +2382,475 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(500).send({
         error: 'Internal Server Error',
         message: 'Failed to fetch lane sessions',
+      });
+    }
+  });
+
+  /**
+   * Helper function to check past-due balance and bypass status.
+   * Returns true if customer is blocked by past-due balance.
+   */
+  async function checkPastDueBlocked(
+    client: Parameters<Parameters<typeof transaction>[0]>[0],
+    customerId: string | null,
+    sessionBypassed: boolean
+  ): Promise<{ blocked: boolean; balance: number }> {
+    if (!customerId) {
+      return { blocked: false, balance: 0 };
+    }
+
+    const customerResult = await client.query<CustomerRow>(
+      `SELECT past_due_balance FROM customers WHERE id = $1`,
+      [customerId]
+    );
+
+    if (customerResult.rows.length === 0) {
+      return { blocked: false, balance: 0 };
+    }
+
+    const balance = parseFloat(String(customerResult.rows[0]!.past_due_balance || 0));
+    const blocked = balance > 0 && !sessionBypassed;
+
+    return { blocked, balance };
+  }
+
+  /**
+   * POST /v1/checkin/lane/:laneId/past-due/demo-payment
+   * 
+   * Demo endpoint for past-due payment (cash or credit).
+   */
+  fastify.post('/v1/checkin/lane/:laneId/past-due/demo-payment', {
+    preHandler: [requireAuth],
+  }, async (
+    request: FastifyRequest<{
+      Params: { laneId: string };
+      Body: { outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE'; declineReason?: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!request.staff) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const { laneId } = request.params;
+    const { outcome, declineReason } = request.body;
+
+    try {
+      const result = await transaction(async (client) => {
+        const sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions
+           WHERE lane_id = $1 AND status IN ('ACTIVE', 'AWAITING_ASSIGNMENT')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [laneId]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active session found' };
+        }
+
+        const session = sessionResult.rows[0]!;
+
+        if (outcome === 'CASH_SUCCESS' || outcome === 'CREDIT_SUCCESS') {
+          // Clear past-due balance
+          if (session.customer_id) {
+            await client.query(
+              `UPDATE customers SET past_due_balance = 0, updated_at = NOW() WHERE id = $1`,
+              [session.customer_id]
+            );
+          }
+
+          // Update session
+          await client.query(
+            `UPDATE lane_sessions
+             SET last_past_due_decline_reason = NULL,
+                 last_past_due_decline_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [session.id]
+          );
+        } else {
+          // CREDIT_DECLINE
+          await client.query(
+            `UPDATE lane_sessions
+             SET last_past_due_decline_reason = $1,
+                 last_past_due_decline_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [declineReason || 'Payment declined', session.id]
+          );
+        }
+
+        // Get updated session and customer info for broadcast
+        const updatedSession = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions WHERE id = $1`,
+          [session.id]
+        );
+
+        const customerInfo = session.customer_id
+          ? await client.query<CustomerRow>(
+              `SELECT past_due_balance FROM customers WHERE id = $1`,
+              [session.customer_id]
+            )
+          : { rows: [] };
+
+        const balance = customerInfo.rows[0] ? parseFloat(String(customerInfo.rows[0]!.past_due_balance || 0)) : 0;
+        const blocked = balance > 0 && !(updatedSession.rows[0]!.past_due_bypassed || false);
+
+        const payload: SessionUpdatedPayload = {
+          sessionId: session.id,
+          customerName: session.customer_display_name || '',
+          membershipNumber: session.membership_number || undefined,
+          allowedRentals: getAllowedRentals(session.membership_number),
+          mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+          status: session.status,
+          pastDueBalance: balance,
+          pastDueBlocked: blocked,
+        };
+
+        fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+        return { success: outcome !== 'CREDIT_DECLINE', outcome };
+      });
+
+      return reply.send(result);
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to process past-due payment');
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status((error as { statusCode: number }).statusCode).send({
+          error: (error as { message: string }).message || 'Failed to process payment',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to process past-due payment',
+      });
+    }
+  });
+
+  /**
+   * POST /v1/checkin/lane/:laneId/past-due/bypass
+   * 
+   * Bypass past-due balance check (requires admin PIN).
+   */
+  fastify.post('/v1/checkin/lane/:laneId/past-due/bypass', {
+    preHandler: [requireAuth],
+  }, async (
+    request: FastifyRequest<{
+      Params: { laneId: string };
+      Body: { managerId: string; managerPin: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!request.staff) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const { laneId } = request.params;
+    const { managerId, managerPin } = request.body;
+
+    try {
+      const result = await transaction(async (client) => {
+        // Verify manager is ADMIN with correct PIN
+        const managerResult = await client.query<{ id: string; role: string; pin_hash: string | null }>(
+          `SELECT id, role, pin_hash FROM staff WHERE id = $1 AND active = true`,
+          [managerId]
+        );
+
+        if (managerResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'Manager not found' };
+        }
+
+        const manager = managerResult.rows[0]!;
+
+        if (manager.role !== 'ADMIN') {
+          throw { statusCode: 403, message: 'Only admins can bypass past-due balance' };
+        }
+
+        if (!manager.pin_hash || !(await verifyPin(managerPin, manager.pin_hash))) {
+          throw { statusCode: 401, message: 'Invalid PIN' };
+        }
+
+        // Get session
+        const sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions
+           WHERE lane_id = $1 AND status IN ('ACTIVE', 'AWAITING_ASSIGNMENT')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [laneId]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active session found' };
+        }
+
+        const session = sessionResult.rows[0]!;
+
+        // Mark as bypassed
+        await client.query(
+          `UPDATE lane_sessions
+           SET past_due_bypassed = true,
+               past_due_bypassed_by_staff_id = $1,
+               past_due_bypassed_at = NOW(),
+               updated_at = NOW()
+           WHERE id = $2`,
+          [managerId, session.id]
+        );
+
+        // Broadcast update
+        const customerInfo = session.customer_id
+          ? await client.query<CustomerRow>(
+              `SELECT past_due_balance FROM customers WHERE id = $1`,
+              [session.customer_id]
+            )
+          : { rows: [] };
+
+        const balance = customerInfo.rows[0] ? parseFloat(String(customerInfo.rows[0]!.past_due_balance || 0)) : 0;
+
+        const payload: SessionUpdatedPayload = {
+          sessionId: session.id,
+          customerName: session.customer_display_name || '',
+          membershipNumber: session.membership_number || undefined,
+          allowedRentals: getAllowedRentals(session.membership_number),
+          mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+          status: session.status,
+          pastDueBalance: balance,
+          pastDueBlocked: false,
+          pastDueBypassed: true,
+        };
+
+        fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+        return { success: true };
+      });
+
+      return reply.send(result);
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to bypass past-due balance');
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status((error as { statusCode: number }).statusCode).send({
+          error: (error as { message: string }).message || 'Failed to bypass',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to bypass past-due balance',
+      });
+    }
+  });
+
+  /**
+   * POST /v1/checkin/lane/:laneId/demo-take-payment
+   * 
+   * Demo endpoint to take payment (must be called after selection is confirmed).
+   */
+  fastify.post('/v1/checkin/lane/:laneId/demo-take-payment', {
+    preHandler: [requireAuth],
+  }, async (
+    request: FastifyRequest<{
+      Params: { laneId: string };
+      Body: { outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE'; declineReason?: string; registerNumber?: number };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!request.staff) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const { laneId } = request.params;
+    const { outcome, declineReason, registerNumber } = request.body;
+
+    try {
+      const result = await transaction(async (client) => {
+        const sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions
+           WHERE lane_id = $1 AND status IN ('ACTIVE', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [laneId]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active session found' };
+        }
+
+        const session = sessionResult.rows[0]!;
+
+        if (!session.selection_confirmed) {
+          throw { statusCode: 400, message: 'Selection must be confirmed before payment' };
+        }
+
+        if (!session.payment_intent_id) {
+          throw { statusCode: 400, message: 'Payment intent must be created first' };
+        }
+
+        const intentResult = await client.query<PaymentIntentRow>(
+          `SELECT * FROM payment_intents WHERE id = $1`,
+          [session.payment_intent_id]
+        );
+
+        if (intentResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'Payment intent not found' };
+        }
+
+        const intent = intentResult.rows[0]!;
+
+        if (outcome === 'CASH_SUCCESS' || outcome === 'CREDIT_SUCCESS') {
+          // Mark as paid
+          await client.query(
+            `UPDATE payment_intents
+             SET status = 'PAID',
+                 paid_at = NOW(),
+                 payment_method = $1,
+                 register_number = $2,
+                 failure_reason = NULL,
+                 failure_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $3`,
+            [
+              outcome === 'CASH_SUCCESS' ? 'CASH' : 'CREDIT',
+              registerNumber || null,
+              intent.id,
+            ]
+          );
+
+          // Update session status
+          await client.query(
+            `UPDATE lane_sessions SET status = 'AWAITING_SIGNATURE', updated_at = NOW() WHERE id = $1`,
+            [session.id]
+          );
+        } else {
+          // CREDIT_DECLINE
+          await client.query(
+            `UPDATE payment_intents
+             SET failure_reason = $1,
+                 failure_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [declineReason || 'Payment declined', intent.id]
+          );
+
+          await client.query(
+            `UPDATE lane_sessions
+             SET last_payment_decline_reason = $1,
+                 last_payment_decline_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [declineReason || 'Payment declined', session.id]
+          );
+        }
+
+        // Get updated intent for broadcast
+        const updatedIntent = await client.query<PaymentIntentRow>(
+          `SELECT * FROM payment_intents WHERE id = $1`,
+          [intent.id]
+        );
+
+        const updatedIntentData = updatedIntent.rows[0]!;
+
+        const payload: SessionUpdatedPayload = {
+          sessionId: session.id,
+          customerName: session.customer_display_name || '',
+          membershipNumber: session.membership_number || undefined,
+          allowedRentals: getAllowedRentals(session.membership_number),
+          mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+          status: outcome !== 'CREDIT_DECLINE' ? 'AWAITING_SIGNATURE' : session.status,
+          paymentIntentId: intent.id,
+          paymentStatus: updatedIntentData.status as 'DUE' | 'PAID',
+          paymentMethod: updatedIntentData.payment_method as 'CASH' | 'CREDIT' | undefined,
+          paymentTotal: typeof updatedIntentData.amount === 'string' ? parseFloat(updatedIntentData.amount) : updatedIntentData.amount,
+          paymentFailureReason: outcome === 'CREDIT_DECLINE' ? (declineReason || 'Payment declined') : undefined,
+        };
+
+        fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+        return {
+          success: outcome !== 'CREDIT_DECLINE',
+          paymentIntentId: intent.id,
+          status: updatedIntentData.status,
+        };
+      });
+
+      return reply.send(result);
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to take payment');
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status((error as { statusCode: number }).statusCode).send({
+          error: (error as { message: string }).message || 'Failed to take payment',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to take payment',
+      });
+    }
+  });
+
+  /**
+   * POST /v1/checkin/lane/:laneId/reset
+   * 
+   * Reset/complete transaction - marks session as completed and clears customer state.
+   */
+  fastify.post('/v1/checkin/lane/:laneId/reset', {
+    preHandler: [requireAuth],
+  }, async (
+    request: FastifyRequest<{
+      Params: { laneId: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!request.staff) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const { laneId } = request.params;
+
+    try {
+      const result = await transaction(async (client) => {
+        const sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions
+           WHERE lane_id = $1 AND status != 'COMPLETED'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [laneId]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active session found' };
+        }
+
+        const session = sessionResult.rows[0]!;
+
+        // Mark session as completed
+        await client.query(
+          `UPDATE lane_sessions SET status = 'COMPLETED', updated_at = NOW() WHERE id = $1`,
+          [session.id]
+        );
+
+        // Broadcast cleared state
+        const payload: SessionUpdatedPayload = {
+          sessionId: session.id,
+          customerName: '',
+          allowedRentals: [],
+          status: 'COMPLETED',
+        };
+
+        fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+        return { success: true };
+      });
+
+      return reply.send(result);
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to reset session');
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status((error as { statusCode: number }).statusCode).send({
+          error: (error as { message: string }).message || 'Failed to reset',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to reset session',
       });
     }
   });
