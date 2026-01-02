@@ -394,6 +394,9 @@ CREATE TABLE public.customers (
     banned_until timestamp with time zone,
     id_scan_hash character varying(255),
     id_scan_value text,
+    primary_language text CHECK ((primary_language = ANY (ARRAY['EN'::text, 'ES'::text]))),
+    notes text,
+    past_due_balance numeric(10,2) DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );

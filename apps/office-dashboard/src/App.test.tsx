@@ -19,8 +19,49 @@ describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      json: async () => ({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (input: RequestInfo) => {
+      const url = typeof input === 'string' ? input : input.url;
+      // Minimal happy-path mocks for the demo dashboard
+      if (url.endsWith('/api/v1/auth/staff')) {
+        return { ok: true, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({
+          staff: [
+            { id: '1', name: 'Manager Club', role: 'ADMIN' },
+            { id: '2', name: 'Front Desk', role: 'STAFF' },
+          ],
+        }) } as any;
+      }
+      if (url.endsWith('/api/v1/inventory/summary')) {
+        return { ok: true, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({
+          byType: { STANDARD: { clean: 10, cleaning: 0, dirty: 0, total: 10 } },
+          overall: { clean: 10, cleaning: 0, dirty: 0, total: 10 },
+          lockers: { clean: 10, cleaning: 0, dirty: 0, total: 10 },
+        }) } as any;
+      }
+      if (url.includes('/api/v1/metrics/waitlist')) {
+        return { ok: true, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({
+          activeCount: 0,
+          offeredCount: 0,
+          averageWaitTimeMinutes: 0,
+        }) } as any;
+      }
+      if (url.includes('/api/v1/admin/reports/cash-totals')) {
+        return { ok: true, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({
+          date: '2026-01-01',
+          total: 0,
+          byPaymentMethod: { CASH: 0, CREDIT: 0 },
+          byRegister: { 'Register 1': 0, 'Register 2': 0, Unassigned: 0 },
+        }) } as any;
+      }
+      if (url.includes('/api/v1/admin/register-sessions')) {
+        return { ok: true, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ([
+          { registerNumber: 1, active: false, sessionId: null, employee: null, deviceId: null, createdAt: null, lastHeartbeatAt: null, secondsSinceHeartbeat: null },
+          { registerNumber: 2, active: false, sessionId: null, employee: null, deviceId: null, createdAt: null, lastHeartbeatAt: null, secondsSinceHeartbeat: null },
+        ]) } as any;
+      }
+      if (url.includes('/api/v1/checkin/lane-sessions')) {
+        return { ok: true, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({ sessions: [] }) } as any;
+      }
+      return { ok: true, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({}) } as any;
     });
   });
 
@@ -31,34 +72,35 @@ describe('App', () => {
       </MemoryRouter>
     );
     // When not authenticated, LockScreen is shown
-    expect(screen.getByText('Staff Login')).toBeDefined();
+    expect(screen.getByText('Club Operations')).toBeDefined();
   });
 
-  it('shows lock screen with PIN input', () => {
+  it('shows employee selection on the lock screen', () => {
     render(
       <MemoryRouter>
         <App />
       </MemoryRouter>
     );
-    // Lock screen should show PIN input
-    expect(screen.getByPlaceholderText('Enter PIN')).toBeDefined();
+    expect(screen.getByText('Select your account to continue')).toBeDefined();
+    expect(screen.getByText('Manager Club')).toBeDefined();
   });
 
   it('renders dashboard when authenticated', () => {
     // Mock a session in localStorage
     const mockSession = {
+      staffId: '1',
       sessionToken: 'test-token',
       name: 'Test User',
-      role: 'admin',
+      role: 'ADMIN',
     };
     localStorage.setItem('staff_session', JSON.stringify(mockSession));
     
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={['/']}>
         <App />
       </MemoryRouter>
     );
-    expect(screen.getByText('Office Dashboard')).toBeDefined();
+    expect(screen.getByText('Administrative Demo Overview')).toBeDefined();
   });
 });
 
