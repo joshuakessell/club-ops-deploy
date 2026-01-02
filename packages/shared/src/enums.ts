@@ -7,6 +7,8 @@ export enum RoomStatus {
   DIRTY = 'DIRTY',
   CLEANING = 'CLEANING',
   CLEAN = 'CLEAN',
+  // Room is in use (occupied). Included to match DB enum `room_status`.
+  OCCUPIED = 'OCCUPIED',
 }
 
 /**

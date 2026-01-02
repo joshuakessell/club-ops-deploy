@@ -130,9 +130,9 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
             name: staff.name,
             role: staff.role,
             accessLevel: staff.role === 'ADMIN' ? 'full' : 'limited',
-            description: staff.role === 'ADMIN' 
-              ? 'Full Access - Auditing, Reports & Schedule Management'
-              : 'Register Employee - View Schedule Only',
+            description: staff.role === 'ADMIN'
+              ? 'Admin — Monitor, Waitlist, Reports, Customer Tools'
+              : 'Staff — Schedule, Messages (stub)',
             icon: staff.role === 'ADMIN' ? <Assessment /> : <Schedule />,
           }));
           setEmployees(staffList);

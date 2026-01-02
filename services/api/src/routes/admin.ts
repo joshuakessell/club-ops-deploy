@@ -1229,5 +1229,271 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
   });
+
+  /**
+   * GET /v1/admin/customers - Search customers (admin)
+   *
+   * Used by office-dashboard Customer Admin Tools.
+   */
+  fastify.get('/v1/admin/customers', {
+    preHandler: [requireAuth, requireAdmin],
+  }, async (
+    request: FastifyRequest<{
+      Querystring: {
+        search?: string;
+        limit?: string;
+      };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const search = (request.query.search || '').trim();
+    const limit = Math.min(Math.max(parseInt(request.query.limit || '25', 10) || 25, 1), 100);
+
+    if (search.length < 2) {
+      return reply.send({ customers: [] });
+    }
+
+    try {
+      const result = await query<{
+        id: string;
+        name: string;
+        membership_number: string | null;
+        primary_language: string | null;
+        notes: string | null;
+        past_due_balance: string | number | null;
+      }>(
+        `SELECT id, name, membership_number, primary_language, notes, past_due_balance
+         FROM customers
+         WHERE name ILIKE $1 OR membership_number ILIKE $1
+         ORDER BY name ASC
+         LIMIT $2`,
+        [`%${search}%`, limit]
+      );
+
+      return reply.send({
+        customers: result.rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          membershipNumber: r.membership_number,
+          primaryLanguage: (r.primary_language as 'EN' | 'ES' | null) || null,
+          notes: r.notes,
+          pastDueBalance: parseFloat(String(r.past_due_balance || 0)),
+        })),
+      });
+    } catch (error) {
+      request.log.error(error, 'Failed to search customers');
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
+
+  /**
+   * PATCH /v1/admin/customers/:id - Update admin-controlled customer fields
+   *
+   * Admin-only and requires step-up re-auth (PIN or WebAuthn).
+   * Supported edits (demo):
+   * - notes (clear/remove)
+   * - pastDueBalance (waive)
+   */
+  fastify.patch('/v1/admin/customers/:id', {
+    preHandler: [requireReauthForAdmin],
+  }, async (
+    request: FastifyRequest<{
+      Params: { id: string };
+      Body: {
+        notes?: string | null;
+        pastDueBalance?: number;
+      };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!request.staff) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const UpdateSchema = z.object({
+      notes: z.string().nullable().optional(),
+      pastDueBalance: z.number().min(0).optional(),
+    }).refine((b) => b.notes !== undefined || b.pastDueBalance !== undefined, {
+      message: 'At least one field is required',
+    });
+
+    let body: z.infer<typeof UpdateSchema>;
+    try {
+      body = UpdateSchema.parse(request.body);
+    } catch (error) {
+      return reply.status(400).send({
+        error: 'Validation failed',
+        details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+      });
+    }
+
+    try {
+      const result = await transaction(async (client) => {
+        const existing = await client.query<{
+          id: string;
+          notes: string | null;
+          past_due_balance: string | number | null;
+          primary_language: string | null;
+          name: string;
+          membership_number: string | null;
+        }>(
+          `SELECT id, name, membership_number, primary_language, notes, past_due_balance
+           FROM customers
+           WHERE id = $1
+           FOR UPDATE`,
+          [request.params.id]
+        );
+
+        if (existing.rows.length === 0) {
+          throw { statusCode: 404, message: 'Customer not found' };
+        }
+
+        const before = existing.rows[0]!;
+        const updates: string[] = [];
+        const params: unknown[] = [];
+        let idx = 1;
+
+        if (body.notes !== undefined) {
+          const normalized = body.notes && body.notes.trim() ? body.notes : null;
+          updates.push(`notes = $${idx}`);
+          params.push(normalized);
+          idx++;
+        }
+
+        if (body.pastDueBalance !== undefined) {
+          updates.push(`past_due_balance = $${idx}`);
+          params.push(body.pastDueBalance);
+          idx++;
+        }
+
+        params.push(request.params.id);
+
+        const updated = await client.query<{
+          id: string;
+          name: string;
+          membership_number: string | null;
+          primary_language: string | null;
+          notes: string | null;
+          past_due_balance: string | number | null;
+        }>(
+          `UPDATE customers
+           SET ${updates.join(', ')}, updated_at = NOW()
+           WHERE id = $${idx}
+           RETURNING id, name, membership_number, primary_language, notes, past_due_balance`,
+          params
+        );
+
+        const after = updated.rows[0]!;
+
+        await client.query(
+          `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, old_value, new_value)
+           VALUES ($1, $2, 'UPDATE', 'customer', $3, $4, $5)`,
+          [
+            request.staff.staffId,
+            request.staff.role,
+            request.params.id,
+            JSON.stringify({
+              notes: before.notes,
+              pastDueBalance: parseFloat(String(before.past_due_balance || 0)),
+            }),
+            JSON.stringify({
+              notes: after.notes,
+              pastDueBalance: parseFloat(String(after.past_due_balance || 0)),
+            }),
+          ]
+        );
+
+        return after;
+      });
+
+      return reply.send({
+        id: result.id,
+        name: result.name,
+        membershipNumber: result.membership_number,
+        primaryLanguage: (result.primary_language as 'EN' | 'ES' | null) || null,
+        notes: result.notes,
+        pastDueBalance: parseFloat(String(result.past_due_balance || 0)),
+      });
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status((error as { statusCode: number }).statusCode).send({
+          error: (error as { message: string }).message || 'Failed to update customer',
+        });
+      }
+      request.log.error(error, 'Failed to update customer');
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
+
+  /**
+   * GET /v1/admin/reports/cash-totals - Demo cash totals for today
+   *
+   * Uses payment_intents marked PAID today; groups by payment_method and register_number.
+   */
+  fastify.get('/v1/admin/reports/cash-totals', {
+    preHandler: [requireAuth, requireAdmin],
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const totals = await query<{ total: string | null }>(
+        `SELECT COALESCE(SUM(amount), 0)::numeric(10,2) as total
+         FROM payment_intents
+         WHERE status = 'PAID'
+           AND paid_at >= date_trunc('day', NOW())
+           AND paid_at <  date_trunc('day', NOW()) + INTERVAL '1 day'`
+      );
+
+      const byMethod = await query<{ payment_method: string | null; total: string | null }>(
+        `SELECT payment_method, COALESCE(SUM(amount), 0)::numeric(10,2) as total
+         FROM payment_intents
+         WHERE status = 'PAID'
+           AND paid_at >= date_trunc('day', NOW())
+           AND paid_at <  date_trunc('day', NOW()) + INTERVAL '1 day'
+         GROUP BY payment_method`
+      );
+
+      const byRegister = await query<{ register_number: number | null; total: string | null }>(
+        `SELECT register_number, COALESCE(SUM(amount), 0)::numeric(10,2) as total
+         FROM payment_intents
+         WHERE status = 'PAID'
+           AND paid_at >= date_trunc('day', NOW())
+           AND paid_at <  date_trunc('day', NOW()) + INTERVAL '1 day'
+         GROUP BY register_number
+         ORDER BY register_number NULLS LAST`
+      );
+
+      const byPaymentMethod: Record<string, number> = {};
+      for (const row of byMethod.rows) {
+        const key = row.payment_method || 'UNKNOWN';
+        byPaymentMethod[key] = parseFloat(String(row.total || 0));
+      }
+
+      const byRegisterOut: Record<string, number> = {};
+      for (const row of byRegister.rows) {
+        const key = row.register_number ? `Register ${row.register_number}` : 'Unassigned';
+        byRegisterOut[key] = parseFloat(String(row.total || 0));
+      }
+
+      // Ensure stable keys for the demo UI
+      byPaymentMethod.CASH ??= 0;
+      byPaymentMethod.CREDIT ??= 0;
+      byRegisterOut['Register 1'] ??= 0;
+      byRegisterOut['Register 2'] ??= 0;
+
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+
+      return reply.send({
+        date: `${yyyy}-${mm}-${dd}`,
+        total: parseFloat(String(totals.rows[0]?.total || 0)),
+        byPaymentMethod,
+        byRegister: byRegisterOut,
+      });
+    } catch (error) {
+      request.log.error(error, 'Failed to build cash totals');
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
 }
 
