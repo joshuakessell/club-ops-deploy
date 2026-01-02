@@ -422,3 +422,131 @@ body {
   cursor: not-allowed;
 }
 
+/* Language Selection Screen */
+.language-selection-screen {
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+}
+
+.language-title {
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 600;
+  text-align: center;
+}
+
+.language-options {
+  display: flex;
+  gap: 2rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.language-option {
+  padding: 2rem 4rem;
+  background: var(--cs-bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--cs-radius-xl);
+  color: var(--text);
+  font-size: clamp(1.25rem, 2.5vw, 2rem);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+  min-width: 200px;
+  box-shadow: var(--cs-elevation-2);
+}
+
+.language-option:hover:not(:disabled) {
+  border-color: var(--cs-primary);
+  background: var(--cs-bg-hover);
+  box-shadow: var(--cs-elevation-4);
+  transform: translateY(-4px);
+}
+
+.language-option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Payment Pending Screen */
+.payment-pending-screen {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+}
+
+.payment-pending-screen h1 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 600;
+}
+
+.payment-total {
+  padding: 2rem;
+  background: var(--cs-bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--cs-radius-xl);
+  min-width: 300px;
+}
+
+.total-label {
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.total-amount {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.payment-instruction {
+  font-size: clamp(1.125rem, 2vw, 1.5rem);
+  color: var(--text-muted);
+}
+
+/* Past Due Block Message */
+.past-due-block-message {
+  padding: 1.5rem;
+  background: #ef4444;
+  color: white;
+  border-radius: var(--cs-radius-lg);
+  text-align: center;
+  margin-bottom: 2rem;
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  font-weight: 600;
+}
+
+/* Assignment Info */
+.assignment-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding: 2rem;
+  background: var(--cs-bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-xl);
+}
+
+.assignment-resource {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.checkout-time {
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  color: var(--text-muted);
+}
+

@@ -2640,6 +2640,86 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * POST /v1/checkin/lane/:laneId/set-language
+   * 
+   * Set customer's primary language preference (EN or ES).
+   * Persists on customer record.
+   */
+  fastify.post('/v1/checkin/lane/:laneId/set-language', async (
+    request: FastifyRequest<{
+      Params: { laneId: string };
+      Body: { language: 'EN' | 'ES' };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { laneId } = request.params;
+    const { language } = request.body;
+
+    try {
+      const result = await transaction(async (client) => {
+        // Get active session
+        const sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions
+           WHERE lane_id = $1 AND status IN ('ACTIVE', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [laneId]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active session found' };
+        }
+
+        const session = sessionResult.rows[0]!;
+
+        if (!session.customer_id) {
+          throw { statusCode: 400, message: 'Session has no customer' };
+        }
+
+        // Update customer's primary language
+        await client.query(
+          `UPDATE customers SET primary_language = $1, updated_at = NOW() WHERE id = $2`,
+          [language, session.customer_id]
+        );
+
+        // Get updated customer info
+        const customerResult = await client.query<CustomerRow>(
+          `SELECT primary_language FROM customers WHERE id = $1`,
+          [session.customer_id]
+        );
+
+        // Broadcast session update with language
+        const payload: SessionUpdatedPayload = {
+          sessionId: session.id,
+          customerName: session.customer_display_name || '',
+          membershipNumber: session.membership_number || undefined,
+          allowedRentals: getAllowedRentals(session.membership_number),
+          mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+          status: session.status,
+          customerPrimaryLanguage: language,
+        };
+
+        fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+        return { success: true, language };
+      });
+
+      return reply.send(result);
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to set language');
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status((error as { statusCode: number }).statusCode).send({
+          error: (error as { message: string }).message || 'Failed to set language',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to set language',
+      });
+    }
+  });
+
+  /**
    * POST /v1/checkin/lane/:laneId/demo-take-payment
    * 
    * Demo endpoint to take payment (must be called after selection is confirmed).

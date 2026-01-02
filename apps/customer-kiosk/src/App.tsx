@@ -11,6 +11,7 @@ import type {
 } from '@club-ops/shared';
 import { CheckinMode } from '@club-ops/shared';
 import logoImage from './assets/the-clubs-logo.png';
+import { t, type Language } from './i18n';
 
 interface HealthStatus {
   status: string;
@@ -26,6 +27,15 @@ interface SessionState {
   visitId?: string;
   mode?: CheckinMode;
   blockEndsAt?: string; // ISO timestamp of when current block ends
+  customerPrimaryLanguage?: Language | null;
+  pastDueBlocked?: boolean;
+  pastDueBalance?: number;
+  paymentStatus?: 'DUE' | 'PAID';
+  paymentTotal?: number;
+  agreementSigned?: boolean;
+  assignedResourceType?: 'room' | 'locker';
+  assignedResourceNumber?: string;
+  checkoutAt?: string;
 }
 
 interface Agreement {
@@ -35,21 +45,21 @@ interface Agreement {
   bodyText: string;
 }
 
-type AppView = 'idle' | 'selection' | 'agreement' | 'complete';
+type AppView = 'idle' | 'language' | 'selection' | 'payment' | 'agreement' | 'complete';
 
 // Map rental types to display names
-function getRentalDisplayName(rental: string): string {
+function getRentalDisplayName(rental: string, lang: Language | null | undefined): string {
   switch (rental) {
     case 'LOCKER':
-      return 'Locker';
+      return t(lang, 'locker');
     case 'STANDARD':
-      return 'Regular Room';
+      return t(lang, 'regularRoom');
     case 'DOUBLE':
-      return 'Double Room';
+      return t(lang, 'doubleRoom');
     case 'SPECIAL':
-      return 'Special Room';
+      return t(lang, 'specialRoom');
     case 'GYM_LOCKER':
-      return 'Gym Locker';
+      return t(lang, 'gymLocker');
     default:
       return rental;
   }
@@ -89,7 +99,9 @@ function App() {
   const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
   const [selectionAcknowledged, setSelectionAcknowledged] = useState(false);
   const [upgradeDisclaimerAcknowledged, setUpgradeDisclaimerAcknowledged] = useState(false);
+  const [hasScrolledAgreement, setHasScrolledAgreement] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
+  const agreementScrollRef = useRef<HTMLDivElement>(null);
   const isDrawingRef = useRef(false);
   const idleTimeoutRef = useRef<number | null>(null);
 
@@ -151,7 +163,10 @@ function App() {
 
         if (message.type === 'SESSION_UPDATED') {
           const payload = message.payload as SessionUpdatedPayload;
-          setSession({
+          
+          // Update session state with all fields
+          setSession(prev => ({
+            ...prev,
             sessionId: payload.sessionId || null,
             customerName: payload.customerName,
             membershipNumber: payload.membershipNumber || null,
@@ -159,14 +174,90 @@ function App() {
             visitId: payload.visitId,
             mode: payload.mode,
             blockEndsAt: payload.blockEndsAt,
-          });
+            customerPrimaryLanguage: payload.customerPrimaryLanguage,
+            pastDueBlocked: payload.pastDueBlocked,
+            pastDueBalance: payload.pastDueBalance,
+            paymentStatus: payload.paymentStatus,
+            paymentTotal: payload.paymentTotal,
+            agreementSigned: payload.agreementSigned,
+            assignedResourceType: payload.assignedResourceType,
+            assignedResourceNumber: payload.assignedResourceNumber,
+            checkoutAt: payload.checkoutAt,
+          }));
+          
           // Set check-in mode from payload
           if (payload.mode) {
             setCheckinMode(payload.mode);
           }
+          
+          // Handle view transitions based on session state
+          // First check: Reset to idle if session is completed and cleared
+          if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
+            // Reset to idle
+            setView('idle');
+            setSession({
+              sessionId: null,
+              customerName: null,
+              membershipNumber: null,
+              allowedRentals: [],
+              blockEndsAt: undefined,
+            });
+            setSelectedRental(null);
+            setAgreed(false);
+            setSignatureData(null);
+            setShowUpgradeDisclaimer(false);
+            setUpgradeAction(null);
+            setShowRenewalDisclaimer(false);
+            setCheckinMode(null);
+            setShowWaitlistModal(false);
+            setWaitlistDesiredType(null);
+            setWaitlistBackupType(null);
+            setProposedRentalType(null);
+            setProposedBy(null);
+            setSelectionConfirmed(false);
+            setSelectionConfirmedBy(null);
+            setSelectionAcknowledged(false);
+            setUpgradeDisclaimerAcknowledged(false);
+            setHasScrolledAgreement(false);
+            return;
+          }
+          
+          // If we have assignment, show complete view (highest priority after reset)
+          if (payload.assignedResourceType && payload.assignedResourceNumber) {
+            setView('complete');
+            return;
+          }
+          
+          // Language selection (first visit, before past-due check)
+          if (payload.customerName && !payload.customerPrimaryLanguage && !payload.pastDueBlocked) {
+            setView('language');
+            return;
+          }
+          
+          // Past-due block screen (shows selection but disabled)
+          if (payload.pastDueBlocked) {
+            setView('selection');
+            return;
+          }
+          
+          // Agreement screen (after payment is PAID, before assignment)
+          if (payload.paymentStatus === 'PAID' && !payload.agreementSigned && 
+              (payload.mode === 'INITIAL' || payload.mode === 'RENEWAL')) {
+            setView('agreement');
+            return;
+          }
+          
+          // Payment pending screen (after selection confirmed, before payment)
+          if (payload.selectionConfirmed && payload.paymentStatus === 'DUE') {
+            setView('payment');
+            return;
+          }
+          
+          // Selection view (default active session state)
           if (payload.customerName) {
             setView('selection');
           }
+          
           // Update selection state
           if (payload.proposedRentalType) {
             setProposedRentalType(payload.proposedRentalType);
@@ -175,42 +266,6 @@ function App() {
           if (payload.selectionConfirmed !== undefined) {
             setSelectionConfirmed(payload.selectionConfirmed);
             setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
-          }
-          // Handle completion status
-          if ((payload as any).status === 'COMPLETED') {
-            setView('complete');
-            // Clear any existing timeout to prevent race conditions
-            if (idleTimeoutRef.current !== null) {
-              clearTimeout(idleTimeoutRef.current);
-            }
-            // Return to idle after delay
-            idleTimeoutRef.current = window.setTimeout(() => {
-              setView('idle');
-              setSession({
-                sessionId: null,
-                customerName: null,
-                membershipNumber: null,
-                allowedRentals: [],
-                blockEndsAt: undefined,
-              });
-              setSelectedRental(null);
-              setAgreed(false);
-              setSignatureData(null);
-              setShowUpgradeDisclaimer(false);
-              setUpgradeAction(null);
-              setShowRenewalDisclaimer(false);
-              setCheckinMode(null);
-              setShowWaitlistModal(false);
-              setWaitlistDesiredType(null);
-              setWaitlistBackupType(null);
-              setProposedRentalType(null);
-              setProposedBy(null);
-              setSelectionConfirmed(false);
-              setSelectionConfirmedBy(null);
-              setSelectionAcknowledged(false);
-              setUpgradeDisclaimerAcknowledged(false);
-              idleTimeoutRef.current = null;
-            }, 5000);
           }
         } else if (message.type === 'SELECTION_PROPOSED') {
           const payload = message.payload as SelectionProposedPayload;
@@ -565,8 +620,9 @@ function App() {
   };
 
   const handleSubmitAgreement = async () => {
-    if (!agreed || !signatureData || !session.sessionId) {
-      alert('Please acknowledge the agreement and provide a signature.');
+    if (!agreed || !signatureData || !session.sessionId || !hasScrolledAgreement) {
+      const lang = session.customerPrimaryLanguage;
+      alert(t(lang, 'signatureRequired'));
       return;
     }
 
@@ -588,35 +644,8 @@ function App() {
         throw new Error(error.error || 'Failed to sign agreement');
       }
 
-      setView('complete');
-      
-      // Clear any existing timeout to prevent race conditions
-      if (idleTimeoutRef.current !== null) {
-        clearTimeout(idleTimeoutRef.current);
-      }
-      // Return to idle after a delay (will be handled by WebSocket COMPLETED status)
-      // Keep this as fallback only if WebSocket doesn't send COMPLETED status
-      idleTimeoutRef.current = window.setTimeout(() => {
-        setView('idle');
-        setSession({
-          sessionId: null,
-          customerName: null,
-          membershipNumber: null,
-          allowedRentals: [],
-          blockEndsAt: undefined,
-        });
-        setSelectedRental(null);
-        setAgreed(false);
-        setSignatureData(null);
-        setShowUpgradeDisclaimer(false);
-        setUpgradeAction(null);
-        setShowRenewalDisclaimer(false);
-        setCheckinMode(null);
-        setShowWaitlistModal(false);
-        setWaitlistDesiredType(null);
-        setWaitlistBackupType(null);
-        idleTimeoutRef.current = null;
-      }, 5000);
+      // Wait for SESSION_UPDATED event with assignment to show complete view
+      // The view will be updated via WebSocket when assignment is created
     } catch (error) {
       console.error('Failed to sign agreement:', error);
       alert(error instanceof Error ? error.message : 'Failed to sign agreement. Please try again.');
@@ -625,11 +654,109 @@ function App() {
     }
   };
 
+  // Handle language selection
+  const handleLanguageSelection = async (language: Language) => {
+    if (!session.sessionId) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/set-language`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ language }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to set language');
+      }
+
+      // Language will be updated via SESSION_UPDATED WebSocket event
+    } catch (error) {
+      console.error('Failed to set language:', error);
+      alert(error instanceof Error ? error.message : 'Failed to set language. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Check if agreement has been scrolled
+  useEffect(() => {
+    const scrollArea = agreementScrollRef.current;
+    if (scrollArea && view === 'agreement') {
+      const handleScroll = () => {
+        const { scrollTop, scrollHeight, clientHeight } = scrollArea;
+        if (scrollTop + clientHeight >= scrollHeight - 10) {
+          setHasScrolledAgreement(true);
+        }
+      };
+      scrollArea.addEventListener('scroll', handleScroll);
+      return () => scrollArea.removeEventListener('scroll', handleScroll);
+    }
+  }, [view]);
+
   // Idle state: logo only, centered
   if (view === 'idle') {
     return (
       <div className="idle-container">
         <img src={logoImage} alt="Club Dallas" className="logo-idle" />
+      </div>
+    );
+  }
+
+  // Language selection screen
+  if (view === 'language') {
+    return (
+      <div className="active-container">
+        <img src={logoImage} alt="Club Dallas" className="logo-header" />
+        <main className="main-content">
+          <div className="language-selection-screen">
+            <h1 className="language-title">{t(null, 'selectLanguage')}</h1>
+            <div className="language-options">
+              <button
+                className="language-option"
+                onClick={() => handleLanguageSelection('EN')}
+                disabled={isSubmitting}
+              >
+                {t(null, 'english')}
+              </button>
+              <button
+                className="language-option"
+                onClick={() => handleLanguageSelection('ES')}
+                disabled={isSubmitting}
+              >
+                {t(null, 'spanish')}
+              </button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // Payment pending screen
+  if (view === 'payment') {
+    return (
+      <div className="active-container">
+        <img src={logoImage} alt="Club Dallas" className="logo-header" />
+        <main className="main-content">
+          <div className="payment-pending-screen">
+            <h1>{t(session.customerPrimaryLanguage, 'paymentPending')}</h1>
+            {session.paymentTotal !== undefined && (
+              <div className="payment-total">
+                <p className="total-label">{t(session.customerPrimaryLanguage, 'totalDue')}</p>
+                <p className="total-amount">${session.paymentTotal.toFixed(2)}</p>
+              </div>
+            )}
+            <p className="payment-instruction">
+              {t(session.customerPrimaryLanguage, 'paymentPending')}
+            </p>
+          </div>
+        </main>
       </div>
     );
   }
@@ -650,14 +777,20 @@ function App() {
         <main className="main-content">
           <div className="agreement-screen">
             <h1 className="agreement-title">
-              {agreement?.title || 'Club Agreement'}
+              {agreement?.title || t(session.customerPrimaryLanguage, 'agreementTitle')}
             </h1>
             
-            <div className="agreement-scroll-area">
-              {/* Placeholder - no text displayed for now */}
-              <p className="agreement-placeholder">
-                Agreement content will be displayed here.
-              </p>
+            <div 
+              ref={agreementScrollRef}
+              className="agreement-scroll-area"
+            >
+              {agreement?.bodyText ? (
+                <div dangerouslySetInnerHTML={{ __html: agreement.bodyText }} />
+              ) : (
+                <p className="agreement-placeholder">
+                  {t(session.customerPrimaryLanguage, 'agreementPlaceholder')}
+                </p>
+              )}
             </div>
 
             <div className="agreement-actions">
@@ -666,12 +799,20 @@ function App() {
                   type="checkbox"
                   checked={agreed}
                   onChange={(e) => setAgreed(e.target.checked)}
+                  disabled={!hasScrolledAgreement}
                 />
-                <span>I agree</span>
+                <span>{t(session.customerPrimaryLanguage, 'iAgree')}</span>
               </label>
+              {!hasScrolledAgreement && (
+                <p style={{ fontSize: '0.875rem', color: '#f59e0b', marginTop: '0.5rem' }}>
+                  {t(session.customerPrimaryLanguage, 'scrollRequired')}
+                </p>
+              )}
 
               <div className="signature-section">
-                <p className="signature-label">Signature required to continue</p>
+                <p className="signature-label">
+                  {t(session.customerPrimaryLanguage, 'signatureRequired')}
+                </p>
                 <canvas
                   ref={signatureCanvasRef}
                   className="signature-canvas"
@@ -690,16 +831,16 @@ function App() {
                   className="clear-signature-btn"
                   onClick={handleClearSignature}
                 >
-                  Clear
+                  {t(session.customerPrimaryLanguage, 'clear')}
                 </button>
               </div>
 
               <button
                 className="submit-agreement-btn"
                 onClick={handleSubmitAgreement}
-                disabled={!agreed || !signatureData || isSubmitting}
+                disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
               >
-                {isSubmitting ? 'Submitting...' : 'Submit'}
+                {isSubmitting ? t(session.customerPrimaryLanguage, 'submitting') : t(session.customerPrimaryLanguage, 'submit')}
               </button>
             </div>
           </div>
@@ -710,16 +851,30 @@ function App() {
 
   // Complete view
   if (view === 'complete') {
+    const lang = session.customerPrimaryLanguage;
+    
     return (
       <div className="active-container">
         <img src={logoImage} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="complete-screen">
-            <h1>Thank you!</h1>
-            <p>Please wait for staff to complete payment and assignment.</p>
-            <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '1rem' }}>
-              Your check-in is being processed...
-            </p>
+            <h1>{t(lang, 'thankYou')}</h1>
+            {session.assignedResourceType && session.assignedResourceNumber ? (
+              <>
+                <div className="assignment-info">
+                  <p className="assignment-resource">
+                    {t(lang, session.assignedResourceType)}: {session.assignedResourceNumber}
+                  </p>
+                  {session.checkoutAt && (
+                    <p className="checkout-time">
+                      {t(lang, 'checkoutAt')}: {new Date(session.checkoutAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p>{t(lang, 'assignmentComplete')}</p>
+            )}
           </div>
         </main>
       </div>
@@ -735,9 +890,18 @@ function App() {
         <div className="customer-info">
           <h1 className="customer-name">{session.customerName}</h1>
           {session.membershipNumber && (
-            <p className="membership-number">Membership: {session.membershipNumber}</p>
+            <p className="membership-number">
+              {t(session.customerPrimaryLanguage, 'membership')}: {session.membershipNumber}
+            </p>
           )}
         </div>
+
+        {/* Past-due block message */}
+        {session.pastDueBlocked && (
+          <div className="past-due-block-message">
+            <p>{t(session.customerPrimaryLanguage, 'pastDueBlocked')}</p>
+          </div>
+        )}
 
         {/* Selection State Display */}
         {proposedRentalType && (
@@ -750,13 +914,13 @@ function App() {
           }}>
             <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
               {selectionConfirmed 
-                ? `✓ Selection Locked: ${getRentalDisplayName(proposedRentalType)} (by ${selectionConfirmedBy === 'CUSTOMER' ? 'You' : 'Staff'})`
-                : `Proposed: ${getRentalDisplayName(proposedRentalType)} (by ${proposedBy === 'CUSTOMER' ? 'You' : 'Staff'})`}
+                ? `✓ ${t(session.customerPrimaryLanguage, 'selected')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${selectionConfirmedBy === 'CUSTOMER' ? 'You' : 'Staff'})`
+                : `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${proposedBy === 'CUSTOMER' ? 'You' : 'Staff'})`}
             </div>
             {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
               <button
                 onClick={handleConfirmSelection}
-                disabled={isSubmitting}
+                disabled={isSubmitting || session.pastDueBlocked}
                 style={{
                   padding: '0.5rem 1rem',
                   background: 'white',
@@ -764,15 +928,15 @@ function App() {
                   border: 'none',
                   borderRadius: '6px',
                   fontWeight: 600,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  cursor: isSubmitting || session.pastDueBlocked ? 'not-allowed' : 'pointer',
                 }}
               >
-                {isSubmitting ? 'Confirming...' : 'Confirm Selection'}
+                {isSubmitting ? t(session.customerPrimaryLanguage, 'confirming') : t(session.customerPrimaryLanguage, 'confirmSelection')}
               </button>
             )}
             {selectionConfirmed && selectionConfirmedBy === 'EMPLOYEE' && !selectionAcknowledged && (
               <div>
-                <p style={{ marginBottom: '0.5rem' }}>Staff has locked this selection. Please acknowledge to continue.</p>
+                <p style={{ marginBottom: '0.5rem' }}>{t(session.customerPrimaryLanguage, 'staffHasLocked')}</p>
                 <button
                   onClick={handleAcknowledgeSelection}
                   disabled={isSubmitting}
@@ -786,21 +950,22 @@ function App() {
                     cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {isSubmitting ? 'Acknowledging...' : 'Acknowledge'}
+                  {isSubmitting ? t(session.customerPrimaryLanguage, 'acknowledging') : t(session.customerPrimaryLanguage, 'acknowledge')}
                 </button>
               </div>
             )}
           </div>
         )}
 
-        {/* Rental Options - disabled if selection is locked and not acknowledged */}
+        {/* Rental Options - disabled if selection is locked and not acknowledged or past-due blocked */}
         <div className="package-options">
           {session.allowedRentals.length > 0 ? (
             session.allowedRentals.map((rental) => {
               const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
-              const showWarning = availableCount > 0 && availableCount < 3;
+              const showWarning = availableCount > 0 && availableCount < 5;
               const isUnavailable = availableCount === 0;
-              const isDisabled = selectionConfirmed && !selectionAcknowledged;
+              const isDisabled = (selectionConfirmed && !selectionAcknowledged) || session.pastDueBlocked;
+              const lang = session.customerPrimaryLanguage;
               
               return (
                 <div key={rental}>
@@ -812,20 +977,20 @@ function App() {
                       cursor: isDisabled ? 'not-allowed' : 'pointer' 
                     }}
                   >
-                    <div className="package-name">{getRentalDisplayName(rental)}</div>
+                    <div className="package-name">{getRentalDisplayName(rental, lang)}</div>
                     {showWarning && (
                       <div style={{ fontSize: '0.875rem', color: '#f59e0b', marginTop: '0.5rem', fontWeight: 600 }}>
-                        ⚠️ Only {availableCount} available
+                        ⚠️ {t(lang, 'limitedAvailability', { count: availableCount })}
                       </div>
                     )}
                     {isUnavailable && (
                       <div style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 600 }}>
-                        Currently unavailable - Tap to join waitlist
+                        {t(lang, 'unavailable')}
                       </div>
                     )}
                     {proposedRentalType === rental && (
                       <div style={{ fontSize: '0.875rem', color: '#3b82f6', marginTop: '0.5rem', fontWeight: 600 }}>
-                        {selectionConfirmed ? '✓ Selected' : 'Proposed'}
+                        {selectionConfirmed ? `✓ ${t(lang, 'selected')}` : t(lang, 'proposed')}
                       </div>
                     )}
                   </div>
@@ -834,7 +999,7 @@ function App() {
             })
           ) : (
             <div className="package-option">
-              <div className="package-name">No options available</div>
+              <div className="package-name">{t(session.customerPrimaryLanguage, 'noOptionsAvailable')}</div>
             </div>
           )}
         </div>
