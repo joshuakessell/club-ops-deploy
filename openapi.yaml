@@ -930,6 +930,198 @@ paths:
         '200':
           description: Room information
 
+  /v1/waitlist:
+    get:
+      tags: [Waitlist]
+      summary: List waitlist entries (ACTIVE/OFFERED/etc)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ACTIVE, OFFERED, COMPLETED, CANCELLED, EXPIRED]
+      responses:
+        '200':
+          description: Waitlist entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        desiredTier: { type: string, enum: [STANDARD, DOUBLE, SPECIAL] }
+                        backupTier: { type: string }
+                        status: { type: string }
+                        createdAt: { type: string, format: date-time }
+                        offeredAt: { type: string, format: date-time, nullable: true }
+                        completedAt: { type: string, format: date-time, nullable: true }
+                        displayIdentifier: { type: string }
+                        currentRentalType: { type: string }
+
+  /v1/waitlist/{id}/offer:
+    post:
+      tags: [Waitlist]
+      summary: Offer upgrade to a waitlist entry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [waitlistId, roomId]
+              properties:
+                waitlistId: { type: string, format: uuid }
+                roomId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Offered
+
+  /v1/waitlist/{id}/cancel:
+    post:
+      tags: [Waitlist]
+      summary: Cancel a waitlist entry (requires recent re-auth)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [waitlistId]
+              properties:
+                waitlistId: { type: string, format: uuid }
+                reason: { type: string }
+      responses:
+        '200':
+          description: Cancelled
+        '403':
+          description: Re-authentication required
+
+  /v1/upgrades/fulfill:
+    post:
+      tags: [Upgrades]
+      summary: Start upgrade fulfillment (create payment intent)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [waitlistId, roomId, acknowledgedDisclaimer]
+              properties:
+                waitlistId: { type: string, format: uuid }
+                roomId: { type: string, format: uuid }
+                acknowledgedDisclaimer: { type: boolean }
+      responses:
+        '200':
+          description: Payment intent created for upgrade
+
+  /v1/upgrades/complete:
+    post:
+      tags: [Upgrades]
+      summary: Complete upgrade after payment (requires recent re-auth)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [waitlistId, paymentIntentId]
+              properties:
+                waitlistId: { type: string, format: uuid }
+                paymentIntentId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Upgrade completed
+        '403':
+          description: Re-authentication required
+
+  /v1/admin/customers:
+    get:
+      tags: [Admin]
+      summary: Search customers (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 25
+      responses:
+        '200':
+          description: Customer search results
+
+  /v1/admin/customers/{id}:
+    patch:
+      tags: [Admin]
+      summary: Update customer admin fields (notes, past due) (requires recent re-auth)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes: { type: string, nullable: true }
+                pastDueBalance: { type: number, minimum: 0 }
+      responses:
+        '200':
+          description: Updated customer
+        '403':
+          description: Re-authentication required
+
+  /v1/admin/reports/cash-totals:
+    get:
+      tags: [Admin]
+      summary: Demo cash totals for today (by method, by register)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Cash totals
+
 components:
   securitySchemes:
     bearerAuth:
