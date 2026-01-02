@@ -643,17 +643,42 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           session = newSessionResult.rows[0]!;
         }
 
-        // Get customer past-due balance if customer exists
+        // Get customer info if customer exists
         let pastDueBalance = 0;
         let pastDueBlocked = false;
+        let customerNotes: string | undefined;
+        let customerPrimaryLanguage: 'EN' | 'ES' | undefined;
+        let customerDobMonthDay: string | undefined;
+        let customerLastVisitAt: string | undefined;
+
         if (session.customer_id) {
           const customerInfo = await client.query<CustomerRow>(
-            `SELECT past_due_balance FROM customers WHERE id = $1`,
+            `SELECT past_due_balance, notes, primary_language, dob FROM customers WHERE id = $1`,
             [session.customer_id]
           );
           if (customerInfo.rows.length > 0) {
-            pastDueBalance = parseFloat(String(customerInfo.rows[0]!.past_due_balance || 0));
+            const customer = customerInfo.rows[0]!;
+            pastDueBalance = parseFloat(String(customer.past_due_balance || 0));
             pastDueBlocked = pastDueBalance > 0 && !(session.past_due_bypassed || false);
+            customerNotes = customer.notes || undefined;
+            customerPrimaryLanguage = customer.primary_language as 'EN' | 'ES' | undefined;
+            
+            if (customer.dob) {
+              customerDobMonthDay = `${String(customer.dob.getMonth() + 1).padStart(2, '0')}/${String(customer.dob.getDate()).padStart(2, '0')}`;
+            }
+
+            // Get last visit
+            const lastVisitResult = await client.query<{ checkin_at: Date }>(
+              `SELECT checkin_at FROM checkin_blocks
+               WHERE customer_id = $1
+               ORDER BY checkin_at DESC
+               LIMIT 1`,
+              [session.customer_id]
+            );
+
+            if (lastVisitResult.rows.length > 0) {
+              customerLastVisitAt = lastVisitResult.rows[0]!.checkin_at.toISOString();
+            }
           }
         }
 
@@ -669,6 +694,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           pastDueBalance: pastDueBalance > 0 ? pastDueBalance : undefined,
           pastDueBlocked,
           pastDueBypassed: session.past_due_bypassed || false,
+          customerNotes,
+          customerPrimaryLanguage,
+          customerDobMonthDay,
+          customerLastVisitAt,
         };
 
         fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
@@ -2715,6 +2744,131 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(500).send({
         error: 'Internal Server Error',
         message: 'Failed to set language',
+      });
+    }
+  });
+
+  /**
+   * POST /v1/checkin/lane/:laneId/add-note
+   * 
+   * Add a note to the customer record (staff only, admin removal in office-dashboard).
+   */
+  fastify.post('/v1/checkin/lane/:laneId/add-note', {
+    preHandler: [requireAuth],
+  }, async (
+    request: FastifyRequest<{
+      Params: { laneId: string };
+      Body: { note: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    if (!request.staff) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    const { laneId } = request.params;
+    const { note } = request.body;
+
+    if (!note || !note.trim()) {
+      return reply.status(400).send({ error: 'Note is required' });
+    }
+
+    try {
+      const result = await transaction(async (client) => {
+        const sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions
+           WHERE lane_id = $1 AND status IN ('ACTIVE', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [laneId]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active session found' };
+        }
+
+        const session = sessionResult.rows[0]!;
+
+        if (!session.customer_id) {
+          throw { statusCode: 400, message: 'Session has no customer' };
+        }
+
+        // Get existing notes
+        const customerResult = await client.query<CustomerRow>(
+          `SELECT notes FROM customers WHERE id = $1`,
+          [session.customer_id]
+        );
+
+        if (customerResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'Customer not found' };
+        }
+
+        const existingNotes = customerResult.rows[0]!.notes || '';
+        const timestamp = new Date().toISOString();
+        const staffName = request.staff.name || 'Staff';
+        const newNoteEntry = `[${timestamp}] ${staffName}: ${note.trim()}`;
+        const updatedNotes = existingNotes ? `${existingNotes}\n${newNoteEntry}` : newNoteEntry;
+
+        // Update customer notes
+        await client.query(
+          `UPDATE customers SET notes = $1, updated_at = NOW() WHERE id = $2`,
+          [updatedNotes, session.customer_id]
+        );
+
+        // Get updated customer info for broadcast
+        const updatedCustomer = await client.query<CustomerRow>(
+          `SELECT notes, past_due_balance, primary_language, dob FROM customers WHERE id = $1`,
+          [session.customer_id]
+        );
+
+        const customer = updatedCustomer.rows[0]!;
+        const dobMonthDay = customer.dob 
+          ? `${String(customer.dob.getMonth() + 1).padStart(2, '0')}/${String(customer.dob.getDate()).padStart(2, '0')}`
+          : undefined;
+
+        // Get last visit
+        const lastVisitResult = await client.query<{ checkin_at: Date }>(
+          `SELECT checkin_at FROM checkin_blocks
+           WHERE customer_id = $1
+           ORDER BY checkin_at DESC
+           LIMIT 1`,
+          [session.customer_id]
+        );
+
+        const lastVisitAt = lastVisitResult.rows.length > 0 
+          ? lastVisitResult.rows[0]!.checkin_at.toISOString()
+          : undefined;
+
+        const payload: SessionUpdatedPayload = {
+          sessionId: session.id,
+          customerName: session.customer_display_name || '',
+          membershipNumber: session.membership_number || undefined,
+          allowedRentals: getAllowedRentals(session.membership_number),
+          mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+          status: session.status,
+          customerNotes: customer.notes || undefined,
+          customerPrimaryLanguage: customer.primary_language as 'EN' | 'ES' | undefined,
+          customerDobMonthDay: dobMonthDay,
+          customerLastVisitAt: lastVisitAt,
+          pastDueBalance: customer.past_due_balance && customer.past_due_balance > 0 ? customer.past_due_balance : undefined,
+        };
+
+        fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+        return { success: true, note: newNoteEntry };
+      });
+
+      return reply.send(result);
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to add note');
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status((error as { statusCode: number }).statusCode).send({
+          error: (error as { message: string }).message || 'Failed to add note',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to add note',
       });
     }
   });
