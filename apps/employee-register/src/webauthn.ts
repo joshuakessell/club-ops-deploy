@@ -8,13 +8,13 @@ export interface RegistrationOptions {
   rp: { name: string; id: string };
   user: { id: string; name: string; displayName: string };
   challenge: string;
-  pubKeyCredParams: Array<{ type: string; alg: number }>;
+  pubKeyCredParams: PublicKeyCredentialParameters[];
   timeout: number;
-  attestation: string;
-  excludeCredentials?: Array<{ id: string; type: string; transports?: string[] }>;
+  attestation: AttestationConveyancePreference;
+  excludeCredentials?: Array<{ id: string; type: 'public-key'; transports?: AuthenticatorTransport[] }>;
   authenticatorSelection?: {
-    authenticatorAttachment?: string;
-    userVerification: string;
+    authenticatorAttachment?: AuthenticatorAttachment;
+    userVerification: UserVerificationRequirement;
   };
 }
 
@@ -22,8 +22,8 @@ export interface AuthenticationOptions {
   challenge: string;
   timeout: number;
   rpId: string;
-  allowCredentials?: Array<{ id: string; type: string; transports?: string[] }>;
-  userVerification: string;
+  allowCredentials?: Array<{ id: string; type: 'public-key'; transports?: AuthenticatorTransport[] }>;
+  userVerification: UserVerificationRequirement;
 }
 
 /**
@@ -60,10 +60,14 @@ export async function createCredential(
   const userIdBuffer = Uint8Array.from(atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 
   // Convert excludeCredentials IDs if present
-  const excludeCredentials = options.excludeCredentials?.map(cred => ({
-    ...cred,
-    id: Uint8Array.from(atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
-  }));
+  const excludeCredentials: PublicKeyCredentialDescriptor[] | undefined =
+    options.excludeCredentials?.map((cred) => ({
+      ...cred,
+      id: Uint8Array.from(
+        atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')),
+        (c) => c.charCodeAt(0)
+      ),
+    }));
 
   const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
     challenge: challengeBuffer.buffer,
@@ -147,17 +151,21 @@ export async function getCredential(
   const challengeBuffer = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
 
   // Convert allowCredentials IDs if present
-  const allowCredentials = options.allowCredentials?.map(cred => ({
-    ...cred,
-    id: Uint8Array.from(atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
-  }));
+  const allowCredentials: PublicKeyCredentialDescriptor[] | undefined =
+    options.allowCredentials?.map((cred) => ({
+      ...cred,
+      id: Uint8Array.from(
+        atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')),
+        (c) => c.charCodeAt(0)
+      ),
+    }));
 
   const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
     challenge: challengeBuffer.buffer,
     timeout: options.timeout,
     rpId: options.rpId,
     allowCredentials,
-    userVerification: options.userVerification as UserVerificationRequirement,
+    userVerification: options.userVerification,
   };
 
   const credential = await navigator.credentials.get({
