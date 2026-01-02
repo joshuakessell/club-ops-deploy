@@ -23,6 +23,7 @@
     "lint": "pnpm -r lint",
     "doctor": "node scripts/doctor.cjs",
     "typecheck": "pnpm -r typecheck",
+    "pretypecheck": "pnpm build:deps",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "spec:check": "node scripts/spec-compliance.mjs"
