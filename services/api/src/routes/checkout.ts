@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { serializableTransaction, query, transaction } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
@@ -8,7 +8,6 @@ import type {
   CheckoutClaimedPayload,
   CheckoutUpdatedPayload,
   CheckoutCompletedPayload,
-  CheckoutChecklist,
   ResolvedCheckoutKey,
   CheckoutRequestSummary,
 } from '@club-ops/shared';
@@ -52,11 +51,10 @@ const CreateCheckoutRequestSchema = z.object({
   occupancyId: z.string().uuid(), // checkin_block.id
   kioskDeviceId: z.string().min(1),
   checklist: z.object({
-    lockerKey: z.boolean().optional(),
+    key: z.boolean().optional(),
     towel: z.boolean().optional(),
-    roomKey: z.boolean().optional(),
-    bedSheets: z.boolean().optional(),
-    tvRemote: z.boolean().optional(),
+    sheets: z.boolean().optional(),
+    remote: z.boolean().optional(),
   }),
 });
 
@@ -130,17 +128,6 @@ interface CheckoutRequestRow {
   completed_at: Date | null;
 }
 
-interface StaffRow {
-  id: string;
-  name: string;
-}
-
-interface SessionRow {
-  id: string;
-  lane: string | null;
-  status: string;
-}
-
 /**
  * Checkout routes for customer-operated checkout kiosk and employee verification.
  */
@@ -152,10 +139,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
    * Public endpoint for checkout kiosk to resolve a scanned key QR code.
    * Returns customer info, scheduled checkout time, and computed late fees.
    */
-  fastify.post('/v1/checkout/resolve-key', async (
-    request: FastifyRequest<{ Body: ResolveKeyInput }>,
-    reply: FastifyReply
-  ) => {
+  fastify.post<{ Body: ResolveKeyInput }>('/v1/checkout/resolve-key', async (request, reply) => {
     let body: ResolveKeyInput;
 
     try {
@@ -316,10 +300,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
    * Public endpoint for checkout kiosk to submit a checkout request.
    * Triggers CHECKOUT_REQUESTED WebSocket event.
    */
-  fastify.post('/v1/checkout/request', async (
-    request: FastifyRequest<{ Body: CreateCheckoutRequestInput }>,
-    reply: FastifyReply
-  ) => {
+  fastify.post<{ Body: CreateCheckoutRequestInput }>('/v1/checkout/request', async (request, reply) => {
     let body: CreateCheckoutRequestInput;
 
     try {
@@ -458,7 +439,6 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
       if (fastify.broadcaster) {
         const summary: CheckoutRequestSummary = {
           requestId: result.id,
-          customerId: customer.id,
           customerName: customer.name,
           membershipNumber: customer.membership_number || undefined,
           rentalType: block.rental_type,
@@ -502,12 +482,9 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
    * Only employees not "mid-checkin" can claim.
    * Sets a 2-minute TTL lock.
    */
-  fastify.post('/v1/checkout/:requestId/claim', {
+  fastify.post<{ Params: { requestId: string } }>('/v1/checkout/:requestId/claim', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Params: { requestId: string } }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -570,18 +547,11 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         return updateResult.rows[0]!;
       });
 
-      // 4. Get staff name for WebSocket event
-      const staffResult = await query<StaffRow>(
-        'SELECT id, name FROM staff WHERE id = $1',
-        [staffId]
-      );
-
       // 5. Broadcast CHECKOUT_CLAIMED event
-      if (fastify.broadcaster && staffResult.rows.length > 0) {
+      if (fastify.broadcaster) {
         const payload: CheckoutClaimedPayload = {
           requestId: result.id,
-          staffId,
-          staffName: staffResult.rows[0]!.name,
+          claimedBy: staffId,
         };
 
         fastify.broadcaster.broadcast({
@@ -612,15 +582,9 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Employee endpoint to record manual payment confirmation.
    */
-  fastify.post('/v1/checkout/:requestId/mark-fee-paid', {
+  fastify.post<{ Params: { requestId: string }; Body: MarkFeePaidInput }>('/v1/checkout/:requestId/mark-fee-paid', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ 
-      Params: { requestId: string };
-      Body: MarkFeePaidInput;
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -635,6 +599,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         details: error instanceof z.ZodError ? error.errors : 'Invalid input',
       });
     }
+    void body;
 
     try {
       const result = await transaction(async (client) => {
@@ -706,12 +671,9 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Employee endpoint to mark items as verified.
    */
-  fastify.post('/v1/checkout/:requestId/confirm-items', {
+  fastify.post<{ Params: { requestId: string } }>('/v1/checkout/:requestId/confirm-items', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Params: { requestId: string } }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -788,12 +750,9 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
    * Employee endpoint to finalize checkout.
    * Updates room/locker status, logs events, applies bans, and emits WebSocket updates.
    */
-  fastify.post('/v1/checkout/:requestId/complete', {
+  fastify.post<{ Params: { requestId: string } }>('/v1/checkout/:requestId/complete', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Params: { requestId: string } }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }

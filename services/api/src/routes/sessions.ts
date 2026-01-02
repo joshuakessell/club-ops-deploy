@@ -531,7 +531,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
       const payload: SessionUpdatedPayload = {
         sessionId: session.id,
         customerName: session.member_name,
-        membershipNumber: customer.membership_number,
+        membershipNumber: customer.membership_number || undefined,
         allowedRentals,
       };
 
@@ -540,7 +540,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(200).send({
         sessionId: session.id,
         customerName: session.member_name,
-        membershipNumber: customer.membership_number,
+        membershipNumber: customer.membership_number || undefined,
         allowedRentals,
       });
     } catch (error) {

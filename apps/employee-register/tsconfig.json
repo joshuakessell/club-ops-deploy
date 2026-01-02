@@ -3,6 +3,8 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noEmit": true
   },
   "include": ["src"],

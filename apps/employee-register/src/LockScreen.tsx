@@ -22,7 +22,7 @@ interface LockScreenProps {
   deviceId: string;
 }
 
-export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
+export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
   const [mode, setMode] = useState<'webauthn' | 'pin'>('webauthn');
   const [staffLookup, setStaffLookup] = useState('');
   const [pin, setPin] = useState('');

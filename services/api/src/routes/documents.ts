@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { query, transaction } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { createHash, randomUUID } from 'crypto';
@@ -43,14 +43,9 @@ export async function documentsRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Lists all documents for an employee.
    */
-  fastify.get('/v1/admin/employees/:employeeId/documents', {
+  fastify.get<{ Params: { employeeId: string } }>('/v1/admin/employees/:employeeId/documents', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { employeeId: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const { employeeId } = request.params;
 
@@ -92,14 +87,9 @@ export async function documentsRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Uploads a document for an employee.
    */
-  fastify.post('/v1/admin/employees/:employeeId/documents', {
+  fastify.post<{ Params: { employeeId: string } }>('/v1/admin/employees/:employeeId/documents', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { employeeId: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       if (!request.staff) {
         return reply.status(401).send({ error: 'Unauthorized' });
@@ -210,14 +200,9 @@ export async function documentsRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Downloads a document.
    */
-  fastify.get('/v1/admin/documents/:documentId', {
+  fastify.get<{ Params: { documentId: string } }>('/v1/admin/documents/:documentId', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { documentId: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const { documentId } = request.params;
 

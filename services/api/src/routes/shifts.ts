@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
@@ -35,18 +35,15 @@ export async function shiftsRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Returns scheduled shifts with computed compliance metrics.
    */
-  fastify.get('/v1/admin/shifts', {
+  fastify.get<{
+    Querystring: {
+      from?: string;
+      to?: string;
+      employeeId?: string;
+    };
+  }>('/v1/admin/shifts', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Querystring: {
-        from?: string;
-        to?: string;
-        employeeId?: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const { from, to, employeeId } = request.query;
 
@@ -127,15 +124,12 @@ export async function shiftsRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Updates a shift. Writes audit log entry.
    */
-  fastify.patch('/v1/admin/shifts/:shiftId', {
+  fastify.patch<{
+    Params: { shiftId: string };
+    Body: z.infer<typeof UpdateShiftSchema>;
+  }>('/v1/admin/shifts/:shiftId', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { shiftId: string };
-      Body: z.infer<typeof UpdateShiftSchema>;
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const { shiftId } = request.params;
       const body = UpdateShiftSchema.parse(request.body);

@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { query } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
 
@@ -15,14 +15,11 @@ export async function metricsRoutes(fastify: FastifyInstance): Promise<void> {
    * - Average time on waitlist until upgrade
    * - Upgrades by tier
    */
-  fastify.get('/v1/metrics/upgrades', {
+  fastify.get<{
+    Querystring: { startDate?: string; endDate?: string };
+  }>('/v1/metrics/upgrades', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Querystring: { startDate?: string; endDate?: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -117,8 +114,8 @@ export async function metricsRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/metrics/waitlist', {
     preHandler: [requireAuth],
-  }, async (_request: FastifyRequest, reply: FastifyReply) => {
-    if (!_request.staff) {
+  }, async (request, reply) => {
+    if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -155,7 +152,7 @@ export async function metricsRoutes(fastify: FastifyInstance): Promise<void> {
           : 0,
       });
     } catch (error: unknown) {
-      _request.log.error(error, 'Failed to fetch waitlist metrics');
+      request.log.error(error, 'Failed to fetch waitlist metrics');
       return reply.status(500).send({
         error: 'Internal Server Error',
         message: 'Failed to fetch waitlist metrics',

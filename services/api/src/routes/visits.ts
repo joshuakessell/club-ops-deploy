@@ -1,7 +1,7 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { serializableTransaction, query, transaction } from '../db/index.js';
-import { requireAuth, requireReauth } from '../auth/middleware.js';
+import { serializableTransaction, query } from '../db/index.js';
+import { requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 
@@ -114,10 +114,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Creates a new visit and initial 6-hour block.
    */
-  fastify.post('/v1/visits', async (
-    request: FastifyRequest<{ Body: CreateVisitInput }>,
-    reply: FastifyReply
-  ) => {
+  fastify.post<{ Body: CreateVisitInput }>('/v1/visits', async (request, reply) => {
     let body: CreateVisitInput;
     
     try {
@@ -322,7 +319,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           customerName: customer.name,
           membershipNumber: customer.membership_number || undefined,
           allowedRentals,
-          mode: 'CHECKIN',
+          mode: 'INITIAL',
           blockEndsAt: result.block.endsAt.toISOString(),
           visitId: result.visit.id,
         };
@@ -347,13 +344,9 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
    * Creates a renewal block that extends from the previous block's end time.
    * Enforces 14-hour maximum visit duration.
    */
-  fastify.post('/v1/visits/:visitId/renew', async (
-    request: FastifyRequest<{ 
-      Params: { visitId: string };
-      Body: RenewVisitInput;
-    }>,
-    reply: FastifyReply
-  ) => {
+  fastify.post<{ Params: { visitId: string }; Body: RenewVisitInput }>(
+    '/v1/visits/:visitId/renew',
+    async (request, reply) => {
     let body: RenewVisitInput;
     
     try {
@@ -600,7 +593,8 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
       fastify.log.error(error, 'Failed to renew visit');
       return reply.status(500).send({ error: 'Internal server error' });
     }
-  });
+    }
+  );
 
   /**
    * GET /v1/visits/active - Search for active visits
@@ -608,12 +602,9 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
    * Searches active visits by membership number or customer name.
    * Returns computed fields: current_checkout_at, total_hours_if_renewed, can_final_extend
    */
-  fastify.get('/v1/visits/active', async (
-    request: FastifyRequest<{ 
-      Querystring: { query?: string; membershipNumber?: string; customerName?: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  fastify.get<{
+    Querystring: { query?: string; membershipNumber?: string; customerName?: string };
+  }>('/v1/visits/active', async (request, reply) => {
     try {
       const { query: searchQuery, membershipNumber, customerName } = request.query;
 
@@ -670,7 +661,6 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
           const blocks = blocksResult.rows;
           const latestBlockEnd = getLatestBlockEnd(blocks);
-          const totalHours = calculateTotalHours(blocks);
           const totalHoursIfRenewed = calculateTotalHours(blocks, 6);
           const canFinalExtend = totalHoursIfRenewed <= 12; // Can extend if renewal + final2h would be <= 14
 
@@ -721,20 +711,18 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
    * - Does NOT require signature (informational only)
    * - Requires step-up re-auth
    */
-  fastify.post('/v1/visits/:visitId/final-extension', {
+  fastify.post<{
+    Params: { visitId: string };
+    Body: {
+      rentalType: 'STANDARD' | 'DOUBLE' | 'SPECIAL' | 'LOCKER' | 'GYM_LOCKER';
+      roomId?: string;
+      lockerId?: string;
+    };
+  }>('/v1/visits/:visitId/final-extension', {
     preHandler: [requireReauth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { visitId: string };
-      Body: {
-        rentalType: 'STANDARD' | 'DOUBLE' | 'SPECIAL' | 'LOCKER' | 'GYM_LOCKER';
-        roomId?: string;
-        lockerId?: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -907,7 +895,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
            (staff_id, action, entity_type, entity_id, old_value, new_value)
            VALUES ($1, 'FINAL_EXTENSION_STARTED', 'visit', $2, $3, $4)`,
           [
-            request.staff.staffId,
+            staff.staffId,
             visitId,
             JSON.stringify({
               totalHours: totalHours,

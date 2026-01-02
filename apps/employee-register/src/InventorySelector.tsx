@@ -299,11 +299,12 @@ export function InventorySelector({
         .filter(l => l.status === RoomStatus.CLEAN && !l.assignedTo)
         .sort((a, b) => parseInt(a.number) - parseInt(b.number));
       
-      if (availableLockers.length > 0) {
+      const first = availableLockers[0];
+      if (first) {
         firstAvailable = {
           type: 'locker',
-          id: availableLockers[0].id,
-          number: availableLockers[0].number,
+          id: first.id,
+          number: first.number,
           tier: 'LOCKER',
         };
       }
@@ -333,14 +334,14 @@ export function InventorySelector({
     if (!inventory) {
       return { SPECIAL: [], DOUBLE: [], STANDARD: [] };
     }
-    const grouped: Record<string, DetailedRoom[]> = {
+    const grouped: Record<'SPECIAL' | 'DOUBLE' | 'STANDARD', DetailedRoom[]> = {
       SPECIAL: [],
       DOUBLE: [],
       STANDARD: [],
     };
 
     for (const room of inventory.rooms) {
-      if (room.tier in grouped) {
+      if (room.tier === 'SPECIAL' || room.tier === 'DOUBLE' || room.tier === 'STANDARD') {
         grouped[room.tier].push(room);
       }
     }

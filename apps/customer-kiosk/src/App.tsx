@@ -9,7 +9,6 @@ import type {
   SelectionLockedPayload,
   SelectionAcknowledgedPayload,
 } from '@club-ops/shared';
-import { CheckinMode } from '@club-ops/shared';
 import logoImage from './assets/the-clubs-logo.png';
 import { t, type Language } from './i18n';
 
@@ -25,7 +24,7 @@ interface SessionState {
   membershipNumber: string | null;
   allowedRentals: string[];
   visitId?: string;
-  mode?: CheckinMode;
+  mode?: 'INITIAL' | 'RENEWAL';
   blockEndsAt?: string; // ISO timestamp of when current block ends
   customerPrimaryLanguage?: Language | null;
   pastDueBlocked?: boolean;
@@ -66,8 +65,8 @@ function getRentalDisplayName(rental: string, lang: Language | null | undefined)
 }
 
 function App() {
-  const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
+  const [_health, setHealth] = useState<HealthStatus | null>(null);
+  const [_wsConnected, setWsConnected] = useState(false);
   const [session, setSession] = useState<SessionState>({
     sessionId: null,
     customerName: null,
@@ -80,9 +79,9 @@ function App() {
   const [agreed, setAgreed] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [showUpgradeDisclaimer, setShowUpgradeDisclaimer] = useState(false);
-  const [upgradeAction, setUpgradeAction] = useState<'waitlist' | 'accept' | null>(null);
+  const [upgradeAction, setUpgradeAction] = useState<'waitlist' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [checkinMode, setCheckinMode] = useState<CheckinMode | null>(null);
+  const [checkinMode, setCheckinMode] = useState<'INITIAL' | 'RENEWAL' | null>(null);
   const [showRenewalDisclaimer, setShowRenewalDisclaimer] = useState(false);
   const [showCustomerConfirmation, setShowCustomerConfirmation] = useState(false);
   const [customerConfirmationData, setCustomerConfirmationData] = useState<CustomerConfirmationRequiredPayload | null>(null);
@@ -98,7 +97,7 @@ function App() {
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
   const [selectionAcknowledged, setSelectionAcknowledged] = useState(false);
-  const [upgradeDisclaimerAcknowledged, setUpgradeDisclaimerAcknowledged] = useState(false);
+  const [_upgradeDisclaimerAcknowledged, setUpgradeDisclaimerAcknowledged] = useState(false);
   const [hasScrolledAgreement, setHasScrolledAgreement] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const agreementScrollRef = useRef<HTMLDivElement>(null);
@@ -390,7 +389,7 @@ function App() {
         throw new Error(error.error || 'Failed to propose selection');
       }
 
-      const data = await response.json();
+      await response.json();
       setProposedRentalType(rental);
       setProposedBy('CUSTOMER');
       setIsSubmitting(false);
@@ -429,7 +428,7 @@ function App() {
       setSelectionAcknowledged(true);
 
       // If renewal mode, show renewal disclaimer before agreement
-      if (checkinMode === CheckinMode.RENEWAL) {
+      if (checkinMode === 'RENEWAL') {
         setShowRenewalDisclaimer(true);
       } else {
         // Show agreement screen after selection confirmed
@@ -476,11 +475,6 @@ function App() {
 
   const handleJoinWaitlist = () => {
     setUpgradeAction('waitlist');
-    setShowUpgradeDisclaimer(true);
-  };
-
-  const handleAcceptUpgrade = () => {
-    setUpgradeAction('accept');
     setShowUpgradeDisclaimer(true);
   };
 
@@ -764,7 +758,7 @@ function App() {
   // Agreement signing view (only for INITIAL/RENEWAL)
   if (view === 'agreement') {
     // Only show agreement for INITIAL/RENEWAL
-    if (checkinMode !== CheckinMode.INITIAL && checkinMode !== CheckinMode.RENEWAL) {
+    if (checkinMode !== 'INITIAL' && checkinMode !== 'RENEWAL') {
       // For upgrades, skip agreement and go to complete
       setView('complete');
       return null;
@@ -1054,8 +1048,8 @@ function App() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>Staff Selected Different Option</h2>
             <div className="disclaimer-text">
-              <p>You requested: <strong>{getRentalDisplayName(customerConfirmationData.requestedType)}</strong></p>
-              <p>Staff selected: <strong>{getRentalDisplayName(customerConfirmationData.selectedType)} {customerConfirmationData.selectedNumber}</strong></p>
+              <p>You requested: <strong>{getRentalDisplayName(customerConfirmationData.requestedType, session.customerPrimaryLanguage)}</strong></p>
+              <p>Staff selected: <strong>{getRentalDisplayName(customerConfirmationData.selectedType, session.customerPrimaryLanguage)} {customerConfirmationData.selectedNumber}</strong></p>
               <p>Do you accept this selection?</p>
             </div>
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
@@ -1122,7 +1116,7 @@ function App() {
             <h2>None Available - Join Waiting List?</h2>
             <div className="disclaimer-text">
               <p>
-                <strong>{getRentalDisplayName(waitlistDesiredType)}</strong> is currently unavailable.
+                <strong>{getRentalDisplayName(waitlistDesiredType, session.customerPrimaryLanguage)}</strong> is currently unavailable.
               </p>
               {waitlistPosition !== null && (
                 <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#1e293b', borderRadius: '6px' }}>
@@ -1165,7 +1159,7 @@ function App() {
                           cursor: isAvailable && !isSubmitting ? 'pointer' : 'not-allowed',
                         }}
                       >
-                        {getRentalDisplayName(rental)}
+                        {getRentalDisplayName(rental, session.customerPrimaryLanguage)}
                         {!isAvailable && ' (Unavailable)'}
                       </button>
                     );

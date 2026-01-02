@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { RoomStatus, RoomType, CheckinMode, type ActiveVisit, type CheckoutRequestSummary, type CheckoutChecklist, type WebSocketEvent, type CheckoutRequestedPayload, type CheckoutClaimedPayload, type CheckoutUpdatedPayload, type SessionUpdatedPayload, type AssignmentCreatedPayload, type AssignmentFailedPayload, type CustomerConfirmedPayload, type CustomerDeclinedPayload, type SelectionProposedPayload, type SelectionLockedPayload, type SelectionAcknowledgedPayload } from '@club-ops/shared';
+import { type ActiveVisit, type CheckoutRequestSummary, type CheckoutChecklist, type WebSocketEvent, type CheckoutRequestedPayload, type CheckoutClaimedPayload, type CheckoutUpdatedPayload, type SessionUpdatedPayload, type AssignmentCreatedPayload, type AssignmentFailedPayload, type CustomerConfirmedPayload, type CustomerDeclinedPayload, type SelectionProposedPayload, type SelectionLockedPayload, type SelectionAcknowledgedPayload } from '@club-ops/shared';
 import { RegisterSignIn } from './RegisterSignIn';
 import { InventorySelector } from './InventorySelector';
 import { IdScanner } from './IdScanner';
@@ -12,6 +12,15 @@ interface HealthStatus {
 }
 
 const API_BASE = '/api';
+
+type LaneSessionMode = 'INITIAL' | 'RENEWAL';
+
+interface StaffSession {
+  staffId: string;
+  name: string;
+  role: 'STAFF' | 'ADMIN';
+  sessionToken: string;
+}
 
 function App() {
   const [session, setSession] = useState<StaffSession | null>(() => {
@@ -38,7 +47,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [agreementSigned, setAgreementSigned] = useState(false);
-  const [checkinMode, setCheckinMode] = useState<CheckinMode>(CheckinMode.INITIAL);
+  const [checkinMode, setCheckinMode] = useState<LaneSessionMode>('INITIAL');
   const [selectedVisit, setSelectedVisit] = useState<ActiveVisit | null>(null);
   const [showRenewalSearch, setShowRenewalSearch] = useState(false);
   const [renewalSearchQuery, setRenewalSearchQuery] = useState('');
@@ -139,6 +148,24 @@ function App() {
   
   // Derive lane from register number
   const lane = registerSession ? `lane-${registerSession.registerNumber}` : 'lane-1';
+
+  const handleLogout = async () => {
+    try {
+      if (session?.sessionToken) {
+        await fetch(`${API_BASE}/v1/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.sessionToken}`,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn('Logout failed (continuing):', err);
+    } finally {
+      localStorage.removeItem('staff_session');
+      setSession(null);
+    }
+  };
 
   // Load staff session from localStorage (created after register sign-in)
   useEffect(() => {
@@ -272,7 +299,7 @@ function App() {
     }
 
     // For RENEWAL mode, require visit to be selected
-    if (checkinMode === CheckinMode.RENEWAL && !selectedVisit) {
+    if (checkinMode === 'RENEWAL' && !selectedVisit) {
       alert('Please select a visit to renew before scanning ID');
       return;
     }
@@ -333,7 +360,7 @@ function App() {
     }
 
     // For RENEWAL mode, require visit to be selected
-    if (checkinMode === CheckinMode.RENEWAL && !selectedVisit) {
+    if (checkinMode === 'RENEWAL' && !selectedVisit) {
       alert('Please select a visit to renew before starting session');
       return;
     }
@@ -349,8 +376,8 @@ function App() {
         body: JSON.stringify({
           idScanValue,
           membershipScanValue: membershipScanValue || undefined,
-          checkinMode: checkinMode === CheckinMode.RENEWAL ? 'RENEWAL' : 'INITIAL',
-          visitId: checkinMode === CheckinMode.RENEWAL && selectedVisit ? selectedVisit.id : undefined,
+          checkinMode: checkinMode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+          visitId: checkinMode === 'RENEWAL' && selectedVisit ? selectedVisit.id : undefined,
         }),
       });
 
@@ -440,7 +467,7 @@ function App() {
       setAgreementSigned(false);
       setManualEntry(false);
       setSelectedVisit(null);
-      setCheckinMode(CheckinMode.INITIAL);
+      setCheckinMode('INITIAL');
       setShowRenewalSearch(false);
       setSelectedRentalType(null);
       setCustomerSelectedType(null);
@@ -502,14 +529,14 @@ function App() {
       return;
     }
 
-    if (checkinMode === CheckinMode.RENEWAL && !selectedVisit) {
+    if (checkinMode === 'RENEWAL' && !selectedVisit) {
       alert('Please select a visit to renew');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      if (checkinMode === CheckinMode.RENEWAL && selectedVisit) {
+      if (checkinMode === 'RENEWAL' && selectedVisit) {
         // Show renewal disclaimer before proceeding
         setSelectedRentalType(rentalType);
         setShowRenewalDisclaimer(true);
@@ -2089,7 +2116,7 @@ function App() {
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
               onClick={() => {
-                setCheckinMode(CheckinMode.INITIAL);
+                setCheckinMode('INITIAL');
                 setSelectedVisit(null);
                 setShowRenewalSearch(false);
                 // Clear all session state when switching modes
@@ -2111,8 +2138,8 @@ function App() {
               }}
               style={{
                 padding: '0.5rem 1rem',
-                background: checkinMode === CheckinMode.INITIAL ? '#3b82f6' : '#e5e7eb',
-                color: checkinMode === CheckinMode.INITIAL ? 'white' : '#374151',
+                background: checkinMode === 'INITIAL' ? '#3b82f6' : '#e5e7eb',
+                color: checkinMode === 'INITIAL' ? 'white' : '#374151',
                 border: 'none',
                 borderRadius: '6px',
                 cursor: 'pointer',
@@ -2123,7 +2150,7 @@ function App() {
             </button>
             <button
               onClick={() => {
-                setCheckinMode(CheckinMode.RENEWAL);
+                setCheckinMode('RENEWAL');
                 setShowRenewalSearch(true);
                 // Clear all session state when switching modes
                 setCustomerName('');
@@ -2149,8 +2176,8 @@ function App() {
               }}
               style={{
                 padding: '0.5rem 1rem',
-                background: checkinMode === CheckinMode.RENEWAL ? '#3b82f6' : '#e5e7eb',
-                color: checkinMode === CheckinMode.RENEWAL ? 'white' : '#374151',
+                background: checkinMode === 'RENEWAL' ? '#3b82f6' : '#e5e7eb',
+                color: checkinMode === 'RENEWAL' ? 'white' : '#374151',
                 border: 'none',
                 borderRadius: '6px',
                 cursor: 'pointer',
@@ -2163,7 +2190,7 @@ function App() {
         </section>
 
         {/* Renewal Visit Search */}
-        {checkinMode === CheckinMode.RENEWAL && showRenewalSearch && (
+        {checkinMode === 'RENEWAL' && showRenewalSearch && (
           <section className="renewal-search-section" style={{ marginBottom: '1rem', padding: '1rem', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
             <h2 style={{ marginBottom: '0.5rem' }}>Select Visit to Renew</h2>
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>

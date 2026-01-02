@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
@@ -32,18 +32,15 @@ export async function timeclockRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Returns timeclock sessions for reporting.
    */
-  fastify.get('/v1/admin/timeclock', {
+  fastify.get<{
+    Querystring: {
+      from?: string;
+      to?: string;
+      employeeId?: string;
+    };
+  }>('/v1/admin/timeclock', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Querystring: {
-        from?: string;
-        to?: string;
-        employeeId?: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const { from, to, employeeId } = request.query;
 
@@ -109,15 +106,14 @@ export async function timeclockRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Allows manager adjustments to clock times.
    */
-  fastify.patch('/v1/admin/timeclock/:sessionId', {
+  fastify.patch<{
+    Params: { sessionId: string };
+    Body: z.infer<typeof UpdateTimeclockSchema>;
+  }>('/v1/admin/timeclock/:sessionId', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { sessionId: string };
-      Body: z.infer<typeof UpdateTimeclockSchema>;
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) return reply.status(401).send({ error: 'Unauthorized' });
     try {
       const { sessionId } = request.params;
       const body = UpdateTimeclockSchema.parse(request.body);
@@ -163,7 +159,7 @@ export async function timeclockRoutes(fastify: FastifyInstance): Promise<void> {
         await client.query(
           `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
            VALUES ($1, 'TIMECLOCK_ADJUSTED', 'timeclock_session', $2)`,
-          [request.staff!.staffId, sessionId]
+          [staff.staffId, sessionId]
         );
 
         // Return updated session
@@ -206,15 +202,14 @@ export async function timeclockRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Closes an open timeclock session (manager action).
    */
-  fastify.post('/v1/admin/timeclock/:sessionId/close', {
+  fastify.post<{
+    Params: { sessionId: string };
+    Body: { notes?: string };
+  }>('/v1/admin/timeclock/:sessionId/close', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { sessionId: string };
-      Body: { notes?: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) return reply.status(401).send({ error: 'Unauthorized' });
     try {
       const { sessionId } = request.params;
       const { notes } = request.body || {};
@@ -249,7 +244,7 @@ export async function timeclockRoutes(fastify: FastifyInstance): Promise<void> {
         await client.query(
           `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
            VALUES ($1, 'TIMECLOCK_CLOSED', 'timeclock_session', $2)`,
-          [request.staff!.staffId, sessionId]
+          [staff.staffId, sessionId]
         );
 
         // Return updated session
