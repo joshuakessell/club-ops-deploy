@@ -1,4 +1,16 @@
 {
-  "snapshot": "snapshot-20251226-f6d90d78-a233-4b32-a66b-290f4f7a57c1",
-  "terminals": []
+  "terminals": [
+    {
+      "name": "install",
+      "command": "pnpm install"
+    },
+    {
+      "name": "typecheck",
+      "command": "pnpm typecheck"
+    },
+    {
+      "name": "test",
+      "command": "bash -lc \"if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then pnpm test; else echo 'Docker not available; running unit tests only (no Postgres)'; pnpm --filter @club-ops/shared test; fi\""
+    }
+  ]
 }
