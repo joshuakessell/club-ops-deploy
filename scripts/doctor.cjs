@@ -48,6 +48,10 @@ console.log('== Build shared (needed for dist exports) ==');
 run('pnpm --filter @club-ops/shared build');
 console.log();
 
+console.log('== Build ui (needed for dist exports) ==');
+run('pnpm --filter @club-ops/ui build');
+console.log();
+
 console.log('== Run shared tests ==');
 run('pnpm --filter @club-ops/shared test');
 console.log();
@@ -64,7 +68,10 @@ console.log('== Lint all ==');
 run('pnpm lint');
 console.log();
 
-console.log('== Done ==');
+console.log('== Build all ==');
+run('pnpm build');
+console.log();
 
+console.log('== Done ==');
 
 

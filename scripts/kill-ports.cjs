@@ -19,7 +19,7 @@ async function killPortWindows(port) {
     // Find process using the port
     const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
     const lines = stdout.trim().split('\n');
-    
+
     const pids = new Set();
     for (const line of lines) {
       const parts = line.trim().split(/\s+/);
@@ -104,9 +104,9 @@ async function checkPostgres() {
   } catch (err) {
     // Port is not in use
   }
-  
+
   console.log(`\n⚠ PostgreSQL is not running on port ${POSTGRES_PORT}`);
-  console.log('   Run: pnpm --filter @club-ops/api db:start\n');
+  console.log('   Run: pnpm db:start\n');
   return false;
 }
 
@@ -130,4 +130,5 @@ main().catch((err) => {
   console.error('Error:', err);
   process.exit(1);
 });
+
 
