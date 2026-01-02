@@ -40,8 +40,12 @@ require_cmd docker "Install Docker Desktop for Mac and ensure 'docker' is on PAT
 if ! docker info >/dev/null 2>&1; then
   fail "Docker is installed but not running. Start Docker Desktop, then re-run."
 fi
-if ! docker compose version >/dev/null 2>&1; then
-  fail "docker compose not available. Update Docker Desktop."
+if docker compose version >/dev/null 2>&1; then
+  log "Docker Compose: docker compose"
+elif command -v docker-compose >/dev/null 2>&1 && docker-compose version >/dev/null 2>&1; then
+  log "Docker Compose: docker-compose"
+else
+  fail "Docker Compose not available. Update Docker Desktop (for 'docker compose') or install 'docker-compose'."
 fi
 
 log "Install dependencies"

@@ -128,6 +128,8 @@ pnpm build
 
 The API uses PostgreSQL running in Docker. The database is configured to use port **5433** (mapped from container port 5432) to avoid conflicts with local PostgreSQL installations.
 
+The DB scripts support both Docker Compose v2 (`docker compose`) and legacy Compose (`docker-compose`).
+
 **Database commands** (run from repo root):
 
 ```bash
