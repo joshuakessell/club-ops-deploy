@@ -5,6 +5,7 @@ describe('isAdjacentTransition', () => {
   it('should allow same status', () => {
     expect(isAdjacentTransition(RoomStatus.DIRTY, RoomStatus.DIRTY)).toBe(true);
     expect(isAdjacentTransition(RoomStatus.CLEAN, RoomStatus.CLEAN)).toBe(true);
+    expect(isAdjacentTransition(RoomStatus.OCCUPIED, RoomStatus.OCCUPIED)).toBe(true);
   });
 
   it('should allow DIRTY → CLEANING', () => {
@@ -17,6 +18,11 @@ describe('isAdjacentTransition', () => {
 
   it('should allow CLEANING → DIRTY (rollback)', () => {
     expect(isAdjacentTransition(RoomStatus.CLEANING, RoomStatus.DIRTY)).toBe(true);
+  });
+
+  it('should allow CLEAN → OCCUPIED and OCCUPIED → DIRTY', () => {
+    expect(isAdjacentTransition(RoomStatus.CLEAN, RoomStatus.OCCUPIED)).toBe(true);
+    expect(isAdjacentTransition(RoomStatus.OCCUPIED, RoomStatus.DIRTY)).toBe(true);
   });
 
   it('should NOT allow DIRTY → CLEAN (skips step)', () => {
