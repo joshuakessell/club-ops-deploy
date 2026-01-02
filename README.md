@@ -8,16 +8,37 @@ A multi-application system for managing club check-ins, room inventory, cleaning
 club-operations-pos/
 ├── apps/
 │   ├── customer-kiosk/      # Tablet-based kiosk UI for check-ins
+│   ├── cleaning-station-kiosk/ # Staff tablet kiosk for cleaning workflow
 │   ├── employee-register/   # Employee-facing tablet app (with Square POS)
+│   ├── checkout-kiosk/      # Customer kiosk for self-service checkout initiation
 │   └── office-dashboard/    # Web app for administration
 ├── services/
 │   └── api/                 # Fastify REST API + WebSocket server
 ├── packages/
-│   └── shared/              # Shared types, enums, validators
+│   ├── shared/              # Shared types, enums, validators
+│   └── ui/                  # Shared UI package (styles + components)
 └── infra/                   # Infrastructure configs (placeholder)
 ```
 
 ## 🚀 Getting Started
+
+### Mac Studio / macOS Quickstart
+
+This repo runs cleanly on **macOS (Apple Silicon)** with **pnpm**.
+
+**Prerequisites**
+
+- **Node.js**: >= 18 (Node 20+ recommended)
+- **pnpm**: pinned via `packageManager` in the root `package.json` (Corepack optional; using `pnpm` directly is fine)
+- **Docker Desktop**: required for local Postgres (runs on host port **5433**)
+
+**Note:** Do **not** use `sudo` for `pnpm` commands.
+
+**Fast path (recommended)**
+
+```bash
+./scripts/bootstrap-mac.sh
+```
 
 ### Prerequisites
 
@@ -34,13 +55,13 @@ Follow these steps in order to get the development environment running:
 pnpm install
 
 # 2. Start PostgreSQL in Docker
-pnpm --filter @club-ops/api db:start
+pnpm db:start
 
 # 3. Run database migrations
-pnpm --filter @club-ops/api db:migrate
+pnpm db:migrate
 
 # 4. Seed the database with sample data
-pnpm --filter @club-ops/api seed
+pnpm db:seed
 
 # 5. Start all services in development mode
 pnpm dev
@@ -61,8 +82,28 @@ This starts:
 - **Cleaning Station Kiosk**: http://localhost:5174
 - **Employee Register**: http://localhost:5175
 - **Office Dashboard**: http://localhost:5176
+- **Checkout Kiosk**: http://localhost:5177
 
-WebSocket endpoint: `ws://localhost:3001/ws`
+### WebSockets
+
+The UIs connect directly to the API WebSocket on port 3001:
+
+- `ws://<host>:3001/ws`
+- Some lane-specific streams use `ws://<host>:3001/ws?lane=LANE_1` (or `LANE_2`)
+
+In local dev, Vite also proxies `/ws` to the API for convenience, but the apps currently construct the explicit `ws://<host>:3001/ws` URL.
+
+### Repo Scan
+
+Run these from repo root:
+
+```bash
+pnpm doctor
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
 
 ### Commands
 
@@ -70,6 +111,13 @@ WebSocket endpoint: `ws://localhost:3001/ws`
 |---------|-------------|
 | `pnpm install` | Install all dependencies |
 | `pnpm dev` | Start all services in development mode |
+| `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check) |
+| `pnpm doctor` | Repo health scan (builds deps, runs typecheck/lint/tests/build) |
+| `pnpm db:start` | Start Postgres via `services/api/docker-compose.yml` |
+| `pnpm db:stop` | Stop Postgres |
+| `pnpm db:reset` | Recreate Postgres volume and restart |
+| `pnpm db:migrate` | Run DB migrations |
+| `pnpm db:seed` | Seed DB with sample data |
 | `pnpm build` | Build all packages and apps |
 | `pnpm test` | Run all tests |
 | `pnpm lint` | Lint all packages |
@@ -84,25 +132,19 @@ The API uses PostgreSQL running in Docker. The database is configured to use por
 
 ```bash
 # Start PostgreSQL in Docker
-pnpm --filter @club-ops/api db:start
+pnpm db:start
 
 # Stop PostgreSQL
-pnpm --filter @club-ops/api db:stop
+pnpm db:stop
 
 # Run database migrations
-pnpm --filter @club-ops/api db:migrate
-
-# Check migration status
-pnpm --filter @club-ops/api db:migrate:status
-
-# Rollback last migration
-pnpm --filter @club-ops/api db:migrate:rollback
+pnpm db:migrate
 
 # Reset database (drops all data and reruns migrations)
-pnpm --filter @club-ops/api db:reset
+pnpm db:reset
 
 # Seed database with sample data
-pnpm --filter @club-ops/api seed
+pnpm db:seed
 ```
 
 **Database Configuration:**
@@ -202,7 +244,7 @@ To test the agreement signing and upgrade disclaimer flows:
 
 1. **Seed the database** (includes active agreement):
    ```bash
-   pnpm --filter @club-ops/api seed
+   pnpm db:seed
    ```
 
 2. **Start development servers**:
@@ -246,6 +288,16 @@ To test the agreement signing and upgrade disclaimer flows:
 - Agreement is NOT required for upgrades
 - Upgrade disclaimer is shown only when joining waitlist or accepting upgrade
 - checkout_at never changes on upgrade (always checkin_at + 6 hours)
+
+## ☁️ Cursor Cloud Agents (optional)
+
+This repo includes a conservative `.cursor/environment.json` that runs:
+
+- `pnpm install`
+- `pnpm typecheck`
+- `pnpm test` (if Docker is available; otherwise runs unit tests that don’t require Postgres)
+
+To snapshot and reuse the environment, use Cursor’s **Cloud Agent Setup** workflow and commit any generated config files you want to keep reproducible.
 
 ## 📝 License
 
