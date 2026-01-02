@@ -195,15 +195,15 @@ function App() {
 
       // Initialize checklist based on rental type
       const newChecklist: CheckoutChecklist = {};
+      // Key is always required; label differs by rental type in UI.
+      newChecklist.key = false;
       if (data.rentalType === 'LOCKER' || data.rentalType === 'GYM_LOCKER') {
-        newChecklist.lockerKey = false;
         newChecklist.towel = false;
       } else {
         // Room
-        newChecklist.roomKey = false;
-        newChecklist.bedSheets = false;
+        newChecklist.sheets = false;
         if (data.hasTvRemote) {
-          newChecklist.tvRemote = false;
+          newChecklist.remote = false;
         }
       }
       setChecklist(newChecklist);
@@ -264,16 +264,14 @@ function App() {
   const isChecklistComplete = () => {
     if (!resolvedKey) return false;
     
+    const baseKeyOk = checklist.key === true;
     if (resolvedKey.rentalType === 'LOCKER' || resolvedKey.rentalType === 'GYM_LOCKER') {
-      return checklist.lockerKey === true && checklist.towel === true;
-    } else {
-      // Room
-      const baseComplete = checklist.roomKey === true && checklist.bedSheets === true;
-      if (resolvedKey.hasTvRemote) {
-        return baseComplete && checklist.tvRemote === true;
-      }
-      return baseComplete;
+      return baseKeyOk && checklist.towel === true;
     }
+    // Room
+    const baseComplete = baseKeyOk && checklist.sheets === true;
+    if (resolvedKey.hasTvRemote) return baseComplete && checklist.remote === true;
+    return baseComplete;
   };
 
   // Idle view
@@ -319,14 +317,14 @@ function App() {
             <div className="checklist-items">
               {isLocker ? (
                 <>
-                  <div className="checklist-item" onClick={() => handleChecklistToggle('lockerKey')}>
+                  <div className="checklist-item" onClick={() => handleChecklistToggle('key')}>
                     <input
                       type="checkbox"
-                      id="lockerKey"
-                      checked={checklist.lockerKey === true}
-                      onChange={() => handleChecklistToggle('lockerKey')}
+                      id="key"
+                      checked={checklist.key === true}
+                      onChange={() => handleChecklistToggle('key')}
                     />
-                    <label htmlFor="lockerKey">Locker key</label>
+                    <label htmlFor="key">Locker key</label>
                   </div>
                   <div className="checklist-item" onClick={() => handleChecklistToggle('towel')}>
                     <input
@@ -340,33 +338,33 @@ function App() {
                 </>
               ) : (
                 <>
-                  <div className="checklist-item" onClick={() => handleChecklistToggle('roomKey')}>
+                  <div className="checklist-item" onClick={() => handleChecklistToggle('key')}>
                     <input
                       type="checkbox"
-                      id="roomKey"
-                      checked={checklist.roomKey === true}
-                      onChange={() => handleChecklistToggle('roomKey')}
+                      id="key"
+                      checked={checklist.key === true}
+                      onChange={() => handleChecklistToggle('key')}
                     />
-                    <label htmlFor="roomKey">Room key</label>
+                    <label htmlFor="key">Room key</label>
                   </div>
-                  <div className="checklist-item" onClick={() => handleChecklistToggle('bedSheets')}>
+                  <div className="checklist-item" onClick={() => handleChecklistToggle('sheets')}>
                     <input
                       type="checkbox"
-                      id="bedSheets"
-                      checked={checklist.bedSheets === true}
-                      onChange={() => handleChecklistToggle('bedSheets')}
+                      id="sheets"
+                      checked={checklist.sheets === true}
+                      onChange={() => handleChecklistToggle('sheets')}
                     />
-                    <label htmlFor="bedSheets">Bed sheets</label>
+                    <label htmlFor="sheets">Sheets</label>
                   </div>
                   {resolvedKey.hasTvRemote && (
-                    <div className="checklist-item" onClick={() => handleChecklistToggle('tvRemote')}>
+                    <div className="checklist-item" onClick={() => handleChecklistToggle('remote')}>
                       <input
                         type="checkbox"
-                        id="tvRemote"
-                        checked={checklist.tvRemote === true}
-                        onChange={() => handleChecklistToggle('tvRemote')}
+                        id="remote"
+                        checked={checklist.remote === true}
+                        onChange={() => handleChecklistToggle('remote')}
                       />
-                      <label htmlFor="tvRemote">TV remote</label>
+                      <label htmlFor="remote">TV remote</label>
                     </div>
                   )}
                 </>

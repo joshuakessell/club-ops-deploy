@@ -304,6 +304,8 @@ export interface CheckoutUpdatedPayload {
 
 export interface CheckoutCompletedPayload {
   requestId: string;
+  kioskDeviceId: string;
+  success: boolean;
 }
 
 /**
