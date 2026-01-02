@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
@@ -30,17 +30,6 @@ interface RoomRow {
   override_flag: boolean;
 }
 
-interface ResolvedRoom {
-  roomId: string;
-  roomNumber: string;
-  roomType: string;
-  status: RoomStatus;
-  floor: number;
-  tagCode: string;
-  tagType: string;
-  overrideFlag: boolean;
-}
-
 /**
  * Key tag resolution routes for cleaning station workflow.
  * Supports batch scanning of QR/NFC tags.
@@ -53,12 +42,9 @@ export async function keysRoutes(fastify: FastifyInstance): Promise<void> {
    * Used by cleaning stations to resolve individual QR/NFC tags.
    * Returns room information for a single token.
    */
-  fastify.post('/v1/keys/resolve', {
+  fastify.post<{ Body: ResolveKeyInput }>('/v1/keys/resolve', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Body: ResolveKeyInput }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     let body: ResolveKeyInput;
 
     try {

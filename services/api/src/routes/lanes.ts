@@ -1,6 +1,6 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction } from '../db/index.js';
+import { transaction } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
@@ -95,15 +95,9 @@ export async function laneRoutes(fastify: FastifyInstance): Promise<void> {
    * Broadcasts SESSION_UPDATED event to the lane.
    * Auth required.
    */
-  fastify.post('/v1/lanes/:laneId/session', {
+  fastify.post<{ Params: { laneId: string }; Body: LaneSessionInput }>('/v1/lanes/:laneId/session', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ 
-      Params: { laneId: string };
-      Body: LaneSessionInput;
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({
         error: 'Unauthorized',
@@ -236,12 +230,9 @@ export async function laneRoutes(fastify: FastifyInstance): Promise<void> {
    * Broadcasts SESSION_UPDATED event with null/empty data to clear the kiosk.
    * Auth required.
    */
-  fastify.post('/v1/lanes/:laneId/clear', {
+  fastify.post<{ Params: { laneId: string } }>('/v1/lanes/:laneId/clear', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Params: { laneId: string } }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({
         error: 'Unauthorized',

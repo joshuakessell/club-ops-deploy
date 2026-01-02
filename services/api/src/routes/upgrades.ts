@@ -1,6 +1,6 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction, serializableTransaction } from '../db/index.js';
+import { transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 
@@ -113,13 +113,11 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
    * Adds customer to waitlist for a higher tier room.
    * Requires disclaimer acknowledgment.
    */
-  fastify.post('/v1/upgrades/waitlist', {
+  fastify.post<{ Body: z.infer<typeof JoinWaitlistSchema> }>('/v1/upgrades/waitlist', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Body: z.infer<typeof JoinWaitlistSchema> }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({
         error: 'Unauthorized',
       });
@@ -158,7 +156,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, new_value)
            VALUES ($1, $2, $3, $4, $5)`,
           [
-            request.staff!.staffId,
+            staff.staffId,
             'UPGRADE_DISCLAIMER',
             'session',
             session.id,
@@ -198,11 +196,9 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post('/v1/upgrades/accept', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Body: z.infer<typeof AcceptUpgradeSchema> }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({
         error: 'Unauthorized',
       });
@@ -301,7 +297,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, old_value, new_value)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [
-            request.staff!.staffId,
+            staff.staffId,
             'UPGRADE_DISCLAIMER',
             'session',
             session.id,
@@ -345,7 +341,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Returns the upgrade disclaimer text for display.
    */
-  fastify.get('/v1/upgrades/disclaimer', async (_request, reply: FastifyReply) => {
+  fastify.get('/v1/upgrades/disclaimer', async (_request, reply) => {
     return reply.send({
       text: UPGRADE_DISCLAIMER_TEXT,
     });
@@ -365,19 +361,17 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
    * 4. Log audit entries
    * 5. Broadcast updates
    */
-  fastify.post('/v1/upgrades/fulfill', {
+  fastify.post<{
+    Body: {
+      waitlistId: string;
+      roomId: string;
+      acknowledgedDisclaimer: boolean;
+    };
+  }>('/v1/upgrades/fulfill', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Body: {
-        waitlistId: string;
-        roomId: string;
-        acknowledgedDisclaimer: boolean;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -491,7 +485,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
            (staff_id, action, entity_type, entity_id, old_value, new_value)
            VALUES ($1, 'UPGRADE_STARTED', 'waitlist', $2, $3, $4)`,
           [
-            request.staff.staffId,
+            staff.staffId,
             waitlistId,
             JSON.stringify({
               status: waitlist.status,
@@ -523,8 +517,9 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to start upgrade',
+        const err = error as { statusCode: number; message?: string };
+        return reply.status(err.statusCode).send({
+          error: err.message || 'Failed to start upgrade',
         });
       }
       fastify.log.error(error, 'Failed to fulfill upgrade');
@@ -539,18 +534,16 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
    * Performs the actual upgrade: resource swap and inventory transitions.
    * Requires step-up re-auth.
    */
-  fastify.post('/v1/upgrades/complete', {
+  fastify.post<{
+    Body: {
+      waitlistId: string;
+      paymentIntentId: string;
+    };
+  }>('/v1/upgrades/complete', {
     preHandler: [requireReauth],
-  }, async (
-    request: FastifyRequest<{
-      Body: {
-        waitlistId: string;
-        paymentIntentId: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -700,7 +693,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
            (staff_id, action, entity_type, entity_id, old_value, new_value)
            VALUES ($1, 'UPGRADE_COMPLETED', 'waitlist', $2, $3, $4)`,
           [
-            request.staff.staffId,
+            staff.staffId,
             waitlistId,
             JSON.stringify({
               oldResourceId,
@@ -743,8 +736,9 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to complete upgrade',
+        const err = error as { statusCode: number; message?: string };
+        return reply.status(err.statusCode).send({
+          error: err.message || 'Failed to complete upgrade',
         });
       }
       fastify.log.error(error, 'Failed to complete upgrade');

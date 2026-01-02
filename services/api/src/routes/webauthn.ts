@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   generateRegistrationOptions,
@@ -6,11 +6,7 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
-import type {
-  PublicKeyCredentialCreationOptionsJSON,
-  PublicKeyCredentialRequestOptionsJSON,
-} from '@simplewebauthn/server/script/deps';
-import { query, transaction } from '../db/index.js';
+import { query } from '../db/index.js';
 import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware.js';
 import { generateSessionToken, getSessionExpiry } from '../auth/utils.js';
 import {
@@ -79,8 +75,8 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
    * Generate registration options for enrolling a new passkey.
    */
   fastify.post('/v1/auth/webauthn/registration/options', async (
-    request: FastifyRequest<{ Body: RegistrationOptionsInput }>,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     let body: RegistrationOptionsInput;
 
@@ -121,7 +117,7 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       const options = await generateRegistrationOptions({
         rpName,
         rpID: rpId,
-        userID: Buffer.from(body.staffId),
+        userID: body.staffId,
         userName: staff.name,
         userDisplayName: staff.name,
         timeout: 120000, // 2 minutes
@@ -154,8 +150,8 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
    * Verify and store a new passkey credential.
    */
   fastify.post('/v1/auth/webauthn/registration/verify', async (
-    request: FastifyRequest<{ Body: RegistrationVerifyInput }>,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     let body: RegistrationVerifyInput;
 
@@ -213,16 +209,16 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // Store credential
-      const credentialId = Buffer.from(verification.registrationInfo!.credential.id)
-        .toString('base64url');
+      const credentialId = Buffer.from(verification.registrationInfo!.credentialID).toString('base64url');
       
       await storeCredential(
         body.staffId,
         body.deviceId,
         credentialId,
-        Buffer.from(verification.registrationInfo!.credential.publicKey),
+        Buffer.from(verification.registrationInfo!.credentialPublicKey),
         verification.registrationInfo!.counter,
-        verification.registrationInfo!.credential.transports
+        // Transports are optional and may not be present depending on client/browser.
+        body.credentialResponse?.response?.transports as string[] | undefined
       );
 
       // Log audit action
@@ -234,7 +230,7 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
           credentialId,
           JSON.stringify({
             deviceId: body.deviceId,
-            transports: verification.registrationInfo!.credential.transports,
+            transports: body.credentialResponse?.response?.transports,
           }),
         ]
       );
@@ -258,8 +254,8 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
    * Generate authentication options for signing in with a passkey.
    */
   fastify.post('/v1/auth/webauthn/authentication/options', async (
-    request: FastifyRequest<{ Body: AuthenticationOptionsInput }>,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     let body: AuthenticationOptionsInput;
 
@@ -340,8 +336,8 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
    * Verify authentication response and issue session token.
    */
   fastify.post('/v1/auth/webauthn/authentication/verify', async (
-    request: FastifyRequest<{ Body: AuthenticationVerifyInput }>,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     let body: AuthenticationVerifyInput;
 
@@ -523,12 +519,9 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Get all passkeys for a staff member (admin only).
    */
-  fastify.get('/v1/auth/webauthn/credentials/:staffId', {
+  fastify.get<{ Params: { staffId: string } }>('/v1/auth/webauthn/credentials/:staffId', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{ Params: { staffId: string } }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const { staffId } = request.params;
 
@@ -577,13 +570,11 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
    * Revoke a passkey credential (admin only).
    * Requires re-authentication for security.
    */
-  fastify.post('/v1/auth/webauthn/credentials/:credentialId/revoke', {
+  fastify.post<{ Params: { credentialId: string } }>('/v1/auth/webauthn/credentials/:credentialId/revoke', {
     preHandler: [requireReauthForAdmin],
-  }, async (
-    request: FastifyRequest<{ Params: { credentialId: string } }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -602,8 +593,6 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      const staffId = credentialResult.rows[0]!.staff_id;
-
       // Revoke credential
       await query(
         `UPDATE staff_webauthn_credentials
@@ -617,7 +606,7 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       await query(
         `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
          VALUES ($1, 'STAFF_WEBAUTHN_REVOKED', 'staff_webauthn_credential', $2)`,
-        [request.staff.staffId, credentialId]
+        [staff.staffId, credentialId]
       );
 
       return reply.send({ success: true });

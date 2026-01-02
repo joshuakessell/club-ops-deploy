@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, requireReauth } from '../auth/middleware.js';
@@ -9,17 +9,6 @@ declare module 'fastify' {
     broadcaster: Broadcaster;
   }
 }
-
-/**
- * Schema for creating waitlist entry (internal use, created during check-in).
- */
-const CreateWaitlistSchema = z.object({
-  visitId: z.string().uuid(),
-  checkinBlockId: z.string().uuid(),
-  desiredTier: z.enum(['STANDARD', 'DOUBLE', 'SPECIAL']),
-  backupTier: z.string(),
-  lockerOrRoomAssignedInitially: z.string().uuid().optional(),
-});
 
 /**
  * Schema for offering upgrade.
@@ -59,25 +48,10 @@ interface WaitlistRow {
   completed_at: Date | null;
 }
 
-interface CheckinBlockRow {
-  id: string;
-  visit_id: string;
-  room_id: string | null;
-  locker_id: string | null;
-  rental_type: string;
-}
-
 interface RoomRow {
   id: string;
   number: string;
   type: string;
-  status: string;
-  assigned_to_customer_id: string | null;
-}
-
-interface LockerRow {
-  id: string;
-  number: string;
   status: string;
   assigned_to_customer_id: string | null;
 }
@@ -93,14 +67,11 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
    * Returns waitlist entries filtered by status.
    * Staff/admin only.
    */
-  fastify.get('/v1/waitlist', {
+  fastify.get<{
+    Querystring: { status?: 'ACTIVE' | 'OFFERED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED' };
+  }>('/v1/waitlist', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Querystring: { status?: 'ACTIVE' | 'OFFERED' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED' };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -178,16 +149,14 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
    * When a desired room tier becomes available, staff can offer it.
    * This marks the waitlist entry as OFFERED.
    */
-  fastify.post('/v1/waitlist/:id/offer', {
+  fastify.post<{
+    Params: { id: string };
+    Body: z.infer<typeof OfferUpgradeSchema>;
+  }>('/v1/waitlist/:id/offer', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { id: string };
-      Body: z.infer<typeof OfferUpgradeSchema>;
-    }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -258,7 +227,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
            (staff_id, action, entity_type, entity_id, old_value, new_value)
            VALUES ($1, 'WAITLIST_OFFERED', 'waitlist', $2, $3, $4)`,
           [
-            request.staff.staffId,
+            staff.staffId,
             id,
             JSON.stringify({ status: 'ACTIVE' }),
             JSON.stringify({ status: 'OFFERED', room_id: body.roomId, room_number: room.number }),
@@ -289,8 +258,9 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error: unknown) {
       request.log.error(error, 'Failed to offer upgrade');
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to offer upgrade',
+        const err = error as { statusCode: number; message?: string };
+        return reply.status(err.statusCode).send({
+          error: err.message || 'Failed to offer upgrade',
         });
       }
       return reply.status(500).send({
@@ -305,20 +275,17 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Marks waitlist entry as COMPLETED and performs the upgrade.
    */
-  fastify.post('/v1/waitlist/:id/complete', {
+  fastify.post<{
+    Params: { id: string };
+    Body: z.infer<typeof CompleteUpgradeSchema>;
+  }>('/v1/waitlist/:id/complete', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { id: string };
-      Body: z.infer<typeof CompleteUpgradeSchema>;
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
-    const { id } = request.params;
+    const { id: _id } = request.params;
     let body: z.infer<typeof CompleteUpgradeSchema>;
 
     try {
@@ -333,6 +300,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
     try {
       // This will be handled by the upgrade fulfillment endpoint
       // This is a placeholder - actual upgrade logic is in upgrade routes
+      void body;
       return reply.status(501).send({
         error: 'Not Implemented',
         message: 'Use /v1/upgrades/fulfill instead',
@@ -352,16 +320,14 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
    * Staff can cancel a waitlist entry.
    * Requires step-up re-auth.
    */
-  fastify.post('/v1/waitlist/:id/cancel', {
+  fastify.post<{
+    Params: { id: string };
+    Body: z.infer<typeof CancelWaitlistSchema>;
+  }>('/v1/waitlist/:id/cancel', {
     preHandler: [requireReauth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { id: string };
-      Body: z.infer<typeof CancelWaitlistSchema>;
-    }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -400,7 +366,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           `UPDATE waitlist 
            SET status = 'CANCELLED', cancelled_at = NOW(), cancelled_by_staff_id = $1, updated_at = NOW()
            WHERE id = $2`,
-          [request.staff.staffId, id]
+          [staff.staffId, id]
         );
 
         // Log audit
@@ -409,7 +375,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
            (staff_id, action, entity_type, entity_id, old_value, new_value)
            VALUES ($1, 'WAITLIST_CANCELLED', 'waitlist', $2, $3, $4)`,
           [
-            request.staff.staffId,
+            staff.staffId,
             id,
             JSON.stringify({ status: waitlist.status }),
             JSON.stringify({ status: 'CANCELLED', reason: body.reason || 'Cancelled by staff' }),
@@ -436,8 +402,9 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error: unknown) {
       request.log.error(error, 'Failed to cancel waitlist');
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to cancel waitlist',
+        const err = error as { statusCode: number; message?: string };
+        return reply.status(err.statusCode).send({
+          error: err.message || 'Failed to cancel waitlist',
         });
       }
       return reply.status(500).send({

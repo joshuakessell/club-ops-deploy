@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { query } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
 
@@ -22,6 +22,8 @@ function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
   return 'STANDARD';
 }
 
+type RoomTier = 'SPECIAL' | 'DOUBLE' | 'STANDARD';
+
 interface RoomCountRow {
   status: string;
   room_type: string;
@@ -44,7 +46,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
    * Returns counts of rooms and lockers grouped by status (CLEAN, CLEANING, DIRTY)
    * and by type (STANDARD, DOUBLE, SPECIAL).
    */
-  fastify.get('/v1/inventory/summary', async (_request, reply: FastifyReply) => {
+  fastify.get('/v1/inventory/summary', async (_request, reply) => {
     try {
       // Get room counts by status and type (excluding LOCKER type in rooms table)
       const roomResult = await query<RoomCountRow>(
@@ -132,7 +134,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
    * Returns only unassigned CLEAN rooms, grouped by tier (SPECIAL, DOUBLE, STANDARD).
    * Uses room number mapping to determine tier.
    */
-  fastify.get('/v1/inventory/available', async (_request, reply: FastifyReply) => {
+  fastify.get('/v1/inventory/available', async (_request, reply) => {
     try {
       const result = await query<{ number: string; status: string; assigned_to_customer_id: string | null }>(
         `SELECT number, status, assigned_to_customer_id
@@ -149,7 +151,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
       );
 
       // Group by tier using room number mapping
-      const available: Record<string, number> = {
+      const available: Record<RoomTier | 'LOCKER', number> = {
         SPECIAL: 0,
         DOUBLE: 0,
         STANDARD: 0,
@@ -157,7 +159,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
       };
 
       for (const row of result.rows) {
-        const tier = getRoomTier(row.number);
+        const tier: RoomTier = getRoomTier(row.number);
         available[tier]++;
       }
 
@@ -187,7 +189,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/inventory/rooms-by-tier', {
     preHandler: [requireAuth],
-  }, async (_request, reply: FastifyReply) => {
+  }, async (_request, reply) => {
     try {
       // Get all rooms with their assignment and checkout info
       const result = await query<{
@@ -214,7 +216,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
       const expiringSoonThreshold = new Date(now.getTime() + 30 * 60 * 1000); // 30 minutes
 
       // Group by tier
-      const byTier: Record<string, {
+      const byTier: Record<RoomTier, {
         available: Array<{ id: string; number: string; status: string }>;
         expiringSoon: Array<{ id: string; number: string; checkoutAt: string }>;
         recentlyReserved: Array<{ id: string; number: string; checkoutAt: string }>;
@@ -225,7 +227,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
       };
 
       for (const row of result.rows) {
-        const tier = getRoomTier(row.number);
+        const tier: RoomTier = getRoomTier(row.number);
         const roomInfo = {
           id: row.id,
           number: row.number,
@@ -295,7 +297,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Returns all rooms with status, last change, assigned member, and cleaner info.
    */
-  fastify.get('/v1/inventory/rooms', async (_request, reply: FastifyReply) => {
+  fastify.get('/v1/inventory/rooms', async (_request, reply) => {
     try {
       const result = await query<{
         id: string;
@@ -351,7 +353,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/inventory/detailed', {
     preHandler: [requireAuth],
-  }, async (_request, reply: FastifyReply) => {
+  }, async (_request, reply) => {
     try {
       // Get rooms with occupancy info from checkin_blocks
       const roomResult = await query<{

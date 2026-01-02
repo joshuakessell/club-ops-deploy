@@ -33,7 +33,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'thankYou': 'Thank you!',
     'assignmentComplete': 'Your check-in is being processed...',
     'room': 'Room',
-    'locker': 'Locker',
     'checkoutAt': 'Checkout Time',
     
     // Selection
@@ -87,7 +86,6 @@ export const translations: Record<Language, Record<string, string>> = {
     'thankYou': '¡Gracias!',
     'assignmentComplete': 'Su registro está siendo procesado...',
     'room': 'Habitación',
-    'locker': 'Casillero',
     'checkoutAt': 'Hora de Salida',
     
     // Selection

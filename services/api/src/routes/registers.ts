@@ -580,13 +580,11 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
    * Signs out an employee from their register.
    * Requires authentication (session token).
    */
-  fastify.post('/v1/registers/signout', {
+  fastify.post<{ Body: { deviceId: string } }>('/v1/registers/signout', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Body: { deviceId: string } }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({
         error: 'Unauthorized',
       });
@@ -618,7 +616,7 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
         const session = sessionResult.rows[0]!;
 
         // Verify employee matches (security check)
-        if (session.employee_id !== request.staff!.staffId) {
+        if (session.employee_id !== staff.staffId) {
           throw new Error('Register session does not belong to authenticated employee');
         }
 

@@ -1732,8 +1732,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error: unknown) {
       request.log.error(error, 'Failed to mark payment as paid');
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to mark payment as paid',
+        const err = error as { statusCode: number; message?: string };
+        return reply.status(err.statusCode).send({
+          error: err.message || 'Failed to mark payment as paid',
         });
       }
       return reply.status(500).send({
@@ -1749,15 +1750,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Store agreement signature, generate PDF, auto-assign resource, and create check-in block.
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.post('/v1/checkin/lane/:laneId/sign-agreement', {
+  fastify.post<{ Params: { laneId: string }; Body: { signaturePayload: string; sessionId?: string } }>('/v1/checkin/lane/:laneId/sign-agreement', {
     preHandler: [optionalAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { signaturePayload: string; sessionId?: string }; // PNG data URL or vector points JSON
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
 
     const { laneId } = request.params;
     const { signaturePayload } = request.body;
@@ -1878,7 +1873,6 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             }
           } else {
             // Assign first CLEAN room of desired tier
-            const tier = rentalType as 'STANDARD' | 'DOUBLE' | 'SPECIAL';
             const roomResult = await client.query<RoomRow>(
               `SELECT r.id, r.number FROM rooms r
                WHERE r.status = 'CLEAN' 
@@ -1891,7 +1885,6 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
             if (roomResult.rows.length > 0) {
               const room = roomResult.rows[0]!;
-              const roomTier = getRoomTier(room.number);
 
               // Verify tier matches (or allow cross-tier assignment)
               assignedResourceId = room.id;
@@ -1943,8 +1936,6 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         );
 
         // Complete check-in: create visit and check-in block with PDF
-        const staffId = request.staff?.staffId || 'system';
-        
         // Get updated session with assigned resource
         const updatedSessionResult = await client.query<LaneSessionRow>(
           `SELECT * FROM lane_sessions WHERE id = $1`,
@@ -2015,8 +2006,6 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             signedAt,
           ]
         );
-
-        const blockId = blockResult.rows[0]!.id;
 
         // Transition resource to OCCUPIED
         if (assignedResourceType === 'room') {
@@ -2711,12 +2700,6 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           [language, session.customer_id]
         );
 
-        // Get updated customer info
-        const customerResult = await client.query<CustomerRow>(
-          `SELECT primary_language FROM customers WHERE id = $1`,
-          [session.customer_id]
-        );
-
         // Broadcast session update with language
         const payload: SessionUpdatedPayload = {
           sessionId: session.id,
@@ -2737,8 +2720,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error: unknown) {
       request.log.error(error, 'Failed to set language');
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to set language',
+        const err = error as { statusCode: number; message?: string };
+        return reply.status(err.statusCode).send({
+          error: err.message || 'Failed to set language',
         });
       }
       return reply.status(500).send({
@@ -2753,16 +2737,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Add a note to the customer record (staff only, admin removal in office-dashboard).
    */
-  fastify.post('/v1/checkin/lane/:laneId/add-note', {
+  fastify.post<{ Params: { laneId: string }; Body: { note: string } }>('/v1/checkin/lane/:laneId/add-note', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { note: string };
-    }>,
-    reply: FastifyReply
-  ) => {
-    if (!request.staff) {
+  }, async (request, reply) => {
+    const staff = request.staff;
+    if (!staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
@@ -2805,7 +2784,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
         const existingNotes = customerResult.rows[0]!.notes || '';
         const timestamp = new Date().toISOString();
-        const staffName = request.staff.name || 'Staff';
+        const staffName = staff.name || 'Staff';
         const newNoteEntry = `[${timestamp}] ${staffName}: ${note.trim()}`;
         const updatedNotes = existingNotes ? `${existingNotes}\n${newNoteEntry}` : newNoteEntry;
 
@@ -2862,8 +2841,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error: unknown) {
       request.log.error(error, 'Failed to add note');
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to add note',
+        const err = error as { statusCode: number; message?: string };
+        return reply.status(err.statusCode).send({
+          error: err.message || 'Failed to add note',
         });
       }
       return reply.status(500).send({
@@ -2878,15 +2858,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Demo endpoint to take payment (must be called after selection is confirmed).
    */
-  fastify.post('/v1/checkin/lane/:laneId/demo-take-payment', {
+  fastify.post<{ Params: { laneId: string }; Body: { outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE'; declineReason?: string; registerNumber?: number } }>('/v1/checkin/lane/:laneId/demo-take-payment', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE'; declineReason?: string; registerNumber?: number };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
