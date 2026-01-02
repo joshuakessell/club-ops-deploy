@@ -24,6 +24,9 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   const [menuOpen, setMenuOpen] = useState(false);
   const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  
+  // Derive lane from register number
+  const lane = registerSession ? `lane-${registerSession.registerNumber}` : null;
 
   // Check for existing register session on mount
   useEffect(() => {

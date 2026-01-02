@@ -65,6 +65,7 @@ function App() {
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [paymentQuote, setPaymentQuote] = useState<{ total: number; lineItems: Array<{ description: string; amount: number }>; messages: string[] } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'DUE' | 'PAID' | null>(null);
+  const [pastDueBlocked, setPastDueBlocked] = useState(false);
   const [waitlistEntries, setWaitlistEntries] = useState<Array<{
     id: string;
     visitId: string;
@@ -89,11 +90,31 @@ function App() {
   const [showUpgradeDisclaimer, setShowUpgradeDisclaimer] = useState(false);
   const [showFinalExtensionModal, setShowFinalExtensionModal] = useState(false);
   const [finalExtensionVisitId, setFinalExtensionVisitId] = useState<string | null>(null);
-  const [lane] = useState(() => {
-    // Get lane from URL query param or localStorage, default to 'lane-1'
-    const params = new URLSearchParams(window.location.search);
-    return params.get('lane') || localStorage.getItem('lane') || 'lane-1';
-  });
+  
+  // Customer info state
+  const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(undefined);
+  const [customerDobMonthDay, setCustomerDobMonthDay] = useState<string | undefined>(undefined);
+  const [customerLastVisitAt, setCustomerLastVisitAt] = useState<string | undefined>(undefined);
+  const [customerNotes, setCustomerNotes] = useState<string | undefined>(undefined);
+  const [showAddNoteModal, setShowAddNoteModal] = useState(false);
+  const [newNoteText, setNewNoteText] = useState('');
+  
+  // Past due state
+  const [showPastDueModal, setShowPastDueModal] = useState(false);
+  const [showManagerBypassModal, setShowManagerBypassModal] = useState(false);
+  const [managerId, setManagerId] = useState('');
+  const [managerPin, setManagerPin] = useState('');
+  const [managerList, setManagerList] = useState<Array<{ id: string; name: string }>>([]);
+  const [paymentDeclineError, setPaymentDeclineError] = useState<string | null>(null);
+  
+  // Availability sidebar state
+  const [showAvailabilitySidebar, setShowAvailabilitySidebar] = useState(true);
+  const [expandedTier, setExpandedTier] = useState<string | null>(null);
+  
+  // Assignment completion state
+  const [assignedResourceType, setAssignedResourceType] = useState<'room' | 'locker' | null>(null);
+  const [assignedResourceNumber, setAssignedResourceNumber] = useState<string | null>(null);
+  const [checkoutAt, setCheckoutAt] = useState<string | null>(null);
 
   const deviceId = useState(() => {
     // Get device ID from environment variable or localStorage
@@ -115,6 +136,9 @@ function App() {
     registerNumber: number;
     deviceId: string;
   } | null>(null);
+  
+  // Derive lane from register number
+  const lane = registerSession ? `lane-${registerSession.registerNumber}` : 'lane-1';
 
   // Load staff session from localStorage (created after register sign-in)
   useEffect(() => {
@@ -682,20 +706,44 @@ function App() {
     if (!session?.sessionToken) return;
 
     try {
-      const response = await fetch(`${API_BASE}/v1/waitlist?status=ACTIVE`, {
-        headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-      });
+      // Fetch both ACTIVE and OFFERED waitlist entries
+      const [activeResponse, offeredResponse] = await Promise.all([
+        fetch(`${API_BASE}/v1/waitlist?status=ACTIVE`, {
+          headers: {
+            'Authorization': `Bearer ${session.sessionToken}`,
+          },
+        }),
+        fetch(`${API_BASE}/v1/waitlist?status=OFFERED`, {
+          headers: {
+            'Authorization': `Bearer ${session.sessionToken}`,
+          },
+        }),
+      ]);
 
-      if (response.ok) {
-        const data = await response.json();
-        setWaitlistEntries(data.entries || []);
+      const allEntries: typeof waitlistEntries = [];
+      
+      if (activeResponse.ok) {
+        const activeData = await activeResponse.json();
+        allEntries.push(...(activeData.entries || []));
       }
+      
+      if (offeredResponse.ok) {
+        const offeredData = await offeredResponse.json();
+        allEntries.push(...(offeredData.entries || []));
+      }
+
+      setWaitlistEntries(allEntries);
     } catch (error) {
       console.error('Failed to fetch waitlist:', error);
     }
   };
+
+  // Fetch waitlist on mount and when session is available
+  useEffect(() => {
+    if (session?.sessionToken) {
+      fetchWaitlist();
+    }
+  }, [session?.sessionToken]);
 
   const fetchAvailableRoomsForTier = async (tier: string) => {
     if (!session?.sessionToken) return;
@@ -994,6 +1042,46 @@ function App() {
               setCustomerSelectedType(payload.proposedRentalType || null);
             }
           }
+          // Update customer info
+          if (payload.customerPrimaryLanguage !== undefined) {
+            setCustomerPrimaryLanguage(payload.customerPrimaryLanguage);
+          }
+          if (payload.customerDobMonthDay !== undefined) {
+            setCustomerDobMonthDay(payload.customerDobMonthDay);
+          }
+          if (payload.customerLastVisitAt !== undefined) {
+            setCustomerLastVisitAt(payload.customerLastVisitAt);
+          }
+          if (payload.customerNotes !== undefined) {
+            setCustomerNotes(payload.customerNotes);
+          }
+          // Update assignment info
+          if (payload.assignedResourceType !== undefined) {
+            setAssignedResourceType(payload.assignedResourceType);
+          }
+          if (payload.assignedResourceNumber !== undefined) {
+            setAssignedResourceNumber(payload.assignedResourceNumber);
+          }
+          if (payload.checkoutAt !== undefined) {
+            setCheckoutAt(payload.checkoutAt);
+          }
+          // Update payment status
+          if (payload.paymentStatus !== undefined) {
+            setPaymentStatus(payload.paymentStatus);
+          }
+          if (payload.paymentFailureReason) {
+            setPaymentDeclineError(payload.paymentFailureReason);
+          }
+          // Update past-due blocking
+          if (payload.pastDueBlocked !== undefined) {
+            setPastDueBlocked(payload.pastDueBlocked);
+            if (payload.pastDueBlocked && payload.pastDueBalance && payload.pastDueBalance > 0) {
+              setShowPastDueModal(true);
+            }
+          }
+        } else if (message.type === 'WAITLIST_UPDATED') {
+          // Refresh waitlist when updated
+          fetchWaitlist();
         } else if (message.type === 'SELECTION_PROPOSED') {
           const payload = message.payload as SelectionProposedPayload;
           if (payload.sessionId === currentSessionId) {
@@ -1322,6 +1410,214 @@ function App() {
     setSelectedInventoryItem(null);
   };
 
+  // Past-due payment handlers
+  const handlePastDuePayment = async (outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE', declineReason?: string) => {
+    if (!session?.sessionToken || !currentSessionId) {
+      alert('Not authenticated');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/past-due/demo-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ outcome, declineReason }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to process payment');
+      }
+
+      if (outcome === 'CREDIT_DECLINE') {
+        setPaymentDeclineError(declineReason || 'Payment declined');
+      } else {
+        setShowPastDueModal(false);
+        setPaymentDeclineError(null);
+      }
+    } catch (error) {
+      console.error('Failed to process past-due payment:', error);
+      alert(error instanceof Error ? error.message : 'Failed to process payment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleManagerBypass = async () => {
+    if (!session?.sessionToken || !currentSessionId || !managerId || !managerPin) {
+      alert('Please select manager and enter PIN');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/past-due/bypass`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ managerId, managerPin }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to bypass past-due');
+      }
+
+      setShowManagerBypassModal(false);
+      setManagerId('');
+      setManagerPin('');
+      setPaymentDeclineError(null);
+    } catch (error) {
+      console.error('Failed to bypass past-due:', error);
+      alert(error instanceof Error ? error.message : 'Failed to bypass past-due');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Notes handler
+  const handleAddNote = async () => {
+    if (!session?.sessionToken || !currentSessionId || !newNoteText.trim()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/add-note`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ note: newNoteText.trim() }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add note');
+      }
+
+      setShowAddNoteModal(false);
+      setNewNoteText('');
+    } catch (error) {
+      console.error('Failed to add note:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add note');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Pay-first demo handlers
+  const handleDemoPayment = async (outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE', declineReason?: string) => {
+    if (!session?.sessionToken || !currentSessionId) {
+      alert('Not authenticated');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/demo-take-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ 
+          outcome, 
+          declineReason,
+          registerNumber: registerSession?.registerNumber,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to process payment');
+      }
+
+      if (outcome === 'CREDIT_DECLINE') {
+        setPaymentDeclineError(declineReason || 'Payment declined');
+      } else {
+        setPaymentDeclineError(null);
+      }
+    } catch (error) {
+      console.error('Failed to process payment:', error);
+      alert(error instanceof Error ? error.message : 'Failed to process payment');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Complete transaction handler
+  const handleCompleteTransaction = async () => {
+    if (!session?.sessionToken) {
+      alert('Not authenticated');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/reset`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to complete transaction');
+      }
+
+      // Reset all state
+      setCustomerName('');
+      setMembershipNumber('');
+      setCurrentSessionId(null);
+      setAgreementSigned(false);
+      setSelectedRentalType(null);
+      setCustomerSelectedType(null);
+      setSelectedInventoryItem(null);
+      setPaymentIntentId(null);
+      setPaymentQuote(null);
+      setPaymentStatus(null);
+      setAssignedResourceType(null);
+      setAssignedResourceNumber(null);
+      setCheckoutAt(null);
+      setCustomerPrimaryLanguage(undefined);
+      setCustomerDobMonthDay(undefined);
+      setCustomerLastVisitAt(undefined);
+      setCustomerNotes(undefined);
+      setPaymentDeclineError(null);
+    } catch (error) {
+      console.error('Failed to complete transaction:', error);
+      alert(error instanceof Error ? error.message : 'Failed to complete transaction');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Fetch managers for bypass modal
+  useEffect(() => {
+    if (showManagerBypassModal && session?.sessionToken) {
+      fetch(`${API_BASE}/v1/employees/available`, {
+        headers: {
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+      })
+        .then(res => res.json())
+        .then(data => {
+          const managers = (data.employees || []).filter((e: { role: string }) => e.role === 'ADMIN');
+          setManagerList(managers);
+        })
+        .catch(console.error);
+    }
+  }, [showManagerBypassModal, session?.sessionToken]);
+
   return (
     <RegisterSignIn
       deviceId={deviceId}
@@ -1586,6 +1882,88 @@ function App() {
       </header>
 
       <main className="main">
+        {/* Customer Info Panel */}
+        {currentSessionId && customerName && (
+          <section style={{ 
+            marginBottom: '1rem', 
+            padding: '1rem', 
+            background: '#1e293b', 
+            border: '1px solid #475569', 
+            borderRadius: '8px' 
+          }}>
+            <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
+              Customer Information
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+              <div>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Name</div>
+                <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerName}</div>
+              </div>
+              {customerPrimaryLanguage && (
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Primary Language</div>
+                  <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerPrimaryLanguage}</div>
+                </div>
+              )}
+              {customerDobMonthDay && (
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Date of Birth</div>
+                  <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerDobMonthDay}</div>
+                </div>
+              )}
+              {customerLastVisitAt && (
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Last Visit</div>
+                  <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+                    {new Date(customerLastVisitAt).toLocaleDateString()}
+                  </div>
+                </div>
+              )}
+              {paymentQuote && paymentQuote.total > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Past Due Balance</div>
+                  <div style={{ fontWeight: 600, fontSize: '1rem', color: paymentQuote.total > 0 ? '#f59e0b' : 'inherit' }}>
+                    ${paymentQuote.total.toFixed(2)}
+                  </div>
+                </div>
+              )}
+            </div>
+            {customerNotes && (
+              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #475569' }}>
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Notes</div>
+                <div style={{ 
+                  padding: '0.75rem', 
+                  background: '#0f172a', 
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: '150px',
+                  overflowY: 'auto'
+                }}>
+                  {customerNotes}
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={() => setShowAddNoteModal(true)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  background: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Add Note
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Waitlist/Upgrades Panel Toggle */}
         <section style={{ marginBottom: '1rem' }}>
           <button
@@ -1948,7 +2326,7 @@ function App() {
         )}
 
         {/* Quick Selection Buttons */}
-        {currentSessionId && customerName && !selectionConfirmed && (
+        {currentSessionId && customerName && !selectionConfirmed && !pastDueBlocked && (
           <div style={{ 
             display: 'flex', 
             gap: '0.5rem', 
@@ -1977,7 +2355,7 @@ function App() {
         )}
 
         {/* Inventory Selector */}
-        {currentSessionId && customerName && (
+        {currentSessionId && customerName && !pastDueBlocked && (
           <InventorySelector
             customerSelectedType={customerSelectedType}
             waitlistDesiredTier={waitlistDesiredTier}
@@ -2417,6 +2795,490 @@ function App() {
           setManualEntry(true);
         }}
       />
+
+      {/* Past-Due Payment Modal */}
+      {showPastDueModal && paymentQuote && paymentQuote.total > 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              background: '#1e293b',
+              padding: '2rem',
+              borderRadius: '12px',
+              maxWidth: '500px',
+              width: '90%',
+            }}
+          >
+            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
+              Past Due Balance: ${paymentQuote.total.toFixed(2)}
+            </h2>
+            <p style={{ marginBottom: '1.5rem', color: '#94a3b8' }}>
+              Customer has a past due balance. Please process payment or bypass.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+              <button
+                onClick={() => handlePastDuePayment('CREDIT_SUCCESS')}
+                disabled={isSubmitting}
+                style={{
+                  padding: '0.75rem',
+                  background: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Credit Success
+              </button>
+              <button
+                onClick={() => handlePastDuePayment('CASH_SUCCESS')}
+                disabled={isSubmitting}
+                style={{
+                  padding: '0.75rem',
+                  background: '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Cash Success
+              </button>
+              <button
+                onClick={() => handlePastDuePayment('CREDIT_DECLINE', 'Card declined')}
+                disabled={isSubmitting}
+                style={{
+                  padding: '0.75rem',
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Credit Decline
+              </button>
+              <button
+                onClick={() => {
+                  setShowPastDueModal(false);
+                  setShowManagerBypassModal(true);
+                }}
+                disabled={isSubmitting}
+                style={{
+                  padding: '0.75rem',
+                  background: 'transparent',
+                  color: '#94a3b8',
+                  border: '1px solid #475569',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Manager Bypass
+              </button>
+            </div>
+            <button
+              onClick={() => setShowPastDueModal(false)}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                background: 'transparent',
+                color: '#94a3b8',
+                border: '1px solid #475569',
+                borderRadius: '6px',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Manager Bypass Modal */}
+      {showManagerBypassModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              background: '#1e293b',
+              padding: '2rem',
+              borderRadius: '12px',
+              maxWidth: '500px',
+              width: '90%',
+            }}
+          >
+            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
+              Manager Bypass
+            </h2>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                Select Manager
+              </label>
+              <select
+                value={managerId}
+                onChange={(e) => setManagerId(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  background: '#0f172a',
+                  border: '1px solid #475569',
+                  borderRadius: '6px',
+                  color: 'white',
+                  fontSize: '1rem',
+                }}
+              >
+                <option value="">Select a manager...</option>
+                {managerList.map(manager => (
+                  <option key={manager.id} value={manager.id}>{manager.name}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                PIN
+              </label>
+              <input
+                type="password"
+                value={managerPin}
+                onChange={(e) => setManagerPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder="Enter 4-digit PIN"
+                maxLength={4}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  background: '#0f172a',
+                  border: '1px solid #475569',
+                  borderRadius: '6px',
+                  color: 'white',
+                  fontSize: '1rem',
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={handleManagerBypass}
+                disabled={isSubmitting || !managerId || !managerPin}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: managerId && managerPin ? '#3b82f6' : '#475569',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: (managerId && managerPin && !isSubmitting) ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {isSubmitting ? 'Processing...' : 'Bypass'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowManagerBypassModal(false);
+                  setManagerId('');
+                  setManagerPin('');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: 'transparent',
+                  color: '#94a3b8',
+                  border: '1px solid #475569',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Note Modal */}
+      {showAddNoteModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 2000,
+          }}
+        >
+          <div
+            style={{
+              background: '#1e293b',
+              padding: '2rem',
+              borderRadius: '12px',
+              maxWidth: '500px',
+              width: '90%',
+            }}
+          >
+            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
+              Add Note
+            </h2>
+            <textarea
+              value={newNoteText}
+              onChange={(e) => setNewNoteText(e.target.value)}
+              placeholder="Enter note..."
+              rows={4}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                background: '#0f172a',
+                border: '1px solid #475569',
+                borderRadius: '6px',
+                color: 'white',
+                fontSize: '1rem',
+                marginBottom: '1rem',
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                onClick={handleAddNote}
+                disabled={isSubmitting || !newNoteText.trim()}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: newNoteText.trim() ? '#3b82f6' : '#475569',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  cursor: (newNoteText.trim() && !isSubmitting) ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {isSubmitting ? 'Adding...' : 'Add Note'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowAddNoteModal(false);
+                  setNewNoteText('');
+                }}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: 'transparent',
+                  color: '#94a3b8',
+                  border: '1px solid #475569',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Decline Error (dismissible) */}
+      {paymentDeclineError && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '1rem',
+            right: '1rem',
+            background: '#ef4444',
+            color: 'white',
+            padding: '1rem',
+            borderRadius: '8px',
+            zIndex: 2000,
+            maxWidth: '400px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.5rem' }}>
+            <div style={{ fontWeight: 600 }}>Payment Declined</div>
+            <button
+              onClick={() => setPaymentDeclineError(null)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'white',
+                fontSize: '1.25rem',
+                cursor: 'pointer',
+                padding: 0,
+                marginLeft: '1rem',
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <div style={{ fontSize: '0.875rem' }}>{paymentDeclineError}</div>
+        </div>
+      )}
+
+      {/* Agreement + Assignment Display */}
+      {currentSessionId && customerName && (agreementSigned || assignedResourceType) && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            background: '#1e293b',
+            borderTop: '2px solid #3b82f6',
+            padding: '1.5rem',
+            zIndex: 100,
+          }}
+        >
+          {!agreementSigned && (
+            <div style={{ marginBottom: '1rem', padding: '1rem', background: '#0f172a', borderRadius: '6px' }}>
+              <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
+                Agreement Pending
+              </div>
+              <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                Waiting for customer to sign the agreement on their device.
+              </div>
+            </div>
+          )}
+          {assignedResourceType && assignedResourceNumber && (
+            <div style={{ marginBottom: '1rem', padding: '1rem', background: '#0f172a', borderRadius: '6px' }}>
+              <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
+                Assigned: {assignedResourceType === 'room' ? 'Room' : 'Locker'} {assignedResourceNumber}
+              </div>
+              {checkoutAt && (
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                  Checkout: {new Date(checkoutAt).toLocaleString()}
+                </div>
+              )}
+            </div>
+          )}
+          {agreementSigned && assignedResourceType && (
+            <button
+              onClick={handleCompleteTransaction}
+              disabled={isSubmitting}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                background: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                fontWeight: 600,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isSubmitting ? 'Processing...' : 'Complete Transaction'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Pay-First Demo Buttons (after selection confirmed) */}
+      {currentSessionId && customerName && selectionConfirmed && paymentQuote && paymentStatus === 'DUE' && !pastDueBlocked && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: assignedResourceType ? '200px' : '0',
+            left: 0,
+            right: 0,
+            background: '#1e293b',
+            borderTop: '2px solid #3b82f6',
+            padding: '1.5rem',
+            zIndex: 100,
+          }}
+        >
+          <div style={{ marginBottom: '1rem', fontWeight: 600, fontSize: '1.125rem' }}>
+            Total: ${paymentQuote.total.toFixed(2)}
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => handleDemoPayment('CREDIT_SUCCESS')}
+              disabled={isSubmitting}
+              style={{
+                flex: 1,
+                padding: '0.75rem',
+                background: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                fontWeight: 600,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Credit Success
+            </button>
+            <button
+              onClick={() => handleDemoPayment('CASH_SUCCESS')}
+              disabled={isSubmitting}
+              style={{
+                flex: 1,
+                padding: '0.75rem',
+                background: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                fontWeight: 600,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Cash Success
+            </button>
+            <button
+              onClick={() => handleDemoPayment('CREDIT_DECLINE', 'Card declined')}
+              disabled={isSubmitting}
+              style={{
+                flex: 1,
+                padding: '0.75rem',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                fontWeight: 600,
+                cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Credit Decline
+            </button>
+          </div>
+        </div>
+      )}
     </div>
     </RegisterSignIn>
   );
