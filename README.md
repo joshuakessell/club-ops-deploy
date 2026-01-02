@@ -130,6 +130,8 @@ The API uses PostgreSQL running in Docker. The database is configured to use por
 
 The DB scripts support both Docker Compose v2 (`docker compose`) and legacy Compose (`docker-compose`).
 
+Database scripts automatically wait for Postgres readiness before running migrations or seeds. This avoids connection reset errors during container startup and works consistently across macOS, Linux, CI, and cloud environments.
+
 **Database commands** (run from repo root):
 
 ```bash

@@ -23,6 +23,17 @@ interface SignInModalProps {
 
 type SignInStep = 'select-employee' | 'enter-pin' | 'assign-register' | 'confirm';
 
+type RegisterAvailability = {
+  registerNumber: 1 | 2;
+  occupied: boolean;
+  deviceId?: string;
+  employee?: {
+    id: string;
+    name: string;
+    role: string;
+  };
+};
+
 export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModalProps) {
   const [step, setStep] = useState<SignInStep>('select-employee');
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -30,7 +41,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState(false);
   const [registerNumber, setRegisterNumber] = useState<number | null>(null);
-  const [availableRegisters, setAvailableRegisters] = useState<number[]>([]);
+  const [registers, setRegisters] = useState<RegisterAvailability[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,6 +61,19 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     } catch (error) {
       console.error('Failed to fetch employees:', error);
       setError('Failed to load employees');
+    }
+  };
+
+  const fetchRegisterAvailability = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/v1/registers/availability`);
+      if (!response.ok) throw new Error('Failed to fetch register availability');
+      const data = await response.json();
+      setRegisters(data.registers || []);
+    } catch (err) {
+      console.error('Failed to fetch register availability:', err);
+      setError('Failed to load register availability');
+      setRegisters(null);
     }
   };
 
@@ -76,6 +100,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
         body: JSON.stringify({
           employeeId: selectedEmployee.id,
           pin: pin.trim(),
+          deviceId,
         }),
       });
 
@@ -90,8 +115,9 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
         throw new Error(errorData.message || 'PIN verification failed');
       }
 
-      // PIN verified, proceed to register assignment
-      await handleAssignRegister();
+      // PIN verified, allow user to choose a register
+      setStep('assign-register');
+      await fetchRegisterAvailability();
     } catch (error) {
       console.error('PIN verification error:', error);
       setError(error instanceof Error ? error.message : 'PIN verification failed');
@@ -100,7 +126,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     }
   };
 
-  const handleAssignRegister = async () => {
+  const handleAssignRegister = async (requestedRegisterNumber?: 1 | 2) => {
     if (!selectedEmployee) return;
 
     setIsLoading(true);
@@ -113,6 +139,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
         body: JSON.stringify({
           employeeId: selectedEmployee.id,
           deviceId,
+          registerNumber: requestedRegisterNumber,
         }),
       });
 
@@ -123,39 +150,20 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
 
       const data = await response.json();
 
-      // If registerNumber is returned, it means auto-assignment happened
-      if (data.registerNumber) {
-        setRegisterNumber(data.registerNumber);
-        setStep('confirm');
-      } else {
-        // If no registerNumber, show selection (shouldn't happen with current logic)
-        const allRegisters = [1, 2];
-        setAvailableRegisters(allRegisters);
-        setStep('assign-register');
-      }
+      if (data.registerNumber) setRegisterNumber(data.registerNumber);
+      setStep('confirm');
     } catch (error) {
       console.error('Register assignment error:', error);
       setError(error instanceof Error ? error.message : 'Failed to assign register');
+      // Refresh availability in case occupancy changed
+      await fetchRegisterAvailability();
     } finally {
       setIsLoading(false);
     }
   };
 
-  const getOccupiedRegisters = async (): Promise<number[]> => {
-    try {
-      // Check status for both registers
-      const status1 = await fetch(`${API_BASE}/v1/registers/status?deviceId=check-register-1`);
-      const status2 = await fetch(`${API_BASE}/v1/registers/status?deviceId=check-register-2`);
-      // This is a simplified check - in production, you'd have a dedicated endpoint
-      return [];
-    } catch {
-      return [];
-    }
-  };
-
-  const handleSelectRegister = (num: number) => {
-    setRegisterNumber(num);
-    setStep('confirm');
+  const handleSelectRegister = async (num: 1 | 2) => {
+    await handleAssignRegister(num);
   };
 
   const handleConfirm = async () => {
@@ -216,13 +224,9 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     } else if (step === 'assign-register') {
       setStep('enter-pin');
       setRegisterNumber(null);
-      setAvailableRegisters([]);
+      setRegisters(null);
     } else if (step === 'confirm') {
-      if (availableRegisters.length > 0) {
-        setStep('assign-register');
-      } else {
-        setStep('enter-pin');
-      }
+      setStep('assign-register');
       setRegisterNumber(null);
     }
     setError(null);
@@ -294,21 +298,39 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
           <div className="sign-in-step">
             <h2>Select Register</h2>
             {error && <div className="sign-in-error">{error}</div>}
-            <div className="register-buttons">
-              {availableRegisters.map((num) => (
-                <button
-                  key={num}
-                  className="register-button"
-                  onClick={() => handleSelectRegister(num)}
-                  disabled={isLoading}
-                >
-                  Register {num}
-                </button>
-              ))}
-            </div>
+            {!registers ? (
+              <div className="sign-in-subtitle">Loading registers...</div>
+            ) : (
+              <div className="register-buttons">
+                {([1, 2] as const).map((num) => {
+                  const reg = registers.find((r) => r.registerNumber === num);
+                  const occupied = reg?.occupied ?? false;
+                  const occupiedLabel = reg?.employee?.name ? ` (In use: ${reg.employee.name})` : ' (In use)';
+
+                  return (
+                    <button
+                      key={num}
+                      className="register-button"
+                      onClick={() => handleSelectRegister(num)}
+                      disabled={isLoading || occupied}
+                      title={occupied ? `Register ${num} is occupied` : `Use Register ${num}`}
+                    >
+                      Register {num}{occupied ? occupiedLabel : ''}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             <div className="sign-in-actions">
               <button onClick={handleBack} disabled={isLoading}>
                 Back
+              </button>
+              <button
+                type="button"
+                onClick={fetchRegisterAvailability}
+                disabled={isLoading}
+              >
+                Refresh
               </button>
             </div>
           </div>

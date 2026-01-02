@@ -126,17 +126,27 @@ function App() {
   const [checkoutAt, setCheckoutAt] = useState<string | null>(null);
 
   const deviceId = useState(() => {
-    // Get device ID from environment variable or localStorage
+    // Get device ID from environment variable or generate a stable per-device base ID.
+    // In development, you may have multiple tabs open; we add a per-tab instance suffix
+    // (stored in sessionStorage) so two tabs on the same machine can sign into
+    // different registers without colliding on deviceId.
     const envDeviceId = import.meta.env.VITE_DEVICE_ID;
     if (envDeviceId) {
       return envDeviceId;
     }
-    let id = localStorage.getItem('device_id');
-    if (!id) {
-      id = `device-${crypto.randomUUID()}`;
-      localStorage.setItem('device_id', id);
+    let baseId = localStorage.getItem('device_id');
+    if (!baseId) {
+      baseId = `device-${crypto.randomUUID()}`;
+      localStorage.setItem('device_id', baseId);
     }
-    return id;
+
+    let instanceId = sessionStorage.getItem('device_instance_id');
+    if (!instanceId) {
+      instanceId = crypto.randomUUID();
+      sessionStorage.setItem('device_instance_id', instanceId);
+    }
+
+    return `${baseId}:${instanceId}`;
   })[0];
 
   const [registerSession, setRegisterSession] = useState<{
