@@ -1076,16 +1076,6 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           throw new Error('Device already exists');
         }
 
-        // Count enabled devices
-        const enabledCount = await client.query<{ count: string }>(
-          `SELECT COUNT(*) as count FROM devices WHERE enabled = true`
-        );
-
-        const count = parseInt(enabledCount.rows[0]?.count || '0', 10);
-        if (count >= 2) {
-          throw new Error('Maximum of 2 enabled devices allowed');
-        }
-
         // Insert new device (enabled by default)
         await client.query(
           `INSERT INTO devices (device_id, display_name, enabled)
@@ -1148,17 +1138,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           throw new Error('Device not found');
         }
 
-        // If enabling, check if we're at the limit
-        if (enabled) {
-          const enabledCount = await client.query<{ count: string }>(
-            `SELECT COUNT(*) as count FROM devices WHERE enabled = true AND device_id != $1`,
-            [deviceId]
-          );
-          const count = parseInt(enabledCount.rows[0]?.count || '0', 10);
-          if (count >= 2) {
-            throw new Error('Maximum of 2 enabled devices allowed');
-          }
-        }
+        // Devices may be auto-registered by register clients; admins can disable as needed.
 
         // If disabling, check for active register session and force sign out
         if (!enabled) {

@@ -2,7 +2,9 @@
 
 ## Overview
 
-This specification defines the admin monitoring and control features for employee register sessions. The system supports a maximum of two active register sessions (Register 1 and Register 2), with admin oversight, forced sign-out capabilities, device allowlist enforcement, and real-time WebSocket updates.
+This specification defines the admin monitoring and control features for employee register sessions. The system supports a maximum of two active register sessions (Register 1 and Register 2), with admin oversight, forced sign-out capabilities, device registry/management, and real-time WebSocket updates.
+
+**Update (auto-registration)**: Register clients auto-register themselves on first use. Admins may still disable a specific device if needed, but unknown devices are no longer blocked by default.
 
 ## Register Session Lifecycle
 
@@ -38,22 +40,22 @@ Admins can force sign-out any active register session:
 - Broadcasts `REGISTER_SESSION_UPDATED` event with reason `FORCED_SIGN_OUT`
 - Client receives event and immediately returns to splash screen
 
-## Device Allowlist
+## Device Registry (Auto-registration)
 
 ### Rules
 
-- Maximum of 2 enabled devices at any time
-- Only enabled devices can:
+- Devices are auto-created in the `devices` table the first time they call a register endpoint
+- Only **enabled** devices can:
   - Verify PIN
   - Assign to registers
   - Send heartbeats
   - Confirm register assignments
-- Disabled or unknown devices receive clear error codes
+- Disabled devices receive clear error codes (`DEVICE_DISABLED`)
 
 ### Admin Management
 
 - View all devices (enabled and disabled)
-- Add new devices (rejected if 2 already enabled)
+- Add new devices (optional; devices will also appear automatically on first use)
 - Enable/disable devices
 - Disabling an active device automatically forces sign-out of its register session
 
@@ -113,7 +115,7 @@ When employee-register receives:
 
 ### Server-Side Enforcement
 
-Runtime endpoints reject requests from disabled/unknown devices:
+Runtime endpoints reject requests from **disabled** devices:
 - `/v1/auth/verify-pin`
 - `/v1/registers/assign`
 - `/v1/registers/confirm`

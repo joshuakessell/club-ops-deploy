@@ -55,12 +55,10 @@ async function seed() {
     );
     
     if (parseInt(existingRooms.rows[0]?.count || '0', 10) > 0) {
-      console.log('⚠️  Rooms already exist in database. Skipping seed.');
-      console.log('   To reseed, clear the database first: pnpm db:reset && pnpm db:migrate');
-      return;
-    }
-
-    // Insert rooms and key tags in a transaction
+      console.log('⚠️  Rooms already exist in database. Skipping room seed.');
+      console.log('   To reseed rooms, clear the database first: pnpm db:reset && pnpm db:migrate');
+    } else {
+      // Insert rooms and key tags in a transaction
     for (const roomSeed of seedRooms) {
       // Insert room
       const roomResult = await query<{ id: string }>(
@@ -82,11 +80,12 @@ async function seed() {
       console.log(`✓ Seeded room ${roomSeed.number} (${roomSeed.status}) with tag ${roomSeed.tagCode}`);
     }
 
-    console.log(`\n✅ Successfully seeded ${seedRooms.length} rooms with key tags`);
-    console.log('\nScan tokens for testing:');
-    seedRooms.forEach(room => {
-      console.log(`  - ${room.tagCode} → Room ${room.number} (${room.status})`);
-    });
+      console.log(`\n✅ Successfully seeded ${seedRooms.length} rooms with key tags`);
+      console.log('\nScan tokens for testing:');
+      seedRooms.forEach(room => {
+        console.log(`  - ${room.tagCode} → Room ${room.number} (${room.status})`);
+      });
+    }
 
     // Seed staff users
     console.log('\nSeeding staff users...');
@@ -192,6 +191,39 @@ async function seed() {
       console.log(`    QR Token: ${staff.qrToken}`);
       console.log(`    PIN: ${staff.pin}`);
     });
+
+    // Seed devices for register use
+    console.log('\nSeeding devices...');
+    
+    const seedDevices = [
+      { deviceId: 'register-1', displayName: 'Register 1' },
+      { deviceId: 'register-2', displayName: 'Register 2' },
+    ];
+    
+    for (const device of seedDevices) {
+      const existing = await query<{ count: string }>(
+        'SELECT COUNT(*) as count FROM devices WHERE device_id = $1',
+        [device.deviceId]
+      );
+      
+      if (parseInt(existing.rows[0]?.count || '0', 10) === 0) {
+        await query(
+          `INSERT INTO devices (device_id, display_name, enabled)
+           VALUES ($1, $2, true)`,
+          [device.deviceId, device.displayName]
+        );
+        console.log(`✓ Seeded device: ${device.displayName} (${device.deviceId})`);
+      } else {
+        // Update existing device to ensure it's enabled
+        await query(
+          `UPDATE devices SET enabled = true, display_name = $1 WHERE device_id = $2`,
+          [device.displayName, device.deviceId]
+        );
+        console.log(`✓ Updated device: ${device.displayName} (${device.deviceId})`);
+      }
+    }
+    
+    console.log('✅ Devices seeded successfully');
 
     // Seed active agreement
     console.log('\nSeeding active agreement...');

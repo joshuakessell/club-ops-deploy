@@ -65,17 +65,30 @@ interface RegisterSessionRow {
 }
 
 /**
- * Helper function to check if a device is enabled.
- * Throws error if device not found or disabled.
+ * Helper function to ensure a device is registered and enabled for register use.
+ *
+ * Behavior:
+ * - If device does not exist in `devices`, auto-register it as enabled.
+ * - If device exists but is disabled, throw DEVICE_DISABLED.
  */
-async function checkDeviceEnabled(deviceId: string): Promise<void> {
+async function ensureDeviceEnabled(deviceId: string): Promise<void> {
   const result = await query<{ enabled: boolean }>(
     `SELECT enabled FROM devices WHERE device_id = $1`,
     [deviceId]
   );
 
+  // Auto-register unknown devices (enabled by default)
   if (result.rows.length === 0) {
-    throw new Error('DEVICE_DISABLED');
+    const safeSuffix = deviceId.length > 32 ? `${deviceId.slice(0, 32)}…` : deviceId;
+    const displayName = `Auto-registered (${safeSuffix})`;
+
+    await query(
+      `INSERT INTO devices (device_id, display_name, enabled)
+       VALUES ($1, $2, true)
+       ON CONFLICT (device_id) DO NOTHING`,
+      [deviceId, displayName]
+    );
+    return;
   }
 
   if (!result.rows[0]!.enabled) {
@@ -136,6 +149,67 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
   });
 
   /**
+   * GET /v1/registers/availability
+   *
+   * Returns which register numbers (1/2) are currently occupied.
+   * Used by the employee-register UI so the user can choose a register.
+   */
+  fastify.get('/v1/registers/availability', async (
+    request: FastifyRequest,
+    reply: FastifyReply
+  ) => {
+    try {
+      const active = await query<{
+        register_number: number;
+        device_id: string;
+        employee_id: string;
+        employee_name: string;
+        employee_role: string;
+      }>(
+        `SELECT
+           rs.register_number,
+           rs.device_id,
+           rs.employee_id,
+           s.name as employee_name,
+           s.role as employee_role
+         FROM register_sessions rs
+         JOIN staff s ON s.id = rs.employee_id
+         WHERE rs.signed_out_at IS NULL`
+      );
+
+      const byRegister = new Map<number, (typeof active.rows)[number]>();
+      for (const row of active.rows) {
+        byRegister.set(row.register_number, row);
+      }
+
+      const registers = [1, 2].map((num) => {
+        const row = byRegister.get(num);
+        if (!row) {
+          return { registerNumber: num as 1 | 2, occupied: false };
+        }
+        return {
+          registerNumber: num as 1 | 2,
+          occupied: true,
+          deviceId: row.device_id,
+          employee: {
+            id: row.employee_id,
+            name: row.employee_name,
+            role: row.employee_role,
+          },
+        };
+      });
+
+      return reply.send({ registers });
+    } catch (error) {
+      request.log.error(error, 'Failed to fetch register availability');
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to fetch register availability',
+      });
+    }
+  });
+
+  /**
    * POST /v1/auth/verify-pin
    * 
    * Verifies employee PIN without creating a session.
@@ -159,7 +233,7 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
     try {
       // Check device is enabled
       try {
-        await checkDeviceEnabled(body.deviceId);
+        await ensureDeviceEnabled(body.deviceId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Device check failed';
         if (message === 'DEVICE_DISABLED') {
@@ -240,7 +314,7 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
     try {
       // Check device is enabled
       try {
-        await checkDeviceEnabled(body.deviceId);
+        await ensureDeviceEnabled(body.deviceId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Device check failed';
         if (message === 'DEVICE_DISABLED') {
@@ -344,7 +418,7 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
     try {
       // Check device is enabled
       try {
-        await checkDeviceEnabled(body.deviceId);
+        await ensureDeviceEnabled(body.deviceId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Device check failed';
         if (message === 'DEVICE_DISABLED') {
@@ -532,7 +606,7 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
     try {
       // Check device is enabled
       try {
-        await checkDeviceEnabled(body.deviceId);
+        await ensureDeviceEnabled(body.deviceId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Device check failed';
         if (message === 'DEVICE_DISABLED') {
@@ -713,6 +787,21 @@ export async function registerRoutes(fastify: FastifyInstance & { broadcaster: a
     }
 
     try {
+      // Auto-register device on first contact; reject only if explicitly disabled
+      try {
+        await ensureDeviceEnabled(deviceId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Device check failed';
+        if (message === 'DEVICE_DISABLED') {
+          return reply.status(403).send({
+            error: 'Device not allowed',
+            code: 'DEVICE_DISABLED',
+            message: 'This device is not enabled for register use',
+          });
+        }
+        throw err;
+      }
+
       const result = await query<RegisterSessionRow & { employee_name: string; employee_role: string }>(
         `SELECT 
            rs.*,
