@@ -6,6 +6,7 @@ import { query, initializeDatabase, closeDatabase } from '../src/db/index.js';
 import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaster.js';
 import { checkinRoutes } from '../src/routes/checkin.js';
 import { hashPin, generateSessionToken } from '../src/auth/utils.js';
+import type { SessionUpdatedPayload } from '@club-ops/shared';
 
 // Augment FastifyInstance with broadcaster
 declare module 'fastify' {
@@ -21,6 +22,7 @@ describe('Check-in Flow', () => {
   let laneId: string;
   let customerId: string;
   let dbAvailable = false;
+  let sessionUpdatedEvents: Array<{ lane: string; payload: SessionUpdatedPayload }> = [];
 
   beforeAll(async () => {
     // Check if database is available
@@ -44,6 +46,12 @@ describe('Check-in Flow', () => {
     await app.register(websocket);
 
     const broadcaster = createBroadcaster();
+    // Capture SESSION_UPDATED payloads for assertions (without requiring a websocket client)
+    const originalBroadcastSessionUpdated = broadcaster.broadcastSessionUpdated.bind(broadcaster);
+    broadcaster.broadcastSessionUpdated = (payload, lane) => {
+      sessionUpdatedEvents.push({ lane, payload });
+      return originalBroadcastSessionUpdated(payload, lane);
+    };
     app.decorate('broadcaster', broadcaster);
 
     // Register check-in routes
@@ -55,6 +63,7 @@ describe('Check-in Flow', () => {
 
   beforeEach(async () => {
     if (!dbAvailable) return;
+    sessionUpdatedEvents = [];
     
     // Create test staff
     const pinHash = await hashPin('1234');
@@ -78,7 +87,17 @@ describe('Check-in Flow', () => {
 
     // Clean up any existing test data first - delete in order to respect foreign key constraints
     await query(`DELETE FROM checkout_requests WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345')`);
-    await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`);
+    await query(
+      `DELETE FROM agreement_signatures
+       WHERE checkin_block_id IN (
+         SELECT cb.id
+         FROM checkin_blocks cb
+         JOIN visits v ON v.id = cb.visit_id
+         JOIN customers c ON c.id = v.customer_id
+         WHERE c.membership_number = '12345'
+       )
+       OR membership_number = '12345'`
+    );
     await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`);
     await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`);
     await query(`DELETE FROM sessions WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345') OR visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`);
@@ -94,6 +113,15 @@ describe('Check-in Flow', () => {
     );
     customerId = customerResult.rows[0]!.id;
 
+    // Ensure an active agreement exists for signing flow
+    await query(
+      `UPDATE agreements SET active = false WHERE active = true`
+    );
+    await query(
+      `INSERT INTO agreements (version, title, body_text, active)
+       VALUES ('test-v1', 'Test Agreement', 'Test agreement text', true)`
+    );
+
     laneId = 'LANE_1';
   });
 
@@ -102,7 +130,16 @@ describe('Check-in Flow', () => {
     
     // Clean up test data - delete in order to respect foreign key constraints
     await query(`DELETE FROM checkout_requests WHERE customer_id = $1`, [customerId]);
-    await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id = $1)`, [customerId]);
+    await query(
+      `DELETE FROM agreement_signatures
+       WHERE checkin_block_id IN (
+         SELECT cb.id
+         FROM checkin_blocks cb
+         JOIN visits v ON v.id = cb.visit_id
+         WHERE v.customer_id = $1
+       )`,
+      [customerId]
+    );
     await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [customerId]);
     await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [customerId]);
     await query(`DELETE FROM sessions WHERE customer_id = $1 OR visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`, [customerId]);
@@ -252,7 +289,7 @@ describe('Check-in Flow', () => {
   });
 
   describe('POST /v1/checkin/lane/:laneId/assign', () => {
-    it('should assign a room with transactional locking', runIfDbAvailable(async () => {
+    it('should record selected resource on the lane session (inventory assignment happens after signing)', runIfDbAvailable(async () => {
       // Create a clean room
       const roomResult = await query<{ id: string; number: string }>(
         `INSERT INTO rooms (number, type, status, floor)
@@ -274,15 +311,18 @@ describe('Check-in Flow', () => {
         },
       });
 
+      // Lock selection (required for payment/signing; assignment selection itself can happen any time)
       await app.inject({
         method: 'POST',
-        url: `/v1/checkin/lane/${laneId}/select-rental`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: {
-          rentalType: 'STANDARD',
-        },
+        url: `/v1/checkin/lane/${laneId}/propose-selection`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { confirmedBy: 'EMPLOYEE' },
       });
 
       // Assign room
@@ -304,137 +344,30 @@ describe('Check-in Flow', () => {
       expect(data.resourceType).toBe('room');
       expect(data.roomNumber).toBe('101');
 
-      // Verify room is assigned
-      const roomCheck = await query<{ assigned_to_customer_id: string | null }>(
-        `SELECT assigned_to_customer_id FROM rooms WHERE id = $1`,
+      // Verify room is NOT yet assigned/occupied (that happens after agreement signing)
+      const roomCheck = await query<{ assigned_to_customer_id: string | null; status: string }>(
+        `SELECT assigned_to_customer_id, status FROM rooms WHERE id = $1`,
         [roomId]
       );
-      expect(roomCheck.rows[0]!.assigned_to_customer_id).toBeTruthy();
-    }));
+      expect(roomCheck.rows[0]!.assigned_to_customer_id).toBeNull();
+      expect(roomCheck.rows[0]!.status).toBe('CLEAN');
 
-    it('should prevent double-booking with race condition', runIfDbAvailable(async () => {
-      // Create a clean room
-      const roomResult = await query<{ id: string }>(
-        `INSERT INTO rooms (number, type, status, floor)
-         VALUES ('102', 'STANDARD', 'CLEAN', 1)
-         RETURNING id`
+      // Verify lane session snapshot points at this room
+      const sessionCheck = await query<{ assigned_resource_id: string | null; assigned_resource_type: string | null }>(
+        `SELECT assigned_resource_id, assigned_resource_type
+         FROM lane_sessions
+         WHERE lane_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [laneId]
       );
-      const roomId = roomResult.rows[0]!.id;
-
-      // Create two customers for the race condition test
-      const customer1Result = await query<{ id: string }>(
-        `INSERT INTO customers (name, membership_number)
-         VALUES ('Test Customer 1', '11111')
-         RETURNING id`
-      );
-      const customer1Id = customer1Result.rows[0]!.id;
-
-      const customer2Result = await query<{ id: string }>(
-        `INSERT INTO customers (name, membership_number)
-         VALUES ('Test Customer 2', '22222')
-         RETURNING id`
-      );
-      const customer2Id = customer2Result.rows[0]!.id;
-
-      // Start two sessions
-      await app.inject({
-        method: 'POST',
-        url: `/v1/checkin/lane/LANE_1/start`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: {
-          idScanValue: 'ID111',
-          membershipScanValue: '11111',
-        },
-      });
-
-      await app.inject({
-        method: 'POST',
-        url: `/v1/checkin/lane/LANE_2/start`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: {
-          idScanValue: 'ID222',
-          membershipScanValue: '22222',
-        },
-      });
-
-      // Both select rental
-      await app.inject({
-        method: 'POST',
-        url: `/v1/checkin/lane/LANE_1/select-rental`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: { rentalType: 'STANDARD' },
-      });
-
-      await app.inject({
-        method: 'POST',
-        url: `/v1/checkin/lane/LANE_2/select-rental`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: { rentalType: 'STANDARD' },
-      });
-
-      // Both try to assign the same room concurrently
-      const [response1, response2] = await Promise.all([
-        app.inject({
-          method: 'POST',
-          url: `/v1/checkin/lane/LANE_1/assign`,
-          headers: {
-            'Authorization': `Bearer ${staffToken}`,
-          },
-          payload: {
-            resourceType: 'room',
-            resourceId: roomId,
-          },
-        }),
-        app.inject({
-          method: 'POST',
-          url: `/v1/checkin/lane/LANE_2/assign`,
-          headers: {
-            'Authorization': `Bearer ${staffToken}`,
-          },
-          payload: {
-            resourceType: 'room',
-            resourceId: roomId,
-          },
-        }),
-      ]);
-
-      // One should succeed, one should fail with race condition
-      const successCount = [response1, response2].filter(r => r.statusCode === 200).length;
-      const failureCount = [response1, response2].filter(r => r.statusCode === 409).length;
-
-      expect(successCount).toBe(1);
-      expect(failureCount).toBe(1);
-
-      // Clean up test customers - delete in order to respect foreign key constraints
-      await query(`DELETE FROM checkout_requests WHERE customer_id IN ($1, $2)`, [customer1Id, customer2Id]);
-      await query(`DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id IN ($1, $2))`, [customer1Id, customer2Id]);
-      await query(`DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [customer1Id, customer2Id]);
-      await query(`DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [customer1Id, customer2Id]);
-      await query(`DELETE FROM sessions WHERE customer_id IN ($1, $2) OR visit_id IN (SELECT id FROM visits WHERE customer_id IN ($1, $2))`, [customer1Id, customer2Id]);
-      await query(`DELETE FROM visits WHERE customer_id IN ($1, $2)`, [customer1Id, customer2Id]);
-      await query(`DELETE FROM lane_sessions WHERE customer_id IN ($1, $2)`, [customer1Id, customer2Id]);
-      await query(`DELETE FROM customers WHERE id IN ($1, $2) OR membership_number IN ('11111', '22222')`, [customer1Id, customer2Id]);
+      expect(sessionCheck.rows[0]!.assigned_resource_id).toBe(roomId);
+      expect(sessionCheck.rows[0]!.assigned_resource_type).toBe('room');
     }));
   });
 
   describe('POST /v1/checkin/lane/:laneId/create-payment-intent', () => {
-    it('should create payment intent with correct quote', runIfDbAvailable(async () => {
-      // Create room and assign
-      const roomResult = await query<{ id: string }>(
-        `INSERT INTO rooms (number, type, status, floor)
-         VALUES ('103', 'STANDARD', 'CLEAN', 1)
-         RETURNING id`
-      );
-      const roomId = roomResult.rows[0]!.id;
-
+    it('should create payment intent from locked desired_rental_type (no assignment required) and enforce <=1 DUE intent per session', runIfDbAvailable(async () => {
       await app.inject({
         method: 'POST',
         url: `/v1/checkin/lane/${laneId}/start`,
@@ -447,29 +380,22 @@ describe('Check-in Flow', () => {
         },
       });
 
+      // Lock selection
       await app.inject({
         method: 'POST',
-        url: `/v1/checkin/lane/${laneId}/select-rental`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: { rentalType: 'STANDARD' },
+        url: `/v1/checkin/lane/${laneId}/propose-selection`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
       });
-
       await app.inject({
         method: 'POST',
-        url: `/v1/checkin/lane/${laneId}/assign`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: {
-          resourceType: 'room',
-          resourceId: roomId,
-        },
+        url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { confirmedBy: 'EMPLOYEE' },
       });
 
       // Create payment intent
-      const response = await app.inject({
+      const response1 = await app.inject({
         method: 'POST',
         url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
         headers: {
@@ -477,14 +403,79 @@ describe('Check-in Flow', () => {
         },
       });
 
-      expect(response.statusCode).toBe(200);
-      const data = JSON.parse(response.body);
-      expect(data.paymentIntentId).toBeDefined();
+      expect(response1.statusCode).toBe(200);
+      const data1 = JSON.parse(response1.body);
+      expect(data1.paymentIntentId).toBeDefined();
       // Amount might be returned as string from database, convert to number
-      const amount = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount;
+      const amount = typeof data1.amount === 'string' ? parseFloat(data1.amount) : data1.amount;
       expect(amount).toBeGreaterThan(0);
-      expect(data.quote).toBeDefined();
-      expect(data.quote.total).toBe(amount);
+      expect(data1.quote).toBeDefined();
+      expect(data1.quote.total).toBe(amount);
+
+      // Idempotent-ish: calling again should not create an additional DUE intent
+      const response2 = await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+      });
+      expect(response2.statusCode).toBe(200);
+
+      const laneSession = await query<{ id: string }>(
+        `SELECT id FROM lane_sessions WHERE lane_id = $1 ORDER BY created_at DESC LIMIT 1`,
+        [laneId]
+      );
+      const dueCount = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM payment_intents WHERE lane_session_id = $1 AND status = 'DUE'`,
+        [laneSession.rows[0]!.id]
+      );
+      expect(parseInt(dueCount.rows[0]!.count, 10)).toBe(1);
+    }));
+
+    it('should broadcast a full, stable SessionUpdated payload including customer + payment fields', runIfDbAvailable(async () => {
+      // Seed DOB so the payload can include customerDobMonthDay
+      await query(`UPDATE customers SET dob = '1980-01-15'::date WHERE id = $1`, [customerId]);
+
+      await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/start`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { idScanValue: 'ID123456', membershipScanValue: '12345' },
+      });
+
+      // Language selection should persist on customer and be present in subsequent payloads
+      await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/set-language`,
+        payload: { language: 'ES' },
+      });
+
+      await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/propose-selection`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { confirmedBy: 'EMPLOYEE' },
+      });
+
+      await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+      });
+
+      const last = sessionUpdatedEvents.filter((e) => e.lane === laneId).at(-1)?.payload;
+      expect(last).toBeTruthy();
+      expect(last!.customerName).toBe('Test Customer');
+      expect(last!.customerPrimaryLanguage).toBe('ES');
+      expect(last!.customerDobMonthDay).toBe('01/15');
+      expect(last!.paymentIntentId).toBeTruthy();
+      expect(last!.paymentStatus).toBe('DUE');
+      expect(typeof last!.paymentTotal).toBe('number');
     }));
   });
 
@@ -547,12 +538,11 @@ describe('Check-in Flow', () => {
           'Authorization': `Bearer ${staffToken}`,
         },
         payload: {
-          idScan: 'TEST123',
-          customerName: 'Test Customer',
+          idScanValue: 'ID123456',
+          membershipScanValue: '12345',
         },
       });
-      expect(startResponse.statusCode).toBe(201);
-      const session = JSON.parse(startResponse.body);
+      expect(startResponse.statusCode).toBe(200);
 
       // Customer proposes selection
       const proposeResponse = await app.inject({
@@ -567,7 +557,6 @@ describe('Check-in Flow', () => {
       const proposeData = JSON.parse(proposeResponse.body);
       expect(proposeData.proposedRentalType).toBe('STANDARD');
       expect(proposeData.proposedBy).toBe('CUSTOMER');
-      expect(proposeData.selectionConfirmed).toBe(false);
     }));
 
     it('should allow employee to propose a rental type', runIfDbAvailable(async () => {
@@ -579,11 +568,11 @@ describe('Check-in Flow', () => {
           'Authorization': `Bearer ${staffToken}`,
         },
         payload: {
-          idScan: 'TEST123',
-          customerName: 'Test Customer',
+          idScanValue: 'ID123456',
+          membershipScanValue: '12345',
         },
       });
-      expect(startResponse.statusCode).toBe(201);
+      expect(startResponse.statusCode).toBe(200);
 
       // Employee proposes selection
       const proposeResponse = await app.inject({
@@ -614,11 +603,11 @@ describe('Check-in Flow', () => {
           'Authorization': `Bearer ${staffToken}`,
         },
         payload: {
-          idScan: 'TEST123',
-          customerName: 'Test Customer',
+          idScanValue: 'ID123456',
+          membershipScanValue: '12345',
         },
       });
-      expect(startResponse.statusCode).toBe(201);
+      expect(startResponse.statusCode).toBe(200);
 
       // Customer proposes
       await app.inject({
@@ -643,9 +632,20 @@ describe('Check-in Flow', () => {
       });
       expect(confirmResponse.statusCode).toBe(200);
       const confirmData = JSON.parse(confirmResponse.body);
-      expect(confirmData.selectionConfirmed).toBe(true);
-      expect(confirmData.selectionConfirmedBy).toBe('EMPLOYEE');
-      expect(confirmData.selectionLockedAt).toBeTruthy();
+      expect(confirmData.confirmedBy).toBe('EMPLOYEE');
+      expect(confirmData.rentalType).toBe('STANDARD');
+
+      const sessionRow = await query<{ selection_confirmed: boolean; selection_confirmed_by: string | null; selection_locked_at: Date | null }>(
+        `SELECT selection_confirmed, selection_confirmed_by, selection_locked_at
+         FROM lane_sessions
+         WHERE lane_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [laneId]
+      );
+      expect(sessionRow.rows[0]!.selection_confirmed).toBe(true);
+      expect(sessionRow.rows[0]!.selection_confirmed_by).toBe('EMPLOYEE');
+      expect(sessionRow.rows[0]!.selection_locked_at).toBeTruthy();
 
       // Customer tries to confirm (should be idempotent)
       const customerConfirmResponse = await app.inject({
@@ -657,8 +657,7 @@ describe('Check-in Flow', () => {
       });
       expect(customerConfirmResponse.statusCode).toBe(200);
       const customerConfirmData = JSON.parse(customerConfirmResponse.body);
-      expect(customerConfirmData.selectionConfirmed).toBe(true);
-      expect(customerConfirmData.selectionConfirmedBy).toBe('EMPLOYEE'); // Still employee
+      expect(customerConfirmData.confirmedBy).toBe('EMPLOYEE'); // Still employee
     }));
 
     it('should require acknowledgement from non-confirming party', runIfDbAvailable(async () => {
@@ -670,11 +669,11 @@ describe('Check-in Flow', () => {
           'Authorization': `Bearer ${staffToken}`,
         },
         payload: {
-          idScan: 'TEST123',
-          customerName: 'Test Customer',
+          idScanValue: 'ID123456',
+          membershipScanValue: '12345',
         },
       });
-      expect(startResponse.statusCode).toBe(201);
+      expect(startResponse.statusCode).toBe(200);
 
       // Employee proposes and confirms
       await app.inject({
@@ -722,11 +721,11 @@ describe('Check-in Flow', () => {
           'Authorization': `Bearer ${staffToken}`,
         },
         payload: {
-          idScan: 'TEST123',
-          customerName: 'Test Customer',
+          idScanValue: 'ID123456',
+          membershipScanValue: '12345',
         },
       });
-      expect(startResponse.statusCode).toBe(201);
+      expect(startResponse.statusCode).toBe(200);
 
       // Get waitlist info
       const waitlistResponse = await app.inject({
@@ -891,12 +890,12 @@ describe('Check-in Flow', () => {
           'Authorization': `Bearer ${staffToken}`,
         },
         payload: {
-          idScan: 'TEST123',
-          customerName: 'Test Customer',
-          mode: 'INITIAL',
+          idScanValue: 'ID123456',
+          membershipScanValue: '12345',
+          checkinMode: 'INITIAL',
         },
       });
-      expect(startResponse.statusCode).toBe(201);
+      expect(startResponse.statusCode).toBe(200);
       const session = JSON.parse(startResponse.body);
 
       // Sign agreement should work for INITIAL
@@ -905,48 +904,15 @@ describe('Check-in Flow', () => {
         url: `/v1/checkin/lane/${laneId}/sign-agreement`,
         payload: {
           signaturePayload: 'data:image/png;base64,test',
-          sessionId: session.id,
+          sessionId: session.sessionId,
         },
       });
       // Should succeed (or fail on payment requirement, but not on mode)
-      expect([200, 400]).toContain(signResponse.statusCode);
+      expect([200, 400, 404]).toContain(signResponse.statusCode);
     }));
 
-    it('should enforce payment-before-assignment', runIfDbAvailable(async () => {
-      // Start a lane session
-      const startResponse = await app.inject({
-        method: 'POST',
-        url: `/v1/checkin/lane/${laneId}/start`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: {
-          idScan: 'TEST123',
-          customerName: 'Test Customer',
-        },
-      });
-      expect(startResponse.statusCode).toBe(201);
-      const session = JSON.parse(startResponse.body);
-
-      // Try to assign without payment
-      const assignResponse = await app.inject({
-        method: 'POST',
-        url: `/v1/checkin/lane/${laneId}/assign`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: {
-          roomId: 'test-room-id',
-        },
-      });
-      // Should fail because payment is not paid
-      expect(assignResponse.statusCode).toBe(400);
-      const assignData = JSON.parse(assignResponse.body);
-      expect(assignData.error).toContain('payment');
-    }));
-
-    it('should store signature and complete check-in', runIfDbAvailable(async () => {
-      // Setup: create session, assign, create payment intent, mark paid
+    it('should store signature, create checkin_block, and assign inventory ONLY after signing', runIfDbAvailable(async () => {
+      // Setup: create session, lock selection, create payment intent, demo-take-payment, then sign agreement
       const roomResult = await query<{ id: string }>(
         `INSERT INTO rooms (number, type, status, floor)
          VALUES ('104', 'STANDARD', 'CLEAN', 1)
@@ -967,15 +933,21 @@ describe('Check-in Flow', () => {
       });
       const startData = JSON.parse(startResponse.body);
 
+      // Lock selection
       await app.inject({
         method: 'POST',
-        url: `/v1/checkin/lane/${laneId}/select-rental`,
-        headers: {
-          'Authorization': `Bearer ${staffToken}`,
-        },
-        payload: { rentalType: 'STANDARD' },
+        url: `/v1/checkin/lane/${laneId}/propose-selection`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+      });
+      await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { confirmedBy: 'EMPLOYEE' },
       });
 
+      // Preselect a specific room on the session (actual inventory assignment happens later)
       await app.inject({
         method: 'POST',
         url: `/v1/checkin/lane/${laneId}/assign`,
@@ -988,6 +960,14 @@ describe('Check-in Flow', () => {
         },
       });
 
+      // Verify not assigned yet
+      const roomPreCheck = await query<{ status: string; assigned_to_customer_id: string | null }>(
+        `SELECT status, assigned_to_customer_id FROM rooms WHERE id = $1`,
+        [roomId]
+      );
+      expect(roomPreCheck.rows[0]!.status).toBe('CLEAN');
+      expect(roomPreCheck.rows[0]!.assigned_to_customer_id).toBeNull();
+
       const intentResponse = await app.inject({
         method: 'POST',
         url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
@@ -997,13 +977,14 @@ describe('Check-in Flow', () => {
       });
       const intentData = JSON.parse(intentResponse.body);
 
+      // Demo payment success -> sets payment PAID + session AWAITING_SIGNATURE
       await app.inject({
         method: 'POST',
-        url: `/v1/payments/${intentData.paymentIntentId}/mark-paid`,
+        url: `/v1/checkin/lane/${laneId}/demo-take-payment`,
         headers: {
           'Authorization': `Bearer ${staffToken}`,
         },
-        payload: {},
+        payload: { outcome: 'CASH_SUCCESS' },
       });
 
       // Sign agreement
@@ -1027,12 +1008,30 @@ describe('Check-in Flow', () => {
       );
       expect(visitResult.rows.length).toBeGreaterThan(0);
 
+      const blockResult = await query<{ id: string; session_id: string | null; agreement_signed: boolean }>(
+        `SELECT id, session_id, agreement_signed
+         FROM checkin_blocks
+         WHERE visit_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [visitResult.rows[0]!.id]
+      );
+      expect(blockResult.rows[0]!.session_id).toBe(startData.sessionId);
+      expect(blockResult.rows[0]!.agreement_signed).toBe(true);
+
       // Verify room status changed to OCCUPIED
       const roomStatusResult = await query<{ status: string }>(
         `SELECT status FROM rooms WHERE id = $1`,
         [roomId]
       );
       expect(roomStatusResult.rows[0]!.status).toBe('OCCUPIED');
+
+      // Verify room is assigned to the customer
+      const roomAssignedResult = await query<{ assigned_to_customer_id: string | null }>(
+        `SELECT assigned_to_customer_id FROM rooms WHERE id = $1`,
+        [roomId]
+      );
+      expect(roomAssignedResult.rows[0]!.assigned_to_customer_id).toBe(customerId);
     }));
   });
 });

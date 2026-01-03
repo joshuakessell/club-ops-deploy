@@ -22,7 +22,11 @@ declare module 'fastify' {
 async function extractStaffFromToken(
   request: FastifyRequest
 ): Promise<boolean> {
-  const authHeader = request.headers.authorization;
+  const authHeader =
+    request.headers.authorization ??
+    // Defensive: some test/inject clients may pass non-normalized header keys
+    ((request.headers as Record<string, unknown>)['Authorization'] as string | undefined) ??
+    ((request.headers as Record<string, unknown>)['AUTHORIZATION'] as string | undefined);
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return false;
   }
