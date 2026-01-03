@@ -29,19 +29,14 @@ The system uses three predefined shift windows with overlapping coverage:
 
 ### Database Schema
 
-**employee_shifts** table:
-- `id` (UUID, PK)
-- `employee_id` (UUID, FK to staff)
-- `starts_at` (TIMESTAMPTZ, NOT NULL)
-- `ends_at` (TIMESTAMPTZ, NOT NULL)
-- `shift_code` (TEXT, NOT NULL, CHECK IN ('A', 'B', 'C'))
-- `role` (TEXT, nullable) - Role assignment for the shift
-- `status` (ENUM/TEXT, NOT NULL) - SCHEDULED | UPDATED | CANCELED
-- `notes` (TEXT, nullable)
-- `created_by` (UUID, nullable, FK to staff) - Manager who created the shift
-- `updated_by` (UUID, nullable, FK to staff) - Manager who last updated
-- `created_at` (TIMESTAMPTZ, NOT NULL, DEFAULT NOW())
-- `updated_at` (TIMESTAMPTZ, NOT NULL, DEFAULT NOW())
+**Deprecated / superseded**: This spec’s schema sketches are not authoritative and may not match the current database.
+
+If/when scheduled shifts are implemented in the database, the canonical table/column meaning must be defined in:
+
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md`
+- `docs/database/DATABASE_ENTITY_DETAILS.md`
+
+And reflected in `db/schema.sql` + `services/api/migrations/`.
 
 ### Shift Status Lifecycle
 
@@ -59,21 +54,14 @@ The system uses three predefined shift windows with overlapping coverage:
 
 ### Database Schema
 
-**timeclock_sessions** table:
-- `id` (UUID, PK)
-- `employee_id` (UUID, FK to staff, NOT NULL)
-- `shift_id` (UUID, FK to employee_shifts, nullable) - Attached shift if applicable
-- `clock_in_at` (TIMESTAMPTZ, NOT NULL)
-- `clock_out_at` (TIMESTAMPTZ, nullable) - NULL indicates open session
-- `source` (TEXT, NOT NULL) - EMPLOYEE_REGISTER | OFFICE_DASHBOARD
-- `created_by` (UUID, nullable, FK to staff) - For manual entries
-- `notes` (TEXT, nullable)
-- `created_at` (TIMESTAMPTZ, NOT NULL, DEFAULT NOW())
+**Deprecated / superseded**: This spec’s schema sketches are not authoritative and may not match the current database.
 
-### Constraints
+If/when timeclock sessions are implemented in the database, the canonical table/column meaning must be defined in:
 
-- **One open session per employee**: Partial unique index on `employee_id` WHERE `clock_out_at IS NULL`
-- Prevents multiple concurrent clock-in sessions
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md`
+- `docs/database/DATABASE_ENTITY_DETAILS.md`
+
+And reflected in `db/schema.sql` + `services/api/migrations/`.
 
 ### Automatic Timeclock Session Creation
 
@@ -147,17 +135,14 @@ Compliance flags are determined with a 5-minute grace threshold:
 
 ### Database Schema
 
-**employee_documents** table:
-- `id` (UUID, PK)
-- `employee_id` (UUID, FK to staff, NOT NULL)
-- `doc_type` (TEXT, NOT NULL) - ID | W4 | I9 | OFFER_LETTER | NDA | OTHER
-- `filename` (TEXT, NOT NULL) - Original filename
-- `mime_type` (TEXT, NOT NULL) - MIME type (e.g., application/pdf, image/jpeg)
-- `storage_key` (TEXT, NOT NULL) - Path/key to file in storage
-- `uploaded_by` (UUID, FK to staff, NOT NULL) - Manager who uploaded
-- `uploaded_at` (TIMESTAMPTZ, NOT NULL, DEFAULT NOW())
-- `notes` (TEXT, nullable)
-- `sha256_hash` (TEXT, nullable) - File integrity hash
+**Deprecated / superseded**: This spec’s schema sketches are not authoritative and may not match the current database.
+
+If/when employee documents are implemented in the database, the canonical table/column meaning must be defined in:
+
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md`
+- `docs/database/DATABASE_ENTITY_DETAILS.md`
+
+And reflected in `db/schema.sql` + `services/api/migrations/`.
 
 ### Document Types
 
@@ -219,7 +204,7 @@ Generate shifts for a 28-day window:
 - Ensure at least 1 scheduled shift is currently active
 
 **Employee Documents**:
-- Seed 1-2 employee_documents rows per employee with realistic filenames and doc_types
+- Seed 1-2 employee document records per employee with realistic filenames and doc types (storage schema is TBD; see canonical DB docs if/when implemented)
 - Optionally create stub files in uploads folder so downloads work in demo
 
 ### Idempotency

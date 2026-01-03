@@ -188,6 +188,20 @@ Fastify-based REST API server with WebSocket support:
 
 See [AGENTS.md](./AGENTS.md) for complete coding guidelines.
 
+## 🎬 Demo flow overview (single source for demo walkthrough)
+
+This is the recommended end-to-end demo walkthrough across the apps. It is intentionally **workflow-only** (no database schema/column assumptions).
+
+1. **Start the stack**: `pnpm dev` (after `pnpm install`, `pnpm db:start`, `pnpm db:migrate`, `pnpm db:seed`)
+2. **Begin a lane session** in **employee-register** (scan/enter customer identity details as prompted).
+3. **Customer-kiosk** displays the customer name (and membership number if captured) and shows eligible rental options.
+4. **Select and confirm** a rental type (customer and/or employee), then proceed through any required acknowledgements.
+5. **Agreement signing** occurs on the customer-kiosk when required by the flow.
+6. **Payment** is collected externally (Square) and then staff marks the payment as paid in employee-register.
+7. **Assignment**: staff assigns a room/locker in employee-register; both sides complete and reset to idle.
+
+For the full behavioral source of truth, see `SPEC.md` → **"Counter Check-in Flow v1 (Source of Truth)"**.
+
 ## 📋 Specifications and Documentation
 
 **SPEC.md is the canonical source of truth** for business rules and product behavior. All implementation must align with SPEC.md.
@@ -251,56 +265,9 @@ pnpm test
 pnpm --filter @club-ops/shared test:watch
 ```
 
-### Local Test Flow: Agreement and Upgrade
+### Local Test Notes (deprecated)
 
-To test the agreement signing and upgrade disclaimer flows:
-
-1. **Seed the database** (includes active agreement):
-   ```bash
-   pnpm db:seed
-   ```
-
-2. **Start development servers**:
-   ```bash
-   pnpm dev
-   ```
-
-3. **Create a check-in**:
-   - Use the employee-register app to scan ID and membership
-   - Create a session with a room assignment
-   - The customer-kiosk will show the rental options
-
-4. **Customer signs placeholder agreement**:
-   - After selecting a rental option, the agreement screen appears
-   - The agreement shows a blank scroll area (no text yet)
-   - Customer must:
-     - Check "I agree" checkbox
-     - Sign on the signature pad
-     - Click "Submit"
-   - The screen cannot be bypassed - "Signature required to continue" is displayed
-
-5. **Optionally join waitlist** (shows upgrade disclaimer):
-   - Customer clicks "Join Waitlist for Upgrade"
-   - Upgrade disclaimer modal appears with:
-     - "Upgrade availability and time estimates are not guarantees."
-     - "Upgrade fees are charged only if an upgrade becomes available and you choose to accept it."
-     - "Upgrades do not extend your stay. Your checkout time remains the same as your original 6-hour check-in."
-     - "The full upgrade fee applies even if limited time remains."
-   - Customer clicks "OK" to acknowledge
-   - Disclaimer acknowledgment is logged to audit_log
-
-6. **Perform upgrade later** (shows disclaimer OK; no agreement re-sign):
-   - When upgrade becomes available, customer accepts it
-   - Upgrade disclaimer modal appears again
-   - Customer acknowledges with "OK"
-   - **No agreement re-signing required** (upgrades don't require agreement)
-   - checkout_at remains unchanged (original check-in + 6 hours)
-
-**Key Points:**
-- Agreement is required for initial check-in and renewal (6-hour blocks)
-- Agreement is NOT required for upgrades
-- Upgrade disclaimer is shown only when joining waitlist or accepting upgrade
-- checkout_at never changes on upgrade (always checkin_at + 6 hours)
+**Deprecated / superseded**: The detailed “local test flow” walkthrough previously lived here and drifted into schema/audit specifics. Use the **Demo flow overview** above plus the authoritative flow spec in `SPEC.md` instead.
 
 ## ☁️ Cursor Cloud Agents (optional)
 
