@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 /**
  * SPEC Compliance Check Script
- * 
- * Validates that the codebase complies with SPEC.md:
- * 1. Room tier enums match SPEC.md (STANDARD, DOUBLE, SPECIAL)
- * 2. No forbidden tier strings exist: "VIP", "DELUXE", "Deluxe", "Vip"
- * 3. Room tier values are exactly STANDARD, DOUBLE, SPECIAL (plus LOCKER and optionally GYM_LOCKER)
+ *
+ * Validates that the runtime (API + UIs) stays aligned with SPEC.md and the shared enums.
+ *
+ * Key behavior:
+ * - Scans ONLY runtime/UI source roots (src/) for deprecated tier strings that must not be used for
+ *   new assignments (e.g. legacy "VIP"/"DELUXE").
+ * - Explicitly allows legacy strings to exist in canonical DB documentation and historical artifacts:
+ *   - docs/database/**
+ *   - services/api/migrations/**
+ *   - db/** (schema snapshots)
+ * - Skips vendor/build dirs everywhere to keep scans fast and deterministic:
+ *   node_modules, .git, .pnpm-store, dist, build, .vite, coverage
  */
 
 import { readFileSync, readdirSync, statSync } from 'fs';
@@ -20,25 +27,47 @@ const FORBIDDEN_STRINGS = ['VIP', 'DELUXE', 'Deluxe', 'Vip'];
 const REQUIRED_TIER_VALUES = ['STANDARD', 'DOUBLE', 'SPECIAL'];
 const ALLOWED_RENTAL_VALUES = ['STANDARD', 'DOUBLE', 'SPECIAL', 'LOCKER', 'GYM_LOCKER'];
 
+// NOTE: This tool is intentionally conservative about what it scans.
+// If you add a new runtime app/package, add its src/ directory here.
+const SOURCE_ROOTS_TO_SCAN = [
+  'services/api/src',
+  'packages/shared/src',
+  'packages/ui/src',
+  'apps/customer-kiosk/src',
+  'apps/employee-register/src',
+  'apps/cleaning-station-kiosk/src',
+  'apps/checkout-kiosk/src',
+  'apps/office-dashboard/src',
+].map((p) => join(ROOT_DIR, p));
+
+const SKIP_DIR_NAMES = new Set(['node_modules', '.git', '.pnpm-store', 'dist', 'build', '.vite', 'coverage']);
+
+// These are allowed to contain legacy strings and are never scanned for forbidden strings.
+const LEGACY_ALLOWED_PATH_PREFIXES = [
+  'docs/database/',
+  'services/api/migrations/',
+  'db/',
+].map((p) => p.replaceAll('\\', '/'));
+
 let errors = [];
 let warnings = [];
 
 /**
  * Recursively find all files matching extensions
  */
-function findFiles(dir, extensions, excludeDirs = ['node_modules', '.git', 'dist']) {
+function findFiles(dir, extensions) {
   const files = [];
   try {
     const entries = readdirSync(dir);
     for (const entry of entries) {
-      if (excludeDirs.includes(entry)) continue;
+      if (SKIP_DIR_NAMES.has(entry)) continue;
       
       if (entry.includes('..')) throw new Error('Invalid file path');
       const fullPath = join(dir, entry);
       const stat = statSync(fullPath);
       
       if (stat.isDirectory()) {
-        files.push(...findFiles(fullPath, extensions, excludeDirs));
+        files.push(...findFiles(fullPath, extensions));
       } else if (stat.isFile()) {
         const ext = entry.split('.').pop();
         if (extensions.includes(ext)) {
@@ -102,39 +131,27 @@ function checkEnums() {
  * Check for forbidden strings in codebase
  */
 function checkForbiddenStrings() {
-  const filesToCheck = [
-    ...findFiles(ROOT_DIR, ['ts', 'tsx', 'js', 'jsx', 'sql']),
-    ...findFiles(join(ROOT_DIR, 'services/api/migrations'), ['sql']),
-  ].filter(f => {
-    // Exclude certain files
-    const relPath = relative(ROOT_DIR, f);
-    if (relPath.includes('node_modules')) return false;
-    if (relPath.includes('dist')) return false;
-    if (relPath.includes('total-diff.txt')) return false; // This is just a diff file
-    if (relPath.includes('diffs-last-three-commits.txt')) return false;
-    // Exclude schema.sql - it documents actual DB state which includes legacy enum values
-    if (relPath === 'db/schema.sql') return false;
-    // Allow the migration that updates the enum
-    if (relPath.includes('030_update_room_type_enum.sql')) return false;
-    // Allow the migration comment that documents old values
-    if (relPath.includes('002_create_rooms.sql')) {
-      // Check if it's just a comment mentioning old values
-      return false; // We'll check this separately
-    }
-    return true;
-  });
+  console.log('🔎 Forbidden string scan configuration:');
+  console.log(`   - Scanning source roots:\n${SOURCE_ROOTS_TO_SCAN.map((p) => `     - ${relative(ROOT_DIR, p)}`).join('\n')}`);
+  console.log(`   - Skipping directory names anywhere: ${Array.from(SKIP_DIR_NAMES).join(', ')}`);
+  console.log(`   - Allowing legacy strings (not scanned): ${LEGACY_ALLOWED_PATH_PREFIXES.join(', ')}`);
+  console.log('');
+
+  const filesToCheck = SOURCE_ROOTS_TO_SCAN.flatMap((root) => findFiles(root, ['ts', 'tsx', 'js', 'jsx']))
+    .filter((f) => {
+      const relPath = relative(ROOT_DIR, f).replaceAll('\\', '/');
+      if (relPath.includes('total-diff.txt')) return false; // local diff artifacts
+      if (relPath.includes('diffs-last-three-commits.txt')) return false;
+
+      // Extra safety: never scan allowed legacy areas even if a source root ever overlaps.
+      return !LEGACY_ALLOWED_PATH_PREFIXES.some((prefix) => relPath.startsWith(prefix));
+    });
   
   let foundForbidden = false;
   
   for (const file of filesToCheck) {
     try {
       const relPath = relative(ROOT_DIR, file);
-      
-      // Skip schema.sql - it documents actual DB state which includes legacy enum values
-      if (relPath === 'db/schema.sql' || relPath.includes('db\\schema.sql')) {
-        continue;
-      }
-      
       const content = readFileSync(file, 'utf-8');
       
       // Check each forbidden string
@@ -160,28 +177,8 @@ function checkForbiddenStrings() {
     }
   }
   
-  // Special case: check migration 002 - it should only mention old values in comments
-  const migration002Path = join(ROOT_DIR, 'services/api/migrations/002_create_rooms.sql');
-  try {
-    const content = readFileSync(migration002Path, 'utf-8');
-    // Check if DELUXE/VIP are in the enum definition (not just comments)
-    if (content.includes("CREATE TYPE room_type AS ENUM ('STANDARD', 'DELUXE', 'VIP'")) {
-      // This is expected - the enum originally had these values
-      // But we should check if migration 030 exists to update them
-      const migration030Path = join(ROOT_DIR, 'services/api/migrations/030_update_room_type_enum.sql');
-      try {
-        statSync(migration030Path);
-        console.log('✓ Migration 030 exists to update enum values');
-      } catch {
-        warnings.push(`⚠️  Migration 002 defines old enum values, but migration 030 (update) not found`);
-      }
-    }
-  } catch {
-    // File doesn't exist, that's ok
-  }
-  
   if (!foundForbidden) {
-    console.log('✓ No forbidden strings found in codebase');
+    console.log('✓ No forbidden strings found in runtime/UI source');
   }
 }
 

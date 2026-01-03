@@ -42,6 +42,9 @@ CREATE TYPE public.audit_action AS ENUM (
     'STAFF_UPDATED',
     'STAFF_ACTIVATED',
     'STAFF_DEACTIVATED',
+    'REGISTER_SIGN_IN',
+    'REGISTER_SIGN_OUT',
+    'REGISTER_FORCE_SIGN_OUT',
     'WAITLIST_CREATED',
     'WAITLIST_CANCELLED',
     'WAITLIST_OFFERED',
@@ -54,7 +57,36 @@ CREATE TYPE public.audit_action AS ENUM (
     'FINAL_EXTENSION_COMPLETED',
     'STAFF_REAUTH_PIN',
     'STAFF_REAUTH_WEBAUTHN',
-    'ROOM_STATUS_CHANGE'
+    'ROOM_STATUS_CHANGE',
+    'SHIFT_UPDATED',
+    'TIMECLOCK_ADJUSTED',
+    'TIMECLOCK_CLOSED',
+    'DOCUMENT_UPLOADED',
+    'TIME_OFF_REQUESTED',
+    'TIME_OFF_APPROVED',
+    'TIME_OFF_DENIED'
+);
+
+
+--
+-- Name: shift_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.shift_status AS ENUM (
+    'SCHEDULED',
+    'UPDATED',
+    'CANCELED'
+);
+
+
+--
+-- Name: time_off_request_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.time_off_request_status AS ENUM (
+    'PENDING',
+    'APPROVED',
+    'DENIED'
 );
 
 
@@ -667,6 +699,98 @@ CREATE TABLE public.staff_webauthn_credentials (
     last_used_at timestamp with time zone,
     revoked_at timestamp with time zone
 );
+
+
+--
+-- Name: employee_shifts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_shifts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    employee_id uuid NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
+    starts_at timestamp with time zone NOT NULL,
+    ends_at timestamp with time zone NOT NULL,
+    shift_code text NOT NULL CHECK (shift_code IN ('A', 'B', 'C')),
+    role text,
+    status public.shift_status DEFAULT 'SCHEDULED'::public.shift_status NOT NULL,
+    notes text,
+    created_by uuid REFERENCES public.staff(id) ON DELETE SET NULL,
+    updated_by uuid REFERENCES public.staff(id) ON DELETE SET NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE INDEX idx_employee_shifts_employee ON public.employee_shifts USING btree (employee_id);
+CREATE INDEX idx_employee_shifts_dates ON public.employee_shifts USING btree (starts_at, ends_at);
+CREATE INDEX idx_employee_shifts_status ON public.employee_shifts USING btree (status);
+CREATE INDEX idx_employee_shifts_shift_code ON public.employee_shifts USING btree (shift_code);
+
+
+--
+-- Name: timeclock_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.timeclock_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    employee_id uuid NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
+    shift_id uuid REFERENCES public.employee_shifts(id) ON DELETE SET NULL,
+    clock_in_at timestamp with time zone NOT NULL,
+    clock_out_at timestamp with time zone,
+    source text NOT NULL CHECK (source IN ('EMPLOYEE_REGISTER', 'OFFICE_DASHBOARD')),
+    created_by uuid REFERENCES public.staff(id) ON DELETE SET NULL,
+    notes text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_timeclock_sessions_employee_open ON public.timeclock_sessions USING btree (employee_id) WHERE (clock_out_at IS NULL);
+CREATE INDEX idx_timeclock_sessions_employee ON public.timeclock_sessions USING btree (employee_id);
+CREATE INDEX idx_timeclock_sessions_shift ON public.timeclock_sessions USING btree (shift_id) WHERE (shift_id IS NOT NULL);
+CREATE INDEX idx_timeclock_sessions_dates ON public.timeclock_sessions USING btree (clock_in_at, clock_out_at);
+CREATE INDEX idx_timeclock_sessions_open ON public.timeclock_sessions USING btree (clock_out_at) WHERE (clock_out_at IS NULL);
+
+
+--
+-- Name: employee_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_documents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    employee_id uuid NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
+    doc_type text NOT NULL CHECK (doc_type IN ('ID', 'W4', 'I9', 'OFFER_LETTER', 'NDA', 'OTHER')),
+    filename text NOT NULL,
+    mime_type text NOT NULL,
+    storage_key text NOT NULL,
+    uploaded_by uuid NOT NULL REFERENCES public.staff(id) ON DELETE RESTRICT,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
+    notes text,
+    sha256_hash text
+);
+
+CREATE INDEX idx_employee_documents_employee ON public.employee_documents USING btree (employee_id);
+CREATE INDEX idx_employee_documents_type ON public.employee_documents USING btree (doc_type);
+CREATE INDEX idx_employee_documents_uploaded_by ON public.employee_documents USING btree (uploaded_by);
+
+
+--
+-- Name: time_off_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.time_off_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    employee_id uuid NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
+    day date NOT NULL,
+    reason text,
+    status public.time_off_request_status DEFAULT 'PENDING'::public.time_off_request_status NOT NULL,
+    decided_by uuid REFERENCES public.staff(id) ON DELETE SET NULL,
+    decided_at timestamp with time zone,
+    decision_notes text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_time_off_requests_employee_day ON public.time_off_requests USING btree (employee_id, day);
+CREATE INDEX idx_time_off_requests_status ON public.time_off_requests USING btree (status);
+CREATE INDEX idx_time_off_requests_day ON public.time_off_requests USING btree (day);
 
 
 --

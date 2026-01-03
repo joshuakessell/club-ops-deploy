@@ -252,8 +252,8 @@ pnpm spec:check
 
 This validates:
 - Room tier enums match SPEC.md (STANDARD, DOUBLE, SPECIAL)
-- No forbidden tier strings exist (VIP, DELUXE, etc.)
-- Room tier values are correct
+- Runtime/UI source code does not depend on deprecated tier strings (VIP, DELUXE, etc.) for new assignments
+- Legacy strings are allowed in canonical DB docs and historical artifacts (`docs/database/**`, `services/api/migrations/**`, `db/**` schema snapshots)
 
 ## 🧪 Testing
 

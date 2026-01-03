@@ -42,7 +42,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
   const [showPinResetModal, setShowPinResetModal] = useState(false);
   const [showReAuthModal, setShowReAuthModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
-  const [pendingPinReset, setPendingPinReset] = useState<{ staffId: string; newPin: string } | null>(null);
+  const [, setPendingPinReset] = useState<{ staffId: string; newPin: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   useEffect(() => {

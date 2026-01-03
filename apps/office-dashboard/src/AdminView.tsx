@@ -205,16 +205,7 @@ export function AdminView({ session }: AdminViewProps) {
       }
       setMetricsByStaff(perStaffData);
 
-      // If a specific staff is selected, also load their detailed metrics
-      if (selectedStaffId) {
-        const byStaffParams = new URLSearchParams({ from, to, staffId: selectedStaffId });
-        const byStaffRes = await fetch(`${API_BASE}/v1/admin/metrics/by-staff?${byStaffParams}`, { headers });
-        if (byStaffRes.ok) {
-          const byStaffData = await byStaffRes.json();
-          const staffName = staffMembers.find(s => s.id === selectedStaffId)?.name || 'Unknown';
-          // This is already included in perStaffData, but we keep it for backward compatibility
-        }
-      }
+      // Note: detailed per-staff metrics are already included in perStaffData above.
     } catch (error) {
       console.error('Failed to load metrics:', error);
     }

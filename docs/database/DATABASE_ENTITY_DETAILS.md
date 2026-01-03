@@ -213,3 +213,62 @@ Other markdown files may describe workflows, but **must not redefine** these ent
 `members` exists only as a temporary legacy artifact. **All operational workflows must use `customers` as authoritative identity**.
 
 
+---
+
+## Staff scheduling / timeclock / HR support tables
+
+These tables support *internal staff operations* (office-dashboard scheduling, timeclock compliance reporting, and employee document storage). They are not part of customer-facing identity or inventory contracts, but they are still server-authoritative and audited.
+
+### `employee_shifts`
+
+- **Purpose**: A scheduled shift assignment for a staff member for a specific window of time.
+- **Primary key**: `employee_shifts.id` (UUID).
+- **Key columns**:
+  - `employee_id`: Owning staff member (`staff.id`).
+  - `starts_at`, `ends_at`: Scheduled window (timestamptz; `starts_at < ends_at` expected).
+  - `shift_code`: One of `A`, `B`, `C` (maps to the 1st/2nd/3rd shift windows in `SPEC.md`).
+  - `status`: `SCHEDULED` | `UPDATED` | `CANCELED`.
+  - `notes`: Optional scheduling notes.
+  - `created_by`, `updated_by`: Staff attribution for management changes.
+- **Invariants**:
+  - Shift windows must be stored as ISO timestamps; UIs render them in America/Chicago.
+  - Shift updates must be attributable (audit log + `updated_by`).
+
+### `timeclock_sessions`
+
+- **Purpose**: Captures a clock-in/clock-out work session for a staff member, optionally linked to a scheduled shift.
+- **Primary key**: `timeclock_sessions.id` (UUID).
+- **Key columns**:
+  - `employee_id`: Owning staff member.
+  - `shift_id`: Optional reference to `employee_shifts.id`.
+  - `clock_in_at`, `clock_out_at`: Work window (open sessions have `clock_out_at = NULL`).
+  - `source`: One of `EMPLOYEE_REGISTER` | `OFFICE_DASHBOARD` (where the clock event originated).
+- **Invariants**:
+  - At most one open session per employee (enforced via partial unique index on `employee_id` where `clock_out_at IS NULL`).
+
+### `employee_documents`
+
+- **Purpose**: Metadata records for employee HR/onboarding documents stored in an external storage key (local FS for demo).
+- **Primary key**: `employee_documents.id` (UUID).
+- **Key columns**:
+  - `employee_id`: Owning staff member.
+  - `doc_type`: `ID` | `W4` | `I9` | `OFFER_LETTER` | `NDA` | `OTHER`.
+  - `filename`, `mime_type`, `storage_key`: Storage metadata.
+  - `uploaded_by`: Staff member who uploaded the document.
+- **Invariants**:
+  - Documents are audit artifacts; uploads must be attributable (`uploaded_by`) and authenticated.
+
+### `time_off_requests`
+
+- **Purpose**: A staff member’s request to take a specific day off, reviewed by management.
+- **Primary key**: `time_off_requests.id` (UUID).
+- **Key columns**:
+  - `employee_id`: Requesting staff member.
+  - `day`: The requested day off (`DATE`, interpreted in the club’s operational timezone).
+  - `status`: `PENDING` | `APPROVED` | `DENIED`.
+  - `reason`: Optional employee-provided reason.
+  - `decided_by`, `decided_at`, `decision_notes`: Management decision attribution.
+- **Invariants**:
+  - At most one request per employee per day (enforced by unique index on `(employee_id, day)`).
+  - Approvals/denials must be audited with actor identity.
+

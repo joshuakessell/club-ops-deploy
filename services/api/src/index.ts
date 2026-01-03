@@ -23,7 +23,9 @@ import {
   registerRoutes,
   shiftsRoutes,
   timeclockRoutes,
-  documentsRoutes
+  documentsRoutes,
+  scheduleRoutes,
+  timeoffRoutes
 } from './routes/index.js';
 import { createBroadcaster, type Broadcaster } from './websocket/broadcaster.js';
 import { initializeDatabase, closeDatabase } from './db/index.js';
@@ -120,6 +122,8 @@ async function main() {
   await fastify.register(shiftsRoutes);
   await fastify.register(timeclockRoutes);
   await fastify.register(documentsRoutes);
+  await fastify.register(scheduleRoutes);
+  await fastify.register(timeoffRoutes);
 
   // WebSocket endpoint
   fastify.get('/ws', { websocket: true }, (connection, req) => {

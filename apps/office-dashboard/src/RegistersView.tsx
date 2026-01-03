@@ -29,7 +29,6 @@ export function RegistersView({ session }: RegistersViewProps) {
   const [registers, setRegisters] = useState<RegisterSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [forceSignOutLoading, setForceSignOutLoading] = useState<number | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
 
   const fetchRegisters = async () => {
     try {
@@ -58,7 +57,6 @@ export function RegistersView({ session }: RegistersViewProps) {
     const wsConnection = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
     
     wsConnection.onopen = () => {
-      setWsConnected(true);
       wsConnection.send(JSON.stringify({
         type: 'subscribe',
         events: ['REGISTER_SESSION_UPDATED'],
@@ -66,7 +64,6 @@ export function RegistersView({ session }: RegistersViewProps) {
     };
 
     wsConnection.onclose = () => {
-      setWsConnected(false);
     };
 
     wsConnection.onmessage = (event) => {

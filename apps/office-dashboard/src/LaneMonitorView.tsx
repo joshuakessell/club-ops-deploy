@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { RegisterSessionUpdatedPayload, SessionUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
+import type { RegisterSessionUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
 import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
 
@@ -75,15 +75,14 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
       try {
         const msg: WebSocketEvent = JSON.parse(event.data);
         if (msg.type === 'SESSION_UPDATED') {
-          const p = msg.payload as SessionUpdatedPayload;
           setLastLaneEvent(msg.timestamp);
           // Lane-scoped already; fetch full summary list (cheap enough for demo).
           const sessions = await apiJson<{ sessions: LaneSessionSummary[] }>('/v1/checkin/lane-sessions', { sessionToken: session.sessionToken });
           setLaneSession((sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null);
         }
         if (msg.type === 'REGISTER_SESSION_UPDATED') {
-          const p = msg.payload as RegisterSessionUpdatedPayload;
-          if (p.registerNumber === laneNumber) {
+          const payload = msg.payload as RegisterSessionUpdatedPayload;
+          if (payload.registerNumber === laneNumber) {
             const regs = await apiJson<RegisterSession[]>('/v1/admin/register-sessions', { sessionToken: session.sessionToken });
             setRegister(regs.find((r) => r.registerNumber === laneNumber) || null);
           }
