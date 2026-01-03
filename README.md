@@ -158,7 +158,7 @@ pnpm db:seed
 - User: `clubops`
 - Password: `clubops_dev`
 
-See [services/api/README.md](./services/api/README.md) for detailed database documentation.
+See `docs/database/DATABASE_SOURCE_OF_TRUTH.md` and `docs/database/DATABASE_ENTITY_DETAILS.md` for the canonical database contract. See [services/api/README.md](./services/api/README.md) for local database setup.
 
 ## 📦 Packages
 
@@ -198,6 +198,15 @@ See [AGENTS.md](./AGENTS.md) for complete coding guidelines.
 - **AGENTS.md** - Agent coding guidelines and project architecture
 - **openapi.yaml** - API contract (should match implemented endpoints)
 - **db/schema.sql** - Database schema snapshot (should match current migrations)
+
+### Database contract
+
+The canonical sources of truth for **database/schema meaning**, **table/column contract**, and **invariants** are:
+
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md`
+- `docs/database/DATABASE_ENTITY_DETAILS.md`
+
+They **supersede older scattered schema notes** across the repo. If there is any conflict, these docs win.
 
 ### Regenerating Schema Documentation
 

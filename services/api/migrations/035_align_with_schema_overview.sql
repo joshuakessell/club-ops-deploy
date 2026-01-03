@@ -1,4 +1,4 @@
--- Migration 035: Align database enums with SCHEMA_OVERVIEW.md
+-- Migration 035: Align database enums with canonical database contract docs
 -- This migration updates enum values to match the canonical schema definition:
 -- 1. checkout_request_status: REQUESTED → SUBMITTED, COMPLETED → VERIFIED
 -- 2. checkin_mode: INITIAL → CHECKIN (in lane_sessions table)

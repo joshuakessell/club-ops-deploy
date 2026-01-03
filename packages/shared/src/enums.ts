@@ -32,7 +32,8 @@ export enum BlockType {
 
 /**
  * Check-in mode: Check-in or Renewal.
- * Matches SCHEMA_OVERVIEW.md canonical definition (LaneSessionMode).
+ * Matches canonical database contract docs (LaneSessionMode).
+ * See: docs/database/DATABASE_SOURCE_OF_TRUTH.md
  */
 export enum CheckinMode {
   CHECKIN = 'CHECKIN',

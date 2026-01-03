@@ -1,5 +1,7 @@
 -- Migration 034: Normalize identity on customers and enforce rental_type enum
--- This migration aligns the database with SCHEMA_OVERVIEW.md naming standards:
+-- This migration aligns the database with the canonical database contract docs:
+-- - docs/database/DATABASE_SOURCE_OF_TRUTH.md
+-- - docs/database/DATABASE_ENTITY_DETAILS.md
 -- 1. Backfills customers from legacy members table
 -- 2. Adds customer_id columns and backfills data from members
 -- 3. Swaps foreign keys from members to customers (customers become canonical identity)
