@@ -20,6 +20,40 @@ body {
   overflow: hidden;
 }
 
+/* Welcome overlay (black overlay with white logo + localized welcome message) */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.25s ease;
+}
+
+.welcome-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.welcome-overlay-logo {
+  width: clamp(220px, 36vw, 560px);
+  height: auto;
+  filter: brightness(0) invert(1);
+}
+
+.welcome-overlay-message {
+  color: #ffffff;
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  font-weight: 600;
+}
+
 /* Idle state: centered logo */
 .idle-container {
   min-height: 100vh;
@@ -513,6 +547,16 @@ body {
 .payment-instruction {
   font-size: clamp(1.125rem, 2vw, 1.5rem);
   color: var(--text-muted);
+}
+
+.payment-decline-generic {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--cs-radius-xl);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+  color: #ffffff;
+  font-weight: 600;
 }
 
 /* Past Due Block Message */

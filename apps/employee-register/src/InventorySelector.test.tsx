@@ -29,33 +29,26 @@ describe('InventorySelector', () => {
     sessionToken: 'test-token',
   };
 
-  // Mock API response format from /api/v1/inventory/rooms-by-tier
+  // Mock API response format from /api/v1/inventory/detailed
   const mockApiResponse = {
-    rooms: {
-      STANDARD: {
-        available: [
-          { id: 'room-1', number: '101', status: 'CLEAN' },
-        ],
-        expiringSoon: [],
-        recentlyReserved: [],
+    rooms: [
+      {
+        id: 'room-1',
+        number: '101',
+        status: 'CLEAN',
+        assignedTo: null,
+        checkoutAt: null,
       },
-      DOUBLE: {
-        available: [],
-        expiringSoon: [],
-        recentlyReserved: [],
+    ],
+    lockers: [
+      {
+        id: 'locker-1',
+        number: '001',
+        status: 'CLEAN',
+        assignedTo: null,
+        checkoutAt: null,
       },
-      SPECIAL: {
-        available: [],
-        expiringSoon: [],
-        recentlyReserved: [],
-      },
-    },
-    lockers: {
-      available: [
-        { id: 'locker-1', number: '001' },
-      ],
-      assigned: [],
-    },
+    ],
   };
 
   beforeEach(() => {

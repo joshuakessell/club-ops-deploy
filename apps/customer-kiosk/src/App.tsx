@@ -31,6 +31,7 @@ interface SessionState {
   pastDueBalance?: number;
   paymentStatus?: 'DUE' | 'PAID';
   paymentTotal?: number;
+  paymentFailureReason?: string;
   agreementSigned?: boolean;
   assignedResourceType?: 'room' | 'locker';
   assignedResourceNumber?: string;
@@ -103,6 +104,9 @@ function App() {
   const agreementScrollRef = useRef<HTMLDivElement>(null);
   const isDrawingRef = useRef(false);
   const idleTimeoutRef = useRef<number | null>(null);
+  const welcomeOverlayTimeoutRef = useRef<number | null>(null);
+  const lastWelcomeSessionIdRef = useRef<string | null>(null);
+  const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
 
   // Get lane from URL query param or localStorage, default to 'lane-1'
   const lane = (() => {
@@ -178,6 +182,7 @@ function App() {
             pastDueBalance: payload.pastDueBalance,
             paymentStatus: payload.paymentStatus,
             paymentTotal: payload.paymentTotal,
+            paymentFailureReason: payload.paymentFailureReason,
             agreementSigned: payload.agreementSigned,
             assignedResourceType: payload.assignedResourceType,
             assignedResourceNumber: payload.assignedResourceNumber,
@@ -321,6 +326,56 @@ function App() {
 
     return () => ws.close();
   }, [lane]);
+
+  // Show a brief welcome overlay when a new session becomes active
+  useEffect(() => {
+    const sessionId = session.sessionId;
+    if (!sessionId) return;
+    if (lastWelcomeSessionIdRef.current === sessionId) return;
+    if (view === 'idle') return;
+
+    lastWelcomeSessionIdRef.current = sessionId;
+    setShowWelcomeOverlay(true);
+
+    if (welcomeOverlayTimeoutRef.current !== null) {
+      window.clearTimeout(welcomeOverlayTimeoutRef.current);
+      welcomeOverlayTimeoutRef.current = null;
+    }
+    welcomeOverlayTimeoutRef.current = window.setTimeout(() => {
+      setShowWelcomeOverlay(false);
+      welcomeOverlayTimeoutRef.current = null;
+    }, 2000);
+  }, [session.sessionId, view]);
+
+  useEffect(() => {
+    return () => {
+      if (welcomeOverlayTimeoutRef.current !== null) {
+        window.clearTimeout(welcomeOverlayTimeoutRef.current);
+        welcomeOverlayTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const WelcomeOverlay = () => {
+    if (!showWelcomeOverlay) return null;
+    const lang = session.customerPrimaryLanguage;
+    return (
+      <div
+        className="welcome-overlay"
+        onClick={() => setShowWelcomeOverlay(false)}
+        role="dialog"
+        aria-label="Welcome"
+      >
+        <div className="welcome-overlay-content">
+          <img src={logoImage} alt="Club Dallas" className="welcome-overlay-logo" />
+          <div className="welcome-overlay-message">
+            {t(lang, 'welcome')}
+            {session.customerName ? `, ${session.customerName}` : ''}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Load active agreement when agreement view is shown
   useEffect(() => {
@@ -706,6 +761,7 @@ function App() {
   if (view === 'language') {
     return (
       <div className="active-container">
+        <WelcomeOverlay />
         <img src={logoImage} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="language-selection-screen">
@@ -736,6 +792,7 @@ function App() {
   if (view === 'payment') {
     return (
       <div className="active-container">
+        <WelcomeOverlay />
         <img src={logoImage} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="payment-pending-screen">
@@ -744,6 +801,12 @@ function App() {
               <div className="payment-total">
                 <p className="total-label">{t(session.customerPrimaryLanguage, 'totalDue')}</p>
                 <p className="total-amount">${session.paymentTotal.toFixed(2)}</p>
+              </div>
+            )}
+            {/* Never show decline reason to the customer; generic guidance only */}
+            {session.paymentFailureReason && (
+              <div className="payment-decline-generic">
+                {t(session.customerPrimaryLanguage, 'paymentIssueSeeAttendant')}
               </div>
             )}
             <p className="payment-instruction">
@@ -766,6 +829,7 @@ function App() {
 
     return (
       <div className="active-container">
+        <WelcomeOverlay />
         <img src={logoImage} alt="Club Dallas" className="logo-header" />
         
         <main className="main-content">
@@ -849,6 +913,7 @@ function App() {
     
     return (
       <div className="active-container">
+        <WelcomeOverlay />
         <img src={logoImage} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="complete-screen">
@@ -878,6 +943,7 @@ function App() {
   // Selection view (default active session state)
   return (
     <div className="active-container">
+      <WelcomeOverlay />
       <img src={logoImage} alt="Club Dallas" className="logo-header" />
       
       <main className="main-content">

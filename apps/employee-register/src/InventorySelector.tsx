@@ -1,6 +1,22 @@
 import { useState, useEffect, useMemo } from 'react';
 import { RoomStatus, RoomType } from '@club-ops/shared';
 
+function getMsUntil(iso: string | undefined, nowMs: number): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  return t - nowMs;
+}
+
+function formatCountdownHHMM(msUntil: number): { label: string; isOverdue: boolean } {
+  const isOverdue = msUntil < 0;
+  const minutesTotal = Math.max(0, Math.ceil(Math.abs(msUntil) / (60 * 1000)));
+  const hours = Math.floor(minutesTotal / 60);
+  const minutes = minutesTotal % 60;
+  const hhmm = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return { label: hhmm, isOverdue };
+}
+
 interface DetailedRoom {
   id: string;
   number: string;
@@ -50,22 +66,20 @@ const ROOM_TYPE_LABELS: Record<string, string> = {
 };
 
 // Group rooms by availability status (standard view ordering)
-type RoomGroup = 'upgradeRequest' | 'available' | 'cleaning' | 'dirty' | 'expiring' | 'occupied';
+type RoomGroup = 'upgradeRequest' | 'available' | 'occupied' | 'cleaning' | 'dirty';
 
 interface GroupedRoom {
   room: DetailedRoom;
   group: RoomGroup;
-  minutesRemaining?: number;
+  msUntilCheckout?: number | null;
   isWaitlistMatch?: boolean; // True if room matches pending waitlist upgrade
 }
 
 function groupRooms(
   rooms: DetailedRoom[], 
-  waitlistEntries: Array<{ desiredTier: string; status: string }> = []
+  waitlistEntries: Array<{ desiredTier: string; status: string }> = [],
+  nowMs: number
 ): GroupedRoom[] {
-  const now = new Date();
-  const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000);
-
   // Create set of tiers with active waitlist entries
   const waitlistTiers = new Set(
     waitlistEntries
@@ -86,6 +100,11 @@ function groupRooms(
       return { room, group: 'available' as RoomGroup };
     }
 
+    // Occupied: assigned or OCCUPIED status (show countdown if checkoutAt is present)
+    if (room.assignedTo || room.status === RoomStatus.OCCUPIED) {
+      return { room, group: 'occupied' as RoomGroup, msUntilCheckout: getMsUntil(room.checkoutAt, nowMs) };
+    }
+
     // Cleaning: CLEANING status
     if (room.status === RoomStatus.CLEANING) {
       return { room, group: 'cleaning' as RoomGroup };
@@ -96,20 +115,6 @@ function groupRooms(
       return { room, group: 'dirty' as RoomGroup };
     }
 
-    // Expiring Soon: Occupied and checkout within 30 minutes
-    if (room.checkoutAt) {
-      const checkoutTime = new Date(room.checkoutAt);
-      if (checkoutTime <= thirtyMinutesFromNow && checkoutTime > now) {
-        const minutesRemaining = Math.ceil((checkoutTime.getTime() - now.getTime()) / (60 * 1000));
-        return { room, group: 'expiring' as RoomGroup, minutesRemaining };
-      }
-    }
-
-    // Occupied: Other occupied rooms
-    if (room.assignedTo || room.status === RoomStatus.OCCUPIED) {
-      return { room, group: 'occupied' as RoomGroup };
-    }
-
     // Default to available for other cases
     return { room, group: 'available' as RoomGroup };
   });
@@ -117,14 +122,13 @@ function groupRooms(
 
 function sortGroupedRooms(grouped: GroupedRoom[]): GroupedRoom[] {
   return grouped.sort((a, b) => {
-    // Group order: upgradeRequest, available, cleaning, dirty, expiring, occupied
+    // Group order: upgradeRequest, available, occupied, cleaning, dirty
     const groupOrder: Record<RoomGroup, number> = {
       upgradeRequest: 0,
       available: 1,
-      cleaning: 2,
-      dirty: 3,
-      expiring: 4,
-      occupied: 5,
+      occupied: 2,
+      cleaning: 3,
+      dirty: 4,
     };
 
     if (groupOrder[a.group] !== groupOrder[b.group]) {
@@ -141,16 +145,12 @@ function sortGroupedRooms(grouped: GroupedRoom[]): GroupedRoom[] {
       return parseInt(a.room.number) - parseInt(b.room.number);
     }
 
-    // Within expiring: sort by checkout_at ascending (soonest first)
-    if (a.group === 'expiring') {
-      if (!a.room.checkoutAt || !b.room.checkoutAt) return 0;
-      return new Date(a.room.checkoutAt).getTime() - new Date(b.room.checkoutAt).getTime();
-    }
-
-    // Within occupied: sort by checkout_at ascending (most expired first)
+    // Within occupied: sort by checkout_at ascending (closest checkout first; missing checkoutAt last)
     if (a.group === 'occupied') {
-      if (!a.room.checkoutAt || !b.room.checkoutAt) return 0;
-      return new Date(a.room.checkoutAt).getTime() - new Date(b.room.checkoutAt).getTime();
+      const aTime = a.room.checkoutAt ? new Date(a.room.checkoutAt).getTime() : Number.POSITIVE_INFINITY;
+      const bTime = b.room.checkoutAt ? new Date(b.room.checkoutAt).getTime() : Number.POSITIVE_INFINITY;
+      if (!Number.isFinite(aTime) && !Number.isFinite(bTime)) return 0;
+      return aTime - bTime;
     }
 
     return 0;
@@ -168,6 +168,7 @@ export function InventorySelector({
   sessionToken,
 }: InventorySelectorProps) {
   const [inventory, setInventory] = useState<DetailedInventory | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -175,6 +176,12 @@ export function InventorySelector({
   const [waitlistEntries, setWaitlistEntries] = useState<Array<{ desiredTier: string; status: string }>>([]);
 
   const API_BASE = '/api';
+
+  // Live countdown tick (HH:MM resolution is fine at 30s granularity)
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Listen for WebSocket events to trigger refresh
   useEffect(() => {
@@ -310,7 +317,7 @@ export function InventorySelector({
       }
     } else {
       const roomsOfType = inventory.rooms.filter(r => r.tier === sectionToUse);
-      const grouped = groupRooms(roomsOfType, waitlistEntries);
+      const grouped = groupRooms(roomsOfType, waitlistEntries, nowMs);
       const sorted = sortGroupedRooms(grouped);
       const firstAvailableRoom = sorted.find(g => g.group === 'available' || g.group === 'upgradeRequest');
       
@@ -327,7 +334,7 @@ export function InventorySelector({
     if (firstAvailable) {
       onSelect(firstAvailable.type, firstAvailable.id, firstAvailable.number, firstAvailable.tier);
     }
-  }, [inventory, customerSelectedType, waitlistBackupType, selectedItem, onSelect]);
+  }, [inventory, customerSelectedType, waitlistBackupType, selectedItem, onSelect, waitlistEntries, nowMs]);
 
   // Group rooms by tier (must be before conditional returns to follow React hooks rules)
   const roomsByTier = useMemo(() => {
@@ -394,6 +401,7 @@ export function InventorySelector({
         onSelectRoom={(room) => onSelect('room', room.id, room.number, 'SPECIAL')}
         selectedItem={selectedItem}
         waitlistEntries={waitlistEntries}
+        nowMs={nowMs}
       />
 
       {/* Double Rooms */}
@@ -405,6 +413,7 @@ export function InventorySelector({
         onSelectRoom={(room) => onSelect('room', room.id, room.number, 'DOUBLE')}
         selectedItem={selectedItem}
         waitlistEntries={waitlistEntries}
+        nowMs={nowMs}
       />
 
       {/* Standard Rooms */}
@@ -416,6 +425,7 @@ export function InventorySelector({
         onSelectRoom={(room) => onSelect('room', room.id, room.number, 'STANDARD')}
         selectedItem={selectedItem}
         waitlistEntries={waitlistEntries}
+        nowMs={nowMs}
       />
 
       {/* Lockers */}
@@ -425,6 +435,7 @@ export function InventorySelector({
         onToggle={() => toggleSection('LOCKER')}
         onSelectLocker={(locker) => onSelect('locker', locker.id, locker.number, 'LOCKER')}
         selectedItem={selectedItem}
+        nowMs={nowMs}
       />
     </div>
   );
@@ -437,6 +448,7 @@ interface InventorySectionProps {
   onToggle: () => void;
   onSelectRoom: (room: DetailedRoom) => void;
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
+  nowMs: number;
 }
 
 function InventorySection({
@@ -447,18 +459,18 @@ function InventorySection({
   onSelectRoom,
   selectedItem,
   waitlistEntries = [],
+  nowMs,
 }: InventorySectionProps & { waitlistEntries?: Array<{ desiredTier: string; status: string }> }) {
   const grouped = useMemo(() => {
-    const groupedRooms = groupRooms(rooms, waitlistEntries);
+    const groupedRooms = groupRooms(rooms, waitlistEntries, nowMs);
     return sortGroupedRooms(groupedRooms);
-  }, [rooms, waitlistEntries]);
+  }, [rooms, waitlistEntries, nowMs]);
 
   const upgradeRequests = grouped.filter(g => g.group === 'upgradeRequest');
   const available = grouped.filter(g => g.group === 'available');
+  const occupied = grouped.filter(g => g.group === 'occupied');
   const cleaning = grouped.filter(g => g.group === 'cleaning');
   const dirty = grouped.filter(g => g.group === 'dirty');
-  const expiring = grouped.filter(g => g.group === 'expiring');
-  const occupied = grouped.filter(g => g.group === 'occupied');
 
   return (
     <div style={{ marginBottom: '1rem' }}>
@@ -531,6 +543,32 @@ function InventorySection({
                   isSelectable={true}
                   isSelected={selectedItem?.type === 'room' && selectedItem.id === room.id}
                   onClick={() => onSelectRoom(room)}
+                  nowMs={nowMs}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Occupied (closest checkout first) */}
+          {occupied.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ 
+                fontSize: '0.875rem', 
+                fontWeight: 600, 
+                color: '#94a3b8', 
+                marginBottom: '0.5rem',
+                paddingBottom: '0.25rem',
+                borderBottom: '1px solid #334155',
+              }}>
+                🔒 Occupied (soonest checkout first)
+              </div>
+              {occupied.map(({ room }) => (
+                <RoomItem
+                  key={room.id}
+                  room={room}
+                  isSelectable={false}
+                  isSelected={false}
+                  nowMs={nowMs}
                 />
               ))}
             </div>
@@ -555,6 +593,7 @@ function InventorySection({
                   room={room}
                   isSelectable={false}
                   isSelected={false}
+                  nowMs={nowMs}
                 />
               ))}
             </div>
@@ -579,61 +618,13 @@ function InventorySection({
                   room={room}
                   isSelectable={false}
                   isSelected={false}
+                  nowMs={nowMs}
                 />
               ))}
             </div>
           )}
 
-          {/* Expiring Soon */}
-          {expiring.length > 0 && (
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ 
-                fontSize: '0.875rem', 
-                fontWeight: 600, 
-                color: '#f59e0b', 
-                marginBottom: '0.5rem',
-                paddingBottom: '0.25rem',
-                borderBottom: '1px solid #334155',
-              }}>
-                ⏰ Expiring Soon
-              </div>
-              {expiring.map(({ room, minutesRemaining }) => (
-                <RoomItem
-                  key={room.id}
-                  room={room}
-                  isSelectable={false}
-                  isSelected={false}
-                  minutesRemaining={minutesRemaining}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Occupied */}
-          {occupied.length > 0 && (
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ 
-                fontSize: '0.875rem', 
-                fontWeight: 600, 
-                color: '#94a3b8', 
-                marginBottom: '0.5rem',
-                paddingBottom: '0.25rem',
-                borderBottom: '1px solid #334155',
-              }}>
-                🔒 Occupied (sorted by expiration)
-              </div>
-              {occupied.map(({ room }) => (
-                <RoomItem
-                  key={room.id}
-                  room={room}
-                  isSelectable={false}
-                  isSelected={false}
-                />
-              ))}
-            </div>
-          )}
-
-          {upgradeRequests.length === 0 && available.length === 0 && cleaning.length === 0 && dirty.length === 0 && expiring.length === 0 && occupied.length === 0 && (
+          {upgradeRequests.length === 0 && available.length === 0 && occupied.length === 0 && cleaning.length === 0 && dirty.length === 0 && (
             <div style={{ padding: '1rem', textAlign: 'center', color: '#94a3b8' }}>
               No rooms in this category
             </div>
@@ -649,12 +640,14 @@ interface RoomItemProps {
   isSelectable: boolean;
   isSelected: boolean;
   onClick?: () => void;
-  minutesRemaining?: number;
   isWaitlistMatch?: boolean;
+  nowMs: number;
 }
 
-function RoomItem({ room, isSelectable, isSelected, onClick, minutesRemaining, isWaitlistMatch }: RoomItemProps) {
+function RoomItem({ room, isSelectable, isSelected, onClick, isWaitlistMatch, nowMs }: RoomItemProps) {
   const isOccupied = !!room.assignedTo;
+  const msUntil = isOccupied ? getMsUntil(room.checkoutAt, nowMs) : null;
+  const countdown = msUntil !== null ? formatCountdownHHMM(msUntil) : null;
 
   return (
     <div
@@ -692,7 +685,12 @@ function RoomItem({ room, isSelectable, isSelected, onClick, minutesRemaining, i
           {isOccupied && (
             <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}>
               Occupied
-              {minutesRemaining !== undefined && ` • ${minutesRemaining} min remaining`}
+              {countdown && (
+                <span>
+                  {' • '}
+                  {countdown.isOverdue ? 'Overdue' : 'Checkout in'} {countdown.label}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -710,6 +708,7 @@ interface LockerSectionProps {
   onToggle: () => void;
   onSelectLocker: (locker: DetailedLocker) => void;
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
+  nowMs: number;
 }
 
 function LockerSection({
@@ -718,17 +717,27 @@ function LockerSection({
   onToggle,
   onSelectLocker,
   selectedItem,
+  nowMs,
 }: LockerSectionProps) {
-  // Create grid of lockers 001-108
-  const lockerMap = useMemo(() => {
-    const map = new Map<string, DetailedLocker>();
-    for (const locker of lockers) {
-      map.set(locker.number, locker);
-    }
-    return map;
-  }, [lockers]);
-
   const availableCount = lockers.filter(l => l.status === RoomStatus.CLEAN && !l.assignedTo).length;
+  const availableLockers = useMemo(
+    () =>
+      lockers
+        .filter((l) => l.status === RoomStatus.CLEAN && !l.assignedTo)
+        .sort((a, b) => parseInt(a.number) - parseInt(b.number)),
+    [lockers]
+  );
+  const occupiedLockers = useMemo(
+    () =>
+      lockers
+        .filter((l) => !!l.assignedTo || l.status === RoomStatus.OCCUPIED)
+        .sort((a, b) => {
+          const aTime = a.checkoutAt ? new Date(a.checkoutAt).getTime() : Number.POSITIVE_INFINITY;
+          const bTime = b.checkoutAt ? new Date(b.checkoutAt).getTime() : Number.POSITIVE_INFINITY;
+          return aTime - bTime;
+        }),
+    [lockers]
+  );
 
   return (
     <div style={{ marginBottom: '1rem' }}>
@@ -755,51 +764,108 @@ function LockerSection({
 
       {isExpanded && (
         <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#0f172a', borderRadius: '6px' }}>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(12, 1fr)', 
-            gap: '0.5rem',
-            maxHeight: '400px',
-            overflowY: 'auto',
-          }}>
-            {Array.from({ length: 108 }, (_, i) => {
-              const lockerNumber = String(i + 1).padStart(3, '0');
-              const locker = lockerMap.get(lockerNumber);
-              const isAvailable = locker && locker.status === RoomStatus.CLEAN && !locker.assignedTo;
-              const isOccupied = locker && !!locker.assignedTo;
-              const isSelected = selectedItem?.type === 'locker' && selectedItem.number === lockerNumber;
+          {/* Available first */}
+          {availableLockers.length > 0 && (
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ 
+                fontSize: '0.875rem', 
+                fontWeight: 600, 
+                color: '#10b981', 
+                marginBottom: '0.5rem',
+                paddingBottom: '0.25rem',
+                borderBottom: '1px solid #334155',
+              }}>
+                ✓ Available Now
+              </div>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(12, 1fr)', 
+                gap: '0.5rem',
+                maxHeight: '240px',
+                overflowY: 'auto',
+              }}>
+                {availableLockers.map((locker) => {
+                  const isSelected = selectedItem?.type === 'locker' && selectedItem.id === locker.id;
+                  return (
+                    <div
+                      key={locker.id}
+                      onClick={() => onSelectLocker(locker)}
+                      style={{
+                        padding: '0.5rem',
+                        background: isSelected ? '#3b82f6' : '#0f172a',
+                        border: isSelected ? '2px solid #60a5fa' : '1px solid #475569',
+                        borderRadius: '4px',
+                        textAlign: 'center',
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        minHeight: '44px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'column',
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{locker.number}</div>
+                      {isSelected && (
+                        <div style={{ fontSize: '1rem', marginTop: '0.25rem' }}>✓</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
-              return (
-                <div
-                  key={lockerNumber}
-                  onClick={isAvailable ? () => locker && onSelectLocker(locker) : undefined}
-                  style={{
-                    padding: '0.5rem',
-                    background: isSelected ? '#3b82f6' : isOccupied ? '#1e293b' : isAvailable ? '#0f172a' : '#0a0f1a',
-                    border: isSelected ? '2px solid #60a5fa' : '1px solid #475569',
-                    borderRadius: '4px',
-                    textAlign: 'center',
-                    fontSize: '0.875rem',
-                    cursor: isAvailable ? 'pointer' : 'default',
-                    opacity: isOccupied ? 0.6 : 1,
-                    minHeight: '44px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                  }}
-                >
-                  <div style={{ fontWeight: 600 }}>{lockerNumber}</div>
-                  {isOccupied && (
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Occupied</div>
-                  )}
-                  {isSelected && (
-                    <div style={{ fontSize: '1rem', marginTop: '0.25rem' }}>✓</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {/* Occupied with countdown, sorted by closest checkout */}
+          {occupiedLockers.length > 0 && (
+            <div style={{ marginBottom: '0.5rem' }}>
+              <div style={{ 
+                fontSize: '0.875rem', 
+                fontWeight: 600, 
+                color: '#94a3b8', 
+                marginBottom: '0.5rem',
+                paddingBottom: '0.25rem',
+                borderBottom: '1px solid #334155',
+              }}>
+                🔒 Occupied (soonest checkout first)
+              </div>
+              {occupiedLockers.map((locker) => {
+                const msUntil = getMsUntil(locker.checkoutAt, nowMs);
+                const countdown = msUntil !== null ? formatCountdownHHMM(msUntil) : null;
+                return (
+                  <div
+                    key={locker.id}
+                    style={{
+                      padding: '0.75rem',
+                      marginBottom: '0.5rem',
+                      background: '#1e293b',
+                      border: '1px solid #475569',
+                      borderRadius: '6px',
+                      opacity: 0.7,
+                    }}
+                  >
+                    <div style={{ fontWeight: 600 }}>Locker {locker.number}</div>
+                    <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                      Occupied
+                      {countdown && (
+                        <span>
+                          {' • '}
+                          {countdown.isOverdue ? 'Overdue' : 'Checkout in'} {countdown.label}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Fallback grid for undefined locker records (rare) */}
+          {availableLockers.length === 0 && occupiedLockers.length === 0 && (
+            <div style={{ color: '#94a3b8', textAlign: 'center', padding: '1rem' }}>
+              No locker inventory available
+            </div>
+          )}
         </div>
       )}
     </div>

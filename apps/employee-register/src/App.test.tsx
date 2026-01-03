@@ -17,6 +17,21 @@ global.fetch = vi.fn();
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    const store: Record<string, string> = {};
+    const storage = {
+      getItem: vi.fn((key: string) => (key in store ? store[key] : null)),
+      setItem: vi.fn((key: string, value: string) => {
+        store[key] = String(value);
+      }),
+      removeItem: vi.fn((key: string) => {
+        delete store[key];
+      }),
+      clear: vi.fn(() => {
+        Object.keys(store).forEach((k) => delete store[k]);
+      }),
+    };
+    Object.defineProperty(window, 'localStorage', { value: storage, writable: true });
+    (globalThis as any).localStorage = storage;
     localStorage.clear();
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       json: async () => ({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
@@ -30,30 +45,65 @@ describe('App', () => {
     expect(screen.queryByText('Employee Register')).toBeNull();
   });
 
-  it('renders the register header when authenticated', () => {
-    // Mock a session in localStorage
-    const mockSession = {
+  it('renders the register header when authenticated', async () => {
+    // Mock a signed-in register + staff session
+    localStorage.setItem('staff_session', JSON.stringify({
+      staffId: 'staff-1',
       sessionToken: 'test-token',
       name: 'Test User',
-      role: 'staff',
-    };
-    localStorage.setItem('staff_session', JSON.stringify(mockSession));
+      role: 'STAFF',
+    }));
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: any) => {
+      const u = String(url);
+      if (u.includes('/v1/registers/status')) {
+        return {
+          ok: true,
+          json: async () => ({
+            signedIn: true,
+            employee: { id: 'emp-1', name: 'Test Employee' },
+            registerNumber: 1,
+          }),
+        } as any;
+      }
+      if (u.includes('/health')) {
+        return { ok: true, json: async () => ({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as any;
+      }
+      return { ok: true, json: async () => ({}) } as any;
+    });
     
     render(<App />);
-    expect(screen.getByText('Employee Register')).toBeDefined();
+    expect(await screen.findByText('Employee Register')).toBeDefined();
   });
 
-  it('shows lane session section when authenticated', () => {
-    // Mock a session in localStorage
-    const mockSession = {
+  it('shows lane session section when authenticated', async () => {
+    localStorage.setItem('staff_session', JSON.stringify({
+      staffId: 'staff-1',
       sessionToken: 'test-token',
       name: 'Test User',
-      role: 'staff',
-    };
-    localStorage.setItem('staff_session', JSON.stringify(mockSession));
+      role: 'STAFF',
+    }));
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: any) => {
+      const u = String(url);
+      if (u.includes('/v1/registers/status')) {
+        return {
+          ok: true,
+          json: async () => ({
+            signedIn: true,
+            employee: { id: 'emp-1', name: 'Test Employee' },
+            registerNumber: 1,
+          }),
+        } as any;
+      }
+      if (u.includes('/health')) {
+        return { ok: true, json: async () => ({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as any;
+      }
+      return { ok: true, json: async () => ({}) } as any;
+    });
     
     render(<App />);
-    expect(screen.getByText('Lane Session')).toBeDefined();
+    expect(await screen.findByText('Lane Session')).toBeDefined();
   });
 });
 

@@ -3,6 +3,9 @@ export type Language = 'EN' | 'ES';
 
 export const translations: Record<Language, Record<string, string>> = {
   EN: {
+    // Welcome
+    'welcome': 'Welcome',
+
     // Language selection
     'selectLanguage': 'Select Language / Seleccione Idioma',
     'english': 'English',
@@ -18,6 +21,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Payment
     'paymentPending': 'Please present payment to the employee',
     'totalDue': 'Total Due',
+    'paymentIssueSeeAttendant': 'Payment issue — please see attendant',
     
     // Agreement
     'agreementTitle': 'Club Agreement',
@@ -56,6 +60,9 @@ export const translations: Record<Language, Record<string, string>> = {
     'noOptionsAvailable': 'No options available',
   },
   ES: {
+    // Welcome
+    'welcome': 'Bienvenido',
+
     // Language selection
     'selectLanguage': 'Seleccione Idioma / Select Language',
     'english': 'English',
@@ -71,6 +78,7 @@ export const translations: Record<Language, Record<string, string>> = {
     // Payment
     'paymentPending': 'Por favor, presente el pago al empleado',
     'totalDue': 'Total a Pagar',
+    'paymentIssueSeeAttendant': 'Problema con el pago — por favor vea al empleado',
     
     // Agreement
     'agreementTitle': 'Acuerdo del Club',

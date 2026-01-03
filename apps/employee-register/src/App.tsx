@@ -115,6 +115,7 @@ function App() {
   const [managerPin, setManagerPin] = useState('');
   const [managerList, setManagerList] = useState<Array<{ id: string; name: string }>>([]);
   const [paymentDeclineError, setPaymentDeclineError] = useState<string | null>(null);
+  const paymentIntentCreateInFlightRef = useRef(false);
   
   // Availability sidebar state
   const [showAvailabilitySidebar, setShowAvailabilitySidebar] = useState(true);
@@ -198,32 +199,6 @@ function App() {
   }) => {
     setRegisterSession(session);
   };
-
-  // Show register sign-in if not signed into a register
-  if (!registerSession) {
-    return (
-      <RegisterSignIn
-        deviceId={deviceId}
-        onSignedIn={handleRegisterSignIn}
-      >
-        <div /> {/* Empty children for now */}
-      </RegisterSignIn>
-    );
-  }
-
-  // Show lock screen if no staff session (shouldn't happen, but safety check)
-  if (!session) {
-    return (
-      <RegisterSignIn
-        deviceId={deviceId}
-        onSignedIn={handleRegisterSignIn}
-      >
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>
-          Loading...
-        </div>
-      </RegisterSignIn>
-    );
-  }
 
   // Handle barcode scanner input (keyboard wedge mode)
   useEffect(() => {
@@ -1148,8 +1123,8 @@ function App() {
         } else if (message.type === 'ASSIGNMENT_CREATED') {
           const payload = message.payload as AssignmentCreatedPayload;
           if (payload.sessionId === currentSessionId) {
-            // Assignment successful - create payment intent
-            handleCreatePaymentIntent();
+            // Assignment successful - payment should already be handled before agreement + assignment.
+            // SessionUpdated will carry assigned resource details.
           }
         } else if (message.type === 'ASSIGNMENT_FAILED') {
           const payload = message.payload as AssignmentFailedPayload;
@@ -1163,8 +1138,6 @@ function App() {
           if (payload.sessionId === currentSessionId) {
             setShowCustomerConfirmationPending(false);
             setCustomerConfirmationType(null);
-            // Proceed with payment intent creation
-            handleCreatePaymentIntent();
           }
         } else if (message.type === 'CUSTOMER_DECLINED') {
           const payload = message.payload as CustomerDeclinedPayload;
@@ -1312,6 +1285,19 @@ function App() {
     }
   };
 
+  // Corrected demo flow: once selection is confirmed/locked, create payment intent (no assignment required).
+  useEffect(() => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    if (!selectionConfirmed) return;
+    if (paymentIntentId || paymentStatus === 'DUE' || paymentStatus === 'PAID') return;
+    if (paymentIntentCreateInFlightRef.current) return;
+
+    paymentIntentCreateInFlightRef.current = true;
+    Promise.resolve(handleCreatePaymentIntent()).finally(() => {
+      paymentIntentCreateInFlightRef.current = false;
+    });
+  }, [currentSessionId, session?.sessionToken, selectionConfirmed, paymentIntentId, paymentStatus]);
+
   const handleAssign = async () => {
     if (!selectedInventoryItem || !currentSessionId || !session?.sessionToken) {
       alert('Please select an item to assign');
@@ -1371,8 +1357,7 @@ function App() {
           return;
         }
 
-        // Create payment intent after successful assignment
-        await handleCreatePaymentIntent();
+        // Assignment occurs after payment + agreement in the corrected flow; nothing payment-related here.
       }
     } catch (error) {
       console.error('Failed to assign:', error);
@@ -1656,11 +1641,13 @@ function App() {
   }, [showManagerBypassModal, session?.sessionToken]);
 
   return (
-    <RegisterSignIn
-      deviceId={deviceId}
-      onSignedIn={handleRegisterSignIn}
-    >
-      <div className="container" style={{ marginTop: '60px', padding: '1.5rem' }}>
+    <RegisterSignIn deviceId={deviceId} onSignedIn={handleRegisterSignIn}>
+      {!registerSession ? (
+        <div />
+      ) : !session ? (
+        <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading...</div>
+      ) : (
+        <div className="container" style={{ marginTop: '60px', padding: '1.5rem' }}>
       {/* Checkout Request Notifications */}
       {checkoutRequests.size > 0 && !selectedCheckoutRequest && (
         <div style={{
@@ -2429,20 +2416,36 @@ function App() {
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   onClick={handleAssign}
-                  disabled={isSubmitting || showCustomerConfirmationPending}
+                  disabled={isSubmitting || showCustomerConfirmationPending || !agreementSigned || paymentStatus !== 'PAID'}
                   style={{
                     padding: '0.75rem 1.5rem',
-                    background: (isSubmitting || showCustomerConfirmationPending) ? '#475569' : '#3b82f6',
+                    background: (isSubmitting || showCustomerConfirmationPending || !agreementSigned || paymentStatus !== 'PAID') ? '#475569' : '#3b82f6',
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
                     fontSize: '1rem',
                     fontWeight: 600,
-                    cursor: (isSubmitting || showCustomerConfirmationPending) ? 'not-allowed' : 'pointer',
+                    cursor: (isSubmitting || showCustomerConfirmationPending || !agreementSigned || paymentStatus !== 'PAID') ? 'not-allowed' : 'pointer',
                   }}
-                  title={showCustomerConfirmationPending ? 'Waiting for customer confirmation' : 'Assign resource'}
+                  title={
+                    showCustomerConfirmationPending
+                      ? 'Waiting for customer confirmation'
+                      : paymentStatus !== 'PAID'
+                        ? 'Payment must be successful before assignment'
+                        : !agreementSigned
+                          ? 'Waiting for customer to sign agreement'
+                          : 'Assign resource'
+                  }
                 >
-                  {isSubmitting ? 'Assigning...' : showCustomerConfirmationPending ? 'Waiting for Confirmation' : 'Assign'}
+                  {isSubmitting
+                    ? 'Assigning...'
+                    : showCustomerConfirmationPending
+                      ? 'Waiting for Confirmation'
+                      : paymentStatus !== 'PAID'
+                        ? 'Awaiting Payment'
+                        : !agreementSigned
+                          ? 'Awaiting Signature'
+                          : 'Assign'}
                 </button>
                 <button
                   onClick={handleClearSelection}
@@ -3316,7 +3319,8 @@ function App() {
           </div>
         </div>
       )}
-    </div>
+        </div>
+      )}
     </RegisterSignIn>
   );
 }
