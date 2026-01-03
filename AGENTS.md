@@ -5,7 +5,8 @@ This repository contains a multi-application system for managing club check-ins,
 All agent work MUST adhere to:
 - `SPEC.md` (source of truth for business rules + product behavior)
 - `openapi.yaml` (API contract target)
-- `db/schema.sql` (canonical DB target)
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md` and `docs/database/DATABASE_ENTITY_DETAILS.md` (canonical DB meaning/contract)
+- `db/schema.sql` (schema snapshot; must match migrations and the canonical DB contract)
 
 If implementation conflicts with these files, the agent MUST either:
 1) fix the implementation to match the specs, or
@@ -15,19 +16,15 @@ If implementation conflicts with these files, the agent MUST either:
 
 ## Command Execution Requirements
 
-**CRITICAL: All terminal commands MUST be executed using bash with elevated sudo privileges.**
+**CRITICAL: Do NOT use `sudo` for `pnpm`/Node commands.**
 
-- Agents MUST use bash shell for all terminal commands (not cmd.exe or PowerShell)
-- All commands MUST be prefixed with `sudo` and executed via bash: `sudo bash -c "command"`
-- Examples:
-  - `sudo bash -c "pnpm install"` (not `pnpm install`)
-  - `sudo bash -c "pnpm dev"` (not `pnpm dev`)
-  - `sudo bash -c "pnpm test"` (not `pnpm test`)
-  - `sudo bash -c "node scripts/kill-ports.js"` (not `node scripts/kill-ports.js`)
-- This applies to ALL commands, including package management, testing, building, and script execution
-- Use this format even if the command might not strictly require sudo - it ensures consistent behavior and prevents permission issues
+- Agents MUST use a bash shell for repo commands when possible (avoid cmd.exe / PowerShell-specific instructions).
+- **Never run `pnpm`, `node`, or dev scripts as root**. Doing so commonly creates root-owned `node_modules/` and breaks installs for everyone else.
+- If you hit permission issues:
+  - Fix file ownership/permissions in the workspace (don’t “paper over” by using `sudo pnpm`).
+  - Delete and reinstall dependencies if needed (e.g., remove `node_modules/` and re-run `pnpm install` as your normal user).
 
-This ensures consistent behavior across different environments and prevents permission-related issues that agents have been experiencing with cmd commands.
+This keeps local dev behavior consistent with standard modern Node/pnpm workflows.
 
 ---
 

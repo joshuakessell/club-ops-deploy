@@ -17,8 +17,8 @@ This specification defines the admin monitoring and control features for employe
 
 ### Session States
 
-- **Active**: `signed_out_at IS NULL` - Employee is currently signed into a register
-- **Signed Out**: `signed_out_at IS NOT NULL` - Session ended normally
+- **Active**: Employee is currently signed into a register
+- **Signed Out**: Session ended normally
 - **Abandoned**: No heartbeat for > 90 seconds - Automatically signed out by cleanup job
 
 ## Admin Responsibilities
@@ -35,8 +35,8 @@ Admins can view the status of both Register 1 and Register 2:
 ### Force Sign-Out
 
 Admins can force sign-out any active register session:
-- Sets `signed_out_at = NOW()` on the session
-- Logs audit entry with action `REGISTER_FORCE_SIGN_OUT`
+- Server marks the session as signed out immediately
+- Logs an audit entry (see canonical database docs for audit logging contract)
 - Broadcasts `REGISTER_SESSION_UPDATED` event with reason `FORCED_SIGN_OUT`
 - Client receives event and immediately returns to splash screen
 
@@ -44,8 +44,8 @@ Admins can force sign-out any active register session:
 
 ### Rules
 
-- Devices are auto-created in the `devices` table the first time they call a register endpoint
-- Only **enabled** devices can:
+- Devices may be auto-registered on first use (server-side), but the storage schema is an implementation detail.
+- Only **enabled/allowed** devices can:
   - Verify PIN
   - Assign to registers
   - Send heartbeats
@@ -175,8 +175,8 @@ Forces sign-out of active session for specified register.
 - Validates `registerNumber ∈ {1, 2}`
 - If no active session: returns `{ ok: true, message: "already signed out" }`
 - If active session exists:
-  - Sets `signed_out_at = NOW()`
-  - Logs audit entry with action `REGISTER_FORCE_SIGN_OUT`
+  - Server marks the session as signed out immediately
+  - Logs an audit entry (see canonical database docs for audit logging contract)
   - Broadcasts `REGISTER_SESSION_UPDATED` with reason `FORCED_SIGN_OUT`
   - Returns updated register summary
 
@@ -227,24 +227,16 @@ Request:
 
 ## Database Schema
 
-### devices Table
+**Deprecated / superseded**: Do not treat this spec as a source of truth for database tables/columns or audit action names.
 
-```sql
-CREATE TABLE devices (
-  device_id VARCHAR(255) PRIMARY KEY,
-  display_name VARCHAR(255) NOT NULL,
-  enabled BOOLEAN NOT NULL DEFAULT true,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-```
+See:
 
-### Audit Log Entry
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md`
+- `docs/database/DATABASE_ENTITY_DETAILS.md`
 
-When force sign-out occurs:
-- `action`: `REGISTER_FORCE_SIGN_OUT`
-- `entity_type`: `register_session`
-- `entity_id`: session.id
-- `staff_id`: admin staff_id
+And for the concrete schema snapshot:
+
+- `db/schema.sql`
 
 ## Security Considerations
 

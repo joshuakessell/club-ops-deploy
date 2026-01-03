@@ -105,29 +105,17 @@ cp .env.example .env
 
 ## Database Schema
 
-The following tables are created by migrations:
+**Deprecated / superseded**: This README used to list “tables” and enum values, but those lists can drift (for example: legacy `members`/`sessions` vs the current customer-first schema).
 
-### Core Tables
+For the canonical database meaning/contracts, see:
 
-- **members** - Club member records
-- **rooms** - Room inventory with status tracking
-- **lockers** - Locker inventory
-- **sessions** - Check-in sessions linking members to rooms/lockers
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md`
+- `docs/database/DATABASE_ENTITY_DETAILS.md`
 
-### Supporting Tables
+For the current schema snapshot and history, see:
 
-- **key_tags** - QR/NFC tags linked to rooms
-- **cleaning_batches** - Batch cleaning operations
-- **cleaning_batch_rooms** - Rooms in each cleaning batch
-- **audit_log** - Comprehensive audit trail
-
-### Enums
-
-- `room_status`: DIRTY, CLEANING, CLEAN
-- `room_type`: STANDARD, DOUBLE, SPECIAL, LOCKER
-- `session_status`: ACTIVE, COMPLETED, CANCELLED
-- `key_tag_type`: QR, NFC
-- `audit_action`: CREATE, UPDATE, DELETE, STATUS_CHANGE, ASSIGN, RELEASE, OVERRIDE, CHECK_IN, CHECK_OUT
+- `db/schema.sql`
+- `services/api/migrations/`
 
 ## Creating New Migrations
 

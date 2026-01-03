@@ -2,7 +2,7 @@
 
 ## Overview
 
-This system manages club operations including member check-ins, room assignments, locker allocations, cleaning workflows, and staff metrics tracking.
+This system manages club operations including customer check-ins, room assignments, locker allocations, cleaning workflows, and staff metrics tracking.
 
 ---
 
@@ -10,9 +10,9 @@ This system manages club operations including member check-ins, room assignments
 
 ### Customer Kiosk (`apps/customer-kiosk`)
 
-**Deprecated**: See "Counter Check-in Flow v1" section below for the current specification.
+**Note**: The authoritative end-to-end behavior is specified in **"Counter Check-in Flow v1"** below. This section is a high-level summary only.
 
-**Purpose**: Tablet-based self-service kiosk for member check-ins.
+**Purpose**: Tablet-based self-service kiosk for customer check-ins.
 
 **Features**:
 - Logo-only idle screen until session is created
@@ -20,7 +20,7 @@ This system manages club operations including member check-ins, room assignments
 - Membership card scanning (QR/NFC) to display membership number
 - Conditional Gym Locker option for grandfathered memberships only
 - Real-time room availability display
-- Room type selection (Standard, Deluxe, VIP)
+- Rental type selection (Locker, Standard, Double, Special; Gym Locker when eligible)
 - Locker assignment confirmation
 
 **Flow**:
@@ -56,7 +56,7 @@ This system manages club operations including member check-ins, room assignments
 
 **Check-in Features** (see "Counter Check-in Flow v1" below):
 - Barcode scanner input capture for ID and membership scans
-- Member lookup and check-in processing
+- Customer lookup and check-in processing
 - Room assignment with real-time availability
 - Locker assignment and key tracking
 - Session countdown timers
@@ -296,7 +296,7 @@ The employee register displays organized inventory lists:
 **Server → Client**:
 - `ROOM_STATUS_CHANGED` - Room status transition
 - `INVENTORY_UPDATED` - Inventory counts changed
-- `ROOM_ASSIGNED` - Room assigned to member
+- `ROOM_ASSIGNED` - Room assigned to customer
 - `ROOM_RELEASED` - Room released from session
 - `SESSION_UPDATED` - Session created or updated (contains customer_name, membership_number, allowed_rentals)
 
@@ -308,97 +308,13 @@ The employee register displays organized inventory lists:
 
 ## Shared Package (`packages/shared`)
 
-### Enums
+**Deprecated / superseded**: The enum lists and “data model” sketches previously in this section were historical and have drifted (e.g., legacy `members`/`sessions`, deprecated room types).
 
-```typescript
-enum RoomStatus {
-  DIRTY = 'DIRTY',
-  CLEANING = 'CLEANING',
-  CLEAN = 'CLEAN'
-}
+Use these canonical sources instead:
 
-enum RoomType {
-  STANDARD = 'STANDARD',
-  DELUXE = 'DELUXE',
-  VIP = 'VIP',
-  LOCKER = 'LOCKER'
-}
-```
-
-### Transition Rules
-
-Valid transitions without override:
-- `DIRTY` → `CLEANING`
-- `CLEANING` → `CLEAN`
-- `CLEANING` → `DIRTY` (rollback)
-- `CLEAN` → `CLEANING`
-- `CLEAN` → `DIRTY`
-
-Invalid transitions (require override):
-- `DIRTY` → `CLEAN` (skips cleaning step)
-
-All overrides must include:
-- Reason for override
-- Staff member ID
-- Timestamp
-
----
-
-## Data Models
-
-### Room
-
-```typescript
-interface Room {
-  id: string;
-  number: string;
-  type: RoomType;
-  status: RoomStatus;
-  floor: number;
-  lastStatusChange: Date;
-  assignedTo?: string;
-  overrideFlag: boolean;
-}
-```
-
-### Session
-
-```typescript
-interface Session {
-  id: string;
-  memberId: string;
-  memberName: string;
-  membershipNumber?: string;
-  roomId?: string;
-  lockerId?: string;
-  checkInTime: Date;
-  expectedDuration: number;
-  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
-  allowedRentals: string[]; // e.g., ['STANDARD', 'DELUXE', 'VIP', 'GYM_LOCKER']
-}
-```
-
-### Session Updated Event
-
-```typescript
-interface SessionUpdatedPayload {
-  sessionId: string;
-  customerName: string;
-  membershipNumber?: string;
-  allowedRentals: string[];
-}
-```
-
-### Inventory Summary
-
-```typescript
-interface InventorySummary {
-  clean: number;
-  cleaning: number;
-  dirty: number;
-  total: number;
-}
-```
+- `packages/shared/src/*` for TypeScript enums/schemas used by apps/services
+- `openapi.yaml` for API request/response contracts
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md` and `docs/database/DATABASE_ENTITY_DETAILS.md` for database meaning/contracts
 
 ---
 
@@ -474,21 +390,15 @@ All state-changing operations logged:
 
 ## Database Schema (Postgres)
 
-### Tables
+**Deprecated / superseded**: This spec is not a database schema reference.
 
-- `rooms` - Room inventory
-- `lockers` - Locker inventory
-- `members` - Member records
-- `sessions` - Check-in sessions
-- `room_status_history` - Status transition audit
-- `overrides` - Override records
-- `staff` - Staff accounts
+For canonical database meaning/contracts, see:
+- `docs/database/DATABASE_SOURCE_OF_TRUTH.md`
+- `docs/database/DATABASE_ENTITY_DETAILS.md`
 
-### Concurrency
-
-- Row-level locking for room assignments
-- Optimistic locking with version columns
-- Transaction isolation: SERIALIZABLE for bookings
+For the current schema snapshot and history, see:
+- `db/schema.sql`
+- `services/api/migrations/`
 
 ---
 
