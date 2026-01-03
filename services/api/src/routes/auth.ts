@@ -15,7 +15,7 @@ import { requireAuth } from '../auth/middleware.js';
 const LoginPinSchema = z.object({
   staffLookup: z.string().min(1), // staff ID or name
   deviceId: z.string().min(1),
-  pin: z.string().min(1),
+  pin: z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
   deviceType: z.enum(['tablet', 'kiosk', 'desktop']).optional(), // Optional device type
 });
 
@@ -379,7 +379,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
    * (valid for 5 minutes).
    */
   const ReauthPinSchema = z.object({
-    pin: z.string().min(1),
+    pin: z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
   });
 
   fastify.post('/v1/auth/reauth-pin', {

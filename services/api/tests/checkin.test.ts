@@ -66,7 +66,7 @@ describe('Check-in Flow', () => {
     sessionUpdatedEvents = [];
     
     // Create test staff
-    const pinHash = await hashPin('1234');
+    const pinHash = await hashPin('111111');
     const staffResult = await query<{ id: string }>(
       `INSERT INTO staff (name, role, pin_hash, active)
        VALUES ('Test Staff', 'STAFF', $1, true)

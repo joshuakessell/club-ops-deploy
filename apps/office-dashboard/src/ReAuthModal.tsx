@@ -244,10 +244,13 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
               <input
                 type="password"
                 value={pin}
-                onChange={(e) => setPin(e.target.value)}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 required
                 autoFocus
                 disabled={isLoading}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
                 style={{
                   width: '100%',
                   padding: '0.75rem',
@@ -304,17 +307,17 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
               </button>
               <button
                 type="submit"
-                disabled={isLoading || !pin.trim()}
+                disabled={isLoading || pin.trim().length !== 6}
                 style={{
                   padding: '0.75rem 1.5rem',
                   background: '#8b5cf6',
                   border: 'none',
                   borderRadius: '6px',
                   color: '#f9fafb',
-                  cursor: isLoading || !pin.trim() ? 'not-allowed' : 'pointer',
+                  cursor: isLoading || pin.trim().length !== 6 ? 'not-allowed' : 'pointer',
                   fontSize: '1rem',
                   fontWeight: 600,
-                  opacity: isLoading || !pin.trim() ? 0.5 : 1,
+                  opacity: isLoading || pin.trim().length !== 6 ? 0.5 : 1,
                 }}
               >
                 {isLoading ? 'Verifying...' : 'Continue'}

@@ -30,6 +30,8 @@ describe('Agreement and Upgrade Flows', () => {
   const testCustomerId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const testRoomId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
   const testAgreementId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
+  const validPngBase64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
   beforeAll(async () => {
     const dbConfig = {
@@ -155,7 +157,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: `/v1/checkins/${checkinId}/agreement-sign`,
         payload: {
-          signaturePngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+          signaturePngBase64: validPngBase64,
           agreed: true,
         },
       });
@@ -200,7 +202,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: `/v1/checkins/${session.id}/agreement-sign`,
         payload: {
-          signaturePngBase64: 'test-signature',
+          signaturePngBase64: validPngBase64,
           agreed: true,
         },
       });
@@ -228,7 +230,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: `/v1/checkins/${session.id}/agreement-sign`,
         payload: {
-          signaturePngBase64: 'test-signature',
+          signaturePngBase64: validPngBase64,
           agreed: true,
         },
       });
@@ -256,7 +258,7 @@ describe('Agreement and Upgrade Flows', () => {
         method: 'POST',
         url: `/v1/checkins/${session.id}/agreement-sign`,
         payload: {
-          signaturePngBase64: 'test',
+          signaturePngBase64: validPngBase64,
           agreed: true,
         },
       });

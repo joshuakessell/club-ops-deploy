@@ -95,31 +95,31 @@ async function seed() {
         name: 'John Erikson',
         role: 'STAFF',
         qrToken: 'STAFF-001',
-        pin: '1234',
+        pin: '111111',
       },
       {
         name: 'Manager Club',
         role: 'ADMIN',
         qrToken: 'STAFF-002',
-        pin: '123456',
+        pin: '222222',
       },
       {
         name: 'Manager Dallas',
         role: 'ADMIN',
         qrToken: 'STAFF-003',
-        pin: '654321',
+        pin: '333333',
       },
       {
         name: 'Employee One',
         role: 'STAFF',
         qrToken: 'STAFF-004',
-        pin: '5678',
+        pin: '444444',
       },
       {
         name: 'Employee Two',
         role: 'STAFF',
         qrToken: 'STAFF-005',
-        pin: '9012',
+        pin: '555555',
       },
     ];
 

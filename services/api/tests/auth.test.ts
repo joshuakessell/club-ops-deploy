@@ -77,8 +77,8 @@ describe('Auth Tests', () => {
 
   beforeEach(async () => {
     // Create test staff members for each test
-    const adminPinHash = await hashPin('1234');
-    const staffPinHash = await hashPin('5678');
+    const adminPinHash = await hashPin('222222');
+    const staffPinHash = await hashPin('444444');
 
     const adminResult = await query<{ id: string }>(
       `INSERT INTO staff (name, role, pin_hash, active)
@@ -131,7 +131,7 @@ describe('Auth Tests', () => {
         payload: {
           staffLookup: 'Staff User',
           deviceId: 'test-device',
-          pin: '5678',
+          pin: '444444',
         },
       });
 
@@ -162,7 +162,7 @@ describe('Auth Tests', () => {
         payload: {
           staffLookup: 'Staff User',
           deviceId: 'test-device',
-          pin: '5678',
+          pin: '444444',
         },
       });
 
@@ -176,11 +176,24 @@ describe('Auth Tests', () => {
         payload: {
           staffLookup: 'Staff User',
           deviceId: 'test-device',
-          pin: '9999',
+          pin: '999999',
         },
       });
 
       expect(response.statusCode).toBe(401);
+    });
+
+    it('should reject non-6-digit PINs (e.g. 4-digit)', async () => {
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/v1/auth/login-pin',
+        payload: {
+          staffLookup: 'Staff User',
+          deviceId: 'test-device',
+          pin: '1234',
+        },
+      });
+      expect(response.statusCode).toBe(400);
     });
 
     it('should log audit action on successful PIN login', async () => {
@@ -190,7 +203,7 @@ describe('Auth Tests', () => {
         payload: {
           staffLookup: 'Staff User',
           deviceId: 'test-device',
-          pin: '5678',
+          pin: '444444',
         },
       });
 
@@ -532,7 +545,7 @@ describe('Auth Tests', () => {
           'Authorization': `Bearer ${adminToken}`,
         },
         payload: {
-          pin: '1234',
+          pin: '222222',
         },
       });
 
@@ -564,7 +577,7 @@ describe('Auth Tests', () => {
           'Authorization': `Bearer ${adminToken}`,
         },
         payload: {
-          pin: '9999',
+          pin: '999999',
         },
       });
 
@@ -583,7 +596,7 @@ describe('Auth Tests', () => {
           'Content-Type': 'application/json',
         },
         payload: {
-          newPin: '9999',
+          newPin: '666666',
         },
       });
 
@@ -601,7 +614,7 @@ describe('Auth Tests', () => {
           'Authorization': `Bearer ${adminToken}`,
         },
         payload: {
-          pin: '1234',
+          pin: '222222',
         },
       });
 
@@ -616,7 +629,7 @@ describe('Auth Tests', () => {
           'Content-Type': 'application/json',
         },
         payload: {
-          newPin: '9999',
+          newPin: '666666',
         },
       });
 
@@ -636,7 +649,7 @@ describe('Auth Tests', () => {
         payload: {
           staffLookup: 'Staff User',
           deviceId: 'test-device',
-          pin: '9999',
+          pin: '666666',
         },
       });
 
@@ -685,7 +698,7 @@ describe('Auth Tests', () => {
           'Authorization': `Bearer ${adminToken}`,
         },
         payload: {
-          pin: '1234',
+          pin: '222222',
         },
       });
 
@@ -719,7 +732,7 @@ describe('Auth Tests', () => {
           'Authorization': `Bearer ${adminToken}`,
         },
         payload: {
-          pin: '1234',
+          pin: '222222',
         },
       });
 
@@ -742,7 +755,7 @@ describe('Auth Tests', () => {
           'Content-Type': 'application/json',
         },
         payload: {
-          newPin: '9999',
+          newPin: '666666',
         },
       });
 

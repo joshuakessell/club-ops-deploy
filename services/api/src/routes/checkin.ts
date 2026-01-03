@@ -1975,20 +1975,32 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         const agreement = agreementResult.rows[0]!;
 
         // Store signature (extract base64 from data URL if needed)
-        const signatureData = signaturePayload.startsWith('data:') 
-          ? signaturePayload.split(',')[1] 
+        const signatureData = signaturePayload.startsWith('data:')
+          ? signaturePayload.split(',')[1]
           : signaturePayload;
+
+        if (!signatureData || signatureData.trim().length < 16) {
+          throw { statusCode: 400, message: 'Signature payload is required' };
+        }
 
         const signedAt = new Date();
 
-        // Generate PDF
-        const pdfBuffer = await generateAgreementPdf({
+        // Generate PDF (robust pdf-lib)
+        let pdfBuffer: Buffer;
+        try {
+          pdfBuffer = await generateAgreementPdf({
+            agreementTitle: agreement.title,
+            agreementVersion: agreement.version,
           customerName,
           membershipNumber,
           agreementText: agreement.body_text,
           signatureImageBase64: signatureData,
           signedAt,
-        });
+          });
+        } catch (e) {
+          request.log.warn({ err: e }, 'Failed to generate agreement PDF from provided signature');
+          throw { statusCode: 400, message: 'Invalid signature image (expected PNG data URL or base64)' };
+        }
 
         // Determine rental type from locked selection snapshot
         const rentalType = (session.desired_rental_type || session.backup_rental_type || 'LOCKER') as
@@ -2687,7 +2699,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const { laneId } = request.params;
-    const { managerId, managerPin } = request.body;
+    const BypassSchema = z.object({
+      managerId: z.string().uuid(),
+      managerPin: z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
+    });
+
+    let body: { managerId: string; managerPin: string };
+    try {
+      body = BypassSchema.parse(request.body);
+    } catch (error) {
+      return reply.status(400).send({
+        error: 'Validation failed',
+        details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+      });
+    }
+
+    const { managerId, managerPin } = body;
 
     try {
       const result = await transaction(async (client) => {

@@ -202,16 +202,18 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             <input
               type="password"
               className="pin-input"
-              placeholder="Enter PIN"
+              placeholder="Enter 6-digit PIN"
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
               disabled={isLoading}
-              maxLength={10}
+              maxLength={6}
+              inputMode="numeric"
+              pattern="[0-9]*"
             />
             <button
               type="submit"
               className="pin-submit-button"
-              disabled={isLoading || !pin.trim() || !staffLookup.trim()}
+              disabled={isLoading || pin.trim().length !== 6 || !staffLookup.trim()}
             >
               {isLoading ? 'Logging in...' : 'Login'}
             </button>

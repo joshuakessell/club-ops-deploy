@@ -3012,9 +3012,11 @@ function App() {
               <input
                 type="password"
                 value={managerPin}
-                onChange={(e) => setManagerPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                placeholder="Enter 4-digit PIN"
-                maxLength={4}
+                onChange={(e) => setManagerPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="Enter 6-digit PIN"
+                maxLength={6}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 style={{
                   width: '100%',
                   padding: '0.75rem',
@@ -3029,17 +3031,17 @@ function App() {
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
                 onClick={handleManagerBypass}
-                disabled={isSubmitting || !managerId || !managerPin}
+                disabled={isSubmitting || !managerId || managerPin.trim().length !== 6}
                 style={{
                   flex: 1,
                   padding: '0.75rem',
-                  background: managerId && managerPin ? '#3b82f6' : '#475569',
+                  background: managerId && managerPin.trim().length === 6 ? '#3b82f6' : '#475569',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
                   fontSize: '1rem',
                   fontWeight: 600,
-                  cursor: (managerId && managerPin && !isSubmitting) ? 'pointer' : 'not-allowed',
+                  cursor: (managerId && managerPin.trim().length === 6 && !isSubmitting) ? 'pointer' : 'not-allowed',
                 }}
               >
                 {isSubmitting ? 'Processing...' : 'Bypass'}

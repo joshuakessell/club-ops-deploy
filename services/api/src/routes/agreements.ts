@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
+import { generateAgreementPdf } from '../utils/pdf-generator.js';
 
 /**
  * Schema for signing an agreement.
@@ -162,6 +163,9 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         const checkinBlockId = blockResult.rows[0]?.id || null;
+        if (!checkinBlockId) {
+          throw { statusCode: 400, message: 'No check-in block found to attach agreement PDF/signature to' };
+        }
 
         // 5. Get the active agreement
         const agreementResult = await client.query<AgreementRow>(
@@ -179,6 +183,53 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
         const agreement = agreementResult.rows[0]!;
 
         // 6. Store the signature
+        const signatureBase64 = body.signaturePngBase64
+          ? (body.signaturePngBase64.startsWith('data:') ? body.signaturePngBase64.split(',')[1] : body.signaturePngBase64)
+          : null;
+
+        const signedAt = new Date();
+
+        // Generate + store agreement PDF bytes on the check-in block
+        let pdfBuffer: Buffer | null = null;
+        if (signatureBase64) {
+          try {
+            pdfBuffer = await generateAgreementPdf({
+              agreementTitle: agreement.title,
+              agreementVersion: agreement.version,
+              agreementText: agreement.body_text,
+              customerName: customer.name,
+              membershipNumber: customer.membership_number || undefined,
+              signedAt,
+              signatureImageBase64: signatureBase64,
+            });
+          } catch (e) {
+            fastify.log.warn({ err: e }, 'Failed to generate agreement PDF from provided signature');
+            throw { statusCode: 400, message: 'Invalid signature image (expected PNG data URL or base64)' };
+          }
+        }
+
+        if (pdfBuffer) {
+          await client.query(
+            `UPDATE checkin_blocks
+             SET agreement_signed = true,
+                 agreement_pdf = $1,
+                 agreement_signed_at = $2,
+                 updated_at = NOW()
+             WHERE id = $3`,
+            [pdfBuffer, signedAt, checkinBlockId]
+          );
+        } else {
+          // Still mark as signed if the caller acknowledged; signature payload may be strokes-only for legacy clients.
+          await client.query(
+            `UPDATE checkin_blocks
+             SET agreement_signed = true,
+                 agreement_signed_at = $1,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [signedAt, checkinBlockId]
+          );
+        }
+
         const signatureResult = await client.query<{ id: string }>(
           `INSERT INTO agreement_signatures (
             agreement_id, checkin_id, checkin_block_id, customer_name, membership_number,
@@ -194,7 +245,7 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
             checkinBlockId,
             customer.name,
             customer.membership_number,
-            body.signaturePngBase64 || null,
+            signatureBase64,
             body.signatureStrokesJson ? JSON.stringify(body.signatureStrokesJson) : null,
             agreement.body_text,
             agreement.version,
@@ -205,21 +256,18 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
           ]
         );
 
-        // 7. Mark block as agreement signed (sessions table doesn't have agreement_signed column)
-
-        if (checkinBlockId) {
-          await client.query(
-            `UPDATE checkin_blocks 
-             SET agreement_signed = true, updated_at = NOW()
-             WHERE id = $1`,
-            [checkinBlockId]
-          );
-        }
+        // Mark the session as agreement signed (used by legacy session flows)
+        await client.query(
+          `UPDATE sessions
+           SET agreement_signed = true, updated_at = NOW()
+           WHERE id = $1`,
+          [session.id]
+        );
 
         return {
           signatureId: signatureResult.rows[0]!.id,
           agreementVersion: agreement.version,
-          signedAt: new Date(),
+          signedAt,
         };
       });
 
