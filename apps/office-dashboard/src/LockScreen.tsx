@@ -369,13 +369,13 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                         value={pin}
                         onChange={(e) => {
                           // Only allow numeric input
-                          const value = e.target.value.replace(/\D/g, '');
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 6);
                           setPin(value);
                         }}
                         disabled={isLoading}
                         autoFocus
                         inputProps={{
-                          maxLength: 10,
+                          maxLength: 6,
                           inputMode: 'numeric',
                           pattern: '[0-9]*',
                         }}
@@ -402,7 +402,7 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                         fullWidth
                         variant="contained"
                         size="large"
-                        disabled={isLoading || !pin.trim()}
+                        disabled={isLoading || pin.trim().length !== 6}
                         startIcon={isLoading ? <CircularProgress size={20} /> : <LoginIcon />}
                         sx={{
                           py: 1.5,

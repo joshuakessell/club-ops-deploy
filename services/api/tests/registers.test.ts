@@ -22,7 +22,7 @@ describe('Register Routes', () => {
   });
 
   beforeEach(async () => {
-    const pinHash = await hashPin('1234');
+    const pinHash = await hashPin('111111');
     const result = await query<{ id: string }>(
       `INSERT INTO staff (name, role, pin_hash, active)
        VALUES ('John Erikson', 'STAFF', $1, true)
@@ -51,7 +51,7 @@ describe('Register Routes', () => {
       url: '/v1/auth/verify-pin',
       payload: {
         employeeId,
-        pin: '1234',
+        pin: '111111',
         deviceId,
       },
     });
@@ -79,7 +79,7 @@ describe('Register Routes', () => {
       url: '/v1/auth/verify-pin',
       payload: {
         employeeId,
-        pin: '1234',
+        pin: '111111',
         deviceId,
       },
     });

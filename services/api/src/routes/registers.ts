@@ -9,7 +9,7 @@ import { requireAuth } from '../auth/middleware.js';
  */
 const VerifyPinSchema = z.object({
   employeeId: z.string().uuid(),
-  pin: z.string().min(1),
+  pin: z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
   deviceId: z.string().min(1),
 });
 

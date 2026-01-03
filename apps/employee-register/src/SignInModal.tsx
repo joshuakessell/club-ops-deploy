@@ -274,11 +274,13 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                 className={`pin-input ${pinError ? 'shake' : ''}`}
                 value={pin}
                 onChange={(e) => {
-                  setPin(e.target.value.replace(/\D/g, '').slice(0, 4));
+                  setPin(e.target.value.replace(/\D/g, '').slice(0, 6));
                   setPinError(false);
                 }}
-                placeholder="Enter 4-digit PIN"
-                maxLength={4}
+                placeholder="Enter 6-digit PIN"
+                maxLength={6}
+                inputMode="numeric"
+                pattern="[0-9]*"
                 autoFocus
                 disabled={isLoading}
               />
@@ -286,7 +288,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                 <button type="button" onClick={handleBack} disabled={isLoading}>
                   Back
                 </button>
-                <button type="submit" disabled={isLoading || pin.length !== 4}>
+                <button type="submit" disabled={isLoading || pin.length !== 6}>
                   {isLoading ? 'Verifying...' : 'Verify PIN'}
                 </button>
               </div>

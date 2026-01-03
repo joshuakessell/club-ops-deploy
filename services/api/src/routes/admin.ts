@@ -571,7 +571,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     const CreateStaffSchema = z.object({
       name: z.string().min(1),
       role: z.enum(['STAFF', 'ADMIN']),
-      pin: z.string().regex(/^\d{4,6}$/, 'PIN must be 4-6 digits'),
+      pin: z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
       active: z.boolean().optional().default(true),
     });
 
@@ -747,7 +747,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const PinResetSchema = z.object({
-      newPin: z.string().regex(/^\d{4,6}$/, 'PIN must be 4-6 digits'),
+      newPin: z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
     });
 
     let body;

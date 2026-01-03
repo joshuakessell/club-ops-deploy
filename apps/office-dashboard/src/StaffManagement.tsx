@@ -537,7 +537,7 @@ function CreateStaffModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !pin.match(/^\d{4,6}$/)) {
+    if (!name.trim() || !pin.match(/^\d{6}$/)) {
       return;
     }
     onCreate({ name: name.trim(), role, pin, active });
@@ -614,14 +614,16 @@ function CreateStaffModal({
           </div>
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-              PIN (4-6 digits) *
+              PIN (6 digits) *
             </label>
             <input
               type="password"
               value={pin}
-              onChange={(e) => setPin(e.target.value)}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
               required
-              pattern="\d{4,6}"
+              pattern="\d{6}"
+              inputMode="numeric"
+              maxLength={6}
               style={{
                 width: '100%',
                 padding: '0.75rem',
@@ -1204,7 +1206,7 @@ function PinResetModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPin.match(/^\d{4,6}$/)) {
+    if (newPin.match(/^\d{6}$/)) {
       onReset(staffId, newPin);
     }
   };
@@ -1239,14 +1241,16 @@ function PinResetModal({
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '1.5rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 500 }}>
-              New PIN (4-6 digits) *
+              New PIN (6 digits) *
             </label>
             <input
               type="password"
               value={newPin}
-              onChange={(e) => setNewPin(e.target.value)}
+              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
               required
-              pattern="\d{4,6}"
+              pattern="\d{6}"
+              inputMode="numeric"
+              maxLength={6}
               style={{
                 width: '100%',
                 padding: '0.75rem',

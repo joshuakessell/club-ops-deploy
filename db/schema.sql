@@ -214,7 +214,7 @@ SET default_table_access_method = heap;
 CREATE TABLE public.agreement_signatures (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     agreement_id uuid NOT NULL,
-    checkin_id uuid NOT NULL,
+    checkin_id uuid,
     customer_name character varying(255) NOT NULL,
     membership_number character varying(50),
     signed_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -295,6 +295,8 @@ CREATE TABLE public.checkin_blocks (
     locker_id uuid,
     session_id uuid,
     agreement_signed boolean DEFAULT false NOT NULL,
+    agreement_pdf bytea,
+    agreement_signed_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     has_tv_remote boolean DEFAULT false NOT NULL,

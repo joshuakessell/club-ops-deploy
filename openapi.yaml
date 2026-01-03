@@ -537,14 +537,15 @@ paths:
           application/json:
             schema:
               type: object
-              required: [signaturePngBase64, agreed]
+              required: [signaturePayload]
               properties:
-                signaturePngBase64:
+                signaturePayload:
                   type: string
-                signatureStrokesJson:
-                  type: object
-                agreed:
-                  type: boolean
+                  description: PNG signature as a full data URL (data:image/png;base64,...) or raw base64 payload.
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
       responses:
         '200':
           description: Signature stored
