@@ -509,8 +509,8 @@
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #000;
-  color: #fff;
+  background: var(--cs-bg);
+  color: var(--cs-text);
   position: relative;
 }
 
@@ -531,7 +531,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--cs-bg-overlay);
   z-index: 2;
 }
 
@@ -541,19 +541,22 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 1rem 2rem;
-  background: #fff;
-  color: #000;
-  border: none;
-  border-radius: 0.5rem;
+  background: var(--cs-bg-card);
+  color: var(--cs-text);
+  border: 1px solid var(--cs-border);
+  border-radius: var(--cs-radius-md);
   font-size: 1.125rem;
   font-weight: 600;
   cursor: pointer;
   z-index: 3;
-  transition: background 0.2s;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+  box-shadow: var(--cs-elevation-2);
 }
 
 .register-sign-in-button:hover {
-  background: #e5e5e5;
+  background: var(--cs-bg-hover);
+  border-color: var(--cs-primary);
+  box-shadow: var(--cs-elevation-3);
 }
 
 .register-top-bar {
@@ -562,13 +565,13 @@
   left: 0;
   right: 0;
   height: 60px;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(15, 23, 42, 0.9);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
   z-index: 100;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid var(--cs-border);
 }
 
 .register-top-bar-center {
@@ -581,7 +584,7 @@
 .register-menu-button {
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--cs-text);
   font-size: 1.5rem;
   cursor: pointer;
   padding: 0.5rem;
@@ -591,7 +594,7 @@
 }
 
 .register-menu-button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--cs-bg-hover);
   border-radius: 0.25rem;
 }
 
@@ -601,8 +604,8 @@
   right: 0;
   width: 300px;
   height: calc(100vh - 60px);
-  background: rgba(0, 0, 0, 0.95);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.96);
+  border-left: 1px solid var(--cs-border);
   z-index: 99;
   transform: translateX(100%);
   transition: transform 0.3s ease;
@@ -615,7 +618,7 @@
 
 .register-menu-item {
   padding: 1rem;
-  color: #fff;
+  color: var(--cs-text);
   background: transparent;
   border: none;
   border-radius: 0.5rem;
@@ -628,7 +631,7 @@
 }
 
 .register-menu-item:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--cs-bg-hover);
 }
 
 /* Sign-In Modal Styles */
@@ -664,7 +667,7 @@
   right: 1rem;
   background: transparent;
   border: none;
-  color: #fff;
+  color: var(--cs-text);
   font-size: 2rem;
   cursor: pointer;
   width: 40px;
@@ -677,7 +680,7 @@
 }
 
 .sign-in-modal-close:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--cs-bg-hover);
 }
 
 .sign-in-step {
@@ -689,12 +692,12 @@
 .sign-in-step h2 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--cs-text);
   margin: 0;
 }
 
 .sign-in-subtitle {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--cs-text-muted);
   font-size: 0.875rem;
   margin: 0;
 }
@@ -749,19 +752,21 @@
 
 .register-button {
   padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--cs-bg-card);
+  border: 1px solid var(--cs-border);
   border-radius: 0.5rem;
-  color: #fff;
+  color: var(--cs-text);
   font-size: 1.25rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: var(--cs-elevation-2);
 }
 
 .register-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--cs-bg-hover);
+  border-color: var(--cs-primary);
+  box-shadow: var(--cs-elevation-3);
 }
 
 .register-button:disabled {
@@ -787,21 +792,22 @@
 }
 
 .sign-in-actions button:first-child {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--cs-bg-hover);
+  color: var(--cs-text);
 }
 
 .sign-in-actions button:first-child:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--cs-bg-active);
 }
 
 .sign-in-actions button:last-child {
-  background: #fff;
-  color: #000;
+  background: var(--cs-bg-card);
+  color: var(--cs-text);
+  border: 1px solid var(--cs-border);
 }
 
 .sign-in-actions button:last-child:hover:not(:disabled) {
-  background: #e5e5e5;
+  background: var(--cs-bg-hover);
 }
 
 .sign-in-actions button:disabled {
