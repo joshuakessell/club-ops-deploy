@@ -22,13 +22,45 @@ interface StaffSession {
   sessionToken: string;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const err = value['error'];
+  const msg = value['message'];
+  if (typeof err === 'string' && err.trim()) return err;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  return undefined;
+}
+
+function parseStaffSession(value: unknown): StaffSession | null {
+  if (!isRecord(value)) return null;
+  const staffId = value['staffId'];
+  const name = value['name'];
+  const role = value['role'];
+  const sessionToken = value['sessionToken'];
+  if (typeof staffId !== 'string') return null;
+  if (typeof name !== 'string') return null;
+  if (role !== 'STAFF' && role !== 'ADMIN') return null;
+  if (typeof sessionToken !== 'string') return null;
+  return { staffId, name, role, sessionToken };
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  const data: unknown = await response.json();
+  return data as T;
+}
+
 function App() {
   const [session, setSession] = useState<StaffSession | null>(() => {
     // Load session from localStorage on mount
     const stored = localStorage.getItem('staff_session');
     if (stored) {
       try {
-        return JSON.parse(stored);
+        const parsed: unknown = JSON.parse(stored) as unknown;
+        return parseStaffSession(parsed);
       } catch {
         return null;
       }
@@ -40,6 +72,7 @@ function App() {
   const [scanMode, setScanMode] = useState<'id' | 'membership' | null>(null);
   const [scanBuffer, setScanBuffer] = useState('');
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const handleScanRef = useRef<((value: string) => Promise<void>) | null>(null);
   const [manualEntry, setManualEntry] = useState(false);
   const [showIdScanner, setShowIdScanner] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -56,7 +89,7 @@ function App() {
   const [selectedRentalType, setSelectedRentalType] = useState<string | null>(null);
   const [checkoutRequests, setCheckoutRequests] = useState<Map<string, CheckoutRequestSummary>>(new Map());
   const [selectedCheckoutRequest, setSelectedCheckoutRequest] = useState<string | null>(null);
-  const [checkoutChecklist, setCheckoutChecklist] = useState<CheckoutChecklist>({});
+  const [, setCheckoutChecklist] = useState<CheckoutChecklist>({});
   const [checkoutItemsConfirmed, setCheckoutItemsConfirmed] = useState(false);
   const [checkoutFeePaid, setCheckoutFeePaid] = useState(false);
   const [customerSelectedType, setCustomerSelectedType] = useState<string | null>(null);
@@ -88,17 +121,9 @@ function App() {
     currentRentalType: string;
   }>>([]);
   const [showUpgradesPanel, setShowUpgradesPanel] = useState(false);
-  const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<string | null>(null);
-  const [availableRoomsForUpgrade, setAvailableRoomsForUpgrade] = useState<Array<{
-    id: string;
-    number: string;
-    tier: string;
-  }>>([]);
+  const [selectedWaitlistEntry] = useState<string | null>(null);
   const [upgradePaymentIntentId, setUpgradePaymentIntentId] = useState<string | null>(null);
   const [upgradeFee, setUpgradeFee] = useState<number | null>(null);
-  const [showUpgradeDisclaimer, setShowUpgradeDisclaimer] = useState(false);
-  const [showFinalExtensionModal, setShowFinalExtensionModal] = useState(false);
-  const [finalExtensionVisitId, setFinalExtensionVisitId] = useState<string | null>(null);
   
   // Customer info state
   const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(undefined);
@@ -116,10 +141,7 @@ function App() {
   const [managerList, setManagerList] = useState<Array<{ id: string; name: string }>>([]);
   const [paymentDeclineError, setPaymentDeclineError] = useState<string | null>(null);
   const paymentIntentCreateInFlightRef = useRef(false);
-  
-  // Availability sidebar state
-  const [showAvailabilitySidebar, setShowAvailabilitySidebar] = useState(true);
-  const [expandedTier, setExpandedTier] = useState<string | null>(null);
+  const fetchWaitlistRef = useRef<(() => Promise<void>) | null>(null);
   
   // Assignment completion state
   const [assignedResourceType, setAssignedResourceType] = useState<'room' | 'locker' | null>(null);
@@ -131,8 +153,9 @@ function App() {
     // In development, you may have multiple tabs open; we add a per-tab instance suffix
     // (stored in sessionStorage) so two tabs on the same machine can sign into
     // different registers without colliding on deviceId.
-    const envDeviceId = import.meta.env.VITE_DEVICE_ID;
-    if (envDeviceId) {
+    const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
+    const envDeviceId = env?.['VITE_DEVICE_ID'];
+    if (typeof envDeviceId === 'string' && envDeviceId.trim()) {
       return envDeviceId;
     }
     let baseId = localStorage.getItem('device_id');
@@ -183,8 +206,8 @@ function App() {
     const stored = localStorage.getItem('staff_session');
     if (stored) {
       try {
-        const staffSession = JSON.parse(stored);
-        setSession(staffSession);
+        const parsed: unknown = JSON.parse(stored) as unknown;
+        setSession(parseStaffSession(parsed));
       } catch {
         setSession(null);
       }
@@ -206,7 +229,7 @@ function App() {
       // Barcode scanners typically send characters quickly and end with Enter
       if (e.key === 'Enter' && scanBuffer.trim()) {
         const scannedValue = scanBuffer.trim();
-        handleScan(scannedValue);
+        void handleScanRef.current?.(scannedValue);
         setScanBuffer('');
         if (scanTimeoutRef.current) {
           clearTimeout(scanTimeoutRef.current);
@@ -246,6 +269,8 @@ function App() {
       await sendScan(scanMode, scannedValue);
     }
   };
+
+  handleScanRef.current = handleScan;
 
   const sendScan = async (mode: 'id' | 'membership', value: string) => {
     if (!session?.sessionToken) {
@@ -301,11 +326,15 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to scan ID');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to scan ID');
       }
 
-      const data = await response.json();
+      const data = await readJson<{
+        customerName?: string;
+        membershipNumber?: string;
+        sessionId?: string;
+      }>(response);
       console.log('ID scanned, session updated:', data);
       
       // Update local state
@@ -367,11 +396,15 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to start session');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to start session');
       }
 
-      const data = await response.json();
+      const data = await readJson<{
+        customerName?: string;
+        membershipNumber?: string;
+        sessionId?: string;
+      }>(response);
       console.log('Session started:', data);
       
       // Update local state
@@ -391,11 +424,6 @@ function App() {
     }
   };
 
-  const updateLaneSession = async (name: string, membership: string | null) => {
-    // Use new check-in start endpoint
-    await startLaneSession(name, membership);
-  };
-
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim()) {
@@ -404,28 +432,6 @@ function App() {
     }
     // Use scan-id endpoint for manual entry too (with minimal payload)
     await handleManualIdEntry(customerName.trim());
-  };
-
-  const fetchAgreementStatus = async (sessionId: string) => {
-    if (!session?.sessionToken) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/v1/sessions/active`, {
-        headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const activeSession = data.sessions?.find((s: { id: string }) => s.id === sessionId);
-        if (activeSession) {
-          setAgreementSigned(activeSession.agreementSigned || false);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch agreement status:', error);
-    }
   };
 
   const handleClearSession = async () => {
@@ -491,7 +497,7 @@ function App() {
         throw new Error('Failed to search visits');
       }
 
-      const data = await response.json();
+      const data = await readJson<{ visits?: ActiveVisit[] }>(response);
       setRenewalSearchResults(data.visits || []);
     } catch (error) {
       console.error('Failed to search visits:', error);
@@ -506,37 +512,6 @@ function App() {
     setShowRenewalSearch(false);
     setRenewalSearchQuery('');
     setRenewalSearchResults([]);
-  };
-
-  const handleCreateVisit = async (rentalType: string, roomId?: string, lockerId?: string) => {
-    if (!session?.sessionToken) {
-      alert('Not authenticated');
-      return;
-    }
-
-    if (checkinMode === 'RENEWAL' && !selectedVisit) {
-      alert('Please select a visit to renew');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      if (checkinMode === 'RENEWAL' && selectedVisit) {
-        // Show renewal disclaimer before proceeding
-        setSelectedRentalType(rentalType);
-        setShowRenewalDisclaimer(true);
-        setIsSubmitting(false);
-        return;
-      }
-
-      // For initial check-in, we need member ID - for now, use lane session approach
-      // In production, this would look up member by name/membership
-      await updateLaneSession(customerName, membershipNumber || null);
-    } catch (error) {
-      console.error('Failed to create visit:', error);
-      alert('Failed to create visit');
-      setIsSubmitting(false);
-    }
   };
 
   const handleClaimCheckout = async (requestId: string) => {
@@ -554,11 +529,11 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to claim checkout');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to claim checkout');
       }
 
-      const data = await response.json();
+      await response.json().catch(() => null);
       setSelectedCheckoutRequest(requestId);
       
       // Fetch the checkout request details to get checklist
@@ -592,8 +567,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to confirm items');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm items');
       }
 
       setCheckoutItemsConfirmed(true);
@@ -620,8 +595,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to mark fee as paid');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to mark fee as paid');
       }
 
       setCheckoutFeePaid(true);
@@ -658,8 +633,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to complete checkout');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to complete checkout');
       }
 
       // Reset checkout state
@@ -697,12 +672,14 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to renew visit');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to renew visit');
       }
 
-      const data = await response.json();
-      setCurrentSessionId(data.sessionId);
+      const data = await readJson<{ sessionId?: string }>(response);
+      if (typeof data.sessionId === 'string') {
+        setCurrentSessionId(data.sessionId);
+      }
       setSelectedRentalType(null);
       alert('Renewal created successfully');
     } catch (error) {
@@ -735,12 +712,12 @@ function App() {
       const allEntries: typeof waitlistEntries = [];
       
       if (activeResponse.ok) {
-        const activeData = await activeResponse.json();
+        const activeData = await readJson<{ entries?: typeof waitlistEntries }>(activeResponse);
         allEntries.push(...(activeData.entries || []));
       }
       
       if (offeredResponse.ok) {
-        const offeredData = await offeredResponse.json();
+        const offeredData = await readJson<{ entries?: typeof waitlistEntries }>(offeredResponse);
         allEntries.push(...(offeredData.entries || []));
       }
 
@@ -750,130 +727,14 @@ function App() {
     }
   };
 
+  fetchWaitlistRef.current = fetchWaitlist;
+
   // Fetch waitlist on mount and when session is available
   useEffect(() => {
     if (session?.sessionToken) {
-      fetchWaitlist();
+      void fetchWaitlistRef.current?.();
     }
   }, [session?.sessionToken]);
-
-  const fetchAvailableRoomsForTier = async (tier: string) => {
-    if (!session?.sessionToken) return;
-
-    try {
-      const response = await fetch(`${API_BASE}/v1/inventory/summary`, {
-        headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        // Get available rooms for the desired tier
-        // This is simplified - in production, you'd filter by tier
-        const availableRooms: Array<{ id: string; number: string; tier: string }> = [];
-        // For now, we'll need to fetch room details separately
-        // This is a placeholder - actual implementation would query rooms by tier
-        setAvailableRoomsForUpgrade(availableRooms);
-      }
-    } catch (error) {
-      console.error('Failed to fetch available rooms:', error);
-    }
-  };
-
-  const handleOfferUpgrade = async (waitlistId: string, roomId: string) => {
-    if (!session?.sessionToken) {
-      alert('Not authenticated');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/waitlist/${waitlistId}/offer`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({ roomId }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to offer upgrade');
-      }
-
-      await fetchWaitlist();
-      alert('Upgrade offered successfully');
-    } catch (error) {
-      console.error('Failed to offer upgrade:', error);
-      alert(error instanceof Error ? error.message : 'Failed to offer upgrade');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleFulfillUpgrade = async (waitlistId: string, roomId: string) => {
-    if (!session?.sessionToken) {
-      alert('Not authenticated');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // Show upgrade disclaimer first
-      setShowUpgradeDisclaimer(true);
-      setSelectedWaitlistEntry(waitlistId);
-      
-      // Store room ID for after disclaimer
-      const fulfillAfterDisclaimer = async () => {
-        try {
-          const response = await fetch(`${API_BASE}/v1/upgrades/fulfill`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.sessionToken}`,
-            },
-            body: JSON.stringify({
-              waitlistId,
-              roomId,
-              acknowledgedDisclaimer: true,
-            }),
-          });
-
-          if (!response.ok) {
-            const error = await response.json();
-            if (error.code === 'REAUTH_REQUIRED') {
-              alert('Re-authentication required. Please log in again.');
-              handleLogout();
-              return;
-            }
-            throw new Error(error.error || 'Failed to fulfill upgrade');
-          }
-
-          const data = await response.json();
-          setUpgradePaymentIntentId(data.paymentIntentId);
-          setUpgradeFee(data.upgradeFee);
-          setShowUpgradeDisclaimer(false);
-          alert(`Upgrade fee: $${data.upgradeFee}. Please mark payment as paid in Square.`);
-          await fetchWaitlist();
-        } catch (error) {
-          console.error('Failed to fulfill upgrade:', error);
-          alert(error instanceof Error ? error.message : 'Failed to fulfill upgrade');
-        } finally {
-          setIsSubmitting(false);
-        }
-      };
-
-      // For now, auto-acknowledge and proceed
-      // In production, wait for staff to acknowledge
-      await fulfillAfterDisclaimer();
-    } catch (error) {
-      console.error('Failed to fulfill upgrade:', error);
-      alert(error instanceof Error ? error.message : 'Failed to fulfill upgrade');
-      setIsSubmitting(false);
-    }
-  };
 
   const handleCompleteUpgrade = async (waitlistId: string, paymentIntentId: string) => {
     if (!session?.sessionToken) {
@@ -896,13 +757,13 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        if (error.code === 'REAUTH_REQUIRED') {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        if (isRecord(errorPayload) && errorPayload.code === 'REAUTH_REQUIRED') {
           alert('Re-authentication required. Please log in again.');
-          handleLogout();
+          await handleLogout();
           return;
         }
-        throw new Error(error.error || 'Failed to complete upgrade');
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to complete upgrade');
       }
 
       setUpgradePaymentIntentId(null);
@@ -917,54 +778,20 @@ function App() {
     }
   };
 
-  const handleFinalExtension = async (visitId: string, rentalType: string, roomId?: string, lockerId?: string) => {
-    if (!session?.sessionToken) {
-      alert('Not authenticated');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/visits/${visitId}/final-extension`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          rentalType,
-          roomId,
-          lockerId,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        if (error.code === 'REAUTH_REQUIRED') {
-          alert('Re-authentication required. Please log in again.');
-          handleLogout();
-          return;
-        }
-        throw new Error(error.error || 'Failed to create final extension');
-      }
-
-      const data = await response.json();
-      setShowFinalExtensionModal(false);
-      setFinalExtensionVisitId(null);
-      alert(`Final extension created. Payment: $20. Please mark payment as paid in Square. Payment Intent ID: ${data.paymentIntentId}`);
-    } catch (error) {
-      console.error('Failed to create final extension:', error);
-      alert(error instanceof Error ? error.message : 'Failed to create final extension');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   useEffect(() => {
     // Check API health
     fetch('/api/health')
       .then((res) => res.json())
-      .then((data: HealthStatus) => setHealth(data))
+      .then((data: unknown) => {
+        if (
+          isRecord(data) &&
+          typeof data.status === 'string' &&
+          typeof data.timestamp === 'string' &&
+          typeof data.uptime === 'number'
+        ) {
+          setHealth({ status: data.status, timestamp: data.timestamp, uptime: data.uptime });
+        }
+      })
       .catch(console.error);
 
     // Connect to WebSocket
@@ -1004,7 +831,9 @@ function App() {
 
     ws.onmessage = (event) => {
       try {
-        const message: WebSocketEvent = JSON.parse(event.data);
+        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
+        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+        const message = parsed as unknown as WebSocketEvent;
         console.log('WebSocket message:', message);
 
         if (message.type === 'CHECKOUT_REQUESTED') {
@@ -1093,7 +922,7 @@ function App() {
           }
         } else if (message.type === 'WAITLIST_UPDATED') {
           // Refresh waitlist when updated
-          fetchWaitlist();
+          void fetchWaitlistRef.current?.();
         } else if (message.type === 'SELECTION_PROPOSED') {
           const payload = message.payload as SelectionProposedPayload;
           if (payload.sessionId === currentSessionId) {
@@ -1204,8 +1033,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to propose selection');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to propose selection');
       }
 
       setProposedRentalType(rentalType);
@@ -1237,8 +1066,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to confirm selection');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
       }
 
       setSelectionConfirmed(true);
@@ -1272,8 +1101,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to acknowledge selection');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to acknowledge selection');
       }
 
       setSelectionAcknowledged(true);
@@ -1293,7 +1122,7 @@ function App() {
     if (paymentIntentCreateInFlightRef.current) return;
 
     paymentIntentCreateInFlightRef.current = true;
-    Promise.resolve(handleCreatePaymentIntent()).finally(() => {
+    void handleCreatePaymentIntent().finally(() => {
       paymentIntentCreateInFlightRef.current = false;
     });
   }, [currentSessionId, session?.sessionToken, selectionConfirmed, paymentIntentId, paymentStatus]);
@@ -1337,21 +1166,22 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        if (error.raceLost || error.error?.includes('already assigned')) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        const msg = getErrorMessage(errorPayload);
+        if (isRecord(errorPayload) && (errorPayload.raceLost === true || (typeof msg === 'string' && msg.includes('already assigned')))) {
           // Race condition - refresh inventory and re-select
           alert('Item no longer available. Refreshing inventory...');
           setSelectedInventoryItem(null);
           // InventorySelector will auto-refresh and re-select
         } else {
-          throw new Error(error.error || 'Failed to assign');
+          throw new Error(msg || 'Failed to assign');
         }
       } else {
-        const data = await response.json();
+        const data = await readJson<{ needsConfirmation?: boolean }>(response);
         console.log('Assignment successful:', data);
         
         // If cross-type assignment, wait for customer confirmation
-        if (data.needsConfirmation) {
+        if (data.needsConfirmation === true) {
           setShowCustomerConfirmationPending(true);
           setIsSubmitting(false);
           return;
@@ -1381,13 +1211,18 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create payment intent');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to create payment intent');
       }
 
-      const data = await response.json();
-      setPaymentIntentId(data.paymentIntentId);
-      setPaymentQuote(data.quote);
+      const data = await readJson<{
+        paymentIntentId?: string;
+        quote?: { total: number; lineItems: Array<{ description: string; amount: number }>; messages: string[] };
+      }>(response);
+      if (typeof data.paymentIntentId === 'string') {
+        setPaymentIntentId(data.paymentIntentId);
+      }
+      setPaymentQuote(data.quote ?? null);
       setPaymentStatus('DUE');
     } catch (error) {
       console.error('Failed to create payment intent:', error);
@@ -1414,8 +1249,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to mark payment as paid');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to mark payment as paid');
       }
 
       setPaymentStatus('PAID');
@@ -1451,8 +1286,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to process payment');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to process payment');
       }
 
       if (outcome === 'CREDIT_DECLINE') {
@@ -1487,8 +1322,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to bypass past-due');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to bypass past-due');
       }
 
       setShowManagerBypassModal(false);
@@ -1521,8 +1356,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to add note');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to add note');
       }
 
       setShowAddNoteModal(false);
@@ -1558,8 +1393,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to process payment');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to process payment');
       }
 
       if (outcome === 'CREDIT_DECLINE') {
@@ -1592,8 +1427,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to complete transaction');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to complete transaction');
       }
 
       // Reset all state
@@ -1631,9 +1466,16 @@ function App() {
           'Authorization': `Bearer ${session.sessionToken}`,
         },
       })
-        .then(res => res.json())
-        .then(data => {
-          const managers = (data.employees || []).filter((e: { role: string }) => e.role === 'ADMIN');
+        .then((res) => res.json())
+        .then((data: unknown) => {
+          if (!isRecord(data) || !Array.isArray(data.employees)) {
+            setManagerList([]);
+            return;
+          }
+          const managers = data.employees
+            .filter((e): e is { id: string; name: string; role: string } => isRecord(e) && typeof e.role === 'string')
+            .filter((e) => e.role === 'ADMIN')
+            .map((e) => ({ id: String(e.id), name: String(e.name) }));
           setManagerList(managers);
         })
         .catch(console.error);
@@ -1670,7 +1512,7 @@ function App() {
             return (
               <div
                 key={request.requestId}
-                onClick={() => handleClaimCheckout(request.requestId)}
+                onClick={() => void handleClaimCheckout(request.requestId)}
                 style={{
                   padding: '1rem',
                   marginBottom: '0.5rem',
@@ -1715,7 +1557,7 @@ function App() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleClaimCheckout(request.requestId);
+                      void handleClaimCheckout(request.requestId);
                     }}
                     style={{
                       padding: '0.5rem 1rem',
@@ -1802,7 +1644,7 @@ function App() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
                 <button
-                  onClick={() => handleConfirmItems(selectedCheckoutRequest)}
+                  onClick={() => void handleConfirmItems(selectedCheckoutRequest)}
                   disabled={checkoutItemsConfirmed}
                   style={{
                     padding: '0.75rem',
@@ -1819,7 +1661,7 @@ function App() {
 
                 {request.lateFeeAmount > 0 && (
                   <button
-                    onClick={() => handleMarkFeePaid(selectedCheckoutRequest)}
+                    onClick={() => void handleMarkFeePaid(selectedCheckoutRequest)}
                     disabled={checkoutFeePaid}
                     style={{
                       padding: '0.75rem',
@@ -1836,7 +1678,7 @@ function App() {
                 )}
 
                 <button
-                  onClick={() => handleCompleteCheckout(selectedCheckoutRequest)}
+                  onClick={() => void handleCompleteCheckout(selectedCheckoutRequest)}
                   disabled={!checkoutItemsConfirmed || (request.lateFeeAmount > 0 && !checkoutFeePaid) || isSubmitting}
                   style={{
                     padding: '0.75rem',
@@ -1888,7 +1730,7 @@ function App() {
           <span className="badge badge-info">Lane: {lane}</span>
           <span className="badge badge-info">{session.name} ({session.role})</span>
           <button
-            onClick={handleLogout}
+            onClick={() => void handleLogout()}
             style={{
               padding: '0.375rem 0.75rem',
               background: 'rgba(239, 68, 68, 0.2)',
@@ -2054,7 +1896,7 @@ function App() {
                                 <button
                                   onClick={() => {
                                     if (paymentStatus === 'PAID') {
-                                      handleCompleteUpgrade(entry.id, upgradePaymentIntentId);
+                                      void handleCompleteUpgrade(entry.id, upgradePaymentIntentId);
                                     } else {
                                       alert('Please mark payment as paid in Square first');
                                     }
@@ -2204,12 +2046,12 @@ function App() {
                 }}
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
-                    handleSearchActiveVisits();
+                    void handleSearchActiveVisits();
                   }
                 }}
               />
               <button
-                onClick={handleSearchActiveVisits}
+                onClick={() => void handleSearchActiveVisits()}
                 style={{
                   padding: '0.5rem 1rem',
                   background: '#3b82f6',
@@ -2294,7 +2136,7 @@ function App() {
             </div>
             {!selectionConfirmed && proposedBy === 'EMPLOYEE' && (
               <button
-                onClick={handleConfirmSelection}
+                onClick={() => void handleConfirmSelection()}
                 disabled={isSubmitting}
                 style={{
                   padding: '0.5rem 1rem',
@@ -2311,7 +2153,7 @@ function App() {
             )}
             {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
               <button
-                onClick={handleConfirmSelection}
+                onClick={() => void handleConfirmSelection()}
                 disabled={isSubmitting}
                 style={{
                   padding: '0.5rem 1rem',
@@ -2330,7 +2172,7 @@ function App() {
               <div>
                 <p style={{ marginBottom: '0.5rem' }}>Customer has locked this selection. Please acknowledge to continue.</p>
                 <button
-                  onClick={handleAcknowledgeSelection}
+                  onClick={() => void handleAcknowledgeSelection()}
                   disabled={isSubmitting}
                   style={{
                     padding: '0.5rem 1rem',
@@ -2360,7 +2202,7 @@ function App() {
             {['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'].map(rental => (
               <button
                 key={rental}
-                onClick={() => handleProposeSelection(rental)}
+                onClick={() => void handleProposeSelection(rental)}
                 disabled={isSubmitting || (proposedRentalType === rental)}
                 style={{
                   padding: '0.5rem 1rem',
@@ -2415,7 +2257,7 @@ function App() {
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
-                  onClick={handleAssign}
+                  onClick={() => void handleAssign()}
                   disabled={isSubmitting || showCustomerConfirmationPending || !agreementSigned || paymentStatus !== 'PAID'}
                   style={{
                     padding: '0.75rem 1.5rem',
@@ -2503,7 +2345,7 @@ function App() {
                   </div>
                 )}
                 <button
-                  onClick={handleMarkPaid}
+                  onClick={() => void handleMarkPaid()}
                   disabled={isSubmitting || paymentStatus === 'PAID'}
                   style={{
                     width: '100%',
@@ -2560,7 +2402,7 @@ function App() {
             </button>
             <button 
               className="action-btn"
-              onClick={handleClearSession}
+              onClick={() => void handleClearSession()}
               disabled={isSubmitting}
             >
               <span className="btn-icon">🗑️</span>
@@ -2580,7 +2422,7 @@ function App() {
           )}
 
           {manualEntry && (
-            <form className="manual-entry-form" onSubmit={handleManualSubmit}>
+            <form className="manual-entry-form" onSubmit={(e) => void handleManualSubmit(e)}>
               <div className="form-group">
                 <label htmlFor="customerName">Customer Name *</label>
                 <input
@@ -2804,7 +2646,7 @@ function App() {
               </ul>
             </div>
             <button
-              onClick={handleRenewalDisclaimerAcknowledge}
+              onClick={() => void handleRenewalDisclaimerAcknowledge()}
               disabled={isSubmitting}
               style={{
                 width: '100%',
@@ -2829,7 +2671,7 @@ function App() {
       <IdScanner
         isOpen={showIdScanner}
         onClose={() => setShowIdScanner(false)}
-        onScan={handleIdScan}
+        onScan={(payload) => void handleIdScan(payload)}
         onManualEntry={() => {
           setShowIdScanner(false);
           setManualEntry(true);
@@ -2869,7 +2711,7 @@ function App() {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
               <button
-                onClick={() => handlePastDuePayment('CREDIT_SUCCESS')}
+                onClick={() => void handlePastDuePayment('CREDIT_SUCCESS')}
                 disabled={isSubmitting}
                 style={{
                   padding: '0.75rem',
@@ -2885,7 +2727,7 @@ function App() {
                 Credit Success
               </button>
               <button
-                onClick={() => handlePastDuePayment('CASH_SUCCESS')}
+                onClick={() => void handlePastDuePayment('CASH_SUCCESS')}
                 disabled={isSubmitting}
                 style={{
                   padding: '0.75rem',
@@ -2901,7 +2743,7 @@ function App() {
                 Cash Success
               </button>
               <button
-                onClick={() => handlePastDuePayment('CREDIT_DECLINE', 'Card declined')}
+                onClick={() => void handlePastDuePayment('CREDIT_DECLINE', 'Card declined')}
                 disabled={isSubmitting}
                 style={{
                   padding: '0.75rem',
@@ -3030,7 +2872,7 @@ function App() {
             </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
-                onClick={handleManagerBypass}
+                onClick={() => void handleManagerBypass()}
                 disabled={isSubmitting || !managerId || managerPin.trim().length !== 6}
                 style={{
                   flex: 1,
@@ -3116,7 +2958,7 @@ function App() {
             />
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
-                onClick={handleAddNote}
+                onClick={() => void handleAddNote()}
                 disabled={isSubmitting || !newNoteText.trim()}
                 style={{
                   flex: 1,
@@ -3229,7 +3071,7 @@ function App() {
           )}
           {agreementSigned && assignedResourceType && (
             <button
-              onClick={handleCompleteTransaction}
+              onClick={() => void handleCompleteTransaction()}
               disabled={isSubmitting}
               style={{
                 width: '100%',
@@ -3268,7 +3110,7 @@ function App() {
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
-              onClick={() => handleDemoPayment('CREDIT_SUCCESS')}
+              onClick={() => void handleDemoPayment('CREDIT_SUCCESS')}
               disabled={isSubmitting}
               style={{
                 flex: 1,
@@ -3285,7 +3127,7 @@ function App() {
               Credit Success
             </button>
             <button
-              onClick={() => handleDemoPayment('CASH_SUCCESS')}
+              onClick={() => void handleDemoPayment('CASH_SUCCESS')}
               disabled={isSubmitting}
               style={{
                 flex: 1,
@@ -3302,7 +3144,7 @@ function App() {
               Cash Success
             </button>
             <button
-              onClick={() => handleDemoPayment('CREDIT_DECLINE', 'Card declined')}
+              onClick={() => void handleDemoPayment('CREDIT_DECLINE', 'Card declined')}
               disabled={isSubmitting}
               style={{
                 flex: 1,

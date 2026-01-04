@@ -31,10 +31,40 @@ import { createBroadcaster, type Broadcaster } from './websocket/broadcaster.js'
 import { initializeDatabase, closeDatabase } from './db/index.js';
 import { cleanupAbandonedRegisterSessions } from './routes/registers.js';
 import { seedDemoData } from './db/seed-demo.js';
+import type { WebSocketEventType } from '@club-ops/shared';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const SKIP_DB = process.env.SKIP_DB === 'true';
+
+function isWebSocketEventType(value: unknown): value is WebSocketEventType {
+  if (typeof value !== 'string') return false;
+  switch (value) {
+    case 'ROOM_STATUS_CHANGED':
+    case 'INVENTORY_UPDATED':
+    case 'ROOM_ASSIGNED':
+    case 'ROOM_RELEASED':
+    case 'SESSION_UPDATED':
+    case 'SELECTION_PROPOSED':
+    case 'SELECTION_LOCKED':
+    case 'SELECTION_ACKNOWLEDGED':
+    case 'WAITLIST_CREATED':
+    case 'ASSIGNMENT_CREATED':
+    case 'ASSIGNMENT_FAILED':
+    case 'CUSTOMER_CONFIRMATION_REQUIRED':
+    case 'CUSTOMER_CONFIRMED':
+    case 'CUSTOMER_DECLINED':
+    case 'CHECKOUT_REQUESTED':
+    case 'CHECKOUT_CLAIMED':
+    case 'CHECKOUT_UPDATED':
+    case 'CHECKOUT_COMPLETED':
+    case 'WAITLIST_UPDATED':
+    case 'REGISTER_SESSION_UPDATED':
+      return true;
+    default:
+      return false;
+  }
+}
 
 // Augment FastifyInstance with broadcaster
 declare module 'fastify' {
@@ -73,15 +103,17 @@ async function main() {
   fastify.decorate('broadcaster', broadcaster);
 
   // Set up periodic cleanup for abandoned register sessions (every 30 seconds)
-  const cleanupInterval = setInterval(async () => {
-    try {
-      const cleaned = await cleanupAbandonedRegisterSessions(fastify);
-      if (cleaned > 0) {
-        fastify.log.info(`Cleaned up ${cleaned} abandoned register session(s)`);
+  const cleanupInterval = setInterval(() => {
+    void (async () => {
+      try {
+        const cleaned = await cleanupAbandonedRegisterSessions(fastify);
+        if (cleaned > 0) {
+          fastify.log.info(`Cleaned up ${cleaned} abandoned register session(s)`);
+        }
+      } catch (error) {
+        fastify.log.error(error, 'Error during register session cleanup');
       }
-    } catch (error) {
-      fastify.log.error(error, 'Error during register session cleanup');
-    }
+    })();
   }, 30000); // 30 seconds
 
   // Initialize database connection (unless skipped for testing)
@@ -146,8 +178,9 @@ async function main() {
 
         // Handle subscription messages
         if (data.type === 'subscribe' && Array.isArray(data.events)) {
-          fastify.log.info({ clientId, events: data.events }, 'Client subscribed to events');
-          broadcaster.subscribeClient(clientId, data.events as string[]);
+          const events = data.events.filter(isWebSocketEventType);
+          fastify.log.info({ clientId, events }, 'Client subscribed to events');
+          broadcaster.subscribeClient(clientId, events);
         }
 
         // Handle lane update

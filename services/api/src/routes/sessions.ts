@@ -242,7 +242,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
            VALUES ($1, $2, $3, $4, $5)`,
           [
             null, // TODO: Use actual staff ID from auth when available
-            'SESSION_CREATED',
+            'CHECK_IN',
             'session',
             newSession.id,
             JSON.stringify({

@@ -442,7 +442,8 @@ CREATE TABLE public.customers (
 
 CREATE TABLE public.key_tags (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    room_id uuid NOT NULL,
+    room_id uuid,
+    locker_id uuid,
     tag_type public.key_tag_type NOT NULL,
     tag_code character varying(255) NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
@@ -1907,7 +1908,7 @@ ALTER TABLE ONLY public.checkin_blocks
 --
 
 ALTER TABLE ONLY public.checkin_blocks
-    ADD CONSTRAINT checkin_blocks_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE SET NULL;
+    ADD CONSTRAINT checkin_blocks_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.lane_sessions(id) ON DELETE SET NULL;
 
 
 --
@@ -1996,6 +1997,12 @@ ALTER TABLE ONLY public.lane_sessions
 
 ALTER TABLE ONLY public.key_tags
     ADD CONSTRAINT key_tags_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.key_tags
+    ADD CONSTRAINT key_tags_locker_id_fkey FOREIGN KEY (locker_id) REFERENCES public.lockers(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.key_tags
+    ADD CONSTRAINT key_tags_exactly_one_target_chk CHECK ((((CASE WHEN (room_id IS NULL) THEN 0 ELSE 1 END) + (CASE WHEN (locker_id IS NULL) THEN 0 ELSE 1 END)) = 1));
 
 
 --

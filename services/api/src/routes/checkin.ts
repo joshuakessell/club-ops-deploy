@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, optionalAuth } from '../auth/middleware.js';
@@ -15,7 +15,6 @@ import type {
   SelectionProposedPayload,
   SelectionLockedPayload,
   SelectionAcknowledgedPayload,
-  WaitlistCreatedPayload,
 } from '@club-ops/shared';
 import { calculatePriceQuote, type PricingInput } from '../pricing/engine.js';
 import { IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
@@ -26,9 +25,6 @@ declare module 'fastify' {
     broadcaster: Broadcaster;
   }
 }
-
-// Import getRoomTier from checkin routes (defined locally)
-// This is used in completeCheckIn and elsewhere
 
 interface LaneSessionRow {
   id: string;
@@ -76,16 +72,6 @@ interface CustomerRow {
   notes?: string;
 }
 
-interface MemberRow {
-  id: string;
-  name: string;
-  membership_number: string | null;
-  dob: Date | null;
-  membership_card_type: string | null;
-  membership_valid_until: Date | null;
-  banned_until: Date | null;
-}
-
 interface RoomRow {
   id: string;
   number: string;
@@ -127,6 +113,15 @@ function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) return value;
   const d = new Date(String(value));
   return Number.isFinite(d.getTime()) ? d : undefined;
+}
+
+function getHttpError(error: unknown): { statusCode: number; message?: string } | null {
+  if (!error || typeof error !== 'object') return null;
+  if (!('statusCode' in error)) return null;
+  const statusCode = (error as { statusCode: unknown }).statusCode;
+  if (typeof statusCode !== 'number') return null;
+  const message = (error as { message?: unknown }).message;
+  return { statusCode, message: typeof message === 'string' ? message : undefined };
 }
 
 async function buildFullSessionUpdatedPayload(
@@ -451,18 +446,16 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Input: { idScanValue, membershipScanValue? }
    * Output: laneSession + customer display fields
    */
-  fastify.post('/v1/checkin/lane/:laneId/start', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { idScanValue: string; membershipScanValue?: string; checkinMode?: 'INITIAL' | 'RENEWAL'; visitId?: string };
+  }>('/v1/checkin/lane/:laneId/start', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { idScanValue: string; membershipScanValue?: string; checkinMode?: 'INITIAL' | 'RENEWAL'; visitId?: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
+    const staffId = request.staff.staffId;
 
     const { laneId } = request.params;
     const { idScanValue, membershipScanValue, checkinMode = 'INITIAL', visitId } = request.body;
@@ -597,7 +590,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                  updated_at = NOW()
              WHERE id = $6
              RETURNING *`,
-            [customerName, membershipNumber, customerId, request.staff.staffId, checkinMode, existingSession.rows[0]!.id]
+            [customerName, membershipNumber, customerId, staffId, checkinMode, existingSession.rows[0]!.id]
           );
           session = updateResult.rows[0]!;
         } else {
@@ -607,7 +600,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
              (lane_id, status, staff_id, customer_id, customer_display_name, membership_number, checkin_mode)
              VALUES ($1, 'ACTIVE', $2, $3, $4, $5, $6)
              RETURNING *`,
-            [laneId, request.staff.staffId, customerId, customerName, membershipNumber, checkinMode]
+            [laneId, staffId, customerId, customerName, membershipNumber, checkinMode]
           );
           session = newSessionResult.rows[0]!;
         }
@@ -638,6 +631,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           blockEndsAt: blockEndsAt ? blockEndsAt.toISOString() : undefined,
           visitId: visitIdForSession || undefined,
           currentTotalHours: checkinMode === 'RENEWAL' ? currentTotalHours : undefined,
+          pastDueBalance,
+          pastDueBlocked,
         };
       });
 
@@ -649,8 +644,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error: unknown) {
       request.log.error(error, 'Failed to start lane session');
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to start session',
+        const statusCode = (error as { statusCode: number }).statusCode;
+        const message = (error as { message?: string }).message;
+        return reply.status(statusCode).send({
+          error: message ?? 'Failed to start session',
         });
       }
       return reply.status(500).send({
@@ -669,18 +666,16 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Input: IdScanPayload (raw barcode + parsed fields)
    * Output: lane session state with customer info
    */
-  fastify.post('/v1/checkin/lane/:laneId/scan-id', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: IdScanPayload;
+  }>('/v1/checkin/lane/:laneId/scan-id', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: IdScanPayload;
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
+    const staffId = request.staff.staffId;
 
     const { laneId } = request.params;
     let body: IdScanPayload;
@@ -813,7 +808,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                  updated_at = NOW()
              WHERE id = $4
              RETURNING *`,
-            [customerId, customerName, request.staff.staffId, existingSession.rows[0]!.id]
+            [customerId, customerName, staffId, existingSession.rows[0]!.id]
           );
           session = updateResult.rows[0]!;
         } else {
@@ -823,7 +818,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
              (lane_id, status, staff_id, customer_id, customer_display_name, checkin_mode)
              VALUES ($1, 'ACTIVE', $2, $3, $4, 'INITIAL')
              RETURNING *`,
-            [laneId, request.staff.staffId, customerId, customerName]
+            [laneId, staffId, customerId, customerName]
           );
           session = newSessionResult.rows[0]!;
         }
@@ -834,7 +829,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         let customerNotes: string | undefined;
         let customerPrimaryLanguage: 'EN' | 'ES' | undefined;
         let customerDobMonthDay: string | undefined;
-        let customerLastVisitAt: string | undefined;
+        // last visit is derived from visits + checkin_blocks (broadcast uses DB-join helper)
 
         if (session.customer_id) {
           const customerInfo = await client.query<CustomerRow>(
@@ -852,11 +847,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               customerDobMonthDay = `${String(customer.dob.getMonth() + 1).padStart(2, '0')}/${String(customer.dob.getDate()).padStart(2, '0')}`;
             }
 
-            // last visit is derived from visits + checkin_blocks (broadcast uses DB-join helper)
           }
         }
-
-        void customerLastVisitAt;
 
         return {
           sessionId: session.id,
@@ -864,6 +856,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           customerName: session.customer_display_name,
           allowedRentals,
           mode: session.checkin_mode || 'INITIAL',
+          pastDueBalance,
+          pastDueBlocked,
+          customerNotes,
+          customerPrimaryLanguage,
+          customerDobMonthDay,
         };
       });
 
@@ -875,8 +872,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error: unknown) {
       request.log.error(error, 'Failed to scan ID');
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        const err = error as { statusCode: number; message: string };
-        return reply.status(err.statusCode).send({ error: err.message });
+        const statusCode = (error as { statusCode: number }).statusCode;
+        const message = (error as { message?: string }).message;
+        return reply.status(statusCode).send({ error: message ?? 'Failed to scan ID' });
       }
       return reply.status(500).send({ error: 'Internal server error' });
     }
@@ -888,19 +886,16 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Customer selects rental type (with optional waitlist).
    * Input: { rentalType, waitlistDesiredType?, backupRentalType? }
    */
-  fastify.post('/v1/checkin/lane/:laneId/select-rental', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: {
+      rentalType: string;
+      waitlistDesiredType?: string;
+      backupRentalType?: string;
+    };
+  }>('/v1/checkin/lane/:laneId/select-rental', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { 
-        rentalType: string;
-        waitlistDesiredType?: string;
-        backupRentalType?: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -953,9 +948,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to select rental');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to select rental',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to select rental',
         });
       }
       return reply.status(500).send({
@@ -972,20 +968,17 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Does not lock the selection; requires confirmation.
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.post('/v1/checkin/lane/:laneId/propose-selection', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: {
+      rentalType: string;
+      proposedBy: 'CUSTOMER' | 'EMPLOYEE';
+      waitlistDesiredType?: string;
+      backupRentalType?: string;
+    };
+  }>('/v1/checkin/lane/:laneId/propose-selection', {
     preHandler: [optionalAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { 
-        rentalType: string;
-        proposedBy: 'CUSTOMER' | 'EMPLOYEE';
-        waitlistDesiredType?: string;
-        backupRentalType?: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
 
     const { laneId } = request.params;
     const { rentalType, proposedBy, waitlistDesiredType, backupRentalType } = request.body;
@@ -1067,9 +1060,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to propose selection');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to propose selection',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to propose selection',
         });
       }
       return reply.status(500).send({
@@ -1085,17 +1079,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Confirm the proposed selection (first confirmation locks it).
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.post('/v1/checkin/lane/:laneId/confirm-selection', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { confirmedBy: 'CUSTOMER' | 'EMPLOYEE' };
+  }>('/v1/checkin/lane/:laneId/confirm-selection', {
     preHandler: [optionalAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { 
-        confirmedBy: 'CUSTOMER' | 'EMPLOYEE';
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
 
     const { laneId } = request.params;
     const { confirmedBy } = request.body;
@@ -1188,9 +1177,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to confirm selection');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to confirm selection',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to confirm selection',
         });
       }
       return reply.status(500).send({
@@ -1206,17 +1196,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Acknowledge a locked selection (required for the other side to proceed).
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.post('/v1/checkin/lane/:laneId/acknowledge-selection', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { acknowledgedBy: 'CUSTOMER' | 'EMPLOYEE' };
+  }>('/v1/checkin/lane/:laneId/acknowledge-selection', {
     preHandler: [optionalAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { 
-        acknowledgedBy: 'CUSTOMER' | 'EMPLOYEE';
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
 
     const { laneId } = request.params;
     const { acknowledgedBy } = request.body;
@@ -1271,9 +1256,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to acknowledge selection');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to acknowledge selection',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to acknowledge selection',
         });
       }
       return reply.status(500).send({
@@ -1290,15 +1276,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Called when customer selects an unavailable rental type.
    * Public endpoint (customer kiosk can call without auth).
    */
-  fastify.get('/v1/checkin/lane/:laneId/waitlist-info', {
+  fastify.get<{
+    Params: { laneId: string };
+    Querystring: { desiredTier: string; currentTier?: string };
+  }>('/v1/checkin/lane/:laneId/waitlist-info', {
     preHandler: [optionalAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Querystring: { desiredTier: string; currentTier?: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
 
     const { laneId } = request.params;
     const { desiredTier, currentTier } = request.query;
@@ -1340,9 +1323,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to get waitlist info');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to get waitlist info',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to get waitlist info',
         });
       }
       return reply.status(500).send({
@@ -1358,18 +1342,16 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Assign a resource (room or locker) to the lane session.
    * Uses transactional locking to prevent double-booking.
    */
-  fastify.post('/v1/checkin/lane/:laneId/assign', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { resourceType: 'room' | 'locker'; resourceId: string };
+  }>('/v1/checkin/lane/:laneId/assign', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { resourceType: 'room' | 'locker'; resourceId: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
+    const staffId = request.staff.staffId;
 
     const { laneId } = request.params;
     const { resourceType, resourceId } = request.body;
@@ -1434,7 +1416,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
              (staff_id, action, entity_type, entity_id, old_value, new_value)
              VALUES ($1, 'ASSIGN', 'room', $2, $3, $4)`,
             [
-              request.staff.staffId,
+              staffId,
               resourceId,
               JSON.stringify({ assigned_to_customer_id: null }),
               JSON.stringify({ selected_for_session_id: session.id }),
@@ -1503,7 +1485,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
              (staff_id, action, entity_type, entity_id, old_value, new_value)
              VALUES ($1, 'ASSIGN', 'locker', $2, $3, $4)`,
             [
-              request.staff.staffId,
+              staffId,
               resourceId,
               JSON.stringify({ assigned_to_customer_id: null }),
               JSON.stringify({ selected_for_session_id: session.id }),
@@ -1538,8 +1520,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       request.log.error(error, 'Failed to assign resource');
       
       // Broadcast assignment failed if we have session info
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        const statusCode = (error as { statusCode: number }).statusCode;
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        const statusCode = httpErr.statusCode;
         if (statusCode === 409) {
           // Race condition - try to get session to broadcast failure
           try {
@@ -1550,7 +1533,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             if (sessionResult.rows.length > 0) {
               const failedPayload: AssignmentFailedPayload = {
                 sessionId: sessionResult.rows[0]!.id,
-                reason: (error as { message: string }).message || 'Resource already assigned',
+                reason: httpErr.message ?? 'Resource already assigned',
                 requestedRoomId: request.body.resourceType === 'room' ? request.body.resourceId : undefined,
                 requestedLockerId: request.body.resourceType === 'locker' ? request.body.resourceId : undefined,
               };
@@ -1562,7 +1545,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         }
         
         return reply.status(statusCode).send({
-          error: (error as { message: string }).message || 'Failed to assign resource',
+          error: httpErr.message ?? 'Failed to assign resource',
           raceLost: statusCode === 409,
         });
       }
@@ -1578,14 +1561,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Create a payment intent with DUE status from the price quote.
    */
-  fastify.post('/v1/checkin/lane/:laneId/create-payment-intent', {
+  fastify.post<{
+    Params: { laneId: string };
+  }>('/v1/checkin/lane/:laneId/create-payment-intent', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -1720,9 +1700,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       });
     } catch (error: unknown) {
       request.log.error(error, 'Failed to create payment intent');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to create payment intent',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to create payment intent',
         });
       }
       return reply.status(500).send({
@@ -1737,18 +1718,16 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Mark a payment intent as PAID (called after Square payment).
    */
-  fastify.post('/v1/payments/:id/mark-paid', {
+  fastify.post<{
+    Params: { id: string };
+    Body: { squareTransactionId?: string };
+  }>('/v1/payments/:id/mark-paid', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { id: string };
-      Body: { squareTransactionId?: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
+    const staffId = request.staff.staffId;
 
     const { id } = request.params;
     const { squareTransactionId } = request.body;
@@ -1795,7 +1774,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
              (staff_id, action, entity_type, entity_id, old_value, new_value)
              VALUES ($1, 'UPGRADE_PAID', 'payment_intent', $2, $3, $4)`,
             [
-              request.staff.staffId,
+              staffId,
               id,
               JSON.stringify({ status: 'DUE' }),
               JSON.stringify({ status: 'PAID', waitlistId: quote.waitlistId }),
@@ -1810,7 +1789,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
              (staff_id, action, entity_type, entity_id, old_value, new_value)
              VALUES ($1, 'FINAL_EXTENSION_PAID', 'payment_intent', $2, $3, $4)`,
             [
-              request.staff.staffId,
+              staffId,
               id,
               JSON.stringify({ status: 'DUE' }),
               JSON.stringify({ status: 'PAID', visitId: quote.visitId, blockId: quote.blockId }),
@@ -1823,7 +1802,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
              (staff_id, action, entity_type, entity_id, old_value, new_value)
              VALUES ($1, 'FINAL_EXTENSION_COMPLETED', 'visit', $2, $3, $4)`,
             [
-              request.staff.staffId,
+              staffId,
               quote.visitId,
               JSON.stringify({ paymentIntentId: id, status: 'DUE' }),
               JSON.stringify({ paymentIntentId: id, status: 'PAID', blockId: quote.blockId }),
@@ -2217,9 +2196,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to sign agreement');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to sign agreement',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to sign agreement',
         });
       }
       return reply.status(500).send({
@@ -2234,12 +2214,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Customer confirms or declines cross-type assignment.
    */
-  fastify.post('/v1/checkin/lane/:laneId/customer-confirm', async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { sessionId: string; confirmed: boolean };
-    }>,
-    reply: FastifyReply
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { sessionId: string; confirmed: boolean };
+  }>('/v1/checkin/lane/:laneId/customer-confirm', async (
+    request,
+    reply
   ) => {
     const { laneId } = request.params;
     const { sessionId, confirmed } = request.body;
@@ -2299,9 +2279,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to process customer confirmation');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to process confirmation',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to process confirmation',
         });
       }
       return reply.status(500).send({
@@ -2314,6 +2295,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * Complete check-in: create visit, check-in block, and transition resources.
    */
+  void completeCheckIn;
   async function completeCheckIn(
     client: Parameters<Parameters<typeof transaction>[0]>[0],
     session: LaneSessionRow,
@@ -2437,7 +2419,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       await client.query(
         `INSERT INTO audit_log 
          (staff_id, action, entity_type, entity_id, old_value, new_value)
-         VALUES ($1, 'SESSION_CREATED', 'visit', $2, $3, $4)`,
+         VALUES ($1, 'CHECK_IN', 'visit', $2, $3, $4)`,
         [
           staffId,
           visitId,
@@ -2514,7 +2496,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/checkin/lane-sessions', {
     preHandler: [requireAuth],
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
       const result = await query<LaneSessionRow>(
         `SELECT 
@@ -2597,15 +2579,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Demo endpoint for past-due payment (cash or credit).
    */
-  fastify.post('/v1/checkin/lane/:laneId/past-due/demo-payment', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE'; declineReason?: string };
+  }>('/v1/checkin/lane/:laneId/past-due/demo-payment', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE'; declineReason?: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -2668,9 +2647,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to process past-due payment');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to process payment',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to process payment',
         });
       }
       return reply.status(500).send({
@@ -2685,15 +2665,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Bypass past-due balance check (requires admin PIN).
    */
-  fastify.post('/v1/checkin/lane/:laneId/past-due/bypass', {
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { managerId: string; managerPin: string };
+  }>('/v1/checkin/lane/:laneId/past-due/bypass', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { managerId: string; managerPin: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -2773,9 +2750,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to bypass past-due balance');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to bypass',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to bypass',
         });
       }
       return reply.status(500).send({
@@ -2791,12 +2769,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Set customer's primary language preference (EN or ES).
    * Persists on customer record.
    */
-  fastify.post('/v1/checkin/lane/:laneId/set-language', async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-      Body: { language: 'EN' | 'ES' };
-    }>,
-    reply: FastifyReply
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { language: 'EN' | 'ES' };
+  }>('/v1/checkin/lane/:laneId/set-language', async (
+    request,
+    reply
   ) => {
     const { laneId } = request.params;
     const { language } = request.body;
@@ -3047,9 +3025,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       });
     } catch (error: unknown) {
       request.log.error(error, 'Failed to take payment');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to take payment',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to take payment',
         });
       }
       return reply.status(500).send({
@@ -3064,14 +3043,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Reset/complete transaction - marks session as completed and clears customer state.
    */
-  fastify.post('/v1/checkin/lane/:laneId/reset', {
+  fastify.post<{
+    Params: { laneId: string };
+  }>('/v1/checkin/lane/:laneId/reset', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{
-      Params: { laneId: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -3129,9 +3105,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send({ success: true });
     } catch (error: unknown) {
       request.log.error(error, 'Failed to reset session');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to reset',
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to reset',
         });
       }
       return reply.status(500).send({

@@ -3,8 +3,9 @@ import { Client } from "pg";
 const {
   DB_HOST = "localhost",
   DB_PORT = "5433",
-  DB_USER = "postgres",
-  DB_PASSWORD = "postgres",
+  // Keep defaults aligned with `src/db/index.ts` so local dev + tests behave consistently.
+  DB_USER = "clubops",
+  DB_PASSWORD = "clubops_dev",
   DB_NAME = "club_operations",
 } = process.env;
 

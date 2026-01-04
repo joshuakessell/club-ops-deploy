@@ -312,6 +312,9 @@ importers:
       '@simplewebauthn/server':
         specifier: ^9.0.0
         version: 9.0.3
+      '@simplewebauthn/types':
+        specifier: ^9.0.0
+        version: 9.0.1
       '@zxing/library':
         specifier: ^0.21.0
         version: 0.21.3

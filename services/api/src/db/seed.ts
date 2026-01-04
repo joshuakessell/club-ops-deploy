@@ -10,9 +10,15 @@ interface RoomSeed {
   tagCode: string;
 }
 
+interface LockerSeed {
+  number: string; // 3-digit "001".."108"
+  status: RoomStatus;
+  tagCode: string;
+}
+
 /**
  * Seed data for development and testing.
- * Inserts rooms with various statuses and key tags with QR scan tokens.
+ * Inserts rooms/lockers with various statuses and key tags with QR scan tokens.
  */
 const seedRooms: RoomSeed[] = [
   // DIRTY rooms
@@ -36,11 +42,17 @@ const seedRooms: RoomSeed[] = [
   
   // SPECIAL rooms - 0 available (none seeded as CLEAN)
   // Note: Room 201, 232, 256 are SPECIAL but not seeded as CLEAN
-  
-  // Lockers
-  { number: 'L01', type: RoomType.LOCKER, status: RoomStatus.CLEAN, floor: 0, tagCode: 'LOCKER-01' },
-  { number: 'L02', type: RoomType.LOCKER, status: RoomStatus.CLEAN, floor: 0, tagCode: 'LOCKER-02' },
 ];
+
+// Seed lockers 001–108 (Club Dallas contract / employee register grid)
+const seedLockers: LockerSeed[] = Array.from({ length: 108 }, (_, idx) => {
+  const n = String(idx + 1).padStart(3, '0');
+  return {
+    number: n,
+    status: RoomStatus.CLEAN,
+    tagCode: `LOCKER-${n}`,
+  };
+});
 
 async function seed() {
   try {
@@ -58,34 +70,63 @@ async function seed() {
       console.log('⚠️  Rooms already exist in database. Skipping room seed.');
       console.log('   To reseed rooms, clear the database first: pnpm db:reset && pnpm db:migrate');
     } else {
-      // Insert rooms and key tags in a transaction
-    for (const roomSeed of seedRooms) {
-      // Insert room
-      const roomResult = await query<{ id: string }>(
-        `INSERT INTO rooms (number, type, status, floor, last_status_change)
-         VALUES ($1, $2, $3, $4, NOW())
-         RETURNING id`,
-        [roomSeed.number, roomSeed.type, roomSeed.status, roomSeed.floor]
-      );
+      for (const roomSeed of seedRooms) {
+        const roomResult = await query<{ id: string }>(
+          `INSERT INTO rooms (number, type, status, floor, last_status_change)
+           VALUES ($1, $2, $3, $4, NOW())
+           RETURNING id`,
+          [roomSeed.number, roomSeed.type, roomSeed.status, roomSeed.floor]
+        );
 
-      const roomId = roomResult.rows[0]!.id;
+        const roomId = roomResult.rows[0]!.id;
 
-      // Insert key tag
-      await query(
-        `INSERT INTO key_tags (room_id, tag_type, tag_code, is_active)
-         VALUES ($1, 'QR', $2, true)`,
-        [roomId, roomSeed.tagCode]
-      );
+        await query(
+          `INSERT INTO key_tags (room_id, tag_type, tag_code, is_active)
+           VALUES ($1, 'QR', $2, true)`,
+          [roomId, roomSeed.tagCode]
+        );
 
-      console.log(`✓ Seeded room ${roomSeed.number} (${roomSeed.status}) with tag ${roomSeed.tagCode}`);
-    }
+        console.log(`✓ Seeded room ${roomSeed.number} (${roomSeed.status}) with tag ${roomSeed.tagCode}`);
+      }
 
       console.log(`\n✅ Successfully seeded ${seedRooms.length} rooms with key tags`);
-      console.log('\nScan tokens for testing:');
-      seedRooms.forEach(room => {
-        console.log(`  - ${room.tagCode} → Room ${room.number} (${room.status})`);
-      });
     }
+
+    // Seed lockers (001–108) and their key tags
+    const existingLockers = await query<{ count: string }>(
+      'SELECT COUNT(*) as count FROM lockers'
+    );
+
+    if (parseInt(existingLockers.rows[0]?.count || '0', 10) > 0) {
+      console.log('⚠️  Lockers already exist in database. Skipping locker seed.');
+    } else {
+      for (const lockerSeed of seedLockers) {
+        const lockerResult = await query<{ id: string }>(
+          `INSERT INTO lockers (number, status)
+           VALUES ($1, $2)
+           RETURNING id`,
+          [lockerSeed.number, lockerSeed.status]
+        );
+
+        const lockerId = lockerResult.rows[0]!.id;
+
+        await query(
+          `INSERT INTO key_tags (locker_id, tag_type, tag_code, is_active)
+           VALUES ($1, 'QR', $2, true)`,
+          [lockerId, lockerSeed.tagCode]
+        );
+      }
+
+      console.log(`\n✅ Successfully seeded ${seedLockers.length} lockers with key tags (001–108)`);
+    }
+
+    console.log('\nScan tokens for testing (sample):');
+    seedRooms.slice(0, 5).forEach((room) => {
+      console.log(`  - ${room.tagCode} → Room ${room.number} (${room.status})`);
+    });
+    seedLockers.slice(0, 5).forEach((locker) => {
+      console.log(`  - ${locker.tagCode} → Locker ${locker.number} (${locker.status})`);
+    });
 
     // Seed staff users
     console.log('\nSeeding staff users...');

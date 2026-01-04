@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware.js';
@@ -13,17 +13,14 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * Returns average dirty time and cleaning duration for a time range.
    * Excludes overridden/anomalous records.
    */
-  fastify.get('/v1/admin/metrics/summary', {
+  fastify.get<{
+    Querystring: {
+      from?: string;
+      to?: string;
+    };
+  }>('/v1/admin/metrics/summary', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{ 
-      Querystring: { 
-        from?: string;
-        to?: string;
-      } 
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const from = request.query.from 
         ? new Date(request.query.from)
@@ -159,18 +156,15 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Returns average dirty time and cleaning duration filtered by staff and time range.
    */
-  fastify.get('/v1/admin/metrics/by-staff', {
+  fastify.get<{
+    Querystring: {
+      from?: string;
+      to?: string;
+      staffId?: string;
+    };
+  }>('/v1/admin/metrics/by-staff', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{ 
-      Querystring: { 
-        from?: string;
-        to?: string;
-        staffId?: string;
-      } 
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const from = request.query.from 
         ? new Date(request.query.from)
@@ -314,10 +308,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/admin/rooms/expirations', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const result = await query<{
         room_id: string;
@@ -404,10 +395,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/admin/kpi', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       // Get room counts by status
       const roomStatusResult = await query<{ status: string; count: string }>(
@@ -442,7 +430,18 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       const lockersOccupied = parseInt(lockersInUseResult.rows[0]?.count || '0', 10);
       const lockersAvailable = totalLockers - lockersOccupied;
 
-      const kpi: Record<string, number> = {
+      type AdminKpi = {
+        roomsOccupied: number;
+        roomsUnoccupied: number;
+        roomsDirty: number;
+        roomsCleaning: number;
+        roomsClean: number;
+        lockersOccupied: number;
+        lockersAvailable: number;
+        waitingListCount: number;
+      };
+
+      const kpi: AdminKpi = {
         roomsOccupied: parseInt(occupiedResult.rows[0]?.count || '0', 10),
         roomsUnoccupied: 0,
         roomsDirty: 0,
@@ -461,7 +460,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         else if (status === 'clean') kpi.roomsClean = count;
       }
 
-      kpi.roomsUnoccupied = (kpi.roomsClean || 0) + (kpi.roomsCleaning || 0) + (kpi.roomsDirty || 0) - kpi.roomsOccupied;
+      kpi.roomsUnoccupied = kpi.roomsClean + kpi.roomsCleaning + kpi.roomsDirty - kpi.roomsOccupied;
 
       return reply.send(kpi);
     } catch (error) {
@@ -475,18 +474,15 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Returns all staff members (active and inactive) with last login info.
    */
-  fastify.get('/v1/admin/staff', {
+  fastify.get<{
+    Querystring: {
+      search?: string;
+      role?: string;
+      active?: string;
+    };
+  }>('/v1/admin/staff', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Querystring: {
-        search?: string;
-        role?: string;
-        active?: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       let whereClause = '1=1';
       const params: unknown[] = [];
@@ -551,19 +547,16 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/admin/staff - Create a new staff member
    */
-  fastify.post('/v1/admin/staff', {
+  fastify.post<{
+    Body: {
+      name: string;
+      role: 'STAFF' | 'ADMIN';
+      pin: string;
+      active?: boolean;
+    };
+  }>('/v1/admin/staff', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Body: {
-        name: string;
-        role: 'STAFF' | 'ADMIN';
-        pin: string;
-        active?: boolean;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -624,19 +617,16 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * PATCH /v1/admin/staff/:id - Update a staff member
    */
-  fastify.patch('/v1/admin/staff/:id', {
+  fastify.patch<{
+    Params: { id: string };
+    Body: {
+      name?: string;
+      role?: 'STAFF' | 'ADMIN';
+      active?: boolean;
+    };
+  }>('/v1/admin/staff/:id', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { id: string };
-      Body: {
-        name?: string;
-        role?: 'STAFF' | 'ADMIN';
-        active?: boolean;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -733,15 +723,12 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Requires re-authentication for security.
    */
-  fastify.post('/v1/admin/staff/:id/pin-reset', {
+  fastify.post<{
+    Params: { id: string };
+    Body: { newPin: string };
+  }>('/v1/admin/staff/:id/pin-reset', {
     preHandler: [requireReauthForAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { id: string };
-      Body: { newPin: string };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
@@ -798,10 +785,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/admin/register-sessions', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       // Get active sessions for both registers
       const activeSessions = await query<{
@@ -893,12 +877,11 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * Forces sign-out of active session for specified register.
    * Broadcasts REGISTER_SESSION_UPDATED event.
    */
-  fastify.post('/v1/admin/register-sessions/:registerNumber/force-signout', {
+  fastify.post<{
+    Params: { registerNumber: string };
+  }>('/v1/admin/register-sessions/:registerNumber/force-signout', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{ Params: { registerNumber: string } }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     const registerNumber = parseInt(request.params.registerNumber, 10);
     
     if (registerNumber !== 1 && registerNumber !== 2) {
@@ -1010,10 +993,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/admin/devices', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     try {
       const result = await query<{
         device_id: string;
@@ -1044,17 +1024,14 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * Adds a new device.
    * Rejects if 2 enabled devices already exist.
    */
-  fastify.post('/v1/admin/devices', {
+  fastify.post<{
+    Body: {
+      deviceId: string;
+      displayName: string;
+    };
+  }>('/v1/admin/devices', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Body: {
-        deviceId: string;
-        displayName: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     const { deviceId, displayName } = request.body;
 
     if (!deviceId || !displayName) {
@@ -1107,15 +1084,12 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * Enables or disables a device.
    * If disabling an active device, force sign out its register session.
    */
-  fastify.patch('/v1/admin/devices/:deviceId', {
+  fastify.patch<{
+    Params: { deviceId: string };
+    Body: { enabled: boolean };
+  }>('/v1/admin/devices/:deviceId', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { deviceId: string };
-      Body: { enabled: boolean };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     const { deviceId } = request.params;
     const { enabled } = request.body;
 
@@ -1215,17 +1189,14 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    *
    * Used by office-dashboard Customer Admin Tools.
    */
-  fastify.get('/v1/admin/customers', {
+  fastify.get<{
+    Querystring: {
+      search?: string;
+      limit?: string;
+    };
+  }>('/v1/admin/customers', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Querystring: {
-        search?: string;
-        limit?: string;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     const search = (request.query.search || '').trim();
     const limit = Math.min(Math.max(parseInt(request.query.limit || '25', 10) || 25, 1), 100);
 
@@ -1274,21 +1245,20 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    * - notes (clear/remove)
    * - pastDueBalance (waive)
    */
-  fastify.patch('/v1/admin/customers/:id', {
+  fastify.patch<{
+    Params: { id: string };
+    Body: {
+      notes?: string | null;
+      pastDueBalance?: number;
+    };
+  }>('/v1/admin/customers/:id', {
     preHandler: [requireReauthForAdmin],
-  }, async (
-    request: FastifyRequest<{
-      Params: { id: string };
-      Body: {
-        notes?: string | null;
-        pastDueBalance?: number;
-      };
-    }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
+    const auditStaffId = request.staff.staffId;
+    const auditStaffRole = request.staff.role;
 
     const UpdateSchema = z.object({
       notes: z.string().nullable().optional(),
@@ -1369,8 +1339,8 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, old_value, new_value)
            VALUES ($1, $2, 'UPDATE', 'customer', $3, $4, $5)`,
           [
-            request.staff.staffId,
-            request.staff.role,
+            auditStaffId,
+            auditStaffRole,
             request.params.id,
             JSON.stringify({
               notes: before.notes,
@@ -1396,8 +1366,10 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
       });
     } catch (error: unknown) {
       if (error && typeof error === 'object' && 'statusCode' in error) {
-        return reply.status((error as { statusCode: number }).statusCode).send({
-          error: (error as { message: string }).message || 'Failed to update customer',
+        const statusCode = (error as { statusCode: number }).statusCode;
+        const message = (error as { message?: string }).message;
+        return reply.status(statusCode).send({
+          error: message ?? 'Failed to update customer',
         });
       }
       request.log.error(error, 'Failed to update customer');
@@ -1412,7 +1384,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/admin/reports/cash-totals', {
     preHandler: [requireAuth, requireAdmin],
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
+  }, async (request, reply) => {
     try {
       const totals = await query<{ total: string | null }>(
         `SELECT COALESCE(SUM(amount), 0)::numeric(10,2) as total

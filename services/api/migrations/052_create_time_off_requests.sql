@@ -1,6 +1,11 @@
 -- Create time_off_requests table for employee day-off requests
 
-CREATE TYPE time_off_request_status AS ENUM ('PENDING', 'APPROVED', 'DENIED');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'time_off_request_status') THEN
+    CREATE TYPE time_off_request_status AS ENUM ('PENDING', 'APPROVED', 'DENIED');
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS time_off_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

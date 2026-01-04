@@ -18,7 +18,31 @@ global.fetch = vi.fn();
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    localStorage.clear();
+
+    // Ensure a Web Storage-like API exists in this environment.
+    const store = new Map<string, string>();
+    const localStorageMock = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+      key: (index: number) => Array.from(store.keys())[index] ?? null,
+      get length() {
+        return store.size;
+      },
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      configurable: true,
+    });
+    window.localStorage.clear();
+
     (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (input: RequestInfo) => {
       const url = typeof input === 'string' ? input : input.url;
       // Minimal happy-path mocks for the demo dashboard
@@ -75,14 +99,14 @@ describe('App', () => {
     expect(screen.getByText('Club Operations')).toBeDefined();
   });
 
-  it('shows employee selection on the lock screen', () => {
+  it('shows employee selection on the lock screen', async () => {
     render(
       <MemoryRouter>
         <App />
       </MemoryRouter>
     );
-    expect(screen.getByText('Select your account to continue')).toBeDefined();
-    expect(screen.getByText('Manager Club')).toBeDefined();
+    expect(await screen.findByText('Select your account to continue')).toBeDefined();
+    expect(await screen.findByText('Manager Club')).toBeDefined();
   });
 
   it('renders dashboard when authenticated', () => {
@@ -93,7 +117,7 @@ describe('App', () => {
       name: 'Test User',
       role: 'ADMIN',
     };
-    localStorage.setItem('staff_session', JSON.stringify(mockSession));
+    window.localStorage.setItem('staff_session', JSON.stringify(mockSession));
     
     render(
       <MemoryRouter initialEntries={['/']}>

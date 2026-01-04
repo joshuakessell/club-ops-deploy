@@ -7,6 +7,7 @@ import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaste
 import { checkinRoutes } from '../src/routes/checkin.js';
 import { hashPin, generateSessionToken } from '../src/auth/utils.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
+import { truncateAllTables } from './testDb.js';
 
 // Augment FastifyInstance with broadcaster
 declare module 'fastify' {
@@ -64,6 +65,9 @@ describe('Check-in Flow', () => {
   beforeEach(async () => {
     if (!dbAvailable) return;
     sessionUpdatedEvents = [];
+
+    // Ensure each test starts from a clean DB state (integration tests share one DB).
+    await truncateAllTables((text, params) => query(text, params));
     
     // Create test staff
     const pinHash = await hashPin('111111');

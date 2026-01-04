@@ -4,6 +4,7 @@ import pg from 'pg';
 import { cleaningRoutes } from '../src/routes/cleaning.js';
 import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaster.js';
 import { RoomStatus, validateTransition } from '@club-ops/shared';
+import { truncateAllTables } from './testDb.js';
 
 // Augment FastifyInstance with broadcaster
 declare module 'fastify' {
@@ -86,6 +87,7 @@ describe('Cleaning Batch Endpoint', () => {
     cleaning: '22222222-2222-2222-2222-222222222222',
     clean: '33333333-3333-3333-3333-333333333333',
   };
+  const testStaffId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 
   beforeAll(async () => {
     // Connect to test database
@@ -141,13 +143,15 @@ describe('Cleaning Batch Endpoint', () => {
     // Clear test data and reset
     broadcastedEvents = [];
 
-    // Clean up test rooms
-    await pool.query('DELETE FROM cleaning_batch_rooms WHERE room_id = ANY($1)', [
-      Object.values(testRoomIds),
-    ]);
-    await pool.query('DELETE FROM cleaning_batches WHERE staff_id = $1', ['test-staff']);
-    await pool.query('DELETE FROM audit_log WHERE user_id = $1', ['test-staff']);
-    await pool.query('DELETE FROM rooms WHERE id = ANY($1)', [Object.values(testRoomIds)]);
+    await truncateAllTables(pool.query.bind(pool));
+
+    // Seed staff to satisfy FK constraints (if present)
+    await pool.query(
+      `INSERT INTO staff (id, name, role, pin_hash, active)
+       VALUES ($1, 'Test Staff', 'STAFF', 'test-hash', true)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role, active = EXCLUDED.active`,
+      [testStaffId]
+    );
 
     // Insert test rooms with known statuses
     await pool.query(`
@@ -176,7 +180,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.dirty],
           targetStatus: 'CLEANING',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -200,7 +204,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.cleaning],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -221,7 +225,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.dirty, testRoomIds.cleaning],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -240,7 +244,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.dirty],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -265,7 +269,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.dirty],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
           override: true,
           overrideReason: 'Manager inspection confirmed room is clean',
         },
@@ -300,7 +304,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.dirty],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
           override: true,
         },
       });
@@ -319,7 +323,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.dirty, testRoomIds.cleaning, testRoomIds.clean],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -347,7 +351,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -361,7 +365,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: ['not-a-uuid'],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -375,7 +379,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.dirty],
           targetStatus: 'INVALID_STATUS',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -390,7 +394,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [nonExistentId],
           targetStatus: 'CLEANING',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
@@ -409,13 +413,13 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.cleaning],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 
       const result = await pool.query(
         'SELECT * FROM cleaning_batches WHERE staff_id = $1',
-        ['test-staff']
+        [testStaffId]
       );
       expect(result.rows.length).toBe(1);
       expect(result.rows[0].room_count).toBe(1);
@@ -428,7 +432,7 @@ describe('Cleaning Batch Endpoint', () => {
         payload: {
           roomIds: [testRoomIds.cleaning],
           targetStatus: 'CLEAN',
-          staffId: 'test-staff',
+          staffId: testStaffId,
         },
       });
 

@@ -228,7 +228,7 @@ const theme = createTheme({
 function App() {
   const [session, setSession] = useState<StaffSession | null>(() => {
     // Load session from localStorage on mount
-    const stored = localStorage.getItem('staff_session');
+    const stored = window.localStorage.getItem('staff_session');
     if (stored) {
       try {
         return JSON.parse(stored);
@@ -241,17 +241,18 @@ function App() {
 
   const deviceId = useState(() => {
     // Generate or retrieve device ID
-    let id = localStorage.getItem('device_id');
+    const storage = window.localStorage;
+    let id = storage.getItem('device_id');
     if (!id) {
       id = `device-${crypto.randomUUID()}`;
-      localStorage.setItem('device_id', id);
+      storage.setItem('device_id', id);
     }
     return id;
   })[0];
 
   const handleLogin = (newSession: StaffSession) => {
     setSession(newSession);
-    localStorage.setItem('staff_session', JSON.stringify(newSession));
+    window.localStorage.setItem('staff_session', JSON.stringify(newSession));
   };
 
   const handleLogout = async () => {
@@ -268,7 +269,7 @@ function App() {
       }
     }
     setSession(null);
-    localStorage.removeItem('staff_session');
+    window.localStorage.removeItem('staff_session');
   };
 
   // Show lock screen if not authenticated

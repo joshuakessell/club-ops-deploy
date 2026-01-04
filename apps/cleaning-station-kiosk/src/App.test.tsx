@@ -35,9 +35,33 @@ Object.defineProperty(HTMLVideoElement.prototype, 'readyState', {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Ensure a Web Storage-like API exists for device ID persistence in tests.
+    const store = new Map<string, string>();
+    const localStorageMock = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+      key: (index: number) => Array.from(store.keys())[index] ?? null,
+      get length() {
+        return store.size;
+      },
+    };
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      configurable: true,
+    });
+
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
-      json: async () => ({
+      json: () => Promise.resolve({
         rooms: [],
         statusCounts: { DIRTY: 0, CLEANING: 0, CLEAN: 0 },
         isMixedStatus: false,

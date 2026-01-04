@@ -251,11 +251,8 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
         const sessionId = sessionResult.rows[0]!.id;
 
-        // Update block with session_id
-        await client.query(
-          `UPDATE checkin_blocks SET session_id = $1 WHERE id = $2`,
-          [sessionId, block.id]
-        );
+        // NOTE: `checkin_blocks.session_id` links to `lane_sessions` (coordination state).
+        // Legacy `sessions` link to visits via `sessions.visit_id`; do not write legacy session IDs into checkin_blocks.
 
         return {
           visit: {
@@ -510,11 +507,8 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
         const sessionId = sessionResult.rows[0]!.id;
 
-        // Update block with session_id
-        await client.query(
-          `UPDATE checkin_blocks SET session_id = $1 WHERE id = $2`,
-          [sessionId, block.id]
-        );
+        // NOTE: `checkin_blocks.session_id` links to `lane_sessions` (coordination state).
+        // Legacy `sessions` link to visits via `sessions.visit_id`; do not write legacy session IDs into checkin_blocks.
 
         return {
           visit: {

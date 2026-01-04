@@ -6,6 +6,16 @@ import { InventorySelector } from './InventorySelector';
 global.fetch = vi.fn();
 
 // Mock WebSocket
+type MockWebSocket = {
+  send: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+  addEventListener: ReturnType<typeof vi.fn>;
+  removeEventListener: ReturnType<typeof vi.fn>;
+  onopen: ((this: WebSocket, ev: Event) => unknown) | null;
+  onmessage: ((this: WebSocket, ev: MessageEvent) => unknown) | null;
+  onerror: ((this: WebSocket, ev: Event) => unknown) | null;
+  onclose: ((this: WebSocket, ev: CloseEvent) => unknown) | null;
+};
 global.WebSocket = vi.fn(() => ({
   send: vi.fn(),
   close: vi.fn(),
@@ -15,7 +25,7 @@ global.WebSocket = vi.fn(() => ({
   onmessage: null,
   onerror: null,
   onclose: null,
-})) as any;
+}) satisfies MockWebSocket) as unknown as typeof WebSocket;
 
 describe('InventorySelector', () => {
   const mockProps = {
@@ -56,9 +66,9 @@ describe('InventorySelector', () => {
   });
 
   it('should render loading state initially', () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
-      json: async () => mockApiResponse,
+      json: () => Promise.resolve(mockApiResponse),
     });
 
     render(<InventorySelector {...mockProps} />);
@@ -66,9 +76,9 @@ describe('InventorySelector', () => {
   });
 
   it('should group and sort rooms correctly', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
-      json: async () => mockApiResponse,
+      json: () => Promise.resolve(mockApiResponse),
     });
 
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
@@ -81,9 +91,9 @@ describe('InventorySelector', () => {
   });
 
   it('should auto-expand section when customer selects type', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
-      json: async () => mockApiResponse,
+      json: () => Promise.resolve(mockApiResponse),
     });
 
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
@@ -95,9 +105,9 @@ describe('InventorySelector', () => {
   });
 
   it('should auto-select first available item', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
-      json: async () => mockApiResponse,
+      json: () => Promise.resolve(mockApiResponse),
     });
 
     const onSelect = vi.fn();

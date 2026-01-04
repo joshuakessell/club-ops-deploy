@@ -4,20 +4,22 @@ import pg from 'pg';
 import { visitRoutes } from '../src/routes/visits.js';
 import { agreementRoutes } from '../src/routes/agreements.js';
 import { createBroadcaster } from '../src/websocket/broadcaster.js';
+import { truncateAllTables } from './testDb.js';
 
 // Mock auth middleware to allow test requests
+const testStaffId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 vi.mock('../src/auth/middleware.js', () => ({
   requireAuth: async (request: any, _reply: any) => {
-    request.staff = { staffId: 'test-staff', role: 'STAFF' };
+    request.staff = { staffId: testStaffId, role: 'STAFF' };
   },
   requireAdmin: async (_request: any, _reply: any) => {
     // No-op for tests
   },
   requireReauth: async (request: any, _reply: any) => {
-    request.staff = { staffId: 'test-staff', role: 'STAFF' };
+    request.staff = { staffId: testStaffId, role: 'STAFF' };
   },
   requireReauthForAdmin: async (request: any, _reply: any) => {
-    request.staff = { staffId: 'test-staff', role: 'ADMIN' };
+    request.staff = { staffId: testStaffId, role: 'ADMIN' };
   },
 }));
 
@@ -68,16 +70,15 @@ describe('Visit and Renewal Flows', () => {
   beforeEach(async () => {
     if (!dbAvailable) return;
 
-    // Clean up test data - delete in order to respect foreign key constraints
-    await pool.query('DELETE FROM agreement_signatures WHERE checkin_block_id IN (SELECT id FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1))', [testCustomerId]);
-    await pool.query('DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
-    await pool.query('DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
-    await pool.query('DELETE FROM sessions WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1) OR customer_id = $1', [testCustomerId]);
-    await pool.query('DELETE FROM visits WHERE customer_id = $1', [testCustomerId]);
-    await pool.query('DELETE FROM checkout_requests WHERE customer_id = $1', [testCustomerId]);
-    await pool.query('DELETE FROM rooms WHERE id = $1 OR number = $2', [testRoomId, 'TEST-101']);
-    await pool.query('DELETE FROM agreements WHERE id = $1', [testAgreementId]);
-    await pool.query('DELETE FROM customers WHERE id = $1 OR membership_number = $2', [testCustomerId, 'TEST-001']);
+    await truncateAllTables(pool.query.bind(pool));
+
+    // Seed a staff row for auth + FK constraints
+    await pool.query(
+      `INSERT INTO staff (id, name, role, pin_hash, active)
+       VALUES ($1, 'Test Staff', 'STAFF', 'test-hash', true)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role, active = EXCLUDED.active`,
+      [testStaffId]
+    );
 
     // Insert test customer with ON CONFLICT handling for both id and membership_number
     await pool.query(
@@ -242,6 +243,7 @@ describe('Visit and Renewal Flows', () => {
     });
 
     const visitData = JSON.parse(visitResponse.body);
+    const visitId = visitData.visit.id;
     const sessionId = visitData.sessionId;
 
     // Sign agreement
@@ -249,7 +251,8 @@ describe('Visit and Renewal Flows', () => {
       method: 'POST',
       url: `/v1/checkins/${sessionId}/agreement-sign`,
       payload: {
-        signaturePngBase64: 'dGVzdC1zaWduYXR1cmU=',
+        // 1x1 transparent PNG (base64) - valid signature payload for PDF generation
+        signaturePngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
         agreed: true,
       },
       headers: {
@@ -262,8 +265,8 @@ describe('Visit and Renewal Flows', () => {
 
     // Verify block is marked as agreement signed
     const blockResult = await pool.query(
-      'SELECT agreement_signed FROM checkin_blocks WHERE session_id = $1',
-      [sessionId]
+      'SELECT agreement_signed FROM checkin_blocks WHERE visit_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [visitId]
     );
     expect(blockResult.rows[0]?.agreement_signed).toBe(true);
 
@@ -308,7 +311,8 @@ describe('Visit and Renewal Flows', () => {
       method: 'POST',
       url: `/v1/checkins/${renewalSessionId}/agreement-sign`,
       payload: {
-        signaturePngBase64: 'dGVzdC1zaWduYXR1cmU=',
+        // 1x1 transparent PNG (base64) - valid signature payload for PDF generation
+        signaturePngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
         agreed: true,
       },
       headers: {
@@ -321,8 +325,12 @@ describe('Visit and Renewal Flows', () => {
 
     // Verify renewal block is marked as agreement signed
     const blockResult = await pool.query(
-      'SELECT agreement_signed FROM checkin_blocks WHERE session_id = $1',
-      [renewalSessionId]
+      `SELECT agreement_signed
+       FROM checkin_blocks
+       WHERE visit_id = $1 AND block_type = 'RENEWAL'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [visitId]
     );
     expect(blockResult.rows[0]?.agreement_signed).toBe(true);
     expect(blockResult.rows[0]?.agreement_signed).toBe(true);

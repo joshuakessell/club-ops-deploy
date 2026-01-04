@@ -1,8 +1,7 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import {
-  hashQrToken,
   verifyPin,
   generateSessionToken,
   getSessionExpiry,
@@ -41,8 +40,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
    * Used by login screens to show available staff for selection.
    */
   fastify.get('/v1/auth/staff', async (
-    request: FastifyRequest,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     try {
       const result = await query<{
@@ -80,8 +79,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
    * Creates a session and returns session token.
    */
   fastify.post('/v1/auth/login-pin', async (
-    request: FastifyRequest<{ Body: LoginPinInput }>,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     let body: LoginPinInput;
 
@@ -273,8 +272,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/v1/auth/logout', {
     preHandler: [requireAuth],
   }, async (
-    request: FastifyRequest,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -356,8 +355,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get('/v1/auth/me', {
     preHandler: [requireAuth],
   }, async (
-    request: FastifyRequest,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     if (!request.staff) {
       return reply.status(401).send({
@@ -382,12 +381,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     pin: z.string().regex(/^\d{6}$/, 'PIN must be exactly 6 digits'),
   });
 
-  fastify.post('/v1/auth/reauth-pin', {
+  fastify.post<{
+    Body: z.infer<typeof ReauthPinSchema>;
+  }>('/v1/auth/reauth-pin', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Body: z.infer<typeof ReauthPinSchema> }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({
         error: 'Unauthorized',
@@ -489,8 +487,8 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/v1/auth/reauth/webauthn/options', {
     preHandler: [requireAuth],
   }, async (
-    request: FastifyRequest,
-    reply: FastifyReply
+    request,
+    reply
   ) => {
     if (!request.staff) {
       return reply.status(401).send({
@@ -553,12 +551,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
    * 
    * Requires existing session. Verifies WebAuthn response and sets reauth_ok_until.
    */
-  fastify.post('/v1/auth/reauth/webauthn/verify', {
+  fastify.post<{
+    Body: { credentialResponse: unknown; deviceId?: string };
+  }>('/v1/auth/reauth/webauthn/verify', {
     preHandler: [requireAuth],
-  }, async (
-    request: FastifyRequest<{ Body: { credentialResponse: unknown; deviceId?: string } }>,
-    reply: FastifyReply
-  ) => {
+  }, async (request, reply) => {
     if (!request.staff) {
       return reply.status(401).send({
         error: 'Unauthorized',

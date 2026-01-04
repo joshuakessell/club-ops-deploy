@@ -61,10 +61,11 @@ function App() {
   const qrCodeScannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerRef = useRef<HTMLDivElement>(null);
   const kioskDeviceId = useState(() => {
-    let id = localStorage.getItem('checkout_kiosk_device_id');
+    const storage = window.localStorage;
+    let id = storage.getItem('checkout_kiosk_device_id');
     if (!id) {
       id = `checkout-kiosk-${crypto.randomUUID()}`;
-      localStorage.setItem('checkout_kiosk_device_id', id);
+      storage.setItem('checkout_kiosk_device_id', id);
     }
     return id;
   })[0];

@@ -3,6 +3,19 @@ import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
 import { RoomStatus, isAdjacentTransition } from '@club-ops/shared';
 import { LockScreen, type StaffSession } from './LockScreen';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const err = value['error'];
+  const msg = value['message'];
+  if (typeof err === 'string' && err.trim()) return err;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  return undefined;
+}
+
 interface ResolvedRoom {
   roomId: string;
   roomNumber: string;
@@ -38,10 +51,11 @@ function App() {
   
   const deviceId = useState(() => {
     // Generate or retrieve device ID
-    let id = localStorage.getItem('device_id');
+    const storage = window.localStorage;
+    let id = storage.getItem('device_id');
     if (!id) {
       id = `device-${crypto.randomUUID()}`;
-      localStorage.setItem('device_id', id);
+      storage.setItem('device_id', id);
     }
     return id;
   })[0];
@@ -74,68 +88,6 @@ function App() {
     setViewMode('scan');
   };
 
-  // Show lock screen if not authenticated
-  if (!session) {
-    return (
-      <LockScreen
-        onLogin={handleLogin}
-        deviceType="kiosk"
-        deviceId={deviceId}
-      />
-    );
-  }
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    scannedItemsRef.current = scannedItems;
-  }, [scannedItems]);
-
-  // Initialize camera
-  useEffect(() => {
-    const initCamera = async () => {
-      try {
-        const constraints: MediaStreamConstraints = {
-          video: {
-            facingMode: cameraFacingMode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        };
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        streamRef.current = stream;
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-
-        // Initialize ZXing reader
-        const codeReader = new BrowserMultiFormatReader();
-        codeReaderRef.current = codeReader;
-        setCameraError(null);
-
-        // Start continuous scanning
-        startScanning();
-      } catch (error) {
-        console.error('Camera error:', error);
-        setCameraError(
-          error instanceof Error ? error.message : 'Failed to access camera'
-        );
-      }
-    };
-
-    initCamera();
-
-    return () => {
-      stopScanning();
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-    };
-  }, [cameraFacingMode]);
-
   const startScanning = useCallback(() => {
     if (!videoRef.current || !canvasRef.current || !codeReaderRef.current) return;
 
@@ -163,7 +115,7 @@ function App() {
         const result = await codeReaderRef.current.decodeFromImageElement(img);
 
         if (result && handleScanRef.current) {
-          handleScanRef.current(result.getText());
+          void handleScanRef.current(result.getText());
         }
       } catch (error) {
         // NotFoundException is expected when no QR code is visible
@@ -174,7 +126,9 @@ function App() {
     };
 
     // Scan every 500ms
-    scanningIntervalRef.current = window.setInterval(scan, 500);
+    scanningIntervalRef.current = window.setInterval(() => {
+      void scan();
+    }, 500);
   }, []);
 
   const stopScanning = useCallback(() => {
@@ -186,6 +140,11 @@ function App() {
       scanningIntervalRef.current = null;
     }
   }, []);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    scannedItemsRef.current = scannedItems;
+  }, [scannedItems]);
 
   const handleScan = useCallback(async (tagCode: string) => {
     if (!session?.sessionToken) {
@@ -210,21 +169,40 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to resolve key: ${response.statusText}`);
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || `Failed to resolve key: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      if (data.roomId && data.roomNumber && data.status) {
+      const data: unknown = await response.json();
+      const roomId = isRecord(data) && typeof data.roomId === 'string' ? data.roomId : null;
+      const roomNumber = isRecord(data) && typeof data.roomNumber === 'string' ? data.roomNumber : null;
+      const status =
+        isRecord(data) &&
+        typeof data.status === 'string' &&
+        (Object.values(RoomStatus) as string[]).includes(data.status)
+          ? (data.status as RoomStatus)
+          : null;
+
+      if (roomId && roomNumber && status) {
+        const roomType =
+          isRecord(data) && typeof data.roomType === 'string' ? data.roomType : 'STANDARD';
+        const floor = isRecord(data) && typeof data.floor === 'number' ? data.floor : 0;
+        const resolvedTagCode =
+          isRecord(data) && typeof data.tagCode === 'string' ? data.tagCode : tagCode;
+        const tagType =
+          isRecord(data) && typeof data.tagType === 'string' ? data.tagType : 'QR';
+        const overrideFlag =
+          isRecord(data) && typeof data.overrideFlag === 'boolean' ? data.overrideFlag : false;
+
         const room: ResolvedRoom = {
-          roomId: data.roomId,
-          roomNumber: data.roomNumber,
-          roomType: data.roomType || 'STANDARD', // Fallback for backwards compatibility
-          status: data.status as RoomStatus,
-          floor: data.floor ?? 0, // Fallback for backwards compatibility
-          tagCode: data.tagCode || tagCode, // Use API value if available, otherwise use scanned tagCode
-          tagType: data.tagType || 'QR', // Fallback for backwards compatibility
-          overrideFlag: data.overrideFlag ?? false, // Fallback for backwards compatibility
+          roomId,
+          roomNumber,
+          roomType,
+          status,
+          floor,
+          tagCode: resolvedTagCode,
+          tagType,
+          overrideFlag,
         };
         setScannedItems((prev) => [
           ...prev,
@@ -242,6 +220,58 @@ function App() {
       setIsProcessing(false);
     }
   }, [session]);
+
+  // Initialize camera (only when authenticated + scanning view)
+  useEffect(() => {
+    if (!session || viewMode !== 'scan') return;
+
+    let cancelled = false;
+    const initCamera = async () => {
+      try {
+        const constraints: MediaStreamConstraints = {
+          video: {
+            facingMode: cameraFacingMode,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+
+        // Initialize ZXing reader
+        const codeReader = new BrowserMultiFormatReader();
+        codeReaderRef.current = codeReader;
+        setCameraError(null);
+
+        // Start continuous scanning
+        startScanning();
+      } catch (error) {
+        console.error('Camera error:', error);
+        setCameraError(error instanceof Error ? error.message : 'Failed to access camera');
+      }
+    };
+
+    void initCamera();
+
+    return () => {
+      cancelled = true;
+      stopScanning();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+    };
+  }, [session, viewMode, cameraFacingMode, startScanning, stopScanning]);
 
   // Keep handleScan ref in sync
   useEffect(() => {
@@ -304,8 +334,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to update rooms: ${response.statusText}`);
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || `Failed to update rooms: ${response.statusText}`);
       }
 
       clearAll();
@@ -343,8 +373,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to update rooms: ${response.statusText}`);
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || `Failed to update rooms: ${response.statusText}`);
       }
 
       clearAll();
@@ -469,14 +499,17 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Some room updates failed');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Some room updates failed');
       }
 
-      const result = await response.json();
+      const result: unknown = await response.json();
       
       // Check if any rooms failed
-      const failed = result.rooms?.some((r: { success: boolean }) => !r.success);
+      const failed =
+        isRecord(result) &&
+        Array.isArray(result.rooms) &&
+        result.rooms.some((r) => isRecord(r) && r.success === false);
       if (failed) {
         throw new Error('Some room updates failed');
       }
@@ -493,6 +526,17 @@ function App() {
   };
 
   const actionType = getActionType();
+
+  // Show lock screen if not authenticated
+  if (!session) {
+    return (
+      <LockScreen
+        onLogin={handleLogin}
+        deviceType="kiosk"
+        deviceId={deviceId}
+      />
+    );
+  }
 
   if (viewMode === 'resolve') {
     return (
@@ -570,7 +614,7 @@ function App() {
             </button>
             <button
               className="button-primary"
-              onClick={saveResolvedStatuses}
+              onClick={() => void saveResolvedStatuses()}
               disabled={isProcessing}
             >
               Save Changes
@@ -703,7 +747,7 @@ function App() {
               {actionType === 'begin' && (
                 <button
                   className="button-primary button-large"
-                  onClick={handleBeginCleaning}
+                  onClick={() => void handleBeginCleaning()}
                   disabled={isProcessing}
                 >
                   Begin Cleaning ({scannedItems.length})
@@ -713,7 +757,7 @@ function App() {
               {actionType === 'finish' && (
                 <button
                   className="button-primary button-large"
-                  onClick={handleFinishCleaning}
+                  onClick={() => void handleFinishCleaning()}
                   disabled={isProcessing}
                 >
                   Finish Cleaning ({scannedItems.length})

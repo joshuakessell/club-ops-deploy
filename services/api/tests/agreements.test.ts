@@ -5,20 +5,22 @@ import { agreementRoutes } from '../src/routes/agreements.js';
 import { sessionRoutes } from '../src/routes/sessions.js';
 import { upgradeRoutes } from '../src/routes/upgrades.js';
 import { createBroadcaster } from '../src/websocket/broadcaster.js';
+import { truncateAllTables } from './testDb.js';
 
 // Mock auth middleware to allow test requests
+const testStaffId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 vi.mock('../src/auth/middleware.js', () => ({
   requireAuth: async (request: any, _reply: any) => {
-    request.staff = { staffId: 'test-staff', role: 'STAFF' };
+    request.staff = { staffId: testStaffId, role: 'STAFF' };
   },
   requireAdmin: async (_request: any, _reply: any) => {
     // No-op for tests
   },
   requireReauth: async (request: any, _reply: any) => {
-    request.staff = { staffId: 'test-staff', role: 'STAFF' };
+    request.staff = { staffId: testStaffId, role: 'STAFF' };
   },
   requireReauthForAdmin: async (request: any, _reply: any) => {
-    request.staff = { staffId: 'test-staff', role: 'ADMIN' };
+    request.staff = { staffId: testStaffId, role: 'ADMIN' };
   },
 }));
 
@@ -72,18 +74,14 @@ describe('Agreement and Upgrade Flows', () => {
   beforeEach(async () => {
     if (!dbAvailable) return;
 
-    // Clean up test data - delete in order to respect foreign key constraints
-    // Delete child records first (use CASCADE where possible, or delete in dependency order)
-    await pool.query('DELETE FROM agreement_signatures WHERE checkin_id IN (SELECT id FROM sessions WHERE customer_id = $1 OR visit_id IN (SELECT id FROM visits WHERE customer_id = $1))', [testCustomerId]);
-    await pool.query('DELETE FROM checkin_blocks WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
-    await pool.query('DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
-    await pool.query('DELETE FROM sessions WHERE customer_id = $1 OR visit_id IN (SELECT id FROM visits WHERE customer_id = $1)', [testCustomerId]);
-    await pool.query('DELETE FROM checkout_requests WHERE customer_id = $1', [testCustomerId]);
-    await pool.query('DELETE FROM visits WHERE customer_id = $1', [testCustomerId]);
-    // Note: audit_log cleanup not needed - staff_id can be NULL and tests use mocked staff IDs
-    await pool.query('DELETE FROM rooms WHERE id = $1 OR number = $2', [testRoomId, 'TEST-101']);
-    await pool.query('DELETE FROM agreements WHERE id = $1', [testAgreementId]);
-    await pool.query('DELETE FROM customers WHERE id = $1 OR membership_number = $2', [testCustomerId, 'TEST-001']);
+    await truncateAllTables(pool.query.bind(pool));
+
+    await pool.query(
+      `INSERT INTO staff (id, name, role, pin_hash, active)
+       VALUES ($1, 'Test Staff', 'STAFF', 'test-hash', true)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role, active = EXCLUDED.active`,
+      [testStaffId]
+    );
 
     // Insert test customer with ON CONFLICT handling
     await pool.query(
@@ -306,7 +304,11 @@ describe('Agreement and Upgrade Flows', () => {
         [session.id]
       );
       expect(auditResult.rows.length).toBe(1);
-      const newValue = JSON.parse(auditResult.rows[0].new_value);
+      const rawNewValue = auditResult.rows[0].new_value as unknown;
+      const newValue =
+        typeof rawNewValue === 'string'
+          ? (JSON.parse(rawNewValue) as Record<string, unknown>)
+          : (rawNewValue as Record<string, unknown>);
       expect(newValue.action).toBe('JOIN_WAITLIST');
       expect(newValue.desiredRoomType).toBe('DOUBLE');
     }));
@@ -358,7 +360,11 @@ describe('Agreement and Upgrade Flows', () => {
         [session.id]
       );
       expect(auditResult.rows.length).toBe(1);
-      const newValue = JSON.parse(auditResult.rows[0].new_value);
+      const rawNewValue = auditResult.rows[0].new_value as unknown;
+      const newValue =
+        typeof rawNewValue === 'string'
+          ? (JSON.parse(rawNewValue) as Record<string, unknown>)
+          : (rawNewValue as Record<string, unknown>);
       expect(newValue.action).toBe('ACCEPT_UPGRADE');
 
       // Verify checkout_at did not change

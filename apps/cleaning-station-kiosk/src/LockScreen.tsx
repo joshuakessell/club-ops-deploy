@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import {
   isWebAuthnSupported,
   requestAuthenticationOptions,
@@ -8,6 +8,32 @@ import {
 } from './webauthn';
 
 const API_BASE = '/api';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const err = value['error'];
+  const msg = value['message'];
+  if (typeof err === 'string' && err.trim()) return err;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  return undefined;
+}
+
+function parseStaffSession(value: unknown): StaffSession | null {
+  if (!isRecord(value)) return null;
+  const staffId = value['staffId'];
+  const name = value['name'];
+  const role = value['role'];
+  const sessionToken = value['sessionToken'];
+  if (typeof staffId !== 'string') return null;
+  if (typeof name !== 'string') return null;
+  if (role !== 'STAFF' && role !== 'ADMIN') return null;
+  if (typeof sessionToken !== 'string') return null;
+  return { staffId, name, role, sessionToken };
+}
 
 export interface StaffSession {
   staffId: string;
@@ -78,7 +104,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
     }
   };
 
-  const handlePinSubmit = async (e: React.FormEvent) => {
+  const handlePinSubmit = async (e: FormEvent) => {
     e.preventDefault();
     
     if (!staffLookup.trim() || !pin.trim()) {
@@ -101,11 +127,15 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Login failed');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Login failed');
       }
 
-      const session: StaffSession = await response.json();
+      const payload: unknown = await response.json();
+      const session = parseStaffSession(payload);
+      if (!session) {
+        throw new Error('Invalid login response');
+      }
       onLogin(session);
       setPin('');
       setStaffLookup('');
@@ -171,7 +201,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             <button
               type="button"
               className="webauthn-button"
-              onClick={handleWebAuthnLogin}
+              onClick={() => void handleWebAuthnLogin()}
               disabled={isLoading || !staffLookup.trim()}
             >
               {isLoading ? 'Authenticating...' : 'Sign in with fingerprint'}
@@ -189,7 +219,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             </button>
           </div>
         ) : (
-          <form className="lock-screen-pin" onSubmit={handlePinSubmit}>
+          <form className="lock-screen-pin" onSubmit={(e) => void handlePinSubmit(e)}>
             <input
               type="text"
               className="staff-lookup-input"

@@ -199,7 +199,7 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
           if (isOverrideTransition) {
             await client.query(
               `INSERT INTO audit_log 
-               (user_id, user_role, action, entity_type, entity_id, previous_value, new_value, override_reason)
+               (user_id, user_role, action, entity_type, entity_id, old_value, new_value, override_reason)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
               [
                 body.staffId,
@@ -215,7 +215,7 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
           } else {
             await client.query(
               `INSERT INTO audit_log 
-               (user_id, user_role, action, entity_type, entity_id, previous_value, new_value)
+               (user_id, user_role, action, entity_type, entity_id, old_value, new_value)
                VALUES ($1, $2, $3, $4, $5, $6, $7)`,
               [
                 body.staffId,

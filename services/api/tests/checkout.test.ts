@@ -2,19 +2,37 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import Fastify, { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { checkoutRoutes } from '../src/routes/checkout.js';
+import { visitRoutes } from '../src/routes/visits.js';
 import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaster.js';
 import { RoomStatus } from '@club-ops/shared';
+import { truncateAllTables } from './testDb.js';
 
 // Mock auth middleware to allow test requests
 // For checkout tests, we'll validate real tokens when provided
 vi.mock('../src/auth/middleware.js', async () => {
   const { query } = await import('../src/db/index.js');
+  async function ensureDefaultStaff(): Promise<{ staffId: string; name: string; role: 'STAFF' | 'ADMIN' }> {
+    const existing = await query<{ id: string; name: string; role: 'STAFF' | 'ADMIN' }>(
+      `SELECT id, name, role FROM staff WHERE active = true ORDER BY created_at ASC LIMIT 1`
+    );
+    if (existing.rows.length > 0) {
+      return { staffId: existing.rows[0]!.id, name: existing.rows[0]!.name, role: existing.rows[0]!.role };
+    }
+    const created = await query<{ id: string; name: string; role: 'STAFF' | 'ADMIN' }>(
+      `INSERT INTO staff (name, role, pin_hash, active)
+       VALUES ('Test Staff', 'STAFF', 'test-hash', true)
+       RETURNING id, name, role`
+    );
+    const row = created.rows[0]!;
+    return { staffId: row.id, name: row.name, role: row.role };
+  }
   return {
     requireAuth: async (request: any, reply: any) => {
       const authHeader = request.headers.authorization || request.headers.Authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        // For tests without auth header, use default staff
-        request.staff = { staffId: 'test-staff', role: 'STAFF' };
+        // For tests without auth header, use a real staff row (uuid) to satisfy FK constraints.
+        const staff = await ensureDefaultStaff();
+        request.staff = { staffId: staff.staffId, name: staff.name, role: staff.role };
         return;
       }
       
@@ -43,16 +61,19 @@ vi.mock('../src/auth/middleware.js', async () => {
       }
       
       // Default for tests
-      request.staff = { staffId: 'test-staff', role: 'STAFF' };
+      const staff = await ensureDefaultStaff();
+      request.staff = { staffId: staff.staffId, name: staff.name, role: staff.role };
     },
     requireAdmin: async (_request: any, _reply: any) => {
       // No-op for tests
     },
     requireReauth: async (request: any, _reply: any) => {
-      request.staff = { staffId: 'test-staff', role: 'STAFF' };
+      const staff = await ensureDefaultStaff();
+      request.staff = { staffId: staff.staffId, name: staff.name, role: staff.role };
     },
     requireReauthForAdmin: async (request: any, _reply: any) => {
-      request.staff = { staffId: 'test-staff', role: 'ADMIN' };
+      const staff = await ensureDefaultStaff();
+      request.staff = { staffId: staff.staffId, name: staff.name, role: 'ADMIN' };
     },
   };
 });
@@ -87,6 +108,8 @@ describe('Checkout Flow', () => {
     };
 
     pool = new pg.Pool(config);
+
+    await truncateAllTables(pool.query.bind(pool));
 
     // Create test data - create customer instead of member
     const customerResult = await pool.query(
@@ -180,6 +203,7 @@ describe('Checkout Flow', () => {
     fastify.decorate('broadcaster', broadcaster);
     // Register routes (auth is mocked via vi.mock)
     await fastify.register(checkoutRoutes);
+    await fastify.register(visitRoutes);
     await fastify.ready();
   });
 

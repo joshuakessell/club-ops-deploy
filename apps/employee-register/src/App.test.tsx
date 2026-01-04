@@ -31,10 +31,10 @@ describe('App', () => {
       }),
     };
     Object.defineProperty(window, 'localStorage', { value: storage, writable: true });
-    (globalThis as any).localStorage = storage;
+    Object.defineProperty(globalThis, 'localStorage', { value: storage, writable: true });
     localStorage.clear();
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
-      json: async () => ({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+      json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
     });
   });
 
@@ -54,22 +54,29 @@ describe('App', () => {
       role: 'STAFF',
     }));
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: any) => {
-      const u = String(url);
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
       if (u.includes('/v1/registers/status')) {
-        return {
+        return Promise.resolve({
           ok: true,
-          json: async () => ({
+          json: () => Promise.resolve({
             signedIn: true,
             employee: { id: 'emp-1', name: 'Test Employee' },
             registerNumber: 1,
           }),
-        } as any;
+        } as unknown as Response);
       }
       if (u.includes('/health')) {
-        return { ok: true, json: async () => ({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as any;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as unknown as Response);
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
     
     render(<App />);
@@ -84,22 +91,29 @@ describe('App', () => {
       role: 'STAFF',
     }));
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: any) => {
-      const u = String(url);
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
       if (u.includes('/v1/registers/status')) {
-        return {
+        return Promise.resolve({
           ok: true,
-          json: async () => ({
+          json: () => Promise.resolve({
             signedIn: true,
             employee: { id: 'emp-1', name: 'Test Employee' },
             registerNumber: 1,
           }),
-        } as any;
+        } as unknown as Response);
       }
       if (u.includes('/health')) {
-        return { ok: true, json: async () => ({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as any;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as unknown as Response);
       }
-      return { ok: true, json: async () => ({}) } as any;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
     
     render(<App />);

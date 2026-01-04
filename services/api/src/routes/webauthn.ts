@@ -6,6 +6,7 @@ import {
   generateAuthenticationOptions,
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
+import type { AuthenticatorTransportFuture } from '@simplewebauthn/types';
 import { query } from '../db/index.js';
 import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware.js';
 import { generateSessionToken, getSessionExpiry } from '../auth/utils.js';
@@ -218,7 +219,7 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
         Buffer.from(verification.registrationInfo!.credentialPublicKey),
         verification.registrationInfo!.counter,
         // Transports are optional and may not be present depending on client/browser.
-        body.credentialResponse?.response?.transports as string[] | undefined
+        body.credentialResponse?.response?.transports as unknown as AuthenticatorTransportFuture[] | undefined
       );
 
       // Log audit action
@@ -272,7 +273,7 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       // Find staff by ID or name (must be active)
       const staffResult = await query<{ id: string; name: string; active: boolean }>(
         `SELECT id, name, active FROM staff 
-         WHERE (id = $1 OR name ILIKE $1)
+         WHERE (id::text = $1 OR name ILIKE $1)
          AND active = true
          LIMIT 1`,
         [body.staffLookup]
@@ -582,8 +583,8 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       const { credentialId } = request.params;
 
       // Get credential info before revoking
-      const credentialResult = await query<{ staff_id: string }>(
-        `SELECT staff_id FROM staff_webauthn_credentials WHERE credential_id = $1`,
+      const credentialResult = await query<{ id: string; staff_id: string }>(
+        `SELECT id, staff_id FROM staff_webauthn_credentials WHERE credential_id = $1`,
         [credentialId]
       );
 
@@ -606,7 +607,7 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       await query(
         `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
          VALUES ($1, 'STAFF_WEBAUTHN_REVOKED', 'staff_webauthn_credential', $2)`,
-        [staff.staffId, credentialId]
+        [staff.staffId, credentialResult.rows[0]!.id]
       );
 
       return reply.send({ success: true });

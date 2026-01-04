@@ -1,5 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
-import { RoomStatus, RoomType } from '@club-ops/shared';
+import { RoomStatus } from '@club-ops/shared';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  const data: unknown = await response.json();
+  return data as T;
+}
 
 function getMsUntil(iso: string | undefined, nowMs: number): number | null {
   if (!iso) return null;
@@ -159,11 +168,11 @@ function sortGroupedRooms(grouped: GroupedRoom[]): GroupedRoom[] {
 
 export function InventorySelector({
   customerSelectedType,
-  waitlistDesiredTier,
+  waitlistDesiredTier: _waitlistDesiredTier,
   waitlistBackupType,
   onSelect,
   selectedItem,
-  sessionId,
+  sessionId: _sessionId,
   lane,
   sessionToken,
 }: InventorySelectorProps) {
@@ -173,7 +182,7 @@ export function InventorySelector({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [waitlistEntries, setWaitlistEntries] = useState<Array<{ desiredTier: string; status: string }>>([]);
+  const waitlistEntries: Array<{ desiredTier: string; status: string }> = useMemo(() => [], []);
 
   const API_BASE = '/api';
 
@@ -196,11 +205,13 @@ export function InventorySelector({
 
     ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data);
-        if (message.type === 'ROOM_STATUS_CHANGED' || 
-            message.type === 'INVENTORY_UPDATED' || 
-            message.type === 'ROOM_ASSIGNED' || 
-            message.type === 'ROOM_RELEASED') {
+        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
+        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+        const t = parsed.type;
+        if (t === 'ROOM_STATUS_CHANGED' || 
+            t === 'INVENTORY_UPDATED' || 
+            t === 'ROOM_ASSIGNED' || 
+            t === 'ROOM_RELEASED') {
           // Trigger refresh
           setRefreshTrigger(prev => prev + 1);
         }
@@ -238,7 +249,7 @@ export function InventorySelector({
           throw new Error('Failed to fetch inventory');
         }
 
-        const data = await response.json();
+        const data = await readJson<{ rooms?: unknown[]; lockers?: unknown[] }>(response);
         if (mounted) {
           // Transform detailed inventory response
           // Map room tier from type field using getRoomTier function
@@ -249,29 +260,35 @@ export function InventorySelector({
             return 'STANDARD';
           };
 
-          const rooms: DetailedRoom[] = (data.rooms || []).map((room: any) => ({
-            id: room.id,
-            number: room.number,
-            tier: getRoomTier(room.number), // Compute tier from room number
-            status: room.status as RoomStatus,
-            floor: room.floor || 1,
-            lastStatusChange: room.lastStatusChange || new Date().toISOString(),
-            assignedTo: room.assignedTo,
-            assignedMemberName: room.assignedMemberName,
-            overrideFlag: room.overrideFlag || false,
-            checkinAt: room.checkinAt,
-            checkoutAt: room.checkoutAt,
-          }));
+          const rooms: DetailedRoom[] = (Array.isArray(data.rooms) ? data.rooms : [])
+            .filter(isRecord)
+            .filter((room) => typeof room.id === 'string' && typeof room.number === 'string' && typeof room.status === 'string')
+            .map((room) => ({
+              id: room.id as string,
+              number: room.number as string,
+              tier: getRoomTier(room.number as string), // Compute tier from room number
+              status: room.status as RoomStatus,
+              floor: typeof room.floor === 'number' ? room.floor : 1,
+              lastStatusChange: typeof room.lastStatusChange === 'string' ? room.lastStatusChange : new Date().toISOString(),
+              assignedTo: typeof room.assignedTo === 'string' ? room.assignedTo : undefined,
+              assignedMemberName: typeof room.assignedMemberName === 'string' ? room.assignedMemberName : undefined,
+              overrideFlag: typeof room.overrideFlag === 'boolean' ? room.overrideFlag : false,
+              checkinAt: typeof room.checkinAt === 'string' ? room.checkinAt : undefined,
+              checkoutAt: typeof room.checkoutAt === 'string' ? room.checkoutAt : undefined,
+            }));
           
-          const lockers: DetailedLocker[] = (data.lockers || []).map((locker: any) => ({
-            id: locker.id,
-            number: locker.number,
-            status: locker.status as RoomStatus,
-            assignedTo: locker.assignedTo,
-            assignedMemberName: locker.assignedMemberName,
-            checkinAt: locker.checkinAt,
-            checkoutAt: locker.checkoutAt,
-          }));
+          const lockers: DetailedLocker[] = (Array.isArray(data.lockers) ? data.lockers : [])
+            .filter(isRecord)
+            .filter((locker) => typeof locker.id === 'string' && typeof locker.number === 'string' && typeof locker.status === 'string')
+            .map((locker) => ({
+              id: locker.id as string,
+              number: locker.number as string,
+              status: locker.status as RoomStatus,
+              assignedTo: typeof locker.assignedTo === 'string' ? locker.assignedTo : undefined,
+              assignedMemberName: typeof locker.assignedMemberName === 'string' ? locker.assignedMemberName : undefined,
+              checkinAt: typeof locker.checkinAt === 'string' ? locker.checkinAt : undefined,
+              checkoutAt: typeof locker.checkoutAt === 'string' ? locker.checkoutAt : undefined,
+            }));
           
           setInventory({ rooms, lockers });
           setError(null);
@@ -287,7 +304,7 @@ export function InventorySelector({
       }
     }
 
-    fetchInventory();
+    void fetchInventory();
 
     return () => {
       mounted = false;
@@ -518,6 +535,7 @@ function InventorySection({
                   isSelected={selectedItem?.type === 'room' && selectedItem.id === room.id}
                   onClick={() => onSelectRoom(room)}
                   isWaitlistMatch={isWaitlistMatch}
+                  nowMs={nowMs}
                 />
               ))}
             </div>

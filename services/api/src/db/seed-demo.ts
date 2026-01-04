@@ -124,14 +124,6 @@ export async function seedDemoData(): Promise<void> {
 
       // Seed timeclock sessions for past days only
       if (dayOffset < 0) {
-        // Most sessions match shifts (realistic compliance)
-        const scenarios = [
-          { type: 'normal', probability: 0.7 },
-          { type: 'late', probability: 0.15 },
-          { type: 'early', probability: 0.1 },
-          { type: 'missing', probability: 0.05 },
-        ];
-
         // Shift A timeclock
         const scenarioA = Math.random();
         if (scenarioA < 0.95) { // 95% show up

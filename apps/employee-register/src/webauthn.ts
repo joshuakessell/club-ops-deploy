@@ -4,6 +4,19 @@
 
 const API_BASE = '/api';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const err = value['error'];
+  const msg = value['message'];
+  if (typeof err === 'string' && err.trim()) return err;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  return undefined;
+}
+
 export interface RegistrationOptions {
   rp: { name: string; id: string };
   user: { id: string; name: string; displayName: string };
@@ -40,11 +53,12 @@ export async function requestRegistrationOptions(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to get registration options');
+    const errorPayload: unknown = await response.json().catch(() => null);
+    throw new Error(getErrorMessage(errorPayload) || 'Failed to get registration options');
   }
 
-  return response.json();
+  const data: unknown = await response.json();
+  return data as RegistrationOptions;
 }
 
 /**
@@ -134,11 +148,12 @@ export async function requestAuthenticationOptions(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Failed to get authentication options');
+    const errorPayload: unknown = await response.json().catch(() => null);
+    throw new Error(getErrorMessage(errorPayload) || 'Failed to get authentication options');
   }
 
-  return response.json();
+  const data: unknown = await response.json();
+  return data as AuthenticationOptions;
 }
 
 /**
@@ -223,11 +238,12 @@ export async function verifyRegistration(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Registration verification failed');
+    const errorPayload: unknown = await response.json().catch(() => null);
+    throw new Error(getErrorMessage(errorPayload) || 'Registration verification failed');
   }
 
-  return response.json();
+  const data: unknown = await response.json();
+  return data as { verified: boolean; credentialId: string };
 }
 
 /**
@@ -250,11 +266,18 @@ export async function verifyAuthentication(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || 'Authentication verification failed');
+    const errorPayload: unknown = await response.json().catch(() => null);
+    throw new Error(getErrorMessage(errorPayload) || 'Authentication verification failed');
   }
 
-  return response.json();
+  const data: unknown = await response.json();
+  return data as {
+    verified: boolean;
+    staffId: string;
+    name: string;
+    role: string;
+    sessionToken: string;
+  };
 }
 
 /**

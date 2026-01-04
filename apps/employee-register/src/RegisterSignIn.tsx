@@ -4,6 +4,15 @@ import type { WebSocketEvent, RegisterSessionUpdatedPayload } from '@club-ops/sh
 
 const API_BASE = '/api';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  const data: unknown = await response.json();
+  return data as T;
+}
+
 interface RegisterSession {
   employeeId: string;
   employeeName: string;
@@ -25,12 +34,9 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   
-  // Derive lane from register number
-  const lane = registerSession ? `lane-${registerSession.registerNumber}` : null;
-
   // Check for existing register session on mount
   useEffect(() => {
-    checkRegisterStatus();
+    void checkRegisterStatus();
   }, []);
 
   // Set up WebSocket subscription for register session updates
@@ -49,7 +55,9 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
 
     ws.onmessage = (event) => {
       try {
-        const message: WebSocketEvent = JSON.parse(event.data);
+        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
+        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+        const message = parsed as unknown as WebSocketEvent;
         if (message.type === 'REGISTER_SESSION_UPDATED') {
           const payload = message.payload as RegisterSessionUpdatedPayload;
           // If this event targets our device and session is no longer active, sign out
@@ -73,8 +81,12 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
       const response = await fetch(`${API_BASE}/v1/registers/status?deviceId=${encodeURIComponent(deviceId)}`);
       if (!response.ok) return false;
       
-      const data = await response.json();
-      if (data.signedIn) {
+      const data = await readJson<{
+        signedIn?: boolean;
+        employee?: { id?: string; name?: string };
+        registerNumber?: number;
+      }>(response);
+      if (data.signedIn && data.employee && typeof data.employee.id === 'string' && typeof data.employee.name === 'string' && typeof data.registerNumber === 'number') {
         setRegisterSession({
           employeeId: data.employee.id,
           employeeName: data.employee.name,
@@ -126,7 +138,8 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     }
 
     // Send heartbeat every 60 seconds (90 second TTL on server)
-    const interval = setInterval(async () => {
+    const interval = setInterval(() => {
+      void (async () => {
       try {
         const response = await fetch(`${API_BASE}/v1/registers/heartbeat`, {
           method: 'POST',
@@ -135,9 +148,9 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
         });
 
         if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
+          const errorPayload: unknown = await response.json().catch(() => null);
           // If 404 or DEVICE_DISABLED, session is invalid
-          if (response.status === 404 || error.code === 'DEVICE_DISABLED') {
+          if (response.status === 404 || (isRecord(errorPayload) && errorPayload.code === 'DEVICE_DISABLED')) {
             handleSessionInvalidated();
             return;
           }
@@ -152,6 +165,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
           handleSessionInvalidated();
         }
       }
+      })();
     }, 60000);
 
     setHeartbeatInterval(interval);
@@ -172,7 +186,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
         });
 
         if (response.ok) {
-          const staffSession = await response.json();
+          const staffSession = await readJson<Record<string, unknown>>(response);
           // Store staff session for API authentication
           localStorage.setItem('staff_session', JSON.stringify(staffSession));
         }
@@ -184,6 +198,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
 
     // Remove PIN from session before storing
     const { pin, ...sessionWithoutPin } = session;
+    void pin;
     setRegisterSession(sessionWithoutPin);
     startHeartbeat();
     onSignedIn(sessionWithoutPin);
@@ -194,12 +209,14 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
       // Get session token from localStorage (from staff session)
       const stored = localStorage.getItem('staff_session');
       if (stored) {
-        const staffSession = JSON.parse(stored);
+        const parsed: unknown = JSON.parse(stored) as unknown;
+        const token = isRecord(parsed) && typeof parsed.sessionToken === 'string' ? parsed.sessionToken : null;
+        if (!token) return;
         await fetch(`${API_BASE}/v1/registers/signout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${staffSession.sessionToken}`,
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({ deviceId }),
         });
@@ -236,7 +253,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
         <SignInModal
           isOpen={showSignInModal}
           onClose={() => setShowSignInModal(false)}
-          onSignIn={handleSignIn}
+          onSignIn={(s) => void handleSignIn(s)}
           deviceId={deviceId}
         />
       </div>
@@ -266,7 +283,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
       <div className={`register-menu ${menuOpen ? 'open' : ''}`}>
         <button
           className="register-menu-item"
-          onClick={handleSignOut}
+          onClick={() => void handleSignOut()}
         >
           Sign Out
         </button>

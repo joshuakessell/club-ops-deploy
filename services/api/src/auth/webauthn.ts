@@ -1,7 +1,12 @@
-import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse, type GenerateRegistrationOptionsOpts, type GenerateAuthenticationOptionsOpts, type VerifyRegistrationResponseOpts, type VerifyAuthenticationResponseOpts, type AuthenticatorDevice } from '@simplewebauthn/server';
-import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequestOptionsJSON, RegistrationResponseJSON, AuthenticationResponseJSON } from '@simplewebauthn/server/script/deps';
-import { query, transaction } from '../db/index.js';
+import { query } from '../db/index.js';
 import crypto from 'crypto';
+import type { AuthenticatorDevice, AuthenticatorTransportFuture } from '@simplewebauthn/types';
+
+function parseTransports(value: string[] | null): AuthenticatorTransportFuture[] | undefined {
+  if (!value || value.length === 0) return undefined;
+  // These values originate from browser APIs; we store them as text and rehydrate for SimpleWebAuthn.
+  return value as unknown as AuthenticatorTransportFuture[];
+}
 
 /**
  * Get the Relying Party (RP) ID from environment or default to localhost for dev.
@@ -120,9 +125,9 @@ export async function getStaffCredentials(staffId: string): Promise<Authenticato
 
   return result.rows.map((row) => ({
     credentialID: Buffer.from(row.credential_id, 'base64url'),
-    publicKey: Buffer.from(row.public_key, 'base64'),
+    credentialPublicKey: Buffer.from(row.public_key, 'base64'),
     counter: Number(row.sign_count),
-    transports: (row.transports as string[]) || undefined,
+    transports: parseTransports(row.transports),
   }));
 }
 
@@ -158,9 +163,9 @@ export async function getCredentialByCredentialId(
     staffId: row.staff_id,
     credential: {
       credentialID: Buffer.from(credentialId, 'base64url'),
-      publicKey: Buffer.from(row.public_key, 'base64'),
+      credentialPublicKey: Buffer.from(row.public_key, 'base64'),
       counter: Number(row.sign_count),
-      transports: (row.transports as string[]) || undefined,
+        transports: parseTransports(row.transports),
     },
   };
 }
@@ -174,7 +179,7 @@ export async function storeCredential(
   credentialId: string,
   publicKey: Buffer,
   signCount: number,
-  transports?: string[]
+  transports?: AuthenticatorTransportFuture[]
 ): Promise<void> {
   await query(
     `INSERT INTO staff_webauthn_credentials 

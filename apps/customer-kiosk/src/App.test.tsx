@@ -4,7 +4,14 @@ import App from './App';
 
 // Mock fetch and WebSocket
 global.fetch = vi.fn();
-let lastWs: any = null;
+type MockWebSocket = {
+  onopen: ((ev: Event) => unknown) | null;
+  onclose: ((ev: CloseEvent) => unknown) | null;
+  onmessage: ((ev: { data: string }) => unknown) | null;
+  close: ReturnType<typeof vi.fn>;
+  send: ReturnType<typeof vi.fn>;
+};
+let lastWs: MockWebSocket | null = null;
 global.WebSocket = vi.fn(() => {
   lastWs = {
     onopen: null,
@@ -27,16 +34,25 @@ describe('App', () => {
     };
     Object.defineProperty(window, 'localStorage', { value: storage, writable: true });
     // Some environments expose localStorage only on window; App reads the global name.
-    (globalThis as any).localStorage = storage;
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(async (url: any) => {
-      const u = String(url);
+    Object.defineProperty(globalThis, 'localStorage', { value: storage, writable: true });
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
       if (u.includes('/health')) {
-        return { json: async () => ({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as any;
+        return Promise.resolve({
+          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+        } as unknown as Response);
       }
       if (u.includes('/v1/inventory/available')) {
-        return { json: async () => ({ rooms: {}, lockers: 0 }) } as any;
+        return Promise.resolve({ json: () => Promise.resolve({ rooms: {}, lockers: 0 }) } as unknown as Response);
       }
-      return { json: async () => ({}) } as any;
+      return Promise.resolve({ json: () => Promise.resolve({}) } as unknown as Response);
     });
   });
 

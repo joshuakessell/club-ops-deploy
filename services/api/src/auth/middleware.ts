@@ -133,7 +133,11 @@ export async function requireReauth(
     return;
   }
 
-  const authHeader = request.headers.authorization;
+  const authHeader =
+    request.headers.authorization ??
+    // Defensive: some test/inject clients may pass non-normalized header keys
+    ((request.headers as Record<string, unknown>)['Authorization'] as string | undefined) ??
+    ((request.headers as Record<string, unknown>)['AUTHORIZATION'] as string | undefined);
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     reply.status(401).send({
       error: 'Unauthorized',
@@ -163,10 +167,20 @@ export async function requireReauth(
     }
 
     const reauthOkUntil = sessionResult.rows[0]!.reauth_ok_until;
-    if (!reauthOkUntil || new Date(reauthOkUntil) < new Date()) {
+    if (!reauthOkUntil) {
       reply.status(403).send({
         error: 'Re-authentication required',
+        code: 'REAUTH_REQUIRED',
         message: 'This action requires recent re-authentication',
+      });
+      return;
+    }
+
+    if (new Date(reauthOkUntil) < new Date()) {
+      reply.status(403).send({
+        error: 'Re-authentication required',
+        code: 'REAUTH_EXPIRED',
+        message: 'Re-authentication expired; please re-authenticate',
       });
       return;
     }
@@ -188,7 +202,13 @@ export async function requireReauthForAdmin(
   request: FastifyRequest,
   reply: FastifyReply
 ): Promise<void> {
-  // First check admin role
+  // First require authentication (attaches request.staff)
+  await requireAuth(request, reply);
+  if (reply.statusCode >= 400) {
+    return;
+  }
+
+  // Then check admin role
   await requireAdmin(request, reply);
   if (reply.statusCode >= 400) {
     return;

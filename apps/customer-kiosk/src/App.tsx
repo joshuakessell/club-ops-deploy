@@ -12,6 +12,19 @@ import type {
 import logoImage from './assets/the-clubs-logo.png';
 import { t, type Language } from './i18n';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const err = value['error'];
+  const msg = value['message'];
+  if (typeof err === 'string' && err.trim()) return err;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  return undefined;
+}
+
 interface HealthStatus {
   status: string;
   timestamp: string;
@@ -66,8 +79,8 @@ function getRentalDisplayName(rental: string, lang: Language | null | undefined)
 }
 
 function App() {
-  const [_health, setHealth] = useState<HealthStatus | null>(null);
-  const [_wsConnected, setWsConnected] = useState(false);
+  const [, setHealth] = useState<HealthStatus | null>(null);
+  const [, setWsConnected] = useState(false);
   const [session, setSession] = useState<SessionState>({
     sessionId: null,
     customerName: null,
@@ -98,7 +111,7 @@ function App() {
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
   const [selectionAcknowledged, setSelectionAcknowledged] = useState(false);
-  const [_upgradeDisclaimerAcknowledged, setUpgradeDisclaimerAcknowledged] = useState(false);
+  const [, setUpgradeDisclaimerAcknowledged] = useState(false);
   const [hasScrolledAgreement, setHasScrolledAgreement] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const agreementScrollRef = useRef<HTMLDivElement>(null);
@@ -106,7 +119,12 @@ function App() {
   const idleTimeoutRef = useRef<number | null>(null);
   const welcomeOverlayTimeoutRef = useRef<number | null>(null);
   const lastWelcomeSessionIdRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
   const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
+
+  useEffect(() => {
+    sessionIdRef.current = session.sessionId;
+  }, [session.sessionId]);
 
   // Get lane from URL query param or localStorage, default to 'lane-1'
   const lane = (() => {
@@ -120,14 +138,25 @@ function App() {
     // Check API health
     fetch(`${API_BASE}/health`)
       .then((res) => res.json())
-      .then((data: HealthStatus) => setHealth(data))
+      .then((data: unknown) => {
+        if (
+          isRecord(data) &&
+          typeof data.status === 'string' &&
+          typeof data.timestamp === 'string' &&
+          typeof data.uptime === 'number'
+        ) {
+          setHealth({ status: data.status, timestamp: data.timestamp, uptime: data.uptime });
+        }
+      })
       .catch(console.error);
 
     // Fetch initial inventory
     fetch(`${API_BASE}/v1/inventory/available`)
       .then((res) => res.json())
-      .then((data: { rooms: Record<string, number>; lockers: number }) => {
-        setInventory(data);
+      .then((data: unknown) => {
+        if (isRecord(data) && isRecord(data.rooms) && typeof data.lockers === 'number') {
+          setInventory({ rooms: data.rooms as Record<string, number>, lockers: data.lockers });
+        }
       })
       .catch(console.error);
 
@@ -161,7 +190,9 @@ function App() {
 
     ws.onmessage = (event) => {
       try {
-        const message: WebSocketEvent = JSON.parse(event.data);
+        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
+        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+        const message = parsed as unknown as WebSocketEvent;
         console.log('WebSocket message:', message);
 
         if (message.type === 'SESSION_UPDATED') {
@@ -273,13 +304,13 @@ function App() {
           }
         } else if (message.type === 'SELECTION_PROPOSED') {
           const payload = message.payload as SelectionProposedPayload;
-          if (payload.sessionId === session.sessionId) {
+          if (payload.sessionId === sessionIdRef.current) {
             setProposedRentalType(payload.rentalType);
             setProposedBy(payload.proposedBy);
           }
         } else if (message.type === 'SELECTION_LOCKED') {
           const payload = message.payload as SelectionLockedPayload;
-          if (payload.sessionId === session.sessionId) {
+          if (payload.sessionId === sessionIdRef.current) {
             setSelectionConfirmed(true);
             setSelectionConfirmedBy(payload.confirmedBy);
             setSelectedRental(payload.rentalType);
@@ -292,7 +323,7 @@ function App() {
           }
         } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
           const payload = message.payload as SelectionAcknowledgedPayload;
-          if (payload.sessionId === session.sessionId) {
+          if (payload.sessionId === sessionIdRef.current) {
             setSelectionAcknowledged(true);
           }
         } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
@@ -412,10 +443,12 @@ function App() {
       try {
         const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/waitlist-info?desiredTier=${rental}&currentTier=${selectedRental || 'LOCKER'}`);
         if (response.ok) {
-          const data = await response.json();
-          setWaitlistPosition(data.position);
-          setWaitlistETA(data.estimatedReadyAt);
-          setWaitlistUpgradeFee(data.upgradeFee);
+          const data: unknown = await response.json();
+          if (isRecord(data)) {
+            setWaitlistPosition(typeof data.position === 'number' ? data.position : null);
+            setWaitlistETA(typeof data.estimatedReadyAt === 'string' ? data.estimatedReadyAt : null);
+            setWaitlistUpgradeFee(typeof data.upgradeFee === 'number' ? data.upgradeFee : null);
+          }
         }
       } catch (error) {
         console.error('Failed to fetch waitlist info:', error);
@@ -440,11 +473,11 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to propose selection');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to propose selection');
       }
 
-      await response.json();
+      await response.json().catch(() => null);
       setProposedRentalType(rental);
       setProposedBy('CUSTOMER');
       setIsSubmitting(false);
@@ -473,8 +506,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to confirm selection');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
       }
 
       setSelectedRental(proposedRentalType);
@@ -515,8 +548,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to acknowledge selection');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to acknowledge selection');
       }
 
       setSelectionAcknowledged(true);
@@ -556,8 +589,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to process waitlist selection');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to process waitlist selection');
       }
 
       setUpgradeDisclaimerAcknowledged(true);
@@ -574,7 +607,7 @@ function App() {
     }
   };
 
-  const handleWaitlistBackupSelection = async (rental: string) => {
+  const handleWaitlistBackupSelection = (rental: string) => {
     if (!session.sessionId || !waitlistDesiredType) {
       return;
     }
@@ -689,8 +722,8 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to sign agreement');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to sign agreement');
       }
 
       // Wait for SESSION_UPDATED event with assignment to show complete view
@@ -720,14 +753,38 @@ function App() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to set language');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to set language');
       }
 
       // Language will be updated via SESSION_UPDATED WebSocket event
     } catch (error) {
       console.error('Failed to set language:', error);
       alert(error instanceof Error ? error.message : 'Failed to set language. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCustomerConfirmSelection = async (confirmed: boolean) => {
+    if (!customerConfirmationData?.sessionId) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/customer-confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: customerConfirmationData.sessionId,
+          confirmed,
+        }),
+      });
+      if (response.ok) {
+        setShowCustomerConfirmation(false);
+        setCustomerConfirmationData(null);
+      }
+    } catch (error) {
+      console.error('Failed to confirm selection:', error);
+      alert('Failed to confirm selection. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -769,14 +826,14 @@ function App() {
             <div className="language-options">
               <button
                 className="language-option"
-                onClick={() => handleLanguageSelection('EN')}
+                onClick={() => void handleLanguageSelection('EN')}
                 disabled={isSubmitting}
               >
                 {t(null, 'english')}
               </button>
               <button
                 className="language-option"
-                onClick={() => handleLanguageSelection('ES')}
+                onClick={() => void handleLanguageSelection('ES')}
                 disabled={isSubmitting}
               >
                 {t(null, 'spanish')}
@@ -895,7 +952,7 @@ function App() {
 
               <button
                 className="submit-agreement-btn"
-                onClick={handleSubmitAgreement}
+                onClick={() => void handleSubmitAgreement()}
                 disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
               >
                 {isSubmitting ? t(session.customerPrimaryLanguage, 'submitting') : t(session.customerPrimaryLanguage, 'submit')}
@@ -979,7 +1036,7 @@ function App() {
             </div>
             {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
               <button
-                onClick={handleConfirmSelection}
+                onClick={() => void handleConfirmSelection()}
                 disabled={isSubmitting || session.pastDueBlocked}
                 style={{
                   padding: '0.5rem 1rem',
@@ -998,7 +1055,7 @@ function App() {
               <div>
                 <p style={{ marginBottom: '0.5rem' }}>{t(session.customerPrimaryLanguage, 'staffHasLocked')}</p>
                 <button
-                  onClick={handleAcknowledgeSelection}
+                  onClick={() => void handleAcknowledgeSelection()}
                   disabled={isSubmitting}
                   style={{
                     padding: '0.5rem 1rem',
@@ -1031,7 +1088,11 @@ function App() {
                 <div key={rental}>
                   <div
                     className="package-option"
-                    onClick={() => !isDisabled && handleRentalSelection(rental)}
+                    onClick={() => {
+                      if (!isDisabled) {
+                        void handleRentalSelection(rental);
+                      }
+                    }}
                     style={{ 
                       opacity: isDisabled ? 0.5 : 1, 
                       cursor: isDisabled ? 'not-allowed' : 'pointer' 
@@ -1099,7 +1160,7 @@ function App() {
             </div>
             <button
               className="modal-ok-btn"
-              onClick={handleDisclaimerAcknowledge}
+              onClick={() => void handleDisclaimerAcknowledge()}
               disabled={isSubmitting}
             >
               OK
@@ -1121,25 +1182,7 @@ function App() {
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
               <button
                 className="modal-ok-btn"
-                onClick={async () => {
-                  try {
-                    const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/customer-confirm`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        sessionId: customerConfirmationData.sessionId,
-                        confirmed: true,
-                      }),
-                    });
-                    if (response.ok) {
-                      setShowCustomerConfirmation(false);
-                      setCustomerConfirmationData(null);
-                    }
-                  } catch (error) {
-                    console.error('Failed to confirm:', error);
-                    alert('Failed to confirm selection. Please try again.');
-                  }
-                }}
+                onClick={() => void handleCustomerConfirmSelection(true)}
                 disabled={isSubmitting}
               >
                 Accept
@@ -1147,25 +1190,7 @@ function App() {
               <button
                 className="modal-ok-btn"
                 style={{ backgroundColor: '#ef4444' }}
-                onClick={async () => {
-                  try {
-                    const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/customer-confirm`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        sessionId: customerConfirmationData.sessionId,
-                        confirmed: false,
-                      }),
-                    });
-                    if (response.ok) {
-                      setShowCustomerConfirmation(false);
-                      setCustomerConfirmationData(null);
-                    }
-                  } catch (error) {
-                    console.error('Failed to decline:', error);
-                    alert('Failed to decline selection. Please try again.');
-                  }
-                }}
+                onClick={() => void handleCustomerConfirmSelection(false)}
                 disabled={isSubmitting}
               >
                 Decline

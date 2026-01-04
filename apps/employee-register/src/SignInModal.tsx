@@ -2,6 +2,24 @@ import { useState, useEffect } from 'react';
 
 const API_BASE = '/api';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getErrorMessage(value: unknown): string | undefined {
+  if (!isRecord(value)) return undefined;
+  const msg = value['message'];
+  const err = value['error'];
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  if (typeof err === 'string' && err.trim()) return err;
+  return undefined;
+}
+
+async function readJson<T>(response: Response): Promise<T> {
+  const data: unknown = await response.json();
+  return data as T;
+}
+
 interface Employee {
   id: string;
   name: string;
@@ -48,7 +66,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
   // Fetch available employees on open
   useEffect(() => {
     if (isOpen && step === 'select-employee') {
-      fetchAvailableEmployees();
+      void fetchAvailableEmployees();
     }
   }, [isOpen, step]);
 
@@ -56,8 +74,12 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     try {
       const response = await fetch(`${API_BASE}/v1/employees/available`);
       if (!response.ok) throw new Error('Failed to fetch employees');
-      const data = await response.json();
-      setEmployees(data.employees || []);
+      const data = await readJson<{ employees?: unknown[] }>(response);
+      const employees = (Array.isArray(data.employees) ? data.employees : [])
+        .filter(isRecord)
+        .filter((e) => typeof e.id === 'string' && typeof e.name === 'string' && typeof e.role === 'string')
+        .map((e) => ({ id: e.id as string, name: e.name as string, role: e.role as string }));
+      setEmployees(employees);
     } catch (error) {
       console.error('Failed to fetch employees:', error);
       setError('Failed to load employees');
@@ -68,8 +90,8 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     try {
       const response = await fetch(`${API_BASE}/v1/registers/availability`);
       if (!response.ok) throw new Error('Failed to fetch register availability');
-      const data = await response.json();
-      setRegisters(data.registers || []);
+      const data = await readJson<{ registers?: unknown[] }>(response);
+      setRegisters((Array.isArray(data.registers) ? data.registers : []) as RegisterAvailability[]);
     } catch (err) {
       console.error('Failed to fetch register availability:', err);
       setError('Failed to load register availability');
@@ -105,14 +127,14 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        if (errorData.message === 'Wrong PIN') {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        if (getErrorMessage(errorPayload) === 'Wrong PIN') {
           setPinError(true);
           setPin('');
           // Shake animation will be handled by CSS
           return;
         }
-        throw new Error(errorData.message || 'PIN verification failed');
+        throw new Error(getErrorMessage(errorPayload) || 'PIN verification failed');
       }
 
       // PIN verified, allow user to choose a register
@@ -144,13 +166,13 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to assign register');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to assign register');
       }
 
-      const data = await response.json();
+      const data = await readJson<{ registerNumber?: number }>(response);
 
-      if (data.registerNumber) setRegisterNumber(data.registerNumber);
+      if (typeof data.registerNumber === 'number') setRegisterNumber(data.registerNumber);
       setStep('confirm');
     } catch (error) {
       console.error('Register assignment error:', error);
@@ -184,11 +206,11 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to confirm register assignment');
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm register assignment');
       }
 
-      const data = await response.json();
+      await response.json().catch(() => null);
 
       // Sign in complete - pass PIN for staff session creation
       onSignIn({
@@ -268,7 +290,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
             <p className="sign-in-subtitle">Employee: {selectedEmployee.name}</p>
             {pinError && <div className="sign-in-error shake">Wrong PIN</div>}
             {error && <div className="sign-in-error">{error}</div>}
-            <form onSubmit={handlePinSubmit}>
+            <form onSubmit={(e) => void handlePinSubmit(e)}>
               <input
                 type="password"
                 className={`pin-input ${pinError ? 'shake' : ''}`}
@@ -313,7 +335,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                     <button
                       key={num}
                       className="register-button"
-                      onClick={() => handleSelectRegister(num)}
+                      onClick={() => void handleSelectRegister(num)}
                       disabled={isLoading || occupied}
                       title={occupied ? `Register ${num} is occupied` : `Use Register ${num}`}
                     >
@@ -329,7 +351,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
               </button>
               <button
                 type="button"
-                onClick={fetchRegisterAvailability}
+                onClick={() => void fetchRegisterAvailability()}
                 disabled={isLoading}
               >
                 Refresh
@@ -347,7 +369,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
               <button onClick={handleBack} disabled={isLoading}>
                 Back
               </button>
-              <button onClick={handleConfirm} disabled={isLoading}>
+              <button onClick={() => void handleConfirm()} disabled={isLoading}>
                 {isLoading ? 'Confirming...' : 'Confirm'}
               </button>
             </div>

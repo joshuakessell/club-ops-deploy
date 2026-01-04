@@ -176,7 +176,7 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
           }
         };
 
-        decodeContinuously();
+        void decodeContinuously();
       } catch (err) {
         console.error('Camera error:', err);
         setError(err instanceof Error ? err.message : 'Failed to access camera');
@@ -184,7 +184,7 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
       }
     };
 
-    startScanning();
+    void startScanning();
 
     return () => {
       // Cleanup

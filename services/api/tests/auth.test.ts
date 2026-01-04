@@ -16,6 +16,10 @@ vi.mock('@simplewebauthn/server', () => ({
   verifyAuthenticationResponse: vi.fn(),
 }));
 
+function toBase64Url(value: string): string {
+  return Buffer.from(value).toString('base64url');
+}
+
 describe('Auth Tests', () => {
   let fastify: FastifyInstance;
   let adminStaffId: string;
@@ -210,13 +214,20 @@ describe('Auth Tests', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
 
+      // The API logs audit entries using the session UUID (not the opaque token string).
+      const sessionResult = await query<{ id: string }>(
+        `SELECT id FROM staff_sessions WHERE session_token = $1`,
+        [body.sessionToken]
+      );
+      const sessionId = sessionResult.rows[0]!.id;
+
       // Check audit log
       const auditResult = await query(
         `SELECT * FROM audit_log 
          WHERE staff_id = $1 
          AND action = 'STAFF_LOGIN_PIN'
          AND entity_id = $2`,
-        [staffStaffId, body.sessionToken]
+        [staffStaffId, sessionId]
       );
       expect(auditResult.rows.length).toBe(1);
     });
@@ -320,13 +331,26 @@ describe('Auth Tests', () => {
 
     it('should allow admin to revoke credentials', async () => {
       // Create a test credential
-      const credentialId = 'test-credential-id';
+      const credentialId = toBase64Url('test-credential-id');
       await query(
         `INSERT INTO staff_webauthn_credentials 
          (staff_id, device_id, credential_id, public_key, sign_count)
          VALUES ($1, 'test-device', $2, 'dGVzdC1wdWJsaWMta2V5', 0)`,
         [staffStaffId, credentialId]
       );
+
+      // Re-authenticate first (passkey revocation requires recent re-auth)
+      const reauthResponse = await fastify.inject({
+        method: 'POST',
+        url: '/v1/auth/reauth-pin',
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+        },
+        payload: {
+          pin: '222222',
+        },
+      });
+      expect(reauthResponse.statusCode).toBe(200);
 
       const response = await fastify.inject({
         method: 'POST',
@@ -370,7 +394,7 @@ describe('Auth Tests', () => {
   describe('Active Enforcement', () => {
     it('should reject WebAuthn authentication options for inactive staff', async () => {
       // Create credential for inactive staff
-      const credentialId = 'test-credential-inactive';
+      const credentialId = toBase64Url('test-credential-inactive');
       await query(
         `INSERT INTO staff_webauthn_credentials 
          (staff_id, device_id, credential_id, public_key, sign_count)
@@ -399,7 +423,8 @@ describe('Auth Tests', () => {
 
     it('should reject WebAuthn authentication verify for inactive staff', async () => {
       // Create credential
-      const credentialId = 'test-credential-inactive-verify';
+      const credentialIdRaw = 'test-credential-inactive-verify';
+      const credentialId = toBase64Url(credentialIdRaw);
       await query(
         `INSERT INTO staff_webauthn_credentials 
          (staff_id, device_id, credential_id, public_key, sign_count)
@@ -435,8 +460,8 @@ describe('Auth Tests', () => {
           staffLookup: 'Staff User',
           deviceId: 'test-device',
           credentialResponse: {
-            id: Buffer.from(credentialId).toString('base64url'),
-            rawId: Buffer.from(credentialId).toString('base64url'),
+            id: credentialId,
+            rawId: credentialId,
             response: {
               clientDataJSON: Buffer.from(JSON.stringify({ challenge, origin: 'http://localhost:3000' })).toString('base64url'),
               authenticatorData: 'test-auth-data',
@@ -455,7 +480,7 @@ describe('Auth Tests', () => {
 
   describe('Revoke Passkey', () => {
     it('should prevent authentication with revoked credential', async () => {
-      const credentialId = 'test-credential-revoked';
+      const credentialId = toBase64Url('test-credential-revoked');
       
       // Create and immediately revoke credential
       await query(
@@ -488,7 +513,7 @@ describe('Auth Tests', () => {
     });
 
     it('should prevent revoked credential from being used in authentication verify', async () => {
-      const credentialId = 'test-credential-revoked-verify';
+      const credentialId = toBase64Url('test-credential-revoked-verify');
       
       // Create credential
       await query(
@@ -658,7 +683,7 @@ describe('Auth Tests', () => {
 
     it('should require re-auth for passkey revocation', async () => {
       // Create a test credential
-      const credentialId = 'test-credential-reauth';
+      const credentialId = toBase64Url('test-credential-reauth');
       await query(
         `INSERT INTO staff_webauthn_credentials 
          (staff_id, device_id, credential_id, public_key, sign_count)
@@ -682,7 +707,7 @@ describe('Auth Tests', () => {
 
     it('should allow passkey revocation after re-auth', async () => {
       // Create a test credential
-      const credentialId = 'test-credential-reauth-ok';
+      const credentialId = toBase64Url('test-credential-reauth-ok');
       await query(
         `INSERT INTO staff_webauthn_credentials 
          (staff_id, device_id, credential_id, public_key, sign_count)
