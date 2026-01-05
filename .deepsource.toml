@@ -1,0 +1,36 @@
+version = 1
+
+test_patterns = [
+  "**/*.test.*",
+  "**/*.spec.*",
+  "**/__tests__/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/.next/**",
+  "**/coverage/**"
+]
+
+exclude_patterns = [
+  "**/node_modules/**",
+  "**/dist/**",
+  "**/build/**",
+  "**/.next/**",
+  "**/coverage/**",
+  "**/vendor/**"
+]
+
+[[analyzers]]
+name = "javascript"
+enabled = true
+
+[[analyzers]]
+name = "typescript"
+enabled = true
+
+[[analyzers]]
+name = "test-coverage"
+enabled = true
+
+[[transformers]]
+name = "prettier"
+enabled = true
