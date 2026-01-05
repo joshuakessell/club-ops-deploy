@@ -13,7 +13,9 @@ exclude_patterns = [
   "**/build/**",
   "**/.next/**",
   "**/coverage/**",
-  "**/vendor/**"
+  "**/vendor/**",
+  "**/migrations/**",
+  "**/tests/_artifacts/**"
 ]
 
 [[analyzers]]
@@ -31,3 +33,4 @@ enabled = true
 [[transformers]]
 name = "prettier"
 enabled = true
+
