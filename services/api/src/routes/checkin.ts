@@ -2494,7 +2494,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           `INSERT INTO audit_logs (staff_id, action, details, created_at)
            VALUES ($1, 'MANUAL_SIGNATURE_OVERRIDE', $2, NOW())`,
           [
-            request.staff.staffId,
+            request.staff?.staffId ?? null,
             JSON.stringify({
               sessionId: session.id,
               laneId,

@@ -6,3 +6,4 @@ ALTER TABLE agreement_signatures
   ALTER COLUMN checkin_id DROP NOT NULL;
 
 
+
