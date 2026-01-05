@@ -14,8 +14,7 @@ enabled = true
 
   [analyzers.meta]
   dialect = "typescript"
-  environment = ["nodejs", "browser"]
-  plugins = ["react"]
+  environment = ["nodejs"]
 
 [[code_formatters]]
 name = "prettier"

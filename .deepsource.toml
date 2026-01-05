@@ -1,5 +1,12 @@
 version = 1
 
+test_patterns = [
+  "**/*.test.*",
+  "**/*.spec.*",
+  "**/__tests__/**",
+  "**/tests/**"
+]
+
 exclude_patterns = [
   "**/node_modules/**",
   "**/dist/**",
