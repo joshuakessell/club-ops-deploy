@@ -273,15 +273,64 @@ async function seed() {
       'SELECT COUNT(*) as count FROM agreements WHERE active = true'
     );
     
+    const agreementBodyText = `<h2 style="text-align:center; margin: 0 0 12px 0;">CLUB DALLAS ENTRY &amp; LIABILITY WAIVER</h2>
+<p style="text-align:center; margin: 0 0 18px 0; font-size: 12px;">Effective Date: Today</p>
+
+<p><strong>PLEASE READ CAREFULLY.</strong> This Agreement contains a release of liability and waiver of certain legal rights. By entering Club Dallas ("Club"), you agree to the terms below.</p>
+
+<h3>1. Definitions</h3>
+<p>"Club Dallas," "Club," "we," "us," and "our" mean the operator(s), owners, managers, employees, contractors, agents, affiliates, successors, and assigns of Club Dallas and the premises. "Guest," "you," and "your" mean the individual entering the premises.</p>
+
+<h3>2. Voluntary Entry and Assumption of Risk</h3>
+<p>You acknowledge that visiting and using the premises involves inherent risks, including but not limited to slips and falls, allergic reactions, exposure to cleaning products, interactions with other guests, and other foreseeable and unforeseeable hazards. You voluntarily assume all risks of injury, illness, property damage, and loss arising from your entry and presence on the premises, whether caused by ordinary negligence or otherwise, to the fullest extent permitted by law.</p>
+
+<h3>3. Release and Waiver of Liability</h3>
+<p>To the maximum extent permitted by law, you hereby release, waive, and discharge the Club from any and all claims, demands, damages, losses, liabilities, costs, and causes of action of any kind arising out of or related to your entry, presence, or participation in any activities on the premises, including claims based on the Club's ordinary negligence.</p>
+
+<h3>4. Indemnification</h3>
+<p>You agree to indemnify, defend, and hold harmless the Club from and against any claims, damages, liabilities, and expenses (including reasonable attorneys' fees) arising out of or related to your actions, conduct, violations of Club rules, or breach of this Agreement.</p>
+
+<h3>5. Conduct and Compliance</h3>
+<p>You agree to comply with all posted rules, staff instructions, and applicable laws. The Club reserves the right to refuse entry or remove any guest at its discretion. You acknowledge that violations of Club rules may result in removal without refund and may be reported to authorities where appropriate.</p>
+
+<h3>6. Health and Fitness Acknowledgment</h3>
+<p>You represent that you are physically able to enter and use the premises and that you will not engage in conduct that poses a risk of harm to yourself or others. You are responsible for your own personal property.</p>
+
+<h3>7. Personal Property; Limitation of Responsibility</h3>
+<p>The Club is not responsible for lost, stolen, or damaged personal property, including valuables left in lockers, rooms, or common areas, except where liability cannot be excluded by law.</p>
+
+<h3>8. Photo/Video Notice</h3>
+<p>To the extent permitted by law, you acknowledge that security monitoring may be in use in certain areas for safety and compliance. The Club does not guarantee privacy in any non-private area. (No statement here authorizes recording in private areas.)</p>
+
+<h3>9. Dispute Resolution</h3>
+<p>Any dispute arising out of this Agreement or your entry to the Club shall be resolved in a lawful forum with jurisdiction, under applicable law. If any provision is held unenforceable, the remainder remains in effect.</p>
+
+<h3>10. Entire Agreement</h3>
+<p>This Agreement represents the entire understanding regarding entry to the premises and supersedes prior communications on this subject. By signing below, you acknowledge that you have read and understood this Agreement and agree to be bound by it.</p>
+
+<p style="margin-top: 18px;"><strong>ACKNOWLEDGMENT:</strong> I have read this Agreement, understand it, and agree to its terms.</p>`;
+    
     if (parseInt(existingAgreement.rows[0]?.count || '0', 10) > 0) {
-      console.log('⚠️  Active agreement already exists. Skipping agreement seed.');
+      // Update existing active agreement if body_text is empty
+      const activeAgreement = await query<{ body_text: string }>(
+        'SELECT body_text FROM agreements WHERE active = true LIMIT 1'
+      );
+      if (activeAgreement.rows.length > 0 && (!activeAgreement.rows[0]?.body_text || activeAgreement.rows[0].body_text.trim() === '')) {
+        await query(
+          `UPDATE agreements SET body_text = $1 WHERE active = true`,
+          [agreementBodyText]
+        );
+        console.log('✓ Updated active agreement with real content');
+      } else {
+        console.log('⚠️  Active agreement already exists with content. Skipping agreement seed.');
+      }
     } else {
       await query(
         `INSERT INTO agreements (version, title, body_text, active)
          VALUES ($1, $2, $3, true)`,
-        ['placeholder-v1', 'Club Agreement', '']
+        ['demo-v1', 'Club Dallas Entry & Liability Waiver (Demo)', agreementBodyText]
       );
-      console.log('✓ Seeded active agreement: placeholder-v1');
+      console.log('✓ Seeded active agreement: demo-v1');
       console.log('✅ Agreement seeded successfully');
     }
 

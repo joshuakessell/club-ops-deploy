@@ -126,11 +126,47 @@ function App() {
     sessionIdRef.current = session.sessionId;
   }, [session.sessionId]);
 
-  // Get lane from URL query param or localStorage, default to 'lane-1'
+  // Get lane from URL pathname pattern, query param, or sessionStorage fallback
+  // Priority: /register-1 => lane-1, /register-2 => lane-2, etc.
+  // Secondary: ?lane=lane-2 query param
+  // Fallback: sessionStorage (NOT localStorage - localStorage is shared across tabs)
+  // Default: lane-1
   const lane = (() => {
+    // Check pathname patterns: /register-1, /register-2, etc.
+    const pathMatch = window.location.pathname.match(/\/register-(\d+)/);
+    if (pathMatch) {
+      return `lane-${pathMatch[1]}`;
+    }
+    
+    // Check query param
     const params = new URLSearchParams(window.location.search);
-    return params.get('lane') || localStorage.getItem('lane') || 'lane-1';
+    const queryLane = params.get('lane');
+    if (queryLane) {
+      return queryLane;
+    }
+    
+    // Check sessionStorage fallback (per-tab, not shared)
+    try {
+      const stored = sessionStorage.getItem('lane');
+      if (stored) {
+        return stored;
+      }
+    } catch {
+      // sessionStorage might not be available
+    }
+    
+    // Default
+    return 'lane-1';
   })();
+  
+  // Store in sessionStorage for persistence within this tab
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('lane', lane);
+    } catch {
+      // Ignore if sessionStorage unavailable
+    }
+  }, [lane]);
 
   const API_BASE = '/api';
 
@@ -642,7 +678,11 @@ function App() {
     if (canvas && view === 'agreement') {
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.strokeStyle = '#ffffff';
+        // Fill white background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Set black ink for signature
+        ctx.strokeStyle = '#000000';
         ctx.lineWidth = 2;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -695,7 +735,11 @@ function App() {
     if (canvas) {
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Clear and fill white background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // Reset stroke style to black
+        ctx.strokeStyle = '#000000';
       }
       setSignatureData(null);
     }
@@ -885,12 +929,16 @@ function App() {
     }
 
     return (
-      <div className="active-container">
+      <div className="agreement-screen-wrapper">
         <WelcomeOverlay />
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
-        
-        <main className="main-content">
-          <div className="agreement-screen">
+        <div className="agreement-screen-container">
+          {/* Logo header - black on white */}
+          <div className="agreement-logo-header">
+            <img src={logoImage} alt="Club Dallas" className="agreement-logo-img" />
+          </div>
+          
+          {/* White paper panel */}
+          <div className="agreement-paper-panel">
             <h1 className="agreement-title">
               {agreement?.title || t(session.customerPrimaryLanguage, 'agreementTitle')}
             </h1>
@@ -900,7 +948,7 @@ function App() {
               className="agreement-scroll-area"
             >
               {agreement?.bodyText ? (
-                <div dangerouslySetInnerHTML={{ __html: agreement.bodyText }} />
+                <div className="agreement-body" dangerouslySetInnerHTML={{ __html: agreement.bodyText }} />
               ) : (
                 <p className="agreement-placeholder">
                   {t(session.customerPrimaryLanguage, 'agreementPlaceholder')}
@@ -919,7 +967,7 @@ function App() {
                 <span>{t(session.customerPrimaryLanguage, 'iAgree')}</span>
               </label>
               {!hasScrolledAgreement && (
-                <p style={{ fontSize: '0.875rem', color: '#f59e0b', marginTop: '0.5rem' }}>
+                <p className="scroll-warning">
                   {t(session.customerPrimaryLanguage, 'scrollRequired')}
                 </p>
               )}
@@ -950,16 +998,18 @@ function App() {
                 </button>
               </div>
 
-              <button
-                className="submit-agreement-btn"
-                onClick={() => void handleSubmitAgreement()}
-                disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
-              >
-                {isSubmitting ? t(session.customerPrimaryLanguage, 'submitting') : t(session.customerPrimaryLanguage, 'submit')}
-              </button>
+              <div className="agreement-submit-container">
+                <button
+                  className="submit-agreement-btn"
+                  onClick={() => void handleSubmitAgreement()}
+                  disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
+                >
+                  {isSubmitting ? t(session.customerPrimaryLanguage, 'submitting') : t(session.customerPrimaryLanguage, 'submit')}
+                </button>
+              </div>
             </div>
           </div>
-        </main>
+        </div>
       </div>
     );
   }
