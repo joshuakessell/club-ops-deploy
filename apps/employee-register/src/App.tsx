@@ -1327,6 +1327,40 @@ function App() {
     setSelectedInventoryItem(null);
   };
 
+  const handleManualSignatureOverride = async () => {
+    if (!session?.sessionToken || !currentSessionId) {
+      alert('Not authenticated');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/manual-signature-override`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          sessionId: currentSessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to process manual signature override');
+      }
+
+      // Success - WebSocket will update the UI
+      await response.json();
+    } catch (error) {
+      console.error('Failed to process manual signature override:', error);
+      alert(error instanceof Error ? error.message : 'Failed to process manual signature override');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Past-due payment handlers
   const handlePastDuePayment = async (outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE', declineReason?: string) => {
     if (!session?.sessionToken || !currentSessionId) {
@@ -2349,22 +2383,45 @@ function App() {
                           ? 'Awaiting Signature'
                           : 'Assign'}
                 </button>
-                <button
-                  onClick={handleClearSelection}
-                  disabled={isSubmitting}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    background: 'transparent',
-                    color: '#94a3b8',
-                    border: '1px solid #475569',
-                    borderRadius: '6px',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  Clear
-                </button>
+                {!agreementSigned && paymentStatus === 'PAID' ? (
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Override customer signature? This will complete the agreement signing process without a customer signature.')) {
+                        void handleManualSignatureOverride();
+                      }
+                    }}
+                    disabled={isSubmitting}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: '#ef4444',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Manual Signature
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleClearSelection}
+                    disabled={isSubmitting}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: 'transparent',
+                      color: '#94a3b8',
+                      border: '1px solid #475569',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
 

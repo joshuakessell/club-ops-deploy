@@ -96,6 +96,7 @@ export async function generateAgreementPdf(params: {
   membershipNumber?: string;
   signedAt: Date;
   signatureImageBase64?: string; // raw base64 OR full data URL
+  signatureText?: string; // Optional text to render in signature box if no image
 }): Promise<Buffer> {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([612, 792]); // US Letter
@@ -194,6 +195,12 @@ export async function generateAgreementPdf(params: {
     const drawX = signatureBoxX + signatureImagePadding + (maxW - drawW) / 2;
     const drawY = signatureBoxY + signatureImagePadding + (maxH - drawH) / 2;
     page.drawImage(pngImage, { x: drawX, y: drawY, width: drawW, height: drawH });
+  } else if (params.signatureText) {
+    // Render text centered in signature box
+    const textWidth = font.widthOfTextAtSize(params.signatureText, 12);
+    const textX = signatureBoxX + (signatureBoxWidth - textWidth) / 2;
+    const textY = signatureBoxY + signatureBoxHeight / 2 - 6;
+    page.drawText(params.signatureText, { x: textX, y: textY, size: 12, font, color: black });
   } else {
     page.drawText('(no signature image provided)', { x: signatureBoxX + 10, y: signatureBoxY + signatureBoxHeight / 2 - 4, size: 10, font, color: gray });
   }

@@ -1055,12 +1055,20 @@ function App() {
       
       <main className="main-content">
         <div className="customer-info">
-          <h1 className="customer-name">{session.customerName}</h1>
-          {session.membershipNumber && (
-            <p className="membership-number">
-              {t(session.customerPrimaryLanguage, 'membership')}: {session.membershipNumber}
-            </p>
-          )}
+          <h1 className="customer-name">Welcome, {session.customerName}</h1>
+        </div>
+
+        {/* Membership Level - locked buttons */}
+        <div className="membership-level-section">
+          <p className="section-label">Membership Level:</p>
+          <div className="membership-buttons">
+            <button className="cs-glass-button cs-glass-button--locked cs-glass-button--selected" disabled>
+              {session.membershipNumber ? 'Member' : 'Non-Member'}
+            </button>
+            <button className="cs-glass-button cs-glass-button--locked" disabled>
+              {session.membershipNumber ? 'Non-Member' : 'Member'}
+            </button>
+          </div>
         </div>
 
         {/* Past-due block message */}
@@ -1124,55 +1132,76 @@ function App() {
           </div>
         )}
 
-        {/* Rental Options - disabled if selection is locked and not acknowledged or past-due blocked */}
-        <div className="package-options">
-          {session.allowedRentals.length > 0 ? (
-            session.allowedRentals.map((rental) => {
-              const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
-              const showWarning = availableCount > 0 && availableCount < 5;
-              const isUnavailable = availableCount === 0;
-              const isDisabled = (selectionConfirmed && !selectionAcknowledged) || session.pastDueBlocked;
-              const lang = session.customerPrimaryLanguage;
-              
-              return (
-                <div key={rental}>
-                  <div
-                    className="package-option"
+        {/* Choose your experience */}
+        <div className="experience-section">
+          <p className="section-label">Choose your experience:</p>
+          <div className="experience-options">
+            {session.allowedRentals.length > 0 ? (
+              session.allowedRentals.map((rental) => {
+                const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
+                const showWarning = availableCount > 0 && availableCount <= 5;
+                const isUnavailable = availableCount === 0;
+                const isDisabled = (selectionConfirmed && !selectionAcknowledged) || session.pastDueBlocked;
+                const isSelected = proposedRentalType === rental && selectionConfirmed;
+                const lang = session.customerPrimaryLanguage;
+                
+                // Map rental types to display names
+                let displayName = getRentalDisplayName(rental, lang);
+                if (rental === 'STANDARD') displayName = 'Private Dressing Room';
+                else if (rental === 'DOUBLE') displayName = 'Deluxe Dressing Room';
+                else if (rental === 'SPECIAL') displayName = 'Special Dressing Room';
+                else if (rental === 'LOCKER') displayName = 'Locker';
+                
+                return (
+                  <button
+                    key={rental}
+                    className={`cs-glass-button ${isSelected ? 'cs-glass-button--selected' : ''} ${isDisabled ? 'cs-glass-button--locked' : ''}`}
                     onClick={() => {
                       if (!isDisabled) {
                         void handleRentalSelection(rental);
                       }
                     }}
-                    style={{ 
-                      opacity: isDisabled ? 0.5 : 1, 
-                      cursor: isDisabled ? 'not-allowed' : 'pointer' 
-                    }}
+                    disabled={isDisabled}
                   >
-                    <div className="package-name">{getRentalDisplayName(rental, lang)}</div>
-                    {showWarning && (
-                      <div style={{ fontSize: '0.875rem', color: '#f59e0b', marginTop: '0.5rem', fontWeight: 600 }}>
-                        ⚠️ {t(lang, 'limitedAvailability', { count: availableCount })}
-                      </div>
-                    )}
-                    {isUnavailable && (
-                      <div style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.5rem', fontWeight: 600 }}>
-                        {t(lang, 'unavailable')}
-                      </div>
-                    )}
-                    {proposedRentalType === rental && (
-                      <div style={{ fontSize: '0.875rem', color: '#3b82f6', marginTop: '0.5rem', fontWeight: 600 }}>
-                        {selectionConfirmed ? `✓ ${t(lang, 'selected')}` : t(lang, 'proposed')}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="package-option">
-              <div className="package-name">{t(session.customerPrimaryLanguage, 'noOptionsAvailable')}</div>
-            </div>
-          )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
+                      <span>{displayName}</span>
+                      {showWarning && !isUnavailable && (
+                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                          Only {availableCount} available
+                        </span>
+                      )}
+                      {isUnavailable && (
+                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                          Unavailable
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
+            ) : (
+              <div className="cs-glass-button cs-glass-button--locked" disabled>
+                {t(session.customerPrimaryLanguage, 'noOptionsAvailable')}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Proceed for Payment button */}
+        <div className="proceed-section">
+          <button
+            className="cs-glass-button"
+            onClick={() => {
+              if (proposedRentalType && selectionConfirmed) {
+                // Selection is confirmed, proceed to payment
+                // The WebSocket will handle the transition
+              }
+            }}
+            disabled={!proposedRentalType || !selectionConfirmed || isSubmitting || session.pastDueBlocked}
+            style={{ minWidth: '200px' }}
+          >
+            Proceed for Payment
+          </button>
         </div>
 
         {/* Waitlist button (shown when higher tier available) */}

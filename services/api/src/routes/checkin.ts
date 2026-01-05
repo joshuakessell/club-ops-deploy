@@ -2210,6 +2210,337 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * POST /v1/checkin/lane/:laneId/manual-signature-override
+   * 
+   * Employee override to complete agreement signing without customer signature.
+   * Requires authentication. Generates PDF with "Manual Signature Override" text.
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { sessionId?: string };
+  }>('/v1/checkin/lane/:laneId/manual-signature-override', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { laneId } = request.params;
+    const { sessionId } = request.body;
+
+    try {
+      const result = await transaction(async (client) => {
+        // Get active session (by sessionId if provided, otherwise latest for lane)
+        let sessionResult;
+        if (sessionId) {
+          sessionResult = await client.query<LaneSessionRow>(
+            `SELECT * FROM lane_sessions
+             WHERE id = $1 AND lane_id = $2 AND status IN ('AWAITING_SIGNATURE', 'AWAITING_PAYMENT')
+             LIMIT 1`,
+            [sessionId, laneId]
+          );
+        } else {
+          sessionResult = await client.query<LaneSessionRow>(
+            `SELECT * FROM lane_sessions
+             WHERE lane_id = $1 AND status IN ('AWAITING_SIGNATURE', 'AWAITING_PAYMENT')
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [laneId]
+          );
+        }
+
+        if (sessionResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active session found' };
+        }
+
+        const session = sessionResult.rows[0]!;
+
+        // Agreement signing is required only for INITIAL and RENEWAL checkin_blocks
+        if (session.checkin_mode !== 'INITIAL' && session.checkin_mode !== 'RENEWAL') {
+          throw { statusCode: 400, message: 'Agreement signing is only required for INITIAL and RENEWAL check-ins' };
+        }
+
+        // Demo flow: require the rental selection to be confirmed/locked before payment+signature
+        if (!session.selection_confirmed || !session.selection_locked_at) {
+          throw { statusCode: 400, message: 'Selection must be confirmed/locked before signing agreement' };
+        }
+
+        // Check payment is paid
+        if (!session.payment_intent_id) {
+          throw { statusCode: 400, message: 'Payment intent must be created before signing agreement' };
+        }
+
+        const intentResult = await client.query<PaymentIntentRow>(
+          `SELECT status FROM payment_intents WHERE id = $1`,
+          [session.payment_intent_id]
+        );
+        if (intentResult.rows.length === 0 || intentResult.rows[0]!.status !== 'PAID') {
+          throw { statusCode: 400, message: 'Payment must be marked as paid before signing agreement' };
+        }
+
+        // Get customer info for PDF
+        const customerResult = session.customer_id
+          ? await client.query<CustomerRow>(
+              `SELECT name, membership_number FROM customers WHERE id = $1`,
+              [session.customer_id]
+            )
+          : { rows: [] };
+
+        const customerName = customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
+        const membershipNumber = customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+
+        // Get active agreement text
+        const agreementResult = await client.query<{ id: string; body_text: string; version: string; title: string }>(
+          `SELECT id, body_text, version, title FROM agreements WHERE active = true ORDER BY created_at DESC LIMIT 1`
+        );
+
+        if (agreementResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No active agreement found' };
+        }
+
+        const agreement = agreementResult.rows[0]!;
+
+        const signedAt = new Date();
+
+        // Generate PDF with override text instead of signature image
+        let pdfBuffer: Buffer;
+        try {
+          pdfBuffer = await generateAgreementPdf({
+            agreementTitle: agreement.title,
+            agreementVersion: agreement.version,
+            customerName,
+            membershipNumber,
+            agreementText: agreement.body_text,
+            signatureText: 'Manual Signature Override',
+            signedAt,
+          });
+        } catch (e) {
+          request.log.warn({ err: e }, 'Failed to generate agreement PDF for manual override');
+          throw { statusCode: 500, message: 'Failed to generate agreement PDF' };
+        }
+
+        // Determine rental type from locked selection snapshot
+        const rentalType = (session.desired_rental_type || session.backup_rental_type || 'LOCKER') as
+          | 'LOCKER'
+          | 'STANDARD'
+          | 'DOUBLE'
+          | 'SPECIAL'
+          | 'GYM_LOCKER';
+
+        // Assignment happens AFTER agreement signing (same as normal flow)
+        let assignedResourceId = session.assigned_resource_id;
+        let assignedResourceType = session.assigned_resource_type as 'room' | 'locker' | null;
+        let assignedResourceNumber: string | undefined;
+
+        if (assignedResourceId && assignedResourceType) {
+          if (assignedResourceType === 'room') {
+            const room = (
+              await client.query<RoomRow>(
+                `SELECT id, number, type, status, assigned_to_customer_id
+                 FROM rooms
+                 WHERE id = $1
+                 FOR UPDATE`,
+                [assignedResourceId]
+              )
+            ).rows[0];
+            if (!room) throw { statusCode: 404, message: 'Selected room not found' };
+            if (room.status !== 'CLEAN' || room.assigned_to_customer_id) {
+              throw { statusCode: 409, message: `Selected room ${room.number} is no longer available` };
+            }
+            assignedResourceNumber = room.number;
+          } else {
+            const locker = (
+              await client.query<LockerRow>(
+                `SELECT id, number, status, assigned_to_customer_id
+                 FROM lockers
+                 WHERE id = $1
+                 FOR UPDATE`,
+                [assignedResourceId]
+              )
+            ).rows[0];
+            if (!locker) throw { statusCode: 404, message: 'Selected locker not found' };
+            if (locker.status !== 'CLEAN' || locker.assigned_to_customer_id) {
+              throw { statusCode: 409, message: `Selected locker ${locker.number} is no longer available` };
+            }
+            assignedResourceNumber = locker.number;
+          }
+        } else {
+          if (rentalType === 'LOCKER' || rentalType === 'GYM_LOCKER') {
+            const locker = (
+              await client.query<LockerRow>(
+                `SELECT id, number, status, assigned_to_customer_id
+                 FROM lockers
+                 WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL
+                 ORDER BY number
+                 LIMIT 1
+                 FOR UPDATE SKIP LOCKED`
+              )
+            ).rows[0];
+            if (!locker) throw { statusCode: 409, message: 'No available lockers' };
+            assignedResourceId = locker.id;
+            assignedResourceType = 'locker';
+            assignedResourceNumber = locker.number;
+          } else {
+            const room = (
+              await client.query<RoomRow>(
+                `SELECT id, number, type, status, assigned_to_customer_id
+                 FROM rooms
+                 WHERE status = 'CLEAN'
+                   AND assigned_to_customer_id IS NULL
+                   AND type = $1
+                 ORDER BY number
+                 LIMIT 1
+                 FOR UPDATE SKIP LOCKED`,
+                [rentalType]
+              )
+            ).rows[0];
+            if (!room) throw { statusCode: 409, message: 'No available rooms' };
+            assignedResourceId = room.id;
+            assignedResourceType = 'room';
+            assignedResourceNumber = room.number;
+          }
+        }
+
+        if (!session.customer_id) {
+          throw { statusCode: 400, message: 'Session has no customer; cannot complete check-in' };
+        }
+
+        // Assign inventory + mark OCCUPIED (server-authoritative, transactional)
+        if (assignedResourceType === 'room') {
+          await client.query(
+            `UPDATE rooms
+             SET status = 'OCCUPIED',
+                 assigned_to_customer_id = $1,
+                 last_status_change = NOW(),
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [session.customer_id, assignedResourceId]
+          );
+        } else {
+          await client.query(
+            `UPDATE lockers
+             SET status = 'OCCUPIED',
+                 assigned_to_customer_id = $1,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [session.customer_id, assignedResourceId]
+          );
+        }
+
+        // Ensure lane session snapshot fields are set
+        await client.query(
+          `UPDATE lane_sessions
+           SET assigned_resource_id = $1,
+               assigned_resource_type = $2,
+               updated_at = NOW()
+           WHERE id = $3`,
+          [assignedResourceId, assignedResourceType, session.id]
+        );
+
+        // Complete check-in: create visit and check-in block with PDF (same as normal flow)
+        const isRenewal = session.checkin_mode === 'RENEWAL';
+
+        let visitId: string;
+        let blockType: 'INITIAL' | 'RENEWAL';
+
+        if (isRenewal) {
+          const visitResult = await client.query<{ id: string }>(
+            `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+            [session.customer_id]
+          );
+          if (visitResult.rows.length === 0) {
+            throw { statusCode: 400, message: 'No active visit found for renewal' };
+          }
+          visitId = visitResult.rows[0]!.id;
+          blockType = 'RENEWAL';
+        } else {
+          const visitResult = await client.query<{ id: string }>(
+            `INSERT INTO visits (customer_id, started_at) VALUES ($1, $2) RETURNING id`,
+            [session.customer_id, signedAt]
+          );
+          visitId = visitResult.rows[0]!.id;
+          blockType = 'INITIAL';
+        }
+
+        const checkoutAt = new Date(signedAt.getTime() + 6 * 60 * 60 * 1000);
+
+        const blockResult = await client.query<{ id: string }>(
+          `INSERT INTO checkin_blocks
+           (visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, session_id, agreement_signed, agreement_pdf)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)
+           RETURNING id`,
+          [
+            visitId,
+            blockType,
+            signedAt,
+            checkoutAt,
+            rentalType,
+            assignedResourceType === 'room' ? assignedResourceId : null,
+            assignedResourceType === 'locker' ? assignedResourceId : null,
+            session.id,
+            pdfBuffer,
+          ]
+        );
+
+        const blockId = blockResult.rows[0]!.id;
+
+        // Update lane session status to COMPLETED
+        await client.query(
+          `UPDATE lane_sessions
+           SET status = 'COMPLETED',
+               updated_at = NOW()
+           WHERE id = $1`,
+          [session.id]
+        );
+
+        // Log audit entry for manual override
+        await client.query(
+          `INSERT INTO audit_logs (staff_id, action, details, created_at)
+           VALUES ($1, 'MANUAL_SIGNATURE_OVERRIDE', $2, NOW())`,
+          [
+            request.staff.staffId,
+            JSON.stringify({
+              sessionId: session.id,
+              laneId,
+              customerId: session.customer_id,
+              customerName,
+              blockId,
+              rentalType,
+              assignedResourceType,
+              assignedResourceNumber,
+            }),
+          ]
+        );
+
+        return {
+          success: true,
+          sessionId: session.id,
+          blockId,
+          assignedResourceType,
+          assignedResourceNumber,
+          checkoutAt: checkoutAt.toISOString(),
+        };
+      });
+
+      // Broadcast session update
+      const { payload } = await transaction((client) =>
+        buildFullSessionUpdatedPayload(client, result.sessionId)
+      );
+      fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+      return reply.send(result);
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to process manual signature override');
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to process manual signature override',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to process manual signature override',
+      });
+    }
+  });
+
+  /**
    * POST /v1/checkin/lane/:laneId/customer-confirm
    * 
    * Customer confirms or declines cross-type assignment.
