@@ -22,15 +22,13 @@ exclude_patterns = [
 name = "javascript"
 enabled = true
 
-[[analyzers]]
-name = "typescript"
-enabled = true
+  [analyzers.meta]
+  dialect = "typescript"
 
 [[analyzers]]
 name = "test-coverage"
 enabled = true
 
-[[transformers]]
+[[code_formatters]]
 name = "prettier"
 enabled = true
-
