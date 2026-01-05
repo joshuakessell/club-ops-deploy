@@ -194,7 +194,9 @@ export function InventorySelector({
 
   // Listen for WebSocket events to trigger refresh
   useEffect(() => {
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001/ws?lane=${encodeURIComponent(lane)}`);
+    // Use Vite proxy instead of direct connection
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`);
 
     ws.onopen = () => {
       ws.send(JSON.stringify({

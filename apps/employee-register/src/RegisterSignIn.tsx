@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { SignInModal } from './SignInModal';
 import type { WebSocketEvent, RegisterSessionUpdatedPayload } from '@club-ops/shared';
 
@@ -34,49 +34,29 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   
-  // Check for existing register session on mount
-  useEffect(() => {
-    void checkRegisterStatus();
-  }, []);
+  const handleSessionInvalidated = useCallback(() => {
+    // Clear heartbeat interval
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      setHeartbeatInterval(null);
+    }
 
-  // Set up WebSocket subscription for register session updates
-  useEffect(() => {
-    if (!registerSession) return;
-
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        events: ['REGISTER_SESSION_UPDATED'],
-      }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
-        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-        const message = parsed as unknown as WebSocketEvent;
-        if (message.type === 'REGISTER_SESSION_UPDATED') {
-          const payload = message.payload as RegisterSessionUpdatedPayload;
-          // If this event targets our device and session is no longer active, sign out
-          if (payload.deviceId === deviceId && !payload.active) {
-            handleSessionInvalidated();
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
-
-    return () => {
-      ws.close();
+    // Close WebSocket
+    if (wsRef.current) {
+      wsRef.current.close();
       wsRef.current = null;
-    };
-  }, [registerSession, deviceId]);
+    }
 
-  const checkRegisterStatus = async (): Promise<boolean> => {
+    // Clear register session state
+    setRegisterSession(null);
+
+    // Clear staff session from localStorage
+    localStorage.removeItem('staff_session');
+
+    // Return to splash (component will re-render showing sign-in modal)
+  }, [heartbeatInterval]);
+
+  const checkRegisterStatus = useCallback(async (): Promise<boolean> => {
     try {
       const response = await fetch(`${API_BASE}/v1/registers/status?deviceId=${encodeURIComponent(deviceId)}`);
       if (!response.ok) return false;
@@ -107,29 +87,63 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
       console.error('Failed to check register status:', error);
       return false;
     }
-  };
+  }, [deviceId, onSignedIn]);
 
-  const handleSessionInvalidated = () => {
-    // Clear heartbeat interval
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      setHeartbeatInterval(null);
-    }
+  // Check for existing register session on mount
+  useEffect(() => {
+    void checkRegisterStatus();
+  }, [checkRegisterStatus]);
 
-    // Close WebSocket
-    if (wsRef.current) {
-      wsRef.current.close();
+  // Set up WebSocket subscription for register session updates
+  useEffect(() => {
+    if (!registerSession) return;
+
+    // Use the Vite proxy path instead of direct connection
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        type: 'subscribe',
+        events: ['REGISTER_SESSION_UPDATED'],
+      }));
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket connection error:', error);
+      // Don't disconnect on error - connection might recover
+    };
+
+    ws.onclose = () => {
+      // WebSocket closed - this is normal on cleanup
       wsRef.current = null;
-    }
+    };
 
-    // Clear register session state
-    setRegisterSession(null);
+    ws.onmessage = (event) => {
+      try {
+        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
+        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+        const message = parsed as unknown as WebSocketEvent;
+        if (message.type === 'REGISTER_SESSION_UPDATED') {
+          const payload = message.payload as RegisterSessionUpdatedPayload;
+          // If this event targets our device and session is no longer active, sign out
+          if (payload.deviceId === deviceId && !payload.active) {
+            handleSessionInvalidated();
+          }
+        }
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
+      }
+    };
 
-    // Clear staff session from localStorage
-    localStorage.removeItem('staff_session');
-
-    // Return to splash (component will re-render showing sign-in modal)
-  };
+    return () => {
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+      wsRef.current = null;
+    };
+  }, [registerSession, deviceId, handleSessionInvalidated]);
 
   const startHeartbeat = () => {
     // Clear existing interval
@@ -242,11 +256,61 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   // If not signed in, show initial state
   if (!registerSession) {
     return (
-      <div className="register-sign-in-container">
-        <div className="register-sign-in-logo">Club Dallas</div>
+      <div 
+        className="register-sign-in-container"
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#0f172a',
+          color: '#e2e8f0',
+          position: 'relative',
+        }}
+      >
+        <div 
+          className="register-sign-in-logo"
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            fontSize: '3rem',
+            fontWeight: 700,
+            textAlign: 'center',
+            zIndex: 1,
+            color: '#e2e8f0',
+          }}
+        >
+          Club Dallas
+        </div>
         <button
           className="register-sign-in-button"
           onClick={() => setShowSignInModal(true)}
+          style={{
+            position: 'absolute',
+            top: '60%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '1rem 2rem',
+            background: '#111827',
+            color: '#e2e8f0',
+            border: '1px solid #1e293b',
+            borderRadius: '0.5rem',
+            fontSize: '1.125rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            zIndex: 3,
+            transition: 'all 0.2s',
+            boxShadow: '0 1px 5px rgba(0, 0, 0, 0.32), 0 2px 2px rgba(0, 0, 0, 0.22)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(148, 163, 184, 0.12)';
+            e.currentTarget.style.borderColor = '#3c50e0';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = '#111827';
+            e.currentTarget.style.borderColor = '#1e293b';
+          }}
         >
           Sign In
         </button>
@@ -264,7 +328,6 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   return (
     <div className="register-sign-in-container">
       <div className="register-sign-in-logo">Club Dallas</div>
-      <div className="register-sign-in-overlay" />
       
       <div className="register-top-bar">
         <button

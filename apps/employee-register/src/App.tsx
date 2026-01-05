@@ -53,6 +53,25 @@ async function readJson<T>(response: Response): Promise<T> {
   return data as T;
 }
 
+/**
+ * Generate a UUID. Falls back to a simple random string if crypto.randomUUID() is not available.
+ */
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // Fall through to fallback
+    }
+  }
+  // Fallback: generate a UUID-like string
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function App() {
   const [session, setSession] = useState<StaffSession | null>(() => {
     // Load session from localStorage on mount
@@ -149,28 +168,55 @@ function App() {
   const [checkoutAt, setCheckoutAt] = useState<string | null>(null);
 
   const deviceId = useState(() => {
-    // Get device ID from environment variable or generate a stable per-device base ID.
-    // In development, you may have multiple tabs open; we add a per-tab instance suffix
-    // (stored in sessionStorage) so two tabs on the same machine can sign into
-    // different registers without colliding on deviceId.
-    const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
-    const envDeviceId = env?.['VITE_DEVICE_ID'];
-    if (typeof envDeviceId === 'string' && envDeviceId.trim()) {
-      return envDeviceId;
-    }
-    let baseId = localStorage.getItem('device_id');
-    if (!baseId) {
-      baseId = `device-${crypto.randomUUID()}`;
-      localStorage.setItem('device_id', baseId);
-    }
+    try {
+      // Get device ID from environment variable or generate a stable per-device base ID.
+      // In development, you may have multiple tabs open; we add a per-tab instance suffix
+      // (stored in sessionStorage) so two tabs on the same machine can sign into
+      // different registers without colliding on deviceId.
+      const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
+      const envDeviceId = env?.['VITE_DEVICE_ID'];
+      if (typeof envDeviceId === 'string' && envDeviceId.trim()) {
+        return envDeviceId;
+      }
+      
+      let baseId: string | null = null;
+      try {
+        baseId = localStorage.getItem('device_id');
+      } catch {
+        // localStorage might not be available (e.g., private browsing)
+      }
+      
+      if (!baseId) {
+        baseId = `device-${generateUUID()}`;
+        try {
+          localStorage.setItem('device_id', baseId);
+        } catch {
+          // If we can't store it, that's okay - we'll regenerate each time
+        }
+      }
 
-    let instanceId = sessionStorage.getItem('device_instance_id');
-    if (!instanceId) {
-      instanceId = crypto.randomUUID();
-      sessionStorage.setItem('device_instance_id', instanceId);
-    }
+      let instanceId: string | null = null;
+      try {
+        instanceId = sessionStorage.getItem('device_instance_id');
+      } catch {
+        // sessionStorage might not be available
+      }
+      
+      if (!instanceId) {
+        instanceId = generateUUID();
+        try {
+          sessionStorage.setItem('device_instance_id', instanceId);
+        } catch {
+          // If we can't store it, that's okay
+        }
+      }
 
-    return `${baseId}:${instanceId}`;
+      return `${baseId}:${instanceId}`;
+    } catch (error) {
+      // Fallback: generate a temporary device ID if anything fails
+      console.error('Failed to generate device ID:', error);
+      return `device-temp-${generateUUID()}`;
+    }
   })[0];
 
   const [registerSession, setRegisterSession] = useState<{
@@ -221,6 +267,19 @@ function App() {
     deviceId: string;
   }) => {
     setRegisterSession(session);
+    // Refresh staff session from localStorage after register sign-in
+    const stored = localStorage.getItem('staff_session');
+    if (stored) {
+      try {
+        const parsed: unknown = JSON.parse(stored) as unknown;
+        const staffSession = parseStaffSession(parsed);
+        if (staffSession) {
+          setSession(staffSession);
+        }
+      } catch {
+        setSession(null);
+      }
+    }
   };
 
   // Handle barcode scanner input (keyboard wedge mode)
@@ -794,8 +853,9 @@ function App() {
       })
       .catch(console.error);
 
-    // Connect to WebSocket
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001/ws?lane=${encodeURIComponent(lane)}`);
+    // Connect to WebSocket (use Vite proxy)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`);
 
     ws.onopen = () => {
       console.log('WebSocket connected');
