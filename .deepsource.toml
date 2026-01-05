@@ -1,19 +1,11 @@
 version = 1
 
-test_patterns = [
-  "**/*.test.*",
-  "**/*.spec.*",
-  "**/__tests__/**",
-  "**/tests/**"
-]
-
 exclude_patterns = [
   "**/node_modules/**",
   "**/dist/**",
   "**/build/**",
   "**/.next/**",
-  "**/coverage/**",
-  "**/vendor/**"
+  "**/coverage/**"
 ]
 
 [[analyzers]]
@@ -22,6 +14,8 @@ enabled = true
 
   [analyzers.meta]
   dialect = "typescript"
+  environment = ["nodejs", "browser"]
+  plugins = ["react"]
 
 [[analyzers]]
 name = "test-coverage"
