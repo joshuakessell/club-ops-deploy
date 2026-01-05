@@ -11,6 +11,7 @@ import type {
 } from '@club-ops/shared';
 import logoImage from './assets/the-clubs-logo.png';
 import { t, type Language } from './i18n';
+import { ScreenShell } from './components/ScreenShell';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -852,70 +853,76 @@ function App() {
   // Idle state: logo only, centered
   if (view === 'idle') {
     return (
-      <div className="idle-container">
-        <img src={logoImage} alt="Club Dallas" className="logo-idle" />
-      </div>
+      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
+        <div className="idle-content">
+          <img src={logoImage} alt="Club Dallas" className="logo-idle" />
+        </div>
+      </ScreenShell>
     );
   }
 
   // Language selection screen
   if (view === 'language') {
     return (
-      <div className="active-container">
+      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
         <WelcomeOverlay />
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
-        <main className="main-content">
-          <div className="language-selection-screen">
-            <h1 className="language-title">{t(null, 'selectLanguage')}</h1>
-            <div className="language-options">
-              <button
-                className="language-option"
-                onClick={() => void handleLanguageSelection('EN')}
-                disabled={isSubmitting}
-              >
-                {t(null, 'english')}
-              </button>
-              <button
-                className="language-option"
-                onClick={() => void handleLanguageSelection('ES')}
-                disabled={isSubmitting}
-              >
-                {t(null, 'spanish')}
-              </button>
+        <div className="active-content">
+          <img src={logoImage} alt="Club Dallas" className="logo-header" />
+          <main className="main-content">
+            <div className="language-selection-screen">
+              <h1 className="language-title">{t(null, 'selectLanguage')}</h1>
+              <div className="language-options">
+                <button
+                  className="language-option"
+                  onClick={() => void handleLanguageSelection('EN')}
+                  disabled={isSubmitting}
+                >
+                  {t(null, 'english')}
+                </button>
+                <button
+                  className="language-option"
+                  onClick={() => void handleLanguageSelection('ES')}
+                  disabled={isSubmitting}
+                >
+                  {t(null, 'spanish')}
+                </button>
+              </div>
             </div>
-          </div>
-        </main>
-      </div>
+          </main>
+        </div>
+      </ScreenShell>
     );
   }
 
   // Payment pending screen
   if (view === 'payment') {
     return (
-      <div className="active-container">
+      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
         <WelcomeOverlay />
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
-        <main className="main-content">
-          <div className="payment-pending-screen">
-            <h1>{t(session.customerPrimaryLanguage, 'paymentPending')}</h1>
-            {session.paymentTotal !== undefined && (
-              <div className="payment-total">
-                <p className="total-label">{t(session.customerPrimaryLanguage, 'totalDue')}</p>
-                <p className="total-amount">${session.paymentTotal.toFixed(2)}</p>
-              </div>
-            )}
-            {/* Never show decline reason to the customer; generic guidance only */}
-            {session.paymentFailureReason && (
-              <div className="payment-decline-generic">
-                {t(session.customerPrimaryLanguage, 'paymentIssueSeeAttendant')}
-              </div>
-            )}
-            <p className="payment-instruction">
-              {t(session.customerPrimaryLanguage, 'paymentPending')}
-            </p>
-          </div>
-        </main>
-      </div>
+        <div className="active-content">
+          <img src={logoImage} alt="Club Dallas" className="logo-header" />
+          <main className="main-content">
+            <div className="payment-pending-screen">
+              <h1>{t(session.customerPrimaryLanguage, 'paymentPending')}</h1>
+              {session.paymentTotal !== undefined && (
+                <div className="payment-total">
+                  <p className="total-label">{t(session.customerPrimaryLanguage, 'totalDue')}</p>
+                  <p className="total-amount">${session.paymentTotal.toFixed(2)}</p>
+                </div>
+              )}
+              {/* Never show decline reason to the customer; generic guidance only */}
+              {session.paymentFailureReason && (
+                <div className="payment-decline-generic">
+                  {t(session.customerPrimaryLanguage, 'paymentIssueSeeAttendant')}
+                </div>
+              )}
+              <p className="payment-instruction">
+                {t(session.customerPrimaryLanguage, 'paymentPending')}
+              </p>
+            </div>
+          </main>
+        </div>
+      </ScreenShell>
     );
   }
 
@@ -929,7 +936,7 @@ function App() {
     }
 
     return (
-      <div className="agreement-screen-wrapper">
+      <ScreenShell backgroundVariant="none" showLogoWatermark={false}>
         <WelcomeOverlay />
         <div className="agreement-screen-container">
           {/* Logo header - black on white */}
@@ -1010,7 +1017,7 @@ function App() {
             </div>
           </div>
         </div>
-      </div>
+      </ScreenShell>
     );
   }
 
@@ -1019,41 +1026,44 @@ function App() {
     const lang = session.customerPrimaryLanguage;
     
     return (
-      <div className="active-container">
+      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
         <WelcomeOverlay />
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
-        <main className="main-content">
-          <div className="complete-screen">
-            <h1>{t(lang, 'thankYou')}</h1>
-            {session.assignedResourceType && session.assignedResourceNumber ? (
-              <>
-                <div className="assignment-info">
-                  <p className="assignment-resource">
-                    {t(lang, session.assignedResourceType)}: {session.assignedResourceNumber}
-                  </p>
-                  {session.checkoutAt && (
-                    <p className="checkout-time">
-                      {t(lang, 'checkoutAt')}: {new Date(session.checkoutAt).toLocaleString()}
+        <div className="active-content">
+          <img src={logoImage} alt="Club Dallas" className="logo-header" />
+          <main className="main-content">
+            <div className="complete-screen">
+              <h1>{t(lang, 'thankYou')}</h1>
+              {session.assignedResourceType && session.assignedResourceNumber ? (
+                <>
+                  <div className="assignment-info">
+                    <p className="assignment-resource">
+                      {t(lang, session.assignedResourceType)}: {session.assignedResourceNumber}
                     </p>
-                  )}
-                </div>
-              </>
-            ) : (
-              <p>{t(lang, 'assignmentComplete')}</p>
-            )}
-          </div>
-        </main>
-      </div>
+                    {session.checkoutAt && (
+                      <p className="checkout-time">
+                        {t(lang, 'checkoutAt')}: {new Date(session.checkoutAt).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p>{t(lang, 'assignmentComplete')}</p>
+              )}
+            </div>
+          </main>
+        </div>
+      </ScreenShell>
     );
   }
 
   // Selection view (default active session state)
   return (
-    <div className="active-container">
+    <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
       <WelcomeOverlay />
-      <img src={logoImage} alt="Club Dallas" className="logo-header" />
-      
-      <main className="main-content">
+      <div className="active-content">
+        <img src={logoImage} alt="Club Dallas" className="logo-header" />
+        
+        <main className="main-content">
         <div className="customer-info">
           <h1 className="customer-name">Welcome, {session.customerName}</h1>
         </div>
@@ -1386,7 +1396,9 @@ function App() {
           </div>
         </div>
       )}
-    </div>
+        </main>
+      </div>
+    </ScreenShell>
   );
 }
 

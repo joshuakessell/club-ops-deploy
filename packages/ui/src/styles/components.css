@@ -580,7 +580,7 @@
 .cs-screen-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.88);
   z-index: 1;
 }
 
