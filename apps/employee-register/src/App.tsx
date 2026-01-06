@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { type ActiveVisit, type CheckoutRequestSummary, type CheckoutChecklist, type WebSocketEvent, type CheckoutRequestedPayload, type CheckoutClaimedPayload, type CheckoutUpdatedPayload, type SessionUpdatedPayload, type AssignmentCreatedPayload, type AssignmentFailedPayload, type CustomerConfirmedPayload, type CustomerDeclinedPayload, type SelectionProposedPayload, type SelectionLockedPayload, type SelectionAcknowledgedPayload } from '@club-ops/shared';
 import { RegisterSignIn } from './RegisterSignIn';
 import { InventorySelector } from './InventorySelector';
@@ -260,7 +260,7 @@ function App() {
     }
   }, []);
 
-  const handleRegisterSignIn = (session: {
+  const handleRegisterSignIn = useCallback((session: {
     employeeId: string;
     employeeName: string;
     registerNumber: number;
@@ -280,7 +280,7 @@ function App() {
         setSession(null);
       }
     }
-  };
+  }, [setRegisterSession, setSession]);
 
   // Handle barcode scanner input (keyboard wedge mode)
   useEffect(() => {

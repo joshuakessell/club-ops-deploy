@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Shared design tokens are imported in main.tsx */
 :root {
   --bg: var(--cs-bg);
@@ -12,6 +16,11 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -20,24 +29,50 @@ body {
   overflow: hidden;
 }
 
+/* iPad kiosk hardening (scoped) */
+#root,
+#root * {
+  -webkit-touch-callout: none;
+}
+
+#root {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#root input,
+#root textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+#root button,
+#root a,
+#root [role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cs-screen-overlay {
+  background: rgba(0, 0, 0, 0.5);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0.5) 0%,
+    rgba(0, 0, 0, 0.5) 70%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  z-index: 2;
+}
+
 /* Kiosk-specific background layers */
-.cs-kiosk-bg {
+.cs-kiosk-bg,
+.cs-kiosk-bg--steamroom1,
+.cs-kiosk-bg--steamroom2,
+.cs-kiosk-bg--none {
+  background-image: url('./assets/backgrounds/sauna_background.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-}
-
-.cs-kiosk-bg--steamroom1 {
-  background-image: url('./assets/backgrounds/steamroom-1.png');
-}
-
-.cs-kiosk-bg--steamroom2 {
-  background-image: url('./assets/backgrounds/steamroom-2.png');
-}
-
-.cs-kiosk-bg--none {
   background-color: #000000;
-  background-image: none;
 }
 
 .cs-kiosk-watermark {
@@ -47,13 +82,25 @@ body {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
+  transition: opacity 200ms ease, filter 200ms ease;
 }
 
 .cs-kiosk-watermark__img {
-  width: min(70vw, 900px);
-  opacity: 0.10;
-  filter: blur(0.2px);
+  width: min(82vw, 1100px);
+  opacity: 0.35;
+  filter: blur(0.1px);
+}
+
+.cs-kiosk-watermark--under {
+  z-index: 1;
+  opacity: 0.12;
+  filter: blur(0.4px);
+}
+
+.cs-kiosk-watermark--over {
+  z-index: 3;
+  opacity: 0.32;
 }
 
 .cs-kiosk-stage {
@@ -70,7 +117,7 @@ body {
 .welcome-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -98,6 +145,29 @@ body {
   color: #ffffff;
   font-size: clamp(1.25rem, 3vw, 2rem);
   font-weight: 600;
+}
+
+.orientation-blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: #000;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.orientation-blocker h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  margin-bottom: 0.75rem;
+}
+
+.orientation-blocker p {
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* Idle state: centered logo */
@@ -287,13 +357,18 @@ body {
   max-width: 900px;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 1rem;
+  height: 100vh;
+  max-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(12px, 2vw, 20px);
+  overflow: hidden;
 }
 
 /* Logo header - white band with black logo */
 .agreement-logo-header {
   background: #ffffff;
-  padding: 1.5rem 2rem;
+  padding: 1rem 1.5rem;
   text-align: center;
   border-radius: var(--cs-radius-lg) var(--cs-radius-lg) 0 0;
 }
@@ -307,28 +382,36 @@ body {
 /* White paper panel */
 .agreement-paper-panel {
   background: #ffffff;
-  padding: 2rem;
+  padding: 1.5rem;
   border-radius: 0 0 var(--cs-radius-lg) var(--cs-radius-lg);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .agreement-title {
-  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-size: clamp(1.35rem, 2.5vw, 2.1rem);
   font-weight: 600;
   text-align: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.25rem;
   color: #000000;
 }
 
 .agreement-scroll-area {
   border: 1px solid #e5e7eb;
   border-radius: var(--cs-radius-md);
-  padding: 2rem;
-  min-height: 300px;
-  max-height: 500px;
+  padding: 1.25rem;
+  min-height: 160px;
+  max-height: clamp(200px, 32vh, 340px);
   overflow-y: auto;
   background: #ffffff;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
+  flex: 1;
+  min-height: 0;
 }
 
 .agreement-body {
@@ -341,7 +424,7 @@ body {
   color: #000000;
   font-size: 1.25rem;
   font-weight: 700;
-  margin-top: 1.5rem;
+  margin-top: 1.25rem;
   margin-bottom: 0.75rem;
 }
 
@@ -349,7 +432,7 @@ body {
   color: #000000;
   font-size: 1rem;
   font-weight: 600;
-  margin-top: 1.25rem;
+  margin-top: 1rem;
   margin-bottom: 0.5rem;
 }
 
@@ -367,7 +450,8 @@ body {
 .agreement-actions {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .checkbox-label {
@@ -395,6 +479,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .signature-label {
@@ -410,8 +495,8 @@ body {
   cursor: crosshair;
   touch-action: none;
   width: 100%;
-  max-width: 600px;
-  height: 200px;
+  max-width: 560px;
+  height: clamp(140px, 20vh, 200px);
 }
 
 .clear-signature-btn {
@@ -434,7 +519,8 @@ body {
 .agreement-submit-container {
   display: flex;
   justify-content: center;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
+  flex-shrink: 0;
 }
 
 .submit-agreement-btn {
@@ -728,5 +814,81 @@ body {
 .checkout-time {
   font-size: clamp(1rem, 2vw, 1.25rem);
   color: var(--text-muted);
+}
+
+.btn-liquid-glass {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 1.75rem;
+  border-radius: 9999px;
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.08));
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  min-height: 52px;
+  transform: translateZ(0);
+  will-change: transform, filter, box-shadow;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, filter 140ms ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.btn-liquid-glass::before,
+.btn-liquid-glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.btn-liquid-glass::before {
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.28), transparent 45%), radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.16), transparent 50%);
+  opacity: 0.7;
+}
+
+.btn-liquid-glass::after {
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.04));
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+.btn-liquid-glass:hover {
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.btn-liquid-glass:active {
+  transform: translateY(1px) scale(0.985);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  filter: brightness(0.97);
+}
+
+.btn-liquid-glass:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: 2px;
+}
+
+.btn-liquid-glass--selected {
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  filter: brightness(1.05);
+}
+
+.btn-liquid-glass--disabled,
+.btn-liquid-glass:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  filter: grayscale(0.2) brightness(0.92);
 }
 

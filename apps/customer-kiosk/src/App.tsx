@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import type { 
   SessionUpdatedPayload, 
   WebSocketEvent,
@@ -9,7 +9,8 @@ import type {
   SelectionLockedPayload,
   SelectionAcknowledgedPayload,
 } from '@club-ops/shared';
-import logoImage from './assets/the-clubs-logo.png';
+import whiteLogo from './assets/logo_vector_transparent_hi.svg';
+import blackLogo from './assets/logo_vector_transparent_hi_black.svg';
 import { t, type Language } from './i18n';
 import { ScreenShell } from './components/ScreenShell';
 
@@ -82,6 +83,10 @@ function getRentalDisplayName(rental: string, lang: Language | null | undefined)
 function App() {
   const [, setHealth] = useState<HealthStatus | null>(null);
   const [, setWsConnected] = useState(false);
+  const [isPortrait, setIsPortrait] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return window.innerHeight >= window.innerWidth;
+  });
   const [session, setSession] = useState<SessionState>({
     sessionId: null,
     customerName: null,
@@ -132,7 +137,8 @@ function App() {
   // Secondary: ?lane=lane-2 query param
   // Fallback: sessionStorage (NOT localStorage - localStorage is shared across tabs)
   // Default: lane-1
-  const lane = (() => {
+  // Memoize to prevent unnecessary re-renders
+  const lane = useMemo(() => {
     // Check pathname patterns: /register-1, /register-2, etc.
     const pathMatch = window.location.pathname.match(/\/register-(\d+)/);
     if (pathMatch) {
@@ -158,7 +164,7 @@ function App() {
     
     // Default
     return 'lane-1';
-  })();
+  }, []); // Empty deps - lane should only be computed once on mount
   
   // Store in sessionStorage for persistence within this tab
   useEffect(() => {
@@ -168,6 +174,28 @@ function App() {
       // Ignore if sessionStorage unavailable
     }
   }, [lane]);
+
+  useEffect(() => {
+    const handleOrientation = () => {
+      setIsPortrait(window.innerHeight >= window.innerWidth);
+    };
+    handleOrientation();
+    window.addEventListener('resize', handleOrientation);
+    window.addEventListener('orientationchange', handleOrientation);
+    return () => {
+      window.removeEventListener('resize', handleOrientation);
+      window.removeEventListener('orientationchange', handleOrientation);
+    };
+  }, []);
+
+  const orientationOverlay = !isPortrait ? (
+    <div className="orientation-blocker">
+      <div>
+        <h1>Portrait mode required</h1>
+        <p>Please rotate the device to portrait to continue.</p>
+      </div>
+    </div>
+  ) : null;
 
   const API_BASE = '/api';
 
@@ -424,6 +452,13 @@ function App() {
     };
   }, []);
 
+  // Ensure agreement view redirects for non-INITIAL/RENEWAL modes
+  useEffect(() => {
+    if (view === 'agreement' && checkinMode !== 'INITIAL' && checkinMode !== 'RENEWAL') {
+      setView('complete');
+    }
+  }, [view, checkinMode]);
+
   const WelcomeOverlay = () => {
     if (!showWelcomeOverlay) return null;
     const lang = session.customerPrimaryLanguage;
@@ -435,7 +470,6 @@ function App() {
         aria-label="Welcome"
       >
         <div className="welcome-overlay-content">
-          <img src={logoImage} alt="Club Dallas" className="welcome-overlay-logo" />
           <div className="welcome-overlay-message">
             {t(lang, 'welcome')}
             {session.customerName ? `, ${session.customerName}` : ''}
@@ -853,9 +887,9 @@ function App() {
   // Idle state: logo only, centered
   if (view === 'idle') {
     return (
-      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
+      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
+        {orientationOverlay}
         <div className="idle-content">
-          <img src={logoImage} alt="Club Dallas" className="logo-idle" />
         </div>
       </ScreenShell>
     );
@@ -864,10 +898,10 @@ function App() {
   // Language selection screen
   if (view === 'language') {
     return (
-      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
+      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
+        {orientationOverlay}
         <WelcomeOverlay />
         <div className="active-content">
-          <img src={logoImage} alt="Club Dallas" className="logo-header" />
           <main className="main-content">
             <div className="language-selection-screen">
               <h1 className="language-title">{t(null, 'selectLanguage')}</h1>
@@ -897,10 +931,10 @@ function App() {
   // Payment pending screen
   if (view === 'payment') {
     return (
-      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
+      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
+        {orientationOverlay}
         <WelcomeOverlay />
         <div className="active-content">
-          <img src={logoImage} alt="Club Dallas" className="logo-header" />
           <main className="main-content">
             <div className="payment-pending-screen">
               <h1>{t(session.customerPrimaryLanguage, 'paymentPending')}</h1>
@@ -930,18 +964,18 @@ function App() {
   if (view === 'agreement') {
     // Only show agreement for INITIAL/RENEWAL
     if (checkinMode !== 'INITIAL' && checkinMode !== 'RENEWAL') {
-      // For upgrades, skip agreement and go to complete
-      setView('complete');
+      // For upgrades, skip agreement and go to complete (will be handled by useEffect above)
       return null;
     }
 
     return (
       <ScreenShell backgroundVariant="none" showLogoWatermark={false}>
+        {orientationOverlay}
         <WelcomeOverlay />
         <div className="agreement-screen-container">
           {/* Logo header - black on white */}
           <div className="agreement-logo-header">
-            <img src={logoImage} alt="Club Dallas" className="agreement-logo-img" />
+            <img src={blackLogo} alt="Club Dallas" className="agreement-logo-img" />
           </div>
           
           {/* White paper panel */}
@@ -1007,7 +1041,7 @@ function App() {
 
               <div className="agreement-submit-container">
                 <button
-                  className="submit-agreement-btn"
+                  className="btn-liquid-glass submit-agreement-btn"
                   onClick={() => void handleSubmitAgreement()}
                   disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
                 >
@@ -1027,9 +1061,9 @@ function App() {
     
     return (
       <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
+        {orientationOverlay}
         <WelcomeOverlay />
         <div className="active-content">
-          <img src={logoImage} alt="Club Dallas" className="logo-header" />
           <main className="main-content">
             <div className="complete-screen">
               <h1>{t(lang, 'thankYou')}</h1>
@@ -1058,11 +1092,10 @@ function App() {
 
   // Selection view (default active session state)
   return (
-    <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
+    <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
+      {orientationOverlay}
       <WelcomeOverlay />
       <div className="active-content">
-        <img src={logoImage} alt="Club Dallas" className="logo-header" />
-        
         <main className="main-content">
         <div className="customer-info">
           <h1 className="customer-name">Welcome, {session.customerName}</h1>
@@ -1072,10 +1105,10 @@ function App() {
         <div className="membership-level-section">
           <p className="section-label">Membership Level:</p>
           <div className="membership-buttons">
-            <button className="cs-glass-button cs-glass-button--locked cs-glass-button--selected" disabled>
+            <button className="btn-liquid-glass btn-liquid-glass--selected btn-liquid-glass--disabled" disabled>
               {session.membershipNumber ? 'Member' : 'Non-Member'}
             </button>
-            <button className="cs-glass-button cs-glass-button--locked" disabled>
+            <button className="btn-liquid-glass btn-liquid-glass--disabled" disabled>
               {session.membershipNumber ? 'Non-Member' : 'Member'}
             </button>
           </div>
@@ -1106,15 +1139,7 @@ function App() {
               <button
                 onClick={() => void handleConfirmSelection()}
                 disabled={isSubmitting || session.pastDueBlocked}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: 'white',
-                  color: '#3b82f6',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  cursor: isSubmitting || session.pastDueBlocked ? 'not-allowed' : 'pointer',
-                }}
+                className="btn-liquid-glass"
               >
                 {isSubmitting ? t(session.customerPrimaryLanguage, 'confirming') : t(session.customerPrimaryLanguage, 'confirmSelection')}
               </button>
@@ -1125,15 +1150,7 @@ function App() {
                 <button
                   onClick={() => void handleAcknowledgeSelection()}
                   disabled={isSubmitting}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: 'white',
-                    color: '#3b82f6',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  }}
+                  className="btn-liquid-glass"
                 >
                   {isSubmitting ? t(session.customerPrimaryLanguage, 'acknowledging') : t(session.customerPrimaryLanguage, 'acknowledge')}
                 </button>
@@ -1165,7 +1182,7 @@ function App() {
                 return (
                   <button
                     key={rental}
-                    className={`cs-glass-button ${isSelected ? 'cs-glass-button--selected' : ''} ${isDisabled ? 'cs-glass-button--locked' : ''}`}
+                    className={`btn-liquid-glass ${isSelected ? 'btn-liquid-glass--selected' : ''} ${isDisabled ? 'btn-liquid-glass--disabled' : ''}`}
                     onClick={() => {
                       if (!isDisabled) {
                         void handleRentalSelection(rental);
@@ -1190,7 +1207,7 @@ function App() {
                 );
               })
             ) : (
-              <div className="cs-glass-button cs-glass-button--locked" disabled>
+              <div className="btn-liquid-glass btn-liquid-glass--disabled">
                 {t(session.customerPrimaryLanguage, 'noOptionsAvailable')}
               </div>
             )}
@@ -1200,7 +1217,7 @@ function App() {
         {/* Proceed for Payment button */}
         <div className="proceed-section">
           <button
-            className="cs-glass-button"
+            className="btn-liquid-glass"
             onClick={() => {
               if (proposedRentalType && selectionConfirmed) {
                 // Selection is confirmed, proceed to payment
@@ -1217,7 +1234,7 @@ function App() {
         {/* Waitlist button (shown when higher tier available) */}
         {session.allowedRentals.includes('STANDARD') && (
           <button
-            className="waitlist-btn"
+            className="btn-liquid-glass waitlist-btn"
             onClick={handleJoinWaitlist}
           >
             Join Waitlist for Upgrade
@@ -1248,7 +1265,7 @@ function App() {
               </ul>
             </div>
             <button
-              className="modal-ok-btn"
+              className="btn-liquid-glass modal-ok-btn"
               onClick={() => void handleDisclaimerAcknowledge()}
               disabled={isSubmitting}
             >
@@ -1270,14 +1287,14 @@ function App() {
             </div>
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
               <button
-                className="modal-ok-btn"
+                  className="btn-liquid-glass modal-ok-btn"
                 onClick={() => void handleCustomerConfirmSelection(true)}
                 disabled={isSubmitting}
               >
                 Accept
               </button>
               <button
-                className="modal-ok-btn"
+                  className="btn-liquid-glass modal-ok-btn"
                 style={{ backgroundColor: '#ef4444' }}
                 onClick={() => void handleCustomerConfirmSelection(false)}
                 disabled={isSubmitting}
@@ -1331,7 +1348,7 @@ function App() {
                     return (
                       <button
                         key={rental}
-                        className="modal-ok-btn"
+                        className="btn-liquid-glass modal-ok-btn"
                         onClick={() => handleWaitlistBackupSelection(rental)}
                         disabled={!isAvailable || isSubmitting}
                         style={{
@@ -1347,7 +1364,7 @@ function App() {
               </div>
             </div>
             <button
-              className="modal-ok-btn"
+              className="btn-liquid-glass modal-ok-btn"
               onClick={() => setShowWaitlistModal(false)}
               disabled={isSubmitting}
               style={{ marginTop: '1rem', backgroundColor: '#64748b' }}
@@ -1383,7 +1400,7 @@ function App() {
               </ul>
             </div>
             <button
-              className="modal-ok-btn"
+              className="btn-liquid-glass modal-ok-btn"
               onClick={() => {
                 setShowRenewalDisclaimer(false);
                 // Proceed to agreement screen
@@ -1396,7 +1413,6 @@ function App() {
           </div>
         </div>
       )}
-        </main>
       </div>
     </ScreenShell>
   );
