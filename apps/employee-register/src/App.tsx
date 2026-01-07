@@ -311,15 +311,17 @@ function App() {
     if (!session?.sessionToken || !selectedCustomerId) return;
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/v1/sessions/scan-id', {
+      // Customer search selection should attach to the *check-in lane session* system
+      // (lane_sessions), not legacy sessions, so downstream kiosk endpoints (set-language, etc.)
+      // can resolve the active session.
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
-          idNumber: selectedCustomerId,
-          lane,
+          customerId: selectedCustomerId,
         }),
       });
 
@@ -576,14 +578,16 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${API_BASE}/v1/lanes/${lane}/clear`, {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/reset`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.sessionToken}`,
         },
       });
 
-      if (!response.ok) {
+      // Reset can be treated as idempotent on the client.
+      // If there is no active lane session, the server may respond 404.
+      if (!response.ok && response.status !== 404) {
         throw new Error('Failed to clear session');
       }
 
@@ -2222,7 +2226,7 @@ function App() {
               <button
                 key={rental}
                 onClick={() => void handleProposeSelection(rental)}
-                disabled={isSubmitting || (proposedRentalType === rental)}
+                disabled={isSubmitting}
                 style={{
                   padding: '0.5rem 1rem',
                   background: proposedRentalType === rental ? '#3b82f6' : '#475569',

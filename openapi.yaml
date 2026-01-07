@@ -188,7 +188,7 @@ paths:
   /v1/checkin/lane/{laneId}/start:
     post:
       tags: [Check-in]
-      summary: Start lane session with ID/membership scan
+      summary: Start lane session (by customerId or ID/membership scan)
       security:
         - bearerAuth: []
       parameters:
@@ -203,18 +203,20 @@ paths:
           application/json:
             schema:
               type: object
-              required: [idScanValue]
               properties:
+                customerId:
+                  type: string
+                  format: uuid
                 idScanValue:
                   type: string
                 membershipScanValue:
                   type: string
-                checkinMode:
-                  type: string
-                  enum: [INITIAL, RENEWAL]
                 visitId:
                   type: string
                   format: uuid
+              anyOf:
+                - required: [customerId]
+                - required: [idScanValue]
       responses:
         '200':
           description: Lane session created/updated

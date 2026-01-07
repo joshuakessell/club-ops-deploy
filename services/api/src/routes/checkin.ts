@@ -474,6 +474,15 @@ async function computeWaitlistInfo(
  * Check-in flow routes.
  */
 export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
+  const StartLaneSessionBodySchema = z.object({
+    customerId: z.string().uuid().optional(),
+    idScanValue: z.string().min(1).optional(),
+    membershipScanValue: z.string().optional(),
+    visitId: z.string().uuid().optional(),
+  }).refine((val) => !!val.customerId || !!val.idScanValue, {
+    message: 'customerId or idScanValue is required',
+  });
+
   /**
    * POST /v1/checkin/lane/:laneId/start
    * 
@@ -483,7 +492,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{
     Params: { laneId: string };
-    Body: { idScanValue: string; membershipScanValue?: string; visitId?: string };
+    Body: { customerId?: string; idScanValue?: string; membershipScanValue?: string; visitId?: string };
   }>('/v1/checkin/lane/:laneId/start', {
     preHandler: [requireAuth],
   }, async (request, reply) => {
@@ -493,12 +502,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     const staffId = request.staff.staffId;
 
     const { laneId } = request.params;
-    const { idScanValue, membershipScanValue, visitId } = request.body;
+    let body: z.infer<typeof StartLaneSessionBodySchema>;
+    try {
+      body = StartLaneSessionBodySchema.parse(request.body);
+    } catch (error) {
+      return reply.status(400).send({
+        error: 'Validation failed',
+        details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+      });
+    }
+
+    const { customerId: requestedCustomerId, idScanValue, membershipScanValue, visitId } = body;
 
     try {
       const result = await transaction(async (client) => {
         // Parse membership number if provided
-        const membershipNumber = membershipScanValue 
+        let membershipNumber = membershipScanValue 
           ? parseMembershipNumber(membershipScanValue) 
           : null;
 
@@ -506,40 +525,62 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         let customerId: string | null = null;
         let customerName = 'Customer';
 
-        // Try to find existing customer by membership number
-        if (membershipNumber) {
+        if (requestedCustomerId) {
           const customerResult = await client.query<CustomerRow>(
             `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until
              FROM customers
-             WHERE membership_number = $1
+             WHERE id = $1
              LIMIT 1`,
-            [membershipNumber]
+            [requestedCustomerId]
           );
+          if (customerResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'Customer not found' };
+          }
+          const customer = customerResult.rows[0]!;
+          customerId = customer.id;
+          customerName = customer.name;
+          membershipNumber = customer.membership_number || null;
 
-          if (customerResult.rows.length > 0) {
-            const customer = customerResult.rows[0]!;
-            customerId = customer.id;
-            customerName = customer.name;
-            
-            // Check if banned
-            const bannedUntil = toDate(customer.banned_until);
-            if (bannedUntil && new Date() < bannedUntil) {
-              throw { statusCode: 403, message: 'Customer is banned until ' + bannedUntil.toISOString() };
+          const bannedUntil = toDate(customer.banned_until);
+          if (bannedUntil && new Date() < bannedUntil) {
+            throw { statusCode: 403, message: 'Customer is banned until ' + bannedUntil.toISOString() };
+          }
+        } else {
+          // Try to find existing customer by membership number
+          if (membershipNumber) {
+            const customerResult = await client.query<CustomerRow>(
+              `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until
+               FROM customers
+               WHERE membership_number = $1
+               LIMIT 1`,
+              [membershipNumber]
+            );
+
+            if (customerResult.rows.length > 0) {
+              const customer = customerResult.rows[0]!;
+              customerId = customer.id;
+              customerName = customer.name;
+              
+              // Check if banned
+              const bannedUntil = toDate(customer.banned_until);
+              if (bannedUntil && new Date() < bannedUntil) {
+                throw { statusCode: 403, message: 'Customer is banned until ' + bannedUntil.toISOString() };
+              }
             }
           }
-        }
 
-        // If we couldn't resolve an existing customer, create one for the session.
-        // Demo behavior: use a placeholder name derived from the scanned ID value.
-        if (!customerId) {
-          const newCustomer = await client.query<{ id: string }>(
-            `INSERT INTO customers (name, created_at, updated_at)
-             VALUES ($1, NOW(), NOW())
-             RETURNING id`,
-            [idScanValue || 'Customer']
-          );
-          customerId = newCustomer.rows[0]!.id;
-          customerName = idScanValue || 'Customer';
+          // If we couldn't resolve an existing customer, create one for the session.
+          // Demo behavior: use a placeholder name derived from the scanned ID value.
+          if (!customerId) {
+            const newCustomer = await client.query<{ id: string }>(
+              `INSERT INTO customers (name, created_at, updated_at)
+               VALUES ($1, NOW(), NOW())
+               RETURNING id`,
+              [idScanValue || 'Customer']
+            );
+            customerId = newCustomer.rows[0]!.id;
+            customerName = idScanValue || 'Customer';
+          }
         }
 
         // Determine mode (auto-detect renewal if active visit exists or explicit visitId provided)
