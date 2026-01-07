@@ -5,6 +5,7 @@
 export { healthRoutes } from './health.js';
 export { authRoutes } from './auth.js';
 export { webauthnRoutes } from './webauthn.js';
+export { customerRoutes } from './customers.js';
 export { sessionRoutes } from './sessions.js';
 export { laneRoutes } from './lanes.js';
 export { inventoryRoutes } from './inventory.js';

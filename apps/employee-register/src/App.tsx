@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { type ActiveVisit, type CheckoutRequestSummary, type CheckoutChecklist, type WebSocketEvent, type CheckoutRequestedPayload, type CheckoutClaimedPayload, type CheckoutUpdatedPayload, type SessionUpdatedPayload, type AssignmentCreatedPayload, type AssignmentFailedPayload, type CustomerConfirmedPayload, type CustomerDeclinedPayload, type SelectionProposedPayload, type SelectionLockedPayload, type SelectionAcknowledgedPayload } from '@club-ops/shared';
+import { type ActiveVisit, type CheckoutRequestSummary, type CheckoutChecklist, type WebSocketEvent, type CheckoutRequestedPayload, type CheckoutClaimedPayload, type CheckoutUpdatedPayload, type SessionUpdatedPayload, type AssignmentCreatedPayload, type AssignmentFailedPayload, type CustomerConfirmedPayload, type CustomerDeclinedPayload, type SelectionProposedPayload, type SelectionLockedPayload, type SelectionAcknowledgedPayload, type SelectionForcedPayload } from '@club-ops/shared';
 import { RegisterSignIn } from './RegisterSignIn';
 import { InventorySelector } from './InventorySelector';
 import { IdScanner } from './IdScanner';
 import type { IdScanPayload } from '@club-ops/shared';
+import { debounce } from './utils/debounce';
 
 interface HealthStatus {
   status: string;
@@ -12,8 +13,6 @@ interface HealthStatus {
 }
 
 const API_BASE = '/api';
-
-type LaneSessionMode = 'INITIAL' | 'RENEWAL';
 
 interface StaffSession {
   staffId: string;
@@ -99,12 +98,7 @@ function App() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [agreementSigned, setAgreementSigned] = useState(false);
-  const [checkinMode, setCheckinMode] = useState<LaneSessionMode>('INITIAL');
-  const [selectedVisit, setSelectedVisit] = useState<ActiveVisit | null>(null);
-  const [showRenewalSearch, setShowRenewalSearch] = useState(false);
-  const [renewalSearchQuery, setRenewalSearchQuery] = useState('');
-  const [renewalSearchResults, setRenewalSearchResults] = useState<ActiveVisit[]>([]);
-  const [showRenewalDisclaimer, setShowRenewalDisclaimer] = useState(false);
+  // Check-in mode is now auto-detected server-side based on active visits/assignments.
   const [selectedRentalType, setSelectedRentalType] = useState<string | null>(null);
   const [checkoutRequests, setCheckoutRequests] = useState<Map<string, CheckoutRequestSummary>>(new Map());
   const [selectedCheckoutRequest, setSelectedCheckoutRequest] = useState<string | null>(null);
@@ -119,7 +113,7 @@ function App() {
   const [proposedBy, setProposedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
-  const [selectionAcknowledged, setSelectionAcknowledged] = useState(false);
+  const [selectionAcknowledged, setSelectionAcknowledged] = useState(true);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [showCustomerConfirmationPending, setShowCustomerConfirmationPending] = useState(false);
   const [customerConfirmationType, setCustomerConfirmationType] = useState<{ requested: string; selected: string; number: string } | null>(null);
@@ -138,11 +132,13 @@ function App() {
     offeredAt?: string;
     displayIdentifier: string;
     currentRentalType: string;
+    customerName?: string;
   }>>([]);
   const [showUpgradesPanel, setShowUpgradesPanel] = useState(false);
-  const [selectedWaitlistEntry] = useState<string | null>(null);
+  const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<string | null>(null);
   const [upgradePaymentIntentId, setUpgradePaymentIntentId] = useState<string | null>(null);
   const [upgradeFee, setUpgradeFee] = useState<number | null>(null);
+  const [waitlistWidgetOpen, setWaitlistWidgetOpen] = useState(false);
   
   // Customer info state
   const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(undefined);
@@ -161,6 +157,20 @@ function App() {
   const [paymentDeclineError, setPaymentDeclineError] = useState<string | null>(null);
   const paymentIntentCreateInFlightRef = useRef(false);
   const fetchWaitlistRef = useRef<(() => Promise<void>) | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerSuggestions, setCustomerSuggestions] = useState<Array<{
+    id: string;
+    name: string;
+    firstName: string;
+    lastName: string;
+    dobMonthDay?: string;
+    membershipNumber?: string;
+    disambiguator: string;
+  }>>([]);
+  const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedCustomerLabel, setSelectedCustomerLabel] = useState<string | null>(null);
   
   // Assignment completion state
   const [assignedResourceType, setAssignedResourceType] = useState<'room' | 'locker' | null>(null);
@@ -246,6 +256,98 @@ function App() {
       setSession(null);
     }
   };
+  const runCustomerSearch = useCallback(
+    debounce(async (query: string) => {
+      if (!session?.sessionToken || query.trim().length < 3) {
+        setCustomerSuggestions([]);
+        setCustomerSearchLoading(false);
+        return;
+      }
+
+      if (searchAbortRef.current) {
+        searchAbortRef.current.abort();
+      }
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+
+      setCustomerSearchLoading(true);
+      try {
+        const response = await fetch(`/api/v1/customers/search?q=${encodeURIComponent(query)}&limit=10`, {
+          headers: {
+            'Authorization': `Bearer ${session.sessionToken}`,
+          },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error('Search failed');
+        }
+        const data = await response.json() as { suggestions?: typeof customerSuggestions };
+        setCustomerSuggestions(data.suggestions || []);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === 'AbortError')) {
+          console.error('Customer search failed:', error);
+          setCustomerSuggestions([]);
+        }
+      } finally {
+        setCustomerSearchLoading(false);
+      }
+    }, 200),
+    [session?.sessionToken]
+  );
+
+  useEffect(() => {
+    if (customerSearch.trim().length >= 3) {
+      setSelectedCustomerId(null);
+      setSelectedCustomerLabel(null);
+      runCustomerSearch(customerSearch);
+    } else {
+      setCustomerSuggestions([]);
+      setSelectedCustomerId(null);
+      setSelectedCustomerLabel(null);
+    }
+  }, [customerSearch, runCustomerSearch]);
+
+  const handleConfirmCustomerSelection = async () => {
+    if (!session?.sessionToken || !selectedCustomerId) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/v1/sessions/scan-id', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          idNumber: selectedCustomerId,
+          lane,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(payload) || 'Failed to start session');
+      }
+
+      const data = await response.json() as {
+        sessionId?: string;
+        customerName?: string;
+        membershipNumber?: string;
+      };
+      if (data.customerName) setCustomerName(data.customerName);
+      if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
+      if (data.sessionId) setCurrentSessionId(data.sessionId);
+
+      // Clear search UI
+      setCustomerSearch('');
+      setCustomerSuggestions([]);
+    } catch (error) {
+      console.error('Failed to confirm customer:', error);
+      alert(error instanceof Error ? error.message : 'Failed to confirm customer');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
 
   // Load staff session from localStorage (created after register sign-in)
   useEffect(() => {
@@ -361,18 +463,6 @@ function App() {
       return;
     }
 
-    // Require check-in mode to be selected before starting session
-    if (!checkinMode) {
-      alert('Please select check-in mode (Initial Check-In or Renewal) before scanning ID');
-      return;
-    }
-
-    // For RENEWAL mode, require visit to be selected
-    if (checkinMode === 'RENEWAL' && !selectedVisit) {
-      alert('Please select a visit to renew before scanning ID');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/scan-id`, {
@@ -426,18 +516,6 @@ function App() {
       return;
     }
 
-    // Require check-in mode to be selected before starting session
-    if (!checkinMode) {
-      alert('Please select check-in mode (Initial Check-In or Renewal) before starting session');
-      return;
-    }
-
-    // For RENEWAL mode, require visit to be selected
-    if (checkinMode === 'RENEWAL' && !selectedVisit) {
-      alert('Please select a visit to renew before starting session');
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/start`, {
@@ -449,8 +527,6 @@ function App() {
         body: JSON.stringify({
           idScanValue,
           membershipScanValue: membershipScanValue || undefined,
-          checkinMode: checkinMode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
-          visitId: checkinMode === 'RENEWAL' && selectedVisit ? selectedVisit.id : undefined,
         }),
       });
 
@@ -516,9 +592,6 @@ function App() {
       setCurrentSessionId(null);
       setAgreementSigned(false);
       setManualEntry(false);
-      setSelectedVisit(null);
-      setCheckinMode('INITIAL');
-      setShowRenewalSearch(false);
       setSelectedRentalType(null);
       setCustomerSelectedType(null);
       setWaitlistDesiredTier(null);
@@ -535,42 +608,6 @@ function App() {
       console.error('Failed to clear session:', error);
       alert('Failed to clear session');
     }
-  };
-
-  const handleSearchActiveVisits = async () => {
-    if (!session?.sessionToken || !renewalSearchQuery.trim()) {
-      return;
-    }
-
-    try {
-      const response = await fetch(
-        `${API_BASE}/v1/visits/active?query=${encodeURIComponent(renewalSearchQuery)}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session.sessionToken}`,
-          },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to search visits');
-      }
-
-      const data = await readJson<{ visits?: ActiveVisit[] }>(response);
-      setRenewalSearchResults(data.visits || []);
-    } catch (error) {
-      console.error('Failed to search visits:', error);
-      alert('Failed to search visits');
-    }
-  };
-
-  const handleSelectVisit = (visit: ActiveVisit) => {
-    setSelectedVisit(visit);
-    setCustomerName(visit.customerName);
-    setMembershipNumber(visit.membershipNumber || '');
-    setShowRenewalSearch(false);
-    setRenewalSearchQuery('');
-    setRenewalSearchResults([]);
   };
 
   const handleClaimCheckout = async (requestId: string) => {
@@ -709,46 +746,6 @@ function App() {
     }
   };
 
-  const handleRenewalDisclaimerAcknowledge = async () => {
-    if (!session?.sessionToken || !selectedVisit || !selectedRentalType) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    setShowRenewalDisclaimer(false);
-
-    try {
-      const response = await fetch(`${API_BASE}/v1/visits/${selectedVisit.id}/renew`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          rentalType: selectedRentalType,
-          lane,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to renew visit');
-      }
-
-      const data = await readJson<{ sessionId?: string }>(response);
-      if (typeof data.sessionId === 'string') {
-        setCurrentSessionId(data.sessionId);
-      }
-      setSelectedRentalType(null);
-      alert('Renewal created successfully');
-    } catch (error) {
-      console.error('Failed to renew visit:', error);
-      alert(error instanceof Error ? error.message : 'Failed to renew visit');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Waitlist/Upgrades functions
   const fetchWaitlist = async () => {
     if (!session?.sessionToken) return;
@@ -794,6 +791,23 @@ function App() {
       void fetchWaitlistRef.current?.();
     }
   }, [session?.sessionToken]);
+
+  const topWaitlistEntry = waitlistEntries.find(e => e.status === 'ACTIVE' || e.status === 'OFFERED');
+  const waitlistDisplayNumber = topWaitlistEntry?.displayIdentifier || '...';
+  const waitlistInteractive = !!topWaitlistEntry;
+  const sessionActive = !!currentSessionId;
+
+  const handleWaitlistEntryAction = (entryId: string, customerName?: string) => {
+    if (sessionActive) {
+      return;
+    }
+    const label = customerName || 'customer';
+    const confirm = window.confirm(`Begin upgrading ${label}?`);
+    if (!confirm) return;
+    setSelectedWaitlistEntry(entryId);
+    setShowUpgradesPanel(true);
+    setWaitlistWidgetOpen(false);
+  };
 
   const handleCompleteUpgrade = async (waitlistId: string, paymentIntentId: string) => {
     if (!session?.sessionToken) {
@@ -989,24 +1003,16 @@ function App() {
             setProposedRentalType(payload.rentalType);
             setProposedBy(payload.proposedBy);
           }
-        } else if (message.type === 'SELECTION_LOCKED') {
-          const payload = message.payload as SelectionLockedPayload;
+        } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
+          const payload = message.payload as SelectionLockedPayload | SelectionForcedPayload;
           if (payload.sessionId === currentSessionId) {
             setSelectionConfirmed(true);
-            setSelectionConfirmedBy(payload.confirmedBy);
+            setSelectionConfirmedBy(payload.confirmedBy || 'EMPLOYEE');
             setCustomerSelectedType(payload.rentalType);
-            // If employee didn't confirm, show acknowledgement prompt
-            if (payload.confirmedBy === 'CUSTOMER') {
-              setSelectionAcknowledged(false);
-            } else {
-              setSelectionAcknowledged(true);
-            }
-          }
-        } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
-          const payload = message.payload as SelectionAcknowledgedPayload;
-          if (payload.sessionId === currentSessionId) {
             setSelectionAcknowledged(true);
           }
+        } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
+          setSelectionAcknowledged(true);
         } else if (message.type === 'INVENTORY_UPDATED' || message.type === 'ROOM_STATUS_CHANGED') {
           // Refresh inventory will be handled by InventorySelector component
         } else if (message.type === 'ASSIGNMENT_CREATED') {
@@ -1049,12 +1055,6 @@ function App() {
   }, [selectedCheckoutRequest, lane]);
 
   const handleInventorySelect = (type: 'room' | 'locker', id: string, number: string, tier: string) => {
-    // If selection is locked and not acknowledged, don't allow selection change
-    if (selectionConfirmed && !selectionAcknowledged) {
-      alert('Please acknowledge the locked selection before changing selection.');
-      return;
-    }
-
     // Check if employee selected different type than customer requested
     if (customerSelectedType && tier !== customerSelectedType) {
       // Require customer confirmation
@@ -1075,6 +1075,12 @@ function App() {
 
   const handleProposeSelection = async (rentalType: string) => {
     if (!currentSessionId || !session?.sessionToken) {
+      return;
+    }
+
+    // Second tap on same rental forces selection
+    if (proposedRentalType === rentalType && !selectionConfirmed) {
+      await handleConfirmSelection();
       return;
     }
 
@@ -1137,38 +1143,6 @@ function App() {
     } catch (error) {
       console.error('Failed to confirm selection:', error);
       alert(error instanceof Error ? error.message : 'Failed to confirm selection. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleAcknowledgeSelection = async () => {
-    if (!currentSessionId || !session?.sessionToken) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/acknowledge-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          acknowledgedBy: 'EMPLOYEE',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to acknowledge selection');
-      }
-
-      setSelectionAcknowledged(true);
-    } catch (error) {
-      console.error('Failed to acknowledge selection:', error);
-      alert(error instanceof Error ? error.message : 'Failed to acknowledge selection. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -1812,17 +1786,19 @@ function App() {
         );
       })()}
 
-      <header className="header">
-        <h1>Employee Register</h1>
-        <div className="status-badges">
-          <span className={`badge ${health?.status === 'ok' ? 'badge-success' : 'badge-error'}`}>
-            API: {health?.status ?? '...'}
-          </span>
-          <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
-            WS: {wsConnected ? 'Live' : 'Offline'}
-          </span>
-          <span className="badge badge-info">Lane: {lane}</span>
-          <span className="badge badge-info">{session.name} ({session.role})</span>
+      <header className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <h1 style={{ margin: 0 }}>Employee Register</h1>
+          <div className="status-badges" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span className={`badge ${health?.status === 'ok' ? 'badge-success' : 'badge-error'}`}>
+              API: {health?.status ?? '...'}
+            </span>
+            <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
+              WS: {wsConnected ? 'Live' : 'Offline'}
+            </span>
+            <span className="badge badge-info">Lane: {lane}</span>
+            <span className="badge badge-info">{session.name} ({session.role})</span>
+          </div>
           <button
             onClick={() => void handleLogout()}
             style={{
@@ -1839,7 +1815,127 @@ function App() {
             Sign Out
           </button>
         </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            onClick={() => setWaitlistWidgetOpen(!waitlistWidgetOpen)}
+            disabled={!waitlistInteractive}
+            aria-label="Waitlist widget"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.45rem 0.75rem',
+              background: waitlistInteractive ? '#fef3c7' : '#1f2937',
+              border: `1px solid ${waitlistInteractive ? '#f59e0b' : '#334155'}`,
+              borderRadius: '9999px',
+              color: waitlistInteractive ? '#92400e' : '#94a3b8',
+              fontWeight: 700,
+              cursor: waitlistInteractive ? 'pointer' : 'not-allowed',
+              minWidth: '110px',
+              justifyContent: 'center',
+            }}
+          >
+            <span role="img" aria-label="waitlist clock">⏰</span>
+            <span>{waitlistDisplayNumber}</span>
+          </button>
+        </div>
       </header>
+
+      {waitlistWidgetOpen && (
+        <div style={{ position: 'relative', marginTop: '0.5rem' }}>
+          <div
+            style={{
+              position: 'absolute',
+              right: 0,
+              zIndex: 1500,
+              background: '#0b1220',
+              border: '1px solid #1f2937',
+              borderRadius: '8px',
+              width: '320px',
+              boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+            }}
+          >
+            <div style={{ padding: '0.75rem', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: 700, color: '#f59e0b' }}>Waitlist</div>
+              <button
+                onClick={() => setWaitlistWidgetOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <div style={{ maxHeight: '260px', overflowY: 'auto', opacity: sessionActive ? 0.65 : 1, pointerEvents: sessionActive ? 'none' : 'auto' }}>
+              {waitlistEntries.length === 0 && (
+                <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No waitlist entries</div>
+              )}
+              {waitlistEntries.slice(0, 6).map(entry => (
+                <div
+                  key={entry.id}
+                  style={{
+                    padding: '0.75rem',
+                    borderBottom: '1px solid #1f2937',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{entry.customerName || entry.displayIdentifier}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                      {entry.displayIdentifier} → {entry.desiredTier}
+                    </div>
+                  </div>
+                  <button
+                    aria-label={`Begin upgrade for ${entry.customerName || entry.displayIdentifier}`}
+                    onClick={() => handleWaitlistEntryAction(entry.id, entry.customerName)}
+                    style={{
+                      background: '#f59e0b',
+                      color: '#1f2937',
+                      border: 'none',
+                      borderRadius: '9999px',
+                      padding: '0.4rem 0.55rem',
+                      fontWeight: 700,
+                      cursor: sessionActive ? 'not-allowed' : 'pointer',
+                    }}
+                    disabled={sessionActive}
+                  >
+                    🔑
+                  </button>
+                </div>
+              ))}
+              {waitlistEntries.length > 6 && (
+                <div
+                  onClick={() => {
+                    setShowUpgradesPanel(true);
+                    setWaitlistWidgetOpen(false);
+                  }}
+                  style={{
+                    padding: '0.75rem',
+                    borderTop: '1px solid #1f2937',
+                    color: '#f59e0b',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  More..
+                </div>
+              )}
+            </div>
+            {sessionActive && (
+              <div style={{ padding: '0.65rem 0.75rem', color: '#f59e0b', fontSize: '0.85rem', borderTop: '1px solid #1f2937' }}>
+                Active session present — actions disabled
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <main className="main">
         {/* Customer Info Panel */}
@@ -2043,157 +2139,6 @@ function App() {
           </section>
         )}
 
-        {/* Mode Toggle */}
-        <section className="mode-toggle-section" style={{ marginBottom: '1rem', padding: '1rem', background: '#f3f4f6', borderRadius: '8px' }}>
-          <h2 style={{ marginBottom: '0.5rem', fontSize: '1rem' }}>Check-in Mode</h2>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              onClick={() => {
-                setCheckinMode('INITIAL');
-                setSelectedVisit(null);
-                setShowRenewalSearch(false);
-                // Clear all session state when switching modes
-                setCustomerName('');
-                setMembershipNumber('');
-                setCurrentSessionId(null);
-                setAgreementSigned(false);
-                setSelectedRentalType(null);
-                setCustomerSelectedType(null);
-                setWaitlistDesiredTier(null);
-                setWaitlistBackupType(null);
-                setSelectedInventoryItem(null);
-                setPaymentIntentId(null);
-                setPaymentQuote(null);
-                setPaymentStatus(null);
-                setShowCustomerConfirmationPending(false);
-                setCustomerConfirmationType(null);
-                setShowWaitlistModal(false);
-              }}
-              style={{
-                padding: '0.5rem 1rem',
-                background: checkinMode === 'INITIAL' ? '#3b82f6' : '#e5e7eb',
-                color: checkinMode === 'INITIAL' ? 'white' : '#374151',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              Initial Check-in
-            </button>
-            <button
-              onClick={() => {
-                setCheckinMode('RENEWAL');
-                setShowRenewalSearch(true);
-                // Clear all session state when switching modes
-                setCustomerName('');
-                setMembershipNumber('');
-                setCurrentSessionId(null);
-                setAgreementSigned(false);
-                setSelectedRentalType(null);
-                setCustomerSelectedType(null);
-                setWaitlistDesiredTier(null);
-                setWaitlistBackupType(null);
-                setSelectedInventoryItem(null);
-                setPaymentIntentId(null);
-                setPaymentQuote(null);
-                setPaymentStatus(null);
-                setShowCustomerConfirmationPending(false);
-                setCustomerConfirmationType(null);
-                setShowWaitlistModal(false);
-                setProposedRentalType(null);
-                setProposedBy(null);
-                setSelectionConfirmed(false);
-                setSelectionConfirmedBy(null);
-                setSelectionAcknowledged(false);
-              }}
-              style={{
-                padding: '0.5rem 1rem',
-                background: checkinMode === 'RENEWAL' ? '#3b82f6' : '#e5e7eb',
-                color: checkinMode === 'RENEWAL' ? 'white' : '#374151',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              Renewal
-            </button>
-          </div>
-        </section>
-
-        {/* Renewal Visit Search */}
-        {checkinMode === 'RENEWAL' && showRenewalSearch && (
-          <section className="renewal-search-section" style={{ marginBottom: '1rem', padding: '1rem', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}>
-            <h2 style={{ marginBottom: '0.5rem' }}>Select Visit to Renew</h2>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <input
-                type="text"
-                value={renewalSearchQuery}
-                onChange={(e) => setRenewalSearchQuery(e.target.value)}
-                placeholder="Search by membership # or customer name"
-                style={{
-                  flex: 1,
-                  padding: '0.5rem',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                }}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    void handleSearchActiveVisits();
-                  }
-                }}
-              />
-              <button
-                onClick={() => void handleSearchActiveVisits()}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                Search
-              </button>
-            </div>
-            {renewalSearchResults.length > 0 && (
-              <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                {renewalSearchResults.map((visit) => (
-                  <div
-                    key={visit.id}
-                    onClick={() => handleSelectVisit(visit)}
-                    style={{
-                      padding: '0.75rem',
-                      marginBottom: '0.5rem',
-                      background: selectedVisit?.id === visit.id ? '#dbeafe' : '#f9fafb',
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <div style={{ fontWeight: 600 }}>{visit.customerName}</div>
-                    {visit.membershipNumber && (
-                      <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                        Membership: {visit.membershipNumber}
-                      </div>
-                    )}
-                    <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                      Checkout: {new Date(visit.currentCheckoutAt).toLocaleString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {selectedVisit && (
-              <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: '#dbeafe', borderRadius: '6px' }}>
-                <strong>Selected:</strong> {selectedVisit.customerName} - Checkout: {new Date(selectedVisit.currentCheckoutAt).toLocaleString()}
-              </div>
-            )}
-          </section>
-        )}
-
         {/* Waitlist Banner */}
         {waitlistDesiredTier && waitlistBackupType && (
           <div style={{
@@ -2261,26 +2206,6 @@ function App() {
               >
                 {isSubmitting ? 'Confirming...' : 'Confirm Customer Selection'}
               </button>
-            )}
-            {selectionConfirmed && selectionConfirmedBy === 'CUSTOMER' && !selectionAcknowledged && (
-              <div>
-                <p style={{ marginBottom: '0.5rem' }}>Customer has locked this selection. Please acknowledge to continue.</p>
-                <button
-                  onClick={() => void handleAcknowledgeSelection()}
-                  disabled={isSubmitting}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: 'white',
-                    color: '#3b82f6',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {isSubmitting ? 'Acknowledging...' : 'Acknowledge'}
-                </button>
-              </div>
             )}
           </div>
         )}
@@ -2599,6 +2524,80 @@ function App() {
               )}
             </div>
           )}
+
+          {/* Customer lookup (typeahead) */}
+          <div className="typeahead-section" style={{ marginTop: '1rem', background: '#0f172a', padding: '1rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <label htmlFor="customer-search" style={{ fontWeight: 600 }}>Search Customer</label>
+              <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>(type at least 3 letters)</span>
+            </div>
+            <input
+              id="customer-search"
+              type="text"
+              value={customerSearch}
+              onChange={(e) => setCustomerSearch(e.target.value)}
+              placeholder="Start typing name..."
+              style={{
+                width: '100%',
+                padding: '0.5rem',
+                borderRadius: '6px',
+                border: '1px solid #1f2937',
+                background: '#0b1220',
+                color: '#e2e8f0',
+              }}
+              disabled={isSubmitting}
+            />
+            {customerSearchLoading && (
+              <div style={{ marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.875rem' }}>Searching...</div>
+            )}
+            {customerSuggestions.length > 0 && (
+              <div style={{ marginTop: '0.5rem', background: '#0b1220', border: '1px solid #1f2937', borderRadius: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                {customerSuggestions.map((s) => {
+                  const label = `${s.lastName}, ${s.firstName}`;
+                  const active = selectedCustomerId === s.id;
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => {
+                        setSelectedCustomerId(s.id);
+                        setSelectedCustomerLabel(label);
+                      }}
+                      style={{
+                        padding: '0.5rem 0.75rem',
+                        cursor: 'pointer',
+                        background: active ? '#1e293b' : 'transparent',
+                        borderBottom: '1px solid #1f2937',
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{label}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
+                        {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <button
+              onClick={() => void handleConfirmCustomerSelection()}
+              disabled={!selectedCustomerId || isSubmitting}
+              style={{
+                marginTop: '0.75rem',
+                width: '100%',
+                padding: '0.65rem',
+                background: selectedCustomerId ? '#3b82f6' : '#1f2937',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 600,
+                cursor: !selectedCustomerId || isSubmitting ? 'not-allowed' : 'pointer',
+                opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
+              }}
+            >
+              {selectedCustomerLabel ? `Confirm ${selectedCustomerLabel}` : 'Confirm'}
+            </button>
+          </div>
         </section>
       </main>
 
@@ -2711,74 +2710,6 @@ function App() {
               }}
             >
               Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Renewal Disclaimer Modal */}
-      {showRenewalDisclaimer && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => setShowRenewalDisclaimer(false)}
-        >
-          <div
-            style={{
-              background: 'white',
-              padding: '2rem',
-              borderRadius: '8px',
-              maxWidth: '500px',
-              width: '90%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem' }}>Renewal Notice</h2>
-            <div style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
-              <ul style={{ listStyle: 'disc', paddingLeft: '1.5rem' }}>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  This is a renewal that extends your stay for another 6 hours from your current checkout time.
-                </li>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  You are nearing the 14-hour maximum stay for a single visit.
-                </li>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  At the end of this 6-hour renewal, you may extend one final time for 2 additional hours for a flat $20 fee (same for lockers or any room type).
-                </li>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  The $20 fee is not charged now; it applies only if you choose the final 2-hour extension later.
-                </li>
-              </ul>
-            </div>
-            <button
-              onClick={() => void handleRenewalDisclaimerAcknowledge()}
-              disabled={isSubmitting}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                background: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                opacity: isSubmitting ? 0.6 : 1,
-              }}
-            >
-              {isSubmitting ? 'Processing...' : 'OK'}
             </button>
           </div>
         </div>

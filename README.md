@@ -151,6 +151,12 @@ pnpm db:reset
 pnpm db:seed
 ```
 
+### Demo seed (rich customers/visits)
+- After a reset/migrate (`pnpm db:reset && pnpm db:migrate`), start the API with `DEMO_MODE=true` to auto-seed 100–200 demo customers, historical visits (6-hour blocks, ≤3 starts/week, no overlaps), a handful of active assignments, and a waitlist list long enough to exercise the UI. Shift/timeclock/demo documents still seed when shift data is absent.
+
+### One-step demo test run
+- `pnpm demo:test` will reset the DB, migrate, seed (with `DEMO_MODE=true`), and run the demo seed test (`services/api/tests/demo-seed.test.ts`). (Runs from the API package, so the test path is `tests/demo-seed.test.ts`.)
+
 **Database Configuration:**
 - Host: `localhost`
 - Port: `5433`

@@ -1,5 +1,8 @@
-import { query } from './index.js';
+import { query, transaction } from './index.js';
 import { randomUUID } from 'crypto';
+import { generateDemoData, type DemoRoom, type DemoLocker } from './demo-data.js';
+import { RoomStatus } from '@club-ops/shared';
+import { pathToFileURL } from 'url';
 
 /**
  * Demo mode seeding for shifts and timeclock sessions.
@@ -12,8 +15,164 @@ export async function seedDemoData(): Promise<void> {
   }
 
   try {
-    // Check if demo shifts already exist in the 28-day window
     const now = new Date();
+
+    // -----------------------------------------------------------------------
+    // Customer / visit / waitlist demo seeding (rich dataset for kiosk/register)
+    // -----------------------------------------------------------------------
+    // Always reseed demo customers in DEMO_MODE to guarantee availability for searches
+    {
+      console.log('🌱 Seeding demo customers, visits, waitlist (resetting existing demo data)...');
+
+      const roomRows = await query<DemoRoom>(
+        `SELECT id, number, type::text as type, status::text as status FROM rooms ORDER BY number`
+      );
+      const lockerRows = await query<DemoLocker>(
+        `SELECT id, number, status::text as status FROM lockers ORDER BY number`
+      );
+
+      const demoData = generateDemoData({
+        now,
+        rooms: roomRows.rows.map((r) => ({
+          ...r,
+          type: r.type as DemoRoom['type'],
+          status: r.status as DemoRoom['status'],
+        })),
+        lockers: lockerRows.rows.map((l) => ({
+          ...l,
+          status: l.status as DemoLocker['status'],
+        })),
+      });
+
+      await transaction(async (client) => {
+        // Reset demo-related rows to ensure deterministic state.
+        //
+        // IMPORTANT:
+        // - Do NOT use TRUNCATE ... CASCADE because rooms/lockers can be cascaded due to
+        //   assigned_to_customer_id FKs, wiping inventory and causing FK insert failures.
+        // - Do NOT use TRUNCATE without CASCADE because other tables reference checkin_blocks/visits
+        //   (e.g., agreement_signatures, charges, sessions), which Postgres blocks on TRUNCATE.
+        //
+        // So we use ordered DELETEs which respect ON DELETE behaviors.
+        await client.query(`UPDATE rooms SET assigned_to_customer_id = NULL, updated_at = NOW()`);
+        await client.query(`UPDATE lockers SET assigned_to_customer_id = NULL, updated_at = NOW()`);
+        await client.query('DELETE FROM waitlist');
+        await client.query('DELETE FROM agreement_signatures');
+        await client.query('DELETE FROM charges');
+        await client.query('DELETE FROM checkin_blocks');
+        await client.query('DELETE FROM visits');
+        await client.query('DELETE FROM customers');
+
+        // Customers
+        for (const customer of demoData.customers) {
+          await client.query(
+            `INSERT INTO customers
+             (id, name, dob, membership_number, membership_card_type, membership_valid_until, primary_language, past_due_balance, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
+            [
+              customer.id,
+              customer.name,
+              customer.dob || null,
+              customer.membership_number || null,
+              customer.membership_card_type || null,
+              customer.membership_valid_until || null,
+              customer.primary_language || null,
+              customer.past_due_balance,
+            ]
+          );
+        }
+
+        // Visits and check-in blocks
+        for (const visit of demoData.visits) {
+          await client.query(
+            `INSERT INTO visits (id, started_at, ended_at, created_at, updated_at, customer_id)
+             VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
+            [visit.id, visit.started_at, visit.ended_at, visit.customer_id]
+          );
+
+          for (const block of visit.blocks) {
+            await client.query(
+              `INSERT INTO checkin_blocks
+               (id, visit_id, block_type, starts_at, ends_at, room_id, locker_id, session_id, agreement_signed, agreement_signed_at, created_at, updated_at, has_tv_remote, waitlist_id, rental_type)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, NOW(), NOW(), $10, $11, $12)`,
+              [
+                block.id,
+                block.visit_id,
+                block.block_type,
+                block.starts_at,
+                block.ends_at,
+                block.room_id || null,
+                block.locker_id || null,
+                block.agreement_signed,
+                block.agreement_signed ? block.ends_at : null,
+                block.has_tv_remote,
+                // Waitlist <-> checkin_blocks is a cycle:
+                // - waitlist.checkin_block_id references checkin_blocks
+                // - checkin_blocks.waitlist_id references waitlist
+                // So insert blocks with NULL waitlist_id and backfill after inserting waitlist rows.
+                null,
+                block.rental_type,
+              ]
+            );
+          }
+        }
+
+        // Waitlist entries (link back into blocks)
+        for (const entry of demoData.waitlistEntries) {
+          await client.query(
+            `INSERT INTO waitlist
+             (id, visit_id, checkin_block_id, desired_tier, backup_tier, locker_or_room_assigned_initially, room_id, status, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+            [
+              entry.id,
+              entry.visit_id,
+              entry.checkin_block_id,
+              entry.desired_tier,
+              entry.backup_tier,
+              entry.locker_or_room_assigned_initially,
+              entry.room_id,
+              entry.status,
+              entry.created_at,
+            ]
+          );
+        }
+
+        // Backfill checkin_blocks.waitlist_id now that waitlist rows exist
+        for (const entry of demoData.waitlistEntries) {
+          await client.query(
+            `UPDATE checkin_blocks SET waitlist_id = $1, updated_at = NOW() WHERE id = $2`,
+            [entry.id, entry.checkin_block_id]
+          );
+        }
+      });
+
+      // Mark active assignments on inventory (rooms/lockers)
+      const activeBlocks = demoData.visits
+        .filter((v) => v.ended_at === null)
+        .flatMap((v) => v.blocks.map((b) => ({ block: b, visit: v })));
+
+      for (const { block, visit } of activeBlocks) {
+        if (block.room_id) {
+          await query(
+            `UPDATE rooms SET status = $1, assigned_to_customer_id = $2, updated_at = NOW() WHERE id = $3`,
+            [RoomStatus.OCCUPIED, visit.customer_id, block.room_id]
+          );
+        }
+        if (block.locker_id) {
+          await query(
+            `UPDATE lockers SET status = $1, assigned_to_customer_id = $2, updated_at = NOW() WHERE id = $3`,
+            [RoomStatus.OCCUPIED, visit.customer_id, block.locker_id]
+          );
+        }
+      }
+
+      console.log(`✅ Demo customers seeded (${demoData.customers.length}), visits: ${demoData.visits.length}, waitlist entries: ${demoData.waitlistEntries.length}`);
+    }
+
+    // -----------------------------------------------------------------------
+    // Shifts / timeclock / documents (existing behavior)
+    // -----------------------------------------------------------------------
+    // Check if demo shifts already exist in the 28-day window
     const past14Days = new Date(now);
     past14Days.setDate(past14Days.getDate() - 14);
     const next14Days = new Date(now);
@@ -26,8 +185,10 @@ export async function seedDemoData(): Promise<void> {
       [past14Days, next14Days]
     );
 
-    if (parseInt(existingShifts.rows[0]?.count || '0', 10) > 0) {
-      console.log('⚠️  Demo shifts already exist. Skipping demo seed.');
+    const shouldSeedShifts = parseInt(existingShifts.rows[0]?.count || '0', 10) === 0;
+
+    if (!shouldSeedShifts) {
+      console.log('⚠️  Demo shifts already exist. Skipping shift/timeclock seed.');
       return;
     }
 
@@ -276,5 +437,23 @@ export async function seedDemoData(): Promise<void> {
     console.error('❌ Demo seed failed:', error);
     // Don't throw - allow server to start even if demo seed fails
   }
+}
+
+// ---------------------------------------------------------------------------
+// CLI entrypoint
+// Allows running: DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts
+// ---------------------------------------------------------------------------
+const isDirectRun =
+  typeof process !== 'undefined' &&
+  Array.isArray(process.argv) &&
+  typeof process.argv[1] === 'string' &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isDirectRun) {
+  seedDemoData().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error('❌ seed-demo CLI failed:', err);
+    process.exitCode = 1;
+  });
 }
 

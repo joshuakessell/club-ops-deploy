@@ -754,6 +754,45 @@ body {
   min-width: 300px;
 }
 
+.payment-breakdown {
+  padding: 1.25rem 1.5rem;
+  background: var(--cs-bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--cs-radius-xl);
+  min-width: 320px;
+  max-width: 520px;
+}
+
+.breakdown-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  color: var(--text);
+}
+
+.breakdown-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.breakdown-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.breakdown-desc {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.breakdown-amt {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .total-label {
   font-size: clamp(1rem, 2vw, 1.25rem);
   color: var(--text-muted);
@@ -882,6 +921,12 @@ body {
   border-color: rgba(255, 255, 255, 0.5);
   box-shadow: 0 22px 50px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.32);
   filter: brightness(1.05);
+}
+
+.btn-liquid-glass--staff-proposed {
+  border-color: rgba(59, 130, 246, 0.95);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.65), 0 0 0 2px rgba(59, 130, 246, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  background: linear-gradient(145deg, rgba(59, 130, 246, 0.36), rgba(255, 255, 255, 0.08));
 }
 
 .btn-liquid-glass--disabled,

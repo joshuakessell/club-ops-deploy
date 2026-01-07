@@ -32,6 +32,7 @@ export type {
   CustomerConfirmedPayload,
   CustomerDeclinedPayload,
   SelectionProposedPayload,
+  SelectionForcedPayload,
   SelectionLockedPayload,
   SelectionAcknowledgedPayload,
   WaitlistCreatedPayload,

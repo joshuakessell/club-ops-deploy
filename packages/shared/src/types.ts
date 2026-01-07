@@ -53,6 +53,7 @@ export type WebSocketEventType =
   | 'ROOM_RELEASED'
   | 'SESSION_UPDATED'
   | 'SELECTION_PROPOSED'
+  | 'SELECTION_FORCED'
   | 'SELECTION_LOCKED'
   | 'SELECTION_ACKNOWLEDGED'
   | 'WAITLIST_CREATED'
@@ -124,6 +125,10 @@ export interface SessionUpdatedPayload {
   paymentStatus?: 'DUE' | 'PAID';
   paymentMethod?: 'CASH' | 'CREDIT';
   paymentTotal?: number;
+  paymentLineItems?: Array<{
+    description: string;
+    amount: number;
+  }>;
   paymentFailureReason?: string;
   agreementSigned?: boolean;
   assignedResourceType?: 'room' | 'locker';
@@ -138,6 +143,12 @@ export interface SelectionProposedPayload {
   sessionId: string;
   rentalType: string;
   proposedBy: 'CUSTOMER' | 'EMPLOYEE';
+}
+
+export interface SelectionForcedPayload {
+  sessionId: string;
+  rentalType: string;
+  forcedBy: 'EMPLOYEE';
 }
 
 /**
