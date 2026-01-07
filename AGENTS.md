@@ -2,6 +2,7 @@
 
 This repository contains a multi-application system for managing club check-ins, renewals, upgrades, room/locker inventory, cleaning workflows, checkout verification, and operational reporting.
 
+**IMPORTANT**
 All agent work MUST adhere to:
 - `SPEC.md` (source of truth for business rules + product behavior)
 - `openapi.yaml` (API contract target)
@@ -10,7 +11,7 @@ All agent work MUST adhere to:
 
 If implementation conflicts with these files, the agent MUST either:
 1) fix the implementation to match the specs, or
-2) propose a spec change with a clear justification and explicit diffs.
+2) propose a spec change with a clear justification and explicit diffs, and receive approval before making changes.
 
 ---
 
