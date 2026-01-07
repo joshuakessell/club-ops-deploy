@@ -471,6 +471,8 @@ CREATE TABLE public.lane_sessions (
     price_quote_json jsonb,
     disclaimers_ack_json jsonb,
     payment_intent_id uuid,
+    membership_purchase_intent character varying(20),
+    membership_purchase_requested_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     checkin_mode character varying(20) DEFAULT 'INITIAL'::character varying,

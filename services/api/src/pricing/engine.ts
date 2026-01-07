@@ -12,6 +12,11 @@ export interface PricingInput {
   checkInTime: Date;
   membershipCardType?: MembershipCardType;
   membershipValidUntil?: Date;
+  /**
+   * When true, include a 6-month membership purchase/renewal in the quote ($43),
+   * and do not charge the daily membership fee for this check-in.
+   */
+  includeSixMonthMembershipPurchase?: boolean;
 }
 
 export interface PriceQuote {
@@ -63,6 +68,7 @@ function isYouth(age?: number): boolean {
  * Check if customer has valid 6-month membership.
  */
 function hasValidSixMonthMembership(
+  now: Date,
   membershipCardType?: MembershipCardType,
   membershipValidUntil?: Date
 ): boolean {
@@ -74,8 +80,18 @@ function hasValidSixMonthMembership(
     return false;
   }
 
-  // Valid if membership hasn't expired
-  return new Date() <= membershipValidUntil;
+  // Membership is valid through the expiration date (inclusive).
+  // membership_valid_until is stored as a DATE in Postgres (no time), so treat it as end-of-day.
+  const endOfDay = new Date(
+    membershipValidUntil.getFullYear(),
+    membershipValidUntil.getMonth(),
+    membershipValidUntil.getDate(),
+    23,
+    59,
+    59,
+    999
+  );
+  return now.getTime() <= endOfDay.getTime();
 }
 
 /**
@@ -170,6 +186,7 @@ function getLockerPrice(rentalType: RentalType, checkInTime: Date, isYouth: bool
  * 25+ must pay $13 unless they have valid 6-month membership.
  */
 function getMembershipFee(
+  checkInTime: Date,
   customerAge?: number,
   membershipCardType?: MembershipCardType,
   membershipValidUntil?: Date
@@ -180,7 +197,7 @@ function getMembershipFee(
   }
 
   // No fee if valid 6-month membership
-  if (hasValidSixMonthMembership(membershipCardType, membershipValidUntil)) {
+  if (hasValidSixMonthMembership(checkInTime, membershipCardType, membershipValidUntil)) {
     return 0;
   }
 
@@ -232,11 +249,15 @@ export function calculatePriceQuote(input: PricingInput): PriceQuote {
   }
 
   // Calculate membership fee
-  const membershipFee = getMembershipFee(
-    input.customerAge,
-    input.membershipCardType,
-    input.membershipValidUntil
-  );
+  const sixMonthMembershipPurchaseFee = input.includeSixMonthMembershipPurchase ? 43 : 0;
+  const membershipFee = input.includeSixMonthMembershipPurchase
+    ? 0
+    : getMembershipFee(
+        input.checkInTime,
+        input.customerAge,
+        input.membershipCardType,
+        input.membershipValidUntil
+      );
 
   if (membershipFee > 0) {
     lineItems.push({
@@ -245,7 +266,14 @@ export function calculatePriceQuote(input: PricingInput): PriceQuote {
     });
   }
 
-  const total = rentalFee + membershipFee;
+  if (sixMonthMembershipPurchaseFee > 0) {
+    lineItems.push({
+      description: '6 Month Membership',
+      amount: sixMonthMembershipPurchaseFee,
+    });
+  }
+
+  const total = rentalFee + membershipFee + sixMonthMembershipPurchaseFee;
 
   const messages: string[] = ['No refunds'];
 

@@ -16,6 +16,7 @@ import {
   type SelectionLockedPayload,
   type SelectionAcknowledgedPayload,
   type SelectionForcedPayload,
+  getCustomerMembershipStatus,
 } from '@club-ops/shared';
 import { RegisterSignIn } from './RegisterSignIn';
 import { InventorySelector } from './InventorySelector';
@@ -167,6 +168,19 @@ function App() {
     messages: string[];
   } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'DUE' | 'PAID' | null>(null);
+  const [membershipPurchaseIntent, setMembershipPurchaseIntent] = useState<'PURCHASE' | 'RENEW' | null>(
+    null
+  );
+  const [customerMembershipValidUntil, setCustomerMembershipValidUntil] = useState<string | null>(null);
+
+  const [showMembershipIdPrompt, setShowMembershipIdPrompt] = useState(false);
+  const [membershipIdInput, setMembershipIdInput] = useState('');
+  const [membershipIdMode, setMembershipIdMode] = useState<'KEEP_EXISTING' | 'ENTER_NEW'>('ENTER_NEW');
+  const [membershipIdSubmitting, setMembershipIdSubmitting] = useState(false);
+  const [membershipIdError, setMembershipIdError] = useState<string | null>(null);
+  const [membershipIdPromptedForSessionId, setMembershipIdPromptedForSessionId] = useState<string | null>(
+    null
+  );
   const [pastDueBlocked, setPastDueBlocked] = useState(false);
   const [waitlistEntries, setWaitlistEntries] = useState<
     Array<{
@@ -1186,6 +1200,12 @@ function App() {
           if (payload.membershipNumber !== undefined) {
             setMembershipNumber(payload.membershipNumber || '');
           }
+          if (payload.customerMembershipValidUntil !== undefined) {
+            setCustomerMembershipValidUntil(payload.customerMembershipValidUntil || null);
+          }
+          if (payload.membershipPurchaseIntent !== undefined) {
+            setMembershipPurchaseIntent(payload.membershipPurchaseIntent || null);
+          }
 
           // Agreement completion sync
           if (payload.agreementSigned !== undefined) {
@@ -1228,8 +1248,20 @@ function App() {
             setCheckoutAt(payload.checkoutAt);
           }
           // Update payment status
+          if (payload.paymentIntentId !== undefined) {
+            setPaymentIntentId(payload.paymentIntentId || null);
+          }
           if (payload.paymentStatus !== undefined) {
             setPaymentStatus(payload.paymentStatus);
+          }
+          // Keep payment quote view in sync with server-authoritative quote updates (e.g., kiosk membership purchase intent).
+          if (payload.paymentTotal !== undefined || payload.paymentLineItems !== undefined) {
+            setPaymentQuote((prev) => {
+              const total = payload.paymentTotal ?? prev?.total ?? 0;
+              const lineItems = payload.paymentLineItems ?? prev?.lineItems ?? [];
+              const messages = prev?.messages ?? [];
+              return { total, lineItems, messages };
+            });
           }
           if (payload.paymentFailureReason) {
             setPaymentDeclineError(payload.paymentFailureReason);
@@ -1257,6 +1289,12 @@ function App() {
             setPaymentIntentId(null);
             setPaymentQuote(null);
             setPaymentStatus(null);
+            setMembershipPurchaseIntent(null);
+            setCustomerMembershipValidUntil(null);
+            setShowMembershipIdPrompt(false);
+            setMembershipIdInput('');
+            setMembershipIdError(null);
+            setMembershipIdPromptedForSessionId(null);
             setProposedRentalType(null);
             setProposedBy(null);
             setSelectionConfirmed(false);
@@ -1593,6 +1631,104 @@ function App() {
       setIsSubmitting(false);
     }
   };
+
+  const handleCompleteMembershipPurchase = async (membershipNumberOverride?: string) => {
+    if (!session?.sessionToken || !currentSessionId) {
+      alert('Not authenticated');
+      return;
+    }
+    const membershipNumberToSave = (membershipNumberOverride ?? membershipIdInput).trim();
+    if (!membershipNumberToSave) {
+      setMembershipIdError('Membership number is required');
+      return;
+    }
+
+    setMembershipIdSubmitting(true);
+    setMembershipIdError(null);
+    try {
+      const response = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/complete-membership-purchase`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({
+            sessionId: currentSessionId,
+            membershipNumber: membershipNumberToSave,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to save membership number');
+      }
+
+      await response.json().catch(() => null);
+      // Server will broadcast updated membership + clear pending intent.
+      setShowMembershipIdPrompt(false);
+      setMembershipIdInput('');
+      setMembershipIdPromptedForSessionId(null);
+    } catch (error) {
+      console.error('Failed to complete membership purchase:', error);
+      setMembershipIdError(error instanceof Error ? error.message : 'Failed to save membership number');
+    } finally {
+      setMembershipIdSubmitting(false);
+    }
+  };
+
+  // Auto-prompt for membership ID after payment is accepted when a membership purchase intent is present.
+  useEffect(() => {
+    if (!currentSessionId) return;
+    if (paymentStatus !== 'PAID') return;
+    if (!membershipPurchaseIntent) return;
+    // If membership is already active, no prompt needed.
+    if (
+      getCustomerMembershipStatus({
+        membershipNumber: membershipNumber || null,
+        membershipValidUntil: customerMembershipValidUntil,
+      }) === 'ACTIVE'
+    ) {
+      return;
+    }
+    if (!paymentQuote?.lineItems?.some((li) => li.description === '6 Month Membership')) return;
+    if (showMembershipIdPrompt) return;
+    if (membershipIdPromptedForSessionId === currentSessionId) return;
+
+    setMembershipIdPromptedForSessionId(currentSessionId);
+    // Renewal supports keeping the same membership number (explicit option).
+    if (membershipPurchaseIntent === 'RENEW' && membershipNumber) {
+      setMembershipIdMode('KEEP_EXISTING');
+      setMembershipIdInput(membershipNumber);
+    } else {
+      setMembershipIdMode('ENTER_NEW');
+      setMembershipIdInput(membershipNumber || '');
+    }
+    setMembershipIdError(null);
+    setShowMembershipIdPrompt(true);
+  }, [
+    currentSessionId,
+    paymentStatus,
+    membershipPurchaseIntent,
+    paymentQuote,
+    showMembershipIdPrompt,
+    membershipIdPromptedForSessionId,
+    membershipNumber,
+    customerMembershipValidUntil,
+  ]);
+
+  // If server clears the pending intent (membership activated), close the prompt.
+  useEffect(() => {
+    if (membershipPurchaseIntent) return;
+    if (!showMembershipIdPrompt) return;
+    setShowMembershipIdPrompt(false);
+    setMembershipIdInput('');
+    setMembershipIdMode('ENTER_NEW');
+    setMembershipIdError(null);
+    setMembershipIdPromptedForSessionId(null);
+  }, [membershipPurchaseIntent, showMembershipIdPrompt]);
 
   const handleClearSelection = () => {
     setSelectedInventoryItem(null);
@@ -3426,6 +3562,203 @@ function App() {
                 >
                   Cancel
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Membership ID Prompt (after membership purchase/renewal payment is accepted) */}
+          {showMembershipIdPrompt && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.6)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2500,
+              }}
+            >
+              <div
+                style={{
+                  background: '#1e293b',
+                  padding: '2rem',
+                  borderRadius: '12px',
+                  maxWidth: '520px',
+                  width: '92%',
+                  border: '1px solid #334155',
+                }}
+              >
+                <h2 style={{ marginBottom: '0.75rem', fontSize: '1.5rem', fontWeight: 700 }}>
+                  Enter Membership ID
+                </h2>
+                <p style={{ marginBottom: '1rem', color: '#94a3b8' }}>
+                  Payment was accepted for a 6 month membership. Scan or type the membership number from
+                  the physical card, then press Enter.
+                </p>
+
+                {membershipPurchaseIntent === 'RENEW' && membershipNumber ? (
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <button
+                        onClick={() => {
+                          setMembershipIdMode('KEEP_EXISTING');
+                          setMembershipIdInput(membershipNumber);
+                          setMembershipIdError(null);
+                        }}
+                        disabled={membershipIdSubmitting}
+                        style={{
+                          flex: 1,
+                          padding: '0.6rem',
+                          background: membershipIdMode === 'KEEP_EXISTING' ? '#3b82f6' : 'transparent',
+                          color: membershipIdMode === 'KEEP_EXISTING' ? 'white' : '#cbd5e1',
+                          border: '1px solid #475569',
+                          borderRadius: '6px',
+                          fontWeight: 700,
+                          cursor: membershipIdSubmitting ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        Keep Same ID
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMembershipIdMode('ENTER_NEW');
+                          setMembershipIdInput('');
+                          setMembershipIdError(null);
+                        }}
+                        disabled={membershipIdSubmitting}
+                        style={{
+                          flex: 1,
+                          padding: '0.6rem',
+                          background: membershipIdMode === 'ENTER_NEW' ? '#3b82f6' : 'transparent',
+                          color: membershipIdMode === 'ENTER_NEW' ? 'white' : '#cbd5e1',
+                          border: '1px solid #475569',
+                          borderRadius: '6px',
+                          fontWeight: 700,
+                          cursor: membershipIdSubmitting ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        Enter New ID
+                      </button>
+                    </div>
+
+                    {membershipIdMode === 'KEEP_EXISTING' && (
+                      <div
+                        style={{
+                          padding: '0.75rem',
+                          background: '#0f172a',
+                          border: '1px solid #475569',
+                          borderRadius: '6px',
+                          color: 'white',
+                          fontSize: '1.25rem',
+                          letterSpacing: '0.04em',
+                        }}
+                      >
+                        {membershipNumber}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {(membershipPurchaseIntent !== 'RENEW' ||
+                  !membershipNumber ||
+                  membershipIdMode === 'ENTER_NEW') && (
+                  <input
+                    type="text"
+                    value={membershipIdInput}
+                    autoFocus
+                    onChange={(e) => setMembershipIdInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Allow scanner wedge input (keyboard) and Enter-to-submit; prevent bubbling to global handlers.
+                      e.stopPropagation();
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        void handleCompleteMembershipPurchase();
+                      }
+                    }}
+                    placeholder="Membership ID"
+                    disabled={membershipIdSubmitting}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #475569',
+                      borderRadius: '6px',
+                      color: 'white',
+                      fontSize: '1.25rem',
+                      letterSpacing: '0.04em',
+                      marginBottom: '0.75rem',
+                    }}
+                  />
+                )}
+
+                {membershipIdError && (
+                  <div style={{ color: '#fecaca', marginBottom: '0.75rem' }}>{membershipIdError}</div>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    onClick={() =>
+                      void handleCompleteMembershipPurchase(
+                        membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
+                          ? membershipNumber
+                          : undefined
+                      )
+                    }
+                    disabled={
+                      membershipIdSubmitting ||
+                      (membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
+                        ? !membershipNumber
+                        : !membershipIdInput.trim())
+                    }
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background:
+                        (membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
+                          ? membershipNumber
+                          : membershipIdInput.trim())
+                          ? '#3b82f6'
+                          : '#475569',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 700,
+                      cursor:
+                        membershipIdSubmitting ||
+                        (membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
+                          ? !membershipNumber
+                          : !membershipIdInput.trim())
+                          ? 'not-allowed'
+                          : 'pointer',
+                    }}
+                  >
+                    {membershipIdSubmitting ? 'Saving…' : 'Save Membership'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowMembershipIdPrompt(false);
+                      setMembershipIdError(null);
+                    }}
+                    disabled={membershipIdSubmitting}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      background: 'transparent',
+                      color: '#94a3b8',
+                      border: '1px solid #475569',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: membershipIdSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Not now
+                  </button>
+                </div>
               </div>
             </div>
           )}

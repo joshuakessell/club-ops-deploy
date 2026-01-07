@@ -39,6 +39,10 @@ export type {
   RegisterSessionUpdatedPayload,
 } from './types';
 
+// Membership helpers (shared business logic)
+export type { CustomerMembershipStatus, MembershipStatusInput } from './membership';
+export { getCustomerMembershipStatus } from './membership';
+
 // Zod schemas
 export {
   RoomStatusSchema,

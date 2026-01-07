@@ -1,122 +1,54 @@
-// Language dictionary for customer kiosk
+import { en } from './locales/en';
+import { es } from './locales/es';
+import { createContext, useContext, useMemo, createElement, type ReactNode } from 'react';
+
+/**
+ * Customer Kiosk i18n
+ *
+ * - Locale files live in `src/locales/en.ts` and `src/locales/es.ts`
+ * - Add new keys to `en.ts` first, then add the same key to `es.ts`
+ * - Runtime fallback behavior: if a key is missing in ES, we fall back to EN, then to the key
+ * - Placeholders: use `{param}` and pass `{ param: value }` to `t()`
+ */
+
 export type Language = 'EN' | 'ES';
 
 export const translations: Record<Language, Record<string, string>> = {
-  EN: {
-    // Welcome
-    welcome: 'Welcome',
-
-    // Language selection
-    selectLanguage: 'Select Language / Seleccione Idioma',
-    english: 'English',
-    spanish: 'Español',
-
-    // Past due
-    pastDueBlocked: 'Please see the front desk to resolve your balance.',
-
-    // Low availability
-    limitedAvailability: 'Limited: only {count} left',
-    unavailable: 'Currently unavailable - Tap to join waitlist',
-
-    // Payment
-    paymentPending: 'Please present payment to the employee',
-    totalDue: 'Total Due',
-    paymentIssueSeeAttendant: 'Payment issue — please see attendant',
-
-    // Agreement
-    agreementTitle: 'Club Agreement',
-    agreementPlaceholder: 'Agreement content will be displayed here.',
-    scrollRequired: 'Please scroll to the bottom of the agreement to continue.',
-    iAgree: 'I agree',
-    signatureRequired: 'Signature required to continue',
-    clear: 'Clear',
-    submit: 'Submit',
-    submitting: 'Submitting...',
-
-    // Assignment
-    thankYou: 'Thank you!',
-    assignmentComplete: 'Your check-in is being processed...',
-    room: 'Room',
-    checkoutAt: 'Checkout Time',
-
-    // Selection
-    proposed: 'Proposed',
-    selected: 'Selected',
-    confirmSelection: 'Confirm Selection',
-    confirming: 'Confirming...',
-    acknowledge: 'Acknowledge',
-    acknowledging: 'Acknowledging...',
-    staffHasLocked: 'Staff has locked this selection. Please acknowledge to continue.',
-
-    // Rental types
-    locker: 'Locker',
-    regularRoom: 'Regular Room',
-    doubleRoom: 'Double Room',
-    specialRoom: 'Special Room',
-    gymLocker: 'Gym Locker',
-
-    // General
-    membership: 'Membership',
-    noOptionsAvailable: 'No options available',
-  },
-  ES: {
-    // Welcome
-    welcome: 'Bienvenido',
-
-    // Language selection
-    selectLanguage: 'Seleccione Idioma / Select Language',
-    english: 'English',
-    spanish: 'Español',
-
-    // Past due
-    pastDueBlocked: 'Por favor, vea al mostrador para resolver su saldo.',
-
-    // Low availability
-    limitedAvailability: 'Limitado: solo quedan {count}',
-    unavailable: 'No disponible actualmente - Toque para unirse a la lista de espera',
-
-    // Payment
-    paymentPending: 'Por favor, presente el pago al empleado',
-    totalDue: 'Total a Pagar',
-    paymentIssueSeeAttendant: 'Problema con el pago — por favor vea al empleado',
-
-    // Agreement
-    agreementTitle: 'Acuerdo del Club',
-    agreementPlaceholder: 'El contenido del acuerdo se mostrará aquí.',
-    scrollRequired: 'Por favor, desplácese hasta el final del acuerdo para continuar.',
-    iAgree: 'Estoy de acuerdo',
-    signatureRequired: 'Se requiere firma para continuar',
-    clear: 'Limpiar',
-    submit: 'Enviar',
-    submitting: 'Enviando...',
-
-    // Assignment
-    thankYou: '¡Gracias!',
-    assignmentComplete: 'Su registro está siendo procesado...',
-    room: 'Habitación',
-    checkoutAt: 'Hora de Salida',
-
-    // Selection
-    proposed: 'Propuesto',
-    selected: 'Seleccionado',
-    confirmSelection: 'Confirmar Selección',
-    confirming: 'Confirmando...',
-    acknowledge: 'Reconocer',
-    acknowledging: 'Reconociendo...',
-    staffHasLocked: 'El personal ha bloqueado esta selección. Por favor, reconozca para continuar.',
-
-    // Rental types
-    locker: 'Casillero',
-    regularRoom: 'Habitación Regular',
-    doubleRoom: 'Habitación Doble',
-    specialRoom: 'Habitación Especial',
-    gymLocker: 'Casillero del Gimnasio',
-
-    // General
-    membership: 'Membresía',
-    noOptionsAvailable: 'No hay opciones disponibles',
-  },
+  EN: en,
+  ES: es,
 };
+
+type I18nContextValue = {
+  lang: Language;
+  t: (key: string, params?: Record<string, string | number>) => string;
+};
+
+const I18nContext = createContext<I18nContextValue>({
+  lang: 'EN',
+  t: (key, params) => t('EN', key, params),
+});
+
+export function I18nProvider({
+  lang,
+  children,
+}: {
+  lang: Language | null | undefined;
+  children: ReactNode;
+}) {
+  const language: Language = lang || 'EN';
+  const value = useMemo<I18nContextValue>(
+    () => ({
+      lang: language,
+      t: (key, params) => t(language, key, params),
+    }),
+    [language]
+  );
+  return createElement(I18nContext.Provider, { value }, children);
+}
+
+export function useI18n() {
+  return useContext(I18nContext);
+}
 
 export function t(
   lang: Language | null | undefined,

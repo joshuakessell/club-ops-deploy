@@ -199,9 +199,9 @@ describe('App', () => {
       const results = (global.WebSocket as unknown as ReturnType<typeof vi.fn>).mock.results;
       const instances = results
         .map((r: { value: unknown }) => r.value as MockWebSocket | undefined)
-        .filter(Boolean);
-      wsWithHandler = instances.find((w) => typeof w.onmessage === 'function') || null;
-      expect(wsWithHandler).toBeTruthy();
+        .filter((w): w is MockWebSocket => !!w);
+      wsWithHandler = instances.find((w) => typeof w?.onmessage === 'function') ?? null;
+      expect(wsWithHandler).not.toBeNull();
     });
 
     act(() => {

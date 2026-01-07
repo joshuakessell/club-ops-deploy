@@ -43,6 +43,8 @@ interface LaneSessionRow {
   price_quote_json: unknown;
   disclaimers_ack_json: unknown;
   payment_intent_id: string | null;
+  membership_purchase_intent?: 'PURCHASE' | 'RENEW' | null;
+  membership_purchase_requested_at?: Date | null;
   checkin_mode: string | null; // 'INITIAL' or 'RENEWAL'
   proposed_rental_type: string | null;
   proposed_by: string | null;
@@ -402,10 +404,20 @@ async function buildFullSessionUpdatedPayload(
     extractPaymentLineItems(session.price_quote_json) ??
     extractPaymentLineItems(paymentIntent?.quote_json);
 
+  const membershipValidUntilRaw = (customer as any)?.membership_valid_until as unknown;
+  const customerMembershipValidUntil =
+    membershipValidUntilRaw instanceof Date
+      ? membershipValidUntilRaw.toISOString().slice(0, 10)
+      : typeof membershipValidUntilRaw === 'string'
+        ? membershipValidUntilRaw
+        : undefined;
+
   const payload: SessionUpdatedPayload = {
     sessionId: session.id,
     customerName: customer?.name || session.customer_display_name || '',
     membershipNumber,
+    customerMembershipValidUntil,
+    membershipPurchaseIntent: (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
     allowedRentals,
     mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
     status: session.status,
@@ -2189,6 +2201,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             checkInTime: new Date(),
             membershipCardType,
             membershipValidUntil,
+            includeSixMonthMembershipPurchase: !!session.membership_purchase_intent,
           };
 
           const quote = calculatePriceQuote(pricingInput);
@@ -3870,6 +3883,284 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * POST /v1/checkin/lane/:laneId/membership-purchase-intent
+   *
+   * Customer kiosk requests a 6-month membership purchase/renewal to be included in the payment quote.
+   * This is server-authoritative state (stored on lane_sessions) so it survives refresh/reconnect.
+   *
+   * If a DUE payment intent already exists for the session (and selection is confirmed), the quote is
+   * recomputed immediately and the payment intent updated.
+   *
+   * Security: optionalAuth (kiosk does not have staff token).
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { intent: 'PURCHASE' | 'RENEW'; sessionId?: string };
+  }>(
+    '/v1/checkin/lane/:laneId/membership-purchase-intent',
+    {
+      preHandler: [optionalAuth],
+    },
+    async (request, reply) => {
+      const { laneId } = request.params;
+      const bodySchema = z.object({
+        intent: z.enum(['PURCHASE', 'RENEW']),
+        sessionId: z.string().uuid().optional(),
+      });
+      const parsed = bodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' });
+      }
+      const { intent, sessionId } = parsed.data;
+
+      try {
+        const result = await transaction(async (client) => {
+          // Prefer explicit sessionId, else latest active session for lane.
+          const sessionResult = sessionId
+            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
+                sessionId,
+              ])
+            : await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE lane_id = $1
+                   AND status IN ('ACTIVE', 'AWAITING_CUSTOMER', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [laneId]
+              );
+
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'No active session found' };
+          }
+
+          const session = sessionResult.rows[0]!;
+          const resolvedLaneId = session.lane_id || laneId;
+
+          if (!session.customer_id) {
+            throw { statusCode: 400, message: 'Session has no customer' };
+          }
+
+          // Persist membership purchase intent on lane session.
+          const updatedSession = (
+            await client.query<LaneSessionRow>(
+              `UPDATE lane_sessions
+               SET membership_purchase_intent = $1,
+                   membership_purchase_requested_at = NOW(),
+                   updated_at = NOW()
+               WHERE id = $2
+               RETURNING *`,
+              [intent, session.id]
+            )
+          ).rows[0]!;
+
+          // If we already have a DUE payment intent and selection is confirmed, update quote immediately.
+          if (updatedSession.payment_intent_id && updatedSession.selection_confirmed) {
+            const intentResult = await client.query<PaymentIntentRow>(
+              `SELECT * FROM payment_intents WHERE id = $1 LIMIT 1`,
+              [updatedSession.payment_intent_id]
+            );
+            const pi = intentResult.rows[0];
+            if (pi && pi.status === 'DUE') {
+              // Get customer info for pricing
+              const customerResult = await client.query<CustomerRow>(
+                `SELECT dob, membership_card_type, membership_valid_until FROM customers WHERE id = $1`,
+                [updatedSession.customer_id]
+              );
+              const customer = customerResult.rows[0];
+              const customerAge = customer ? calculateAge(customer.dob) : undefined;
+              const membershipCardType =
+                customer?.membership_card_type
+                  ? ((customer.membership_card_type as 'NONE' | 'SIX_MONTH') || undefined)
+                  : undefined;
+              const membershipValidUntil = toDate(customer?.membership_valid_until) || undefined;
+
+              const rentalType = (updatedSession.desired_rental_type ||
+                updatedSession.backup_rental_type ||
+                'LOCKER') as 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | 'GYM_LOCKER';
+
+              const pricingInput: PricingInput = {
+                rentalType,
+                customerAge,
+                checkInTime: new Date(),
+                membershipCardType,
+                membershipValidUntil,
+                includeSixMonthMembershipPurchase: true,
+              };
+
+              const quote = calculatePriceQuote(pricingInput);
+
+              await client.query(
+                `UPDATE payment_intents
+                 SET amount = $1,
+                     quote_json = $2,
+                     updated_at = NOW()
+                 WHERE id = $3`,
+                [quote.total, JSON.stringify(quote), pi.id]
+              );
+
+              await client.query(
+                `UPDATE lane_sessions
+                 SET price_quote_json = $1,
+                     updated_at = NOW()
+                 WHERE id = $2`,
+                [JSON.stringify(quote), updatedSession.id]
+              );
+            }
+          }
+
+          return { sessionId: updatedSession.id, laneId: resolvedLaneId };
+        });
+
+        const { payload } = await transaction((client) =>
+          buildFullSessionUpdatedPayload(client, result.sessionId)
+        );
+        fastify.broadcaster.broadcastSessionUpdated(payload, result.laneId || laneId);
+
+        return reply.send({ success: true });
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to set membership purchase intent');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to set membership purchase intent',
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to set membership purchase intent',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/checkin/lane/:laneId/complete-membership-purchase
+   *
+   * After payment is accepted (Square marked paid) for a quote that includes a 6-month membership,
+   * staff must enter the physical membership number. This endpoint persists the membership number
+   * and sets membership expiration to purchase date + 6 months, then clears the lane session's
+   * pending membership purchase intent.
+   *
+   * Security: requireAuth (staff only).
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { sessionId?: string; membershipNumber: string };
+  }>(
+    '/v1/checkin/lane/:laneId/complete-membership-purchase',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+      const { laneId } = request.params;
+
+      const bodySchema = z.object({
+        sessionId: z.string().uuid().optional(),
+        membershipNumber: z.string().min(1),
+      });
+      const parsed = bodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' });
+      }
+
+      const { sessionId, membershipNumber } = parsed.data;
+
+      try {
+        const result = await transaction(async (client) => {
+          // Prefer explicit sessionId, else latest active session for lane.
+          const sessionResult = sessionId
+            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
+                sessionId,
+              ])
+            : await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE lane_id = $1
+                   AND status IN ('ACTIVE', 'AWAITING_CUSTOMER', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [laneId]
+              );
+
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'No active session found' };
+          }
+
+          const session = sessionResult.rows[0]!;
+          const resolvedLaneId = session.lane_id || laneId;
+
+          if (!session.customer_id) {
+            throw { statusCode: 400, message: 'Session has no customer' };
+          }
+          if (!session.membership_purchase_intent) {
+            throw { statusCode: 400, message: 'No membership purchase intent set for this session' };
+          }
+          if (!session.payment_intent_id) {
+            throw { statusCode: 400, message: 'No payment intent found for this session' };
+          }
+
+          const intentResult = await client.query<PaymentIntentRow>(
+            `SELECT * FROM payment_intents WHERE id = $1 LIMIT 1`,
+            [session.payment_intent_id]
+          );
+          if (intentResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'Payment intent not found' };
+          }
+          const pi = intentResult.rows[0]!;
+          if (pi.status !== 'PAID') {
+            throw { statusCode: 400, message: 'Payment intent must be PAID before completing membership' };
+          }
+
+          // Persist membership to customer record.
+          await client.query(
+            `UPDATE customers
+             SET membership_number = $1,
+                 membership_card_type = 'SIX_MONTH',
+                 membership_valid_until = (CURRENT_DATE + INTERVAL '6 months')::date,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [membershipNumber.trim(), session.customer_id]
+          );
+
+          // Mirror membership number on lane session (non-authoritative, but useful for downstream eligibility).
+          await client.query(
+            `UPDATE lane_sessions
+             SET membership_number = $1,
+                 membership_purchase_intent = NULL,
+                 membership_purchase_requested_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [membershipNumber.trim(), session.id]
+          );
+
+          return { sessionId: session.id, laneId: resolvedLaneId };
+        });
+
+        const { payload } = await transaction((client) =>
+          buildFullSessionUpdatedPayload(client, result.sessionId)
+        );
+        fastify.broadcaster.broadcastSessionUpdated(payload, result.laneId || laneId);
+
+        return reply.send({ success: true });
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to complete membership purchase');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to complete membership purchase',
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to complete membership purchase',
+        });
+      }
+    }
+  );
+
+  /**
    * GET /v1/checkin/lane/:laneId/set-language
    *
    * Compatibility helper: some clients/devtools may hit this URL via GET.
@@ -4177,6 +4468,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                assigned_resource_type = NULL,
                price_quote_json = NULL,
                payment_intent_id = NULL,
+               membership_purchase_intent = NULL,
+               membership_purchase_requested_at = NULL,
                proposed_rental_type = NULL,
                proposed_by = NULL,
                selection_confirmed = false,
@@ -4261,6 +4554,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                assigned_resource_type = NULL,
                price_quote_json = NULL,
                payment_intent_id = NULL,
+               membership_purchase_intent = NULL,
+               membership_purchase_requested_at = NULL,
                proposed_rental_type = NULL,
                proposed_by = NULL,
                selection_confirmed = false,

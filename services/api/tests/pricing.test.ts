@@ -188,12 +188,13 @@ describe('Pricing Engine', () => {
       });
 
       it('should charge $0 for 25+ with valid 6-month membership', () => {
-        const futureDate = new Date();
+        const checkInTime = new Date('2024-01-15T10:00:00');
+        const futureDate = new Date(checkInTime);
         futureDate.setMonth(futureDate.getMonth() + 3);
         const input: PricingInput = {
           rentalType: 'LOCKER',
           customerAge: 25,
-          checkInTime: new Date('2024-01-15T10:00:00'),
+          checkInTime,
           membershipCardType: 'SIX_MONTH',
           membershipValidUntil: futureDate,
         };
@@ -202,12 +203,13 @@ describe('Pricing Engine', () => {
       });
 
       it('should charge $13 for 25+ with expired 6-month membership', () => {
-        const pastDate = new Date();
+        const checkInTime = new Date('2024-01-15T10:00:00');
+        const pastDate = new Date(checkInTime);
         pastDate.setMonth(pastDate.getMonth() - 1);
         const input: PricingInput = {
           rentalType: 'LOCKER',
           customerAge: 25,
-          checkInTime: new Date('2024-01-15T10:00:00'),
+          checkInTime,
           membershipCardType: 'SIX_MONTH',
           membershipValidUntil: pastDate,
         };

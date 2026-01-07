@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import whiteLogo from '../assets/logo_vector_transparent_hi.svg';
+import { useI18n } from '../i18n';
 
 interface ScreenShellProps {
   children: ReactNode;
@@ -14,6 +15,7 @@ export function ScreenShell({
   showLogoWatermark = true,
   watermarkLayer = 'under',
 }: ScreenShellProps) {
+  const { t } = useI18n();
   const watermarkClass = `cs-kiosk-watermark ${watermarkLayer === 'under' ? 'cs-kiosk-watermark--under' : 'cs-kiosk-watermark--over'}`;
 
   return (
@@ -21,7 +23,7 @@ export function ScreenShell({
       <div className="cs-screen-overlay" />
       {showLogoWatermark && (
         <div className={watermarkClass}>
-          <img src={whiteLogo} alt="Club Dallas" className="cs-kiosk-watermark__img" />
+          <img src={whiteLogo} alt={t('brand.clubName')} className="cs-kiosk-watermark__img" />
         </div>
       )}
       <div className="cs-kiosk-stage">{children}</div>
