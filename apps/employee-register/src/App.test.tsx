@@ -122,8 +122,6 @@ describe('App', () => {
   });
 
   it('shows customer suggestions at 3+ characters and confirm triggers session', async () => {
-    vi.useFakeTimers();
-
     localStorage.setItem('staff_session', JSON.stringify({
       staffId: 'staff-1',
       sessionToken: 'test-token',
@@ -157,13 +155,13 @@ describe('App', () => {
           ok: true,
           json: () => Promise.resolve({
             suggestions: [
-              { id: 'cust-1', name: 'Alex Rivera', firstName: 'Alex', lastName: 'Rivera', dobMonthDay: '03/14', membershipNumber: '700001', disambiguator: '0001' },
+              { id: 'c0ffee00-0000-4000-8000-000000000001', name: 'Alex Rivera', firstName: 'Alex', lastName: 'Rivera', dobMonthDay: '03/14', membershipNumber: '700001', disambiguator: '0001' },
             ],
           }),
         } as unknown as Response);
       }
 
-      if (u.includes('/v1/sessions/scan-id')) {
+      if (u.includes('/v1/checkin/lane/lane-1/start')) {
         expect(init?.method).toBe('POST');
         return Promise.resolve({
           ok: true,
@@ -187,8 +185,8 @@ describe('App', () => {
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
     fireEvent.change(searchInput, { target: { value: 'Ale' } });
 
-    // advance debounce
-    vi.advanceTimersByTime(250);
+    // Allow debounced search to fire
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     const suggestion = await screen.findByText(/Rivera, Alex/);
     fireEvent.click(suggestion);
@@ -197,15 +195,12 @@ describe('App', () => {
     fireEvent.click(confirmButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Alex Rivera/)).toBeInTheDocument();
+      expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
 
-    vi.useRealTimers();
   });
 
   it('double tap on same proposal forces selection (to payment)', async () => {
-    vi.useFakeTimers();
-
     localStorage.setItem('staff_session', JSON.stringify({
       staffId: 'staff-1',
       sessionToken: 'test-token',
@@ -241,13 +236,13 @@ describe('App', () => {
           ok: true,
           json: () => Promise.resolve({
             suggestions: [
-              { id: 'cust-1', name: 'Alex Rivera', firstName: 'Alex', lastName: 'Rivera', dobMonthDay: '03/14', membershipNumber: '700001', disambiguator: '0001' },
+              { id: 'c0ffee00-0000-4000-8000-000000000001', name: 'Alex Rivera', firstName: 'Alex', lastName: 'Rivera', dobMonthDay: '03/14', membershipNumber: '700001', disambiguator: '0001' },
             ],
           }),
         } as unknown as Response);
       }
 
-      if (u.includes('/v1/sessions/scan-id')) {
+      if (u.includes('/v1/checkin/lane/lane-1/start')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({
@@ -276,6 +271,16 @@ describe('App', () => {
         } as unknown as Response);
       }
 
+      if (u.includes('/v1/checkin/lane/lane-1/create-payment-intent')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            paymentIntentId: 'pi-123',
+            quote: { total: 10, lineItems: [], messages: [] },
+          }),
+        } as unknown as Response);
+      }
+
       if (u.includes('/health')) {
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as unknown as Response);
       }
@@ -287,30 +292,32 @@ describe('App', () => {
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
     fireEvent.change(searchInput, { target: { value: 'Ale' } });
-    vi.advanceTimersByTime(250);
+    await new Promise((resolve) => setTimeout(resolve, 250));
     const suggestion = await screen.findByText(/Rivera, Alex/);
     fireEvent.click(suggestion);
     const confirmButton = await screen.findByText(/Confirm/);
     fireEvent.click(confirmButton);
     await waitFor(() => {
-      expect(screen.getByText(/Alex Rivera/)).toBeInTheDocument();
+      expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
 
     const proposeButtons = screen.getAllByText(/Propose/);
     fireEvent.click(proposeButtons[0]!); // first tap proposes
+    await waitFor(() => {
+      expect(screen.queryAllByText(/Proposed:/).length).toBeGreaterThan(0);
+    });
     fireEvent.click(proposeButtons[0]!); // second tap forces (confirm)
 
     await waitFor(() => {
-      // Payment section appears when selection confirmed/forced
-      expect(screen.getByText(/Mark Paid in Square/)).toBeInTheDocument();
+      // Confirming selection triggers payment intent creation; the quote total is surfaced
+      // in the customer info panel (labelled "Past Due Balance" in this demo UI).
+      expect(screen.getByText(/Past Due Balance/)).toBeDefined();
+      expect(screen.queryAllByText(/\$10\.00/).length).toBeGreaterThan(0);
     });
 
-    vi.useRealTimers();
   });
 
   it('disables waitlist widget actions when a session is active', async () => {
-    vi.useFakeTimers();
-
     localStorage.setItem('staff_session', JSON.stringify({
       staffId: 'staff-1',
       sessionToken: 'test-token',
@@ -344,13 +351,13 @@ describe('App', () => {
           ok: true,
           json: () => Promise.resolve({
             suggestions: [
-              { id: 'cust-1', name: 'Alex Rivera', firstName: 'Alex', lastName: 'Rivera', membershipNumber: '700001', disambiguator: '0001' },
+              { id: 'c0ffee00-0000-4000-8000-000000000001', name: 'Alex Rivera', firstName: 'Alex', lastName: 'Rivera', membershipNumber: '700001', disambiguator: '0001' },
             ],
           }),
         } as unknown as Response);
       }
 
-      if (u.includes('/v1/sessions/scan-id')) {
+      if (u.includes('/v1/checkin/lane/lane-1/start')) {
         expect(init?.method).toBe('POST');
         return Promise.resolve({
           ok: true,
@@ -395,23 +402,23 @@ describe('App', () => {
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
     fireEvent.change(searchInput, { target: { value: 'Ale' } });
-    vi.advanceTimersByTime(250);
+    await new Promise((resolve) => setTimeout(resolve, 250));
     const suggestion = await screen.findByText(/Rivera, Alex/);
     fireEvent.click(suggestion);
     const confirmButton = await screen.findByText(/Confirm/);
     fireEvent.click(confirmButton);
     await waitFor(() => {
-      expect(screen.getByText(/Alex Rivera/)).toBeInTheDocument();
+      expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
 
     const waitlistButton = await screen.findByLabelText('Waitlist widget');
     fireEvent.click(waitlistButton);
     const confirmSpy = vi.spyOn(window, 'confirm');
-    const keyButton = await screen.findByLabelText(/Begin upgrade/);
+    const keyButtons = await screen.findAllByLabelText(/Begin upgrade/);
+    const keyButton = keyButtons[0]!;
     fireEvent.click(keyButton);
     expect(confirmSpy).not.toHaveBeenCalled();
 
-    vi.useRealTimers();
   });
 });
 

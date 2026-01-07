@@ -194,6 +194,25 @@ describe('Check-in Flow', () => {
       expect(data.allowedRentals).toContain('STANDARD');
     }));
 
+    it('should start a lane session for an existing customerId (no ID scan required)', runIfDbAvailable(async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/start`,
+        headers: {
+          'Authorization': `Bearer ${staffToken}`,
+        },
+        payload: {
+          customerId,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.sessionId).toBeDefined();
+      expect(data.customerName).toBe('Test Customer');
+      expect(data.membershipNumber).toBe('12345');
+    }));
+
     it('should update existing session with membership scan', runIfDbAvailable(async () => {
       // Create initial session
       await app.inject({
