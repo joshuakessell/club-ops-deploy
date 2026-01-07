@@ -158,7 +158,11 @@ pnpm db:seed
 
 ### One-step demo test run
 
-- `pnpm demo:test` will reset the DB, migrate, seed (with `DEMO_MODE=true`), and run the demo seed test (`services/api/tests/demo-seed.test.ts`). (Runs from the API package, so the test path is `tests/demo-seed.test.ts`.)
+- `pnpm demo:test` will reset the DB, migrate, seed (with `DEMO_MODE=true`), and run the demo seed test (`services/api/tests/demo-seed.test.ts`). (Runs from the API package, so the test path is `tests/demo-seed.test.ts`.) **It does not start any web servers**, so you won’t be able to browse `http://localhost:5175` unless you also run `pnpm dev`.
+
+### One-step demo seed + run the full stack
+
+- `pnpm demo:dev` will seed demo data and then start the full dev stack (API + all apps). Use this when you want to browse the apps locally (e.g. **Employee Register** at `http://localhost:5175`).
 
 **Database Configuration:**
 
