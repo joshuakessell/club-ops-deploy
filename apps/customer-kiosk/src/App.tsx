@@ -9,8 +9,9 @@ import type {
   SelectionLockedPayload,
   SelectionForcedPayload,
 } from '@club-ops/shared';
+import { getCustomerMembershipStatus } from '@club-ops/shared';
 import blackLogo from './assets/logo_vector_transparent_hi_black.svg';
-import { t, type Language } from './i18n';
+import { I18nProvider, t, type Language } from './i18n';
 import { ScreenShell } from './components/ScreenShell';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -36,6 +37,8 @@ interface SessionState {
   sessionId: string | null;
   customerName: string | null;
   membershipNumber: string | null;
+  membershipValidUntil?: string | null; // YYYY-MM-DD (customer membership expiration)
+  membershipPurchaseIntent?: 'PURCHASE' | 'RENEW' | null;
   allowedRentals: string[];
   visitId?: string;
   mode?: 'INITIAL' | 'RENEWAL';
@@ -68,16 +71,58 @@ function getRentalDisplayName(rental: string, lang: Language | null | undefined)
     case 'LOCKER':
       return t(lang, 'locker');
     case 'STANDARD':
-      return t(lang, 'regularRoom');
+      return t(lang, 'rental.standardDisplay');
     case 'DOUBLE':
-      return t(lang, 'doubleRoom');
+      return t(lang, 'rental.doubleDisplay');
     case 'SPECIAL':
-      return t(lang, 'specialRoom');
+      return t(lang, 'rental.specialDisplay');
     case 'GYM_LOCKER':
       return t(lang, 'gymLocker');
     default:
       return rental;
   }
+}
+
+function getPaymentLineItemDisplayDescription(
+  description: string,
+  lang: Language | null | undefined
+): string {
+  // Server currently sends English descriptions; map known ones for kiosk display.
+  // If unknown, fall back to server text.
+  switch (description) {
+    case 'Locker':
+      return t(lang, 'lineItem.locker');
+    case 'Gym Locker':
+      return t(lang, 'lineItem.gymLocker');
+    case 'Gym Locker (no cost)':
+      return t(lang, 'lineItem.gymLockerNoCost');
+    case 'Standard Room':
+      return t(lang, 'lineItem.standardRoom');
+    case 'Double Room':
+      return t(lang, 'lineItem.doubleRoom');
+    case 'Special Room':
+      return t(lang, 'lineItem.specialRoom');
+    case 'Membership Fee':
+      return t(lang, 'lineItem.membershipFee');
+    case '6 Month Membership':
+      return t(lang, 'lineItem.sixMonthMembership');
+    default:
+      return description;
+  }
+}
+
+function getMembershipStatus(
+  session: SessionState,
+  nowMs: number
+): 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'NON_MEMBER' {
+  if (session.membershipPurchaseIntent) return 'PENDING';
+  const base = getCustomerMembershipStatus(
+    { membershipNumber: session.membershipNumber, membershipValidUntil: session.membershipValidUntil },
+    new Date(nowMs)
+  );
+  if (base === 'ACTIVE') return 'ACTIVE';
+  if (base === 'EXPIRED') return 'EXPIRED';
+  return 'NON_MEMBER';
 }
 
 function App() {
@@ -134,6 +179,10 @@ function App() {
   const lastWelcomeSessionIdRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
+  const [showMembershipModal, setShowMembershipModal] = useState(false);
+  const [membershipModalIntent, setMembershipModalIntent] = useState<'PURCHASE' | 'RENEW' | null>(
+    null
+  );
 
   // Inject pulse animation for proposal highlight
   useEffect(() => {
@@ -218,8 +267,8 @@ function App() {
   const orientationOverlay = !isPortrait ? (
     <div className="orientation-blocker">
       <div>
-        <h1>Portrait mode required</h1>
-        <p>Please rotate the device to portrait to continue.</p>
+        <h1>{t(session.customerPrimaryLanguage, 'orientation.title')}</h1>
+        <p>{t(session.customerPrimaryLanguage, 'orientation.body')}</p>
       </div>
     </div>
   ) : null;
@@ -300,6 +349,8 @@ function App() {
             sessionId: payload.sessionId || null,
             customerName: payload.customerName,
             membershipNumber: payload.membershipNumber || null,
+            membershipValidUntil: payload.customerMembershipValidUntil || null,
+            membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
             allowedRentals: payload.allowedRentals,
             visitId: payload.visitId,
             mode: payload.mode,
@@ -334,6 +385,8 @@ function App() {
               sessionId: null,
               customerName: null,
               membershipNumber: null,
+              membershipValidUntil: null,
+              membershipPurchaseIntent: null,
               allowedRentals: [],
               blockEndsAt: undefined,
             });
@@ -498,7 +551,7 @@ function App() {
         className="welcome-overlay"
         onClick={() => setShowWelcomeOverlay(false)}
         role="dialog"
-        aria-label="Welcome"
+        aria-label={t(lang, 'a11y.welcomeDialog')}
       >
         <div className="welcome-overlay-content">
           <div className="welcome-overlay-message">
@@ -512,6 +565,7 @@ function App() {
 
   // Load active agreement when agreement view is shown
   useEffect(() => {
+    const lang = session.customerPrimaryLanguage;
     if (view === 'agreement' && !agreement) {
       fetch(`${API_BASE}/v1/agreements/active`)
         .then((res) => res.json())
@@ -525,14 +579,14 @@ function App() {
         })
         .catch((error) => {
           console.error('Failed to load agreement:', error);
-          alert('Failed to load agreement. Please try again.');
+          alert(t(lang, 'error.loadAgreement'));
         });
     }
-  }, [view, agreement]);
+  }, [view, agreement, session.customerPrimaryLanguage]);
 
   const handleRentalSelection = async (rental: string) => {
     if (!session.sessionId) {
-      alert('No active session. Please wait for staff to start a session.');
+      alert(t(session.customerPrimaryLanguage, 'error.noActiveSession'));
       return;
     }
 
@@ -592,9 +646,8 @@ function App() {
       setIsSubmitting(false);
     } catch (error) {
       console.error('Failed to propose selection:', error);
-      alert(
-        error instanceof Error ? error.message : 'Failed to process selection. Please try again.'
-      );
+      // Customer-facing UI: keep it generic (server errors may not be localized).
+      alert(t(session.customerPrimaryLanguage, 'error.processSelection'));
       setIsSubmitting(false);
     }
   };
@@ -641,7 +694,7 @@ function App() {
       // Then proceed to agreement if INITIAL/RENEWAL
     } catch (error) {
       console.error('Failed to acknowledge upgrade disclaimer:', error);
-      alert(error instanceof Error ? error.message : 'Failed to process. Please try again.');
+      alert(t(session.customerPrimaryLanguage, 'error.process'));
     }
   };
 
@@ -655,7 +708,7 @@ function App() {
       (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
       0;
     if (availableCount === 0) {
-      alert('This rental type is not available. Please select an available option.');
+      alert(t(session.customerPrimaryLanguage, 'error.rentalNotAvailable'));
       return;
     }
 
@@ -783,7 +836,7 @@ function App() {
       // The view will be updated via WebSocket when assignment is created
     } catch (error) {
       console.error('Failed to sign agreement:', error);
-      alert(error instanceof Error ? error.message : 'Failed to sign agreement. Please try again.');
+      alert(t(session.customerPrimaryLanguage, 'error.signAgreement'));
     } finally {
       setIsSubmitting(false);
     }
@@ -817,7 +870,7 @@ function App() {
       // Language will be updated via SESSION_UPDATED WebSocket event
     } catch (error) {
       console.error('Failed to set language:', error);
-      alert(error instanceof Error ? error.message : 'Failed to set language. Please try again.');
+      alert(t(session.customerPrimaryLanguage, 'error.setLanguage'));
     } finally {
       setIsSubmitting(false);
     }
@@ -841,7 +894,45 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to confirm selection:', error);
-      alert('Failed to confirm selection. Please try again.');
+      alert(t(session.customerPrimaryLanguage, 'error.confirmSelection'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const openMembershipModal = (intent: 'PURCHASE' | 'RENEW') => {
+    setMembershipModalIntent(intent);
+    setShowMembershipModal(true);
+  };
+
+  const handleMembershipContinue = async () => {
+    if (!membershipModalIntent || !session.sessionId) return;
+    const lang = session.customerPrimaryLanguage;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intent: membershipModalIntent, sessionId: session.sessionId }),
+        }
+      );
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to request membership purchase');
+      }
+      // Immediate UX; server WS broadcast will also reconcile.
+      setSession((prev) => ({ ...prev, membershipPurchaseIntent: membershipModalIntent }));
+      setShowMembershipModal(false);
+      setMembershipModalIntent(null);
+    } catch (error) {
+      console.error('Failed to set membership purchase intent:', error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : t(lang, 'error.process')
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -865,90 +956,101 @@ function App() {
   // Idle state: logo only, centered
   if (view === 'idle') {
     return (
-      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
-        {orientationOverlay}
-        <div className="idle-content"></div>
-      </ScreenShell>
+      <I18nProvider lang={session.customerPrimaryLanguage}>
+        <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
+          {orientationOverlay}
+          <div className="idle-content"></div>
+        </ScreenShell>
+      </I18nProvider>
     );
   }
 
   // Language selection screen
   if (view === 'language') {
     return (
-      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
-        {orientationOverlay}
-        <WelcomeOverlay />
-        <div className="active-content">
-          <main className="main-content">
-            <div className="language-selection-screen">
-              <h1 className="language-title">{t(null, 'selectLanguage')}</h1>
-              <div className="language-options">
-                <button
-                  className="language-option"
-                  onClick={() => void handleLanguageSelection('EN')}
-                  disabled={isSubmitting}
-                >
-                  {t(null, 'english')}
-                </button>
-                <button
-                  className="language-option"
-                  onClick={() => void handleLanguageSelection('ES')}
-                  disabled={isSubmitting}
-                >
-                  {t(null, 'spanish')}
-                </button>
+      <I18nProvider lang={session.customerPrimaryLanguage}>
+        <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
+          {orientationOverlay}
+          <WelcomeOverlay />
+          <div className="active-content">
+            <main className="main-content">
+              <div className="language-selection-screen">
+                <h1 className="language-title">{t(null, 'selectLanguage')}</h1>
+                <div className="language-options">
+                  <button
+                    className="language-option"
+                    onClick={() => void handleLanguageSelection('EN')}
+                    disabled={isSubmitting}
+                  >
+                    {t(null, 'english')}
+                  </button>
+                  <button
+                    className="language-option"
+                    onClick={() => void handleLanguageSelection('ES')}
+                    disabled={isSubmitting}
+                  >
+                    {t(null, 'spanish')}
+                  </button>
+                </div>
               </div>
-            </div>
-          </main>
-        </div>
-      </ScreenShell>
+            </main>
+          </div>
+        </ScreenShell>
+      </I18nProvider>
     );
   }
 
   // Payment pending screen
   if (view === 'payment') {
     return (
-      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
-        {orientationOverlay}
-        <WelcomeOverlay />
-        <div className="active-content">
-          <main className="main-content">
-            <div className="payment-pending-screen">
-              <h1>{t(session.customerPrimaryLanguage, 'paymentPending')}</h1>
-              {session.paymentLineItems && session.paymentLineItems.length > 0 && (
-                <div className="payment-breakdown">
-                  <p className="breakdown-title">
-                    {t(session.customerPrimaryLanguage, 'charges') ?? 'Charges'}
-                  </p>
-                  <div className="breakdown-items">
-                    {session.paymentLineItems.map((li, idx) => (
-                      <div key={`${li.description}-${idx}`} className="breakdown-row">
-                        <span className="breakdown-desc">{li.description}</span>
-                        <span className="breakdown-amt">${li.amount.toFixed(2)}</span>
-                      </div>
-                    ))}
+      <I18nProvider lang={session.customerPrimaryLanguage}>
+        <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
+          {orientationOverlay}
+          <WelcomeOverlay />
+          <div className="active-content">
+            <main className="main-content">
+              <div className="payment-pending-screen">
+                <h1>{t(session.customerPrimaryLanguage, 'paymentPending')}</h1>
+                {session.paymentLineItems && session.paymentLineItems.length > 0 && (
+                  <div className="payment-breakdown">
+                    <p className="breakdown-title">
+                      {t(session.customerPrimaryLanguage, 'payment.charges')}
+                    </p>
+                    <div className="breakdown-items">
+                      {session.paymentLineItems.map((li, idx) => (
+                        <div key={`${li.description}-${idx}`} className="breakdown-row">
+                          <span className="breakdown-desc">
+                            {getPaymentLineItemDisplayDescription(
+                              li.description,
+                              session.customerPrimaryLanguage
+                            )}
+                          </span>
+                          <span className="breakdown-amt">${li.amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-              {session.paymentTotal !== undefined && (
-                <div className="payment-total">
-                  <p className="total-label">{t(session.customerPrimaryLanguage, 'totalDue')}</p>
-                  <p className="total-amount">${session.paymentTotal.toFixed(2)}</p>
-                </div>
-              )}
-              {/* Never show decline reason to the customer; generic guidance only */}
-              {session.paymentFailureReason && (
-                <div className="payment-decline-generic">
-                  {t(session.customerPrimaryLanguage, 'paymentIssueSeeAttendant')}
-                </div>
-              )}
-              <p className="payment-instruction">
-                {t(session.customerPrimaryLanguage, 'paymentPending')}
-              </p>
-            </div>
-          </main>
-        </div>
-      </ScreenShell>
+                )}
+                {session.paymentTotal !== undefined && (
+                  <div className="payment-total">
+                    <p className="total-label">{t(session.customerPrimaryLanguage, 'totalDue')}</p>
+                    <p className="total-amount">${session.paymentTotal.toFixed(2)}</p>
+                  </div>
+                )}
+                {/* Never show decline reason to the customer; generic guidance only */}
+                {session.paymentFailureReason && (
+                  <div className="payment-decline-generic">
+                    {t(session.customerPrimaryLanguage, 'paymentIssueSeeAttendant')}
+                  </div>
+                )}
+                <p className="payment-instruction">
+                  {t(session.customerPrimaryLanguage, 'paymentPending')}
+                </p>
+              </div>
+            </main>
+          </div>
+        </ScreenShell>
+      </I18nProvider>
     );
   }
 
@@ -961,91 +1063,97 @@ function App() {
     }
 
     return (
-      <ScreenShell backgroundVariant="none" showLogoWatermark={false}>
-        {orientationOverlay}
-        <WelcomeOverlay />
-        <div className="agreement-screen-container">
-          {/* Logo header - black on white */}
-          <div className="agreement-logo-header">
-            <img src={blackLogo} alt="Club Dallas" className="agreement-logo-img" />
-          </div>
-
-          {/* White paper panel */}
-          <div className="agreement-paper-panel">
-            <h1 className="agreement-title">
-              {agreement?.title || t(session.customerPrimaryLanguage, 'agreementTitle')}
-            </h1>
-
-            <div ref={agreementScrollRef} className="agreement-scroll-area">
-              {agreement?.bodyText ? (
-                <div
-                  className="agreement-body"
-                  dangerouslySetInnerHTML={{ __html: agreement.bodyText }}
-                />
-              ) : (
-                <p className="agreement-placeholder">
-                  {t(session.customerPrimaryLanguage, 'agreementPlaceholder')}
-                </p>
-              )}
+      <I18nProvider lang={session.customerPrimaryLanguage}>
+        <ScreenShell backgroundVariant="none" showLogoWatermark={false}>
+          {orientationOverlay}
+          <WelcomeOverlay />
+          <div className="agreement-screen-container">
+            {/* Logo header - black on white */}
+            <div className="agreement-logo-header">
+              <img
+                src={blackLogo}
+                alt={t(session.customerPrimaryLanguage, 'brand.clubName')}
+                className="agreement-logo-img"
+              />
             </div>
 
-            <div className="agreement-actions">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  disabled={!hasScrolledAgreement}
-                />
-                <span>{t(session.customerPrimaryLanguage, 'iAgree')}</span>
-              </label>
-              {!hasScrolledAgreement && (
-                <p className="scroll-warning">
-                  {t(session.customerPrimaryLanguage, 'scrollRequired')}
-                </p>
-              )}
+            {/* White paper panel */}
+            <div className="agreement-paper-panel">
+              <h1 className="agreement-title">
+                {agreement?.title || t(session.customerPrimaryLanguage, 'agreementTitle')}
+              </h1>
 
-              <div className="signature-section">
-                <p className="signature-label">
-                  {t(session.customerPrimaryLanguage, 'signatureRequired')}
-                </p>
-                <canvas
-                  ref={signatureCanvasRef}
-                  className="signature-canvas"
-                  width={600}
-                  height={200}
-                  onMouseDown={handleSignatureStart}
-                  onMouseMove={handleSignatureMove}
-                  onMouseUp={handleSignatureEnd}
-                  onMouseLeave={handleSignatureEnd}
-                  onTouchStart={handleSignatureStart}
-                  onTouchMove={handleSignatureMove}
-                  onTouchEnd={handleSignatureEnd}
-                />
-                <button
-                  type="button"
-                  className="clear-signature-btn"
-                  onClick={handleClearSignature}
-                >
-                  {t(session.customerPrimaryLanguage, 'clear')}
-                </button>
+              <div ref={agreementScrollRef} className="agreement-scroll-area">
+                {agreement?.bodyText ? (
+                  <div
+                    className="agreement-body"
+                    dangerouslySetInnerHTML={{ __html: agreement.bodyText }}
+                  />
+                ) : (
+                  <p className="agreement-placeholder">
+                    {t(session.customerPrimaryLanguage, 'agreementPlaceholder')}
+                  </p>
+                )}
               </div>
 
-              <div className="agreement-submit-container">
-                <button
-                  className="btn-liquid-glass submit-agreement-btn"
-                  onClick={() => void handleSubmitAgreement()}
-                  disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
-                >
-                  {isSubmitting
-                    ? t(session.customerPrimaryLanguage, 'submitting')
-                    : t(session.customerPrimaryLanguage, 'submit')}
-                </button>
+              <div className="agreement-actions">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={agreed}
+                    onChange={(e) => setAgreed(e.target.checked)}
+                    disabled={!hasScrolledAgreement}
+                  />
+                  <span>{t(session.customerPrimaryLanguage, 'iAgree')}</span>
+                </label>
+                {!hasScrolledAgreement && (
+                  <p className="scroll-warning">
+                    {t(session.customerPrimaryLanguage, 'scrollRequired')}
+                  </p>
+                )}
+
+                <div className="signature-section">
+                  <p className="signature-label">
+                    {t(session.customerPrimaryLanguage, 'signatureRequired')}
+                  </p>
+                  <canvas
+                    ref={signatureCanvasRef}
+                    className="signature-canvas"
+                    width={600}
+                    height={200}
+                    onMouseDown={handleSignatureStart}
+                    onMouseMove={handleSignatureMove}
+                    onMouseUp={handleSignatureEnd}
+                    onMouseLeave={handleSignatureEnd}
+                    onTouchStart={handleSignatureStart}
+                    onTouchMove={handleSignatureMove}
+                    onTouchEnd={handleSignatureEnd}
+                  />
+                  <button
+                    type="button"
+                    className="clear-signature-btn"
+                    onClick={handleClearSignature}
+                  >
+                    {t(session.customerPrimaryLanguage, 'clear')}
+                  </button>
+                </div>
+
+                <div className="agreement-submit-container">
+                  <button
+                    className="btn-liquid-glass submit-agreement-btn"
+                    onClick={() => void handleSubmitAgreement()}
+                    disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
+                  >
+                    {isSubmitting
+                      ? t(session.customerPrimaryLanguage, 'submitting')
+                      : t(session.customerPrimaryLanguage, 'submit')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </ScreenShell>
+        </ScreenShell>
+      </I18nProvider>
     );
   }
 
@@ -1054,113 +1162,192 @@ function App() {
     const lang = session.customerPrimaryLanguage;
 
     return (
-      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
-        {orientationOverlay}
-        <WelcomeOverlay />
-        <div className="active-content">
-          <main className="main-content">
-            <div className="complete-screen">
-              <h1>{t(lang, 'thankYou')}</h1>
-              {session.assignedResourceType && session.assignedResourceNumber ? (
-                <>
-                  <div className="assignment-info">
-                    <p className="assignment-resource">
-                      {t(lang, session.assignedResourceType)}: {session.assignedResourceNumber}
-                    </p>
-                    {session.checkoutAt && (
-                      <p className="checkout-time">
-                        {t(lang, 'checkoutAt')}: {new Date(session.checkoutAt).toLocaleString()}
+      <I18nProvider lang={lang}>
+        <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
+          {orientationOverlay}
+          <WelcomeOverlay />
+          <div className="active-content">
+            <main className="main-content">
+              <div className="complete-screen">
+                <h1>{t(lang, 'thankYou')}</h1>
+                {session.assignedResourceType && session.assignedResourceNumber ? (
+                  <>
+                    <div className="assignment-info">
+                      <p className="assignment-resource">
+                        {t(lang, session.assignedResourceType)}: {session.assignedResourceNumber}
                       </p>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <p>{t(lang, 'assignmentComplete')}</p>
-              )}
+                      {session.checkoutAt && (
+                        <p className="checkout-time">
+                          {t(lang, 'checkoutAt')}: {new Date(session.checkoutAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p>{t(lang, 'assignmentComplete')}</p>
+                )}
 
-              <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center' }}>
-                <button
-                  className="btn-liquid-glass modal-ok-btn"
-                  onClick={() =>
-                    void (async () => {
-                      setIsSubmitting(true);
-                      try {
-                        // Kiosk acknowledgement: clears lane session UI state so this kiosk resets for the next customer.
-                        await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                        });
-                      } catch (error) {
-                        console.error('Failed to kiosk-ack completion:', error);
-                        // Continue to local reset even if server call fails; WS will reconcile when possible.
-                      } finally {
-                        // Local reset (immediate UX), server broadcast will also clear deterministically.
-                        setView('idle');
-                        setSession({
-                          sessionId: null,
-                          customerName: null,
-                          membershipNumber: null,
-                          allowedRentals: [],
-                          blockEndsAt: undefined,
-                        });
-                        setSelectedRental(null);
-                        setAgreed(false);
-                        setSignatureData(null);
-                        setShowUpgradeDisclaimer(false);
-                        setUpgradeAction(null);
-                        setShowRenewalDisclaimer(false);
-                        setCheckinMode(null);
-                        setShowWaitlistModal(false);
-                        setWaitlistDesiredType(null);
-                        setWaitlistBackupType(null);
-                        setProposedRentalType(null);
-                        setProposedBy(null);
-                        setSelectionConfirmed(false);
-                        setSelectionConfirmedBy(null);
-                        setSelectionAcknowledged(false);
-                        setUpgradeDisclaimerAcknowledged(false);
-                        setHasScrolledAgreement(false);
-                        setIsSubmitting(false);
-                      }
-                    })()
-                  }
-                  disabled={isSubmitting}
-                >
-                  OK
-                </button>
+                <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center' }}>
+                  <button
+                    className="btn-liquid-glass modal-ok-btn"
+                    onClick={() =>
+                      void (async () => {
+                        setIsSubmitting(true);
+                        try {
+                          // Kiosk acknowledgement: clears lane session UI state so this kiosk resets for the next customer.
+                          await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                          });
+                        } catch (error) {
+                          console.error('Failed to kiosk-ack completion:', error);
+                          // Continue to local reset even if server call fails; WS will reconcile when possible.
+                        } finally {
+                          // Local reset (immediate UX), server broadcast will also clear deterministically.
+                          setView('idle');
+                          setSession({
+                            sessionId: null,
+                            customerName: null,
+                            membershipNumber: null,
+                          membershipValidUntil: null,
+                          membershipPurchaseIntent: null,
+                            allowedRentals: [],
+                            blockEndsAt: undefined,
+                          });
+                          setSelectedRental(null);
+                          setAgreed(false);
+                          setSignatureData(null);
+                          setShowUpgradeDisclaimer(false);
+                          setUpgradeAction(null);
+                          setShowRenewalDisclaimer(false);
+                          setCheckinMode(null);
+                          setShowWaitlistModal(false);
+                          setWaitlistDesiredType(null);
+                          setWaitlistBackupType(null);
+                          setProposedRentalType(null);
+                          setProposedBy(null);
+                          setSelectionConfirmed(false);
+                          setSelectionConfirmedBy(null);
+                          setSelectionAcknowledged(false);
+                          setUpgradeDisclaimerAcknowledged(false);
+                          setHasScrolledAgreement(false);
+                          setIsSubmitting(false);
+                        }
+                      })()
+                    }
+                    disabled={isSubmitting}
+                  >
+                    {t(lang, 'common.ok')}
+                  </button>
+                </div>
               </div>
-            </div>
-          </main>
-        </div>
-      </ScreenShell>
+            </main>
+          </div>
+        </ScreenShell>
+      </I18nProvider>
     );
   }
 
   // Selection view (default active session state)
   return (
-    <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
-      {orientationOverlay}
-      <WelcomeOverlay />
-      <div className="active-content">
-        <main className="main-content">
+    <I18nProvider lang={session.customerPrimaryLanguage}>
+      <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
+        {orientationOverlay}
+        <WelcomeOverlay />
+        <div className="active-content">
+          <main className="main-content">
           <div className="customer-info">
-            <h1 className="customer-name">Welcome, {session.customerName}</h1>
+            <h1 className="customer-name">
+              {session.customerName
+                ? t(session.customerPrimaryLanguage, 'selection.welcomeWithName', {
+                    name: session.customerName,
+                  })
+                : t(session.customerPrimaryLanguage, 'welcome')}
+            </h1>
           </div>
 
           {/* Membership Level - locked buttons */}
           <div className="membership-level-section">
-            <p className="section-label">Membership Level:</p>
-            <div className="membership-buttons">
-              <button
-                className="btn-liquid-glass btn-liquid-glass--selected btn-liquid-glass--disabled"
-                disabled
-              >
-                {session.membershipNumber ? 'Member' : 'Non-Member'}
-              </button>
-              <button className="btn-liquid-glass btn-liquid-glass--disabled" disabled>
-                {session.membershipNumber ? 'Non-Member' : 'Member'}
-              </button>
-            </div>
+            <p className="section-label">{t(session.customerPrimaryLanguage, 'membership.level')}</p>
+            {(() => {
+              const lang = session.customerPrimaryLanguage;
+              const status = getMembershipStatus(session, Date.now());
+              const isActive = status === 'ACTIVE';
+              const isPending = status === 'PENDING';
+              const isExpired = status === 'EXPIRED';
+              const isNonMember = status === 'NON_MEMBER';
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div
+                    className="btn-liquid-glass btn-liquid-glass--disabled"
+                    style={{
+                      opacity: 1,
+                      cursor: 'default',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '0.75rem',
+                      padding: '0.9rem 1rem',
+                    }}
+                  >
+                    <span style={{ fontWeight: 700 }}>
+                      {isActive || isPending
+                        ? t(lang, 'membership.member')
+                        : t(lang, 'membership.nonMember')}
+                    </span>
+                    {isPending && (
+                      <span
+                        style={{
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: '999px',
+                          background: '#f59e0b',
+                          color: 'black',
+                          fontWeight: 800,
+                          fontSize: '0.85rem',
+                        }}
+                      >
+                        {t(lang, 'membership.pending')}
+                      </span>
+                    )}
+                    {isExpired && !isPending && (
+                      <span
+                        style={{
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: '999px',
+                          background: '#ef4444',
+                          color: 'white',
+                          fontWeight: 700,
+                          fontSize: '0.85rem',
+                        }}
+                      >
+                        {t(lang, 'membership.expired')}
+                      </span>
+                    )}
+                  </div>
+
+                  {isNonMember && (
+                    <button
+                      className="btn-liquid-glass"
+                      onClick={() => openMembershipModal('PURCHASE')}
+                      disabled={isSubmitting}
+                    >
+                      {t(lang, 'membership.purchase6Month')}
+                    </button>
+                  )}
+
+                  {isExpired && (
+                    <button
+                      className="btn-liquid-glass"
+                      onClick={() => openMembershipModal('RENEW')}
+                      disabled={isSubmitting}
+                    >
+                      {t(lang, 'membership.renewMembership')}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Past-due block message */}
@@ -1187,17 +1374,17 @@ function App() {
             >
               <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
                 {selectionConfirmed
-                  ? `✓ ${t(session.customerPrimaryLanguage, 'selected')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${selectionConfirmedBy === 'CUSTOMER' ? 'You' : 'Staff'})`
+                  ? `✓ ${t(session.customerPrimaryLanguage, 'selected')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${selectionConfirmedBy === 'CUSTOMER' ? t(session.customerPrimaryLanguage, 'common.you') : t(session.customerPrimaryLanguage, 'common.staff')})`
                   : proposedBy === 'EMPLOYEE'
-                    ? `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (Staff suggestion — tap the highlighted option to accept)`
-                    : `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (Your selection — waiting for staff to confirm)`}
+                    ? `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${t(session.customerPrimaryLanguage, 'selection.staffSuggestionHint')})`
+                    : `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${t(session.customerPrimaryLanguage, 'selection.yourSelectionWaiting')})`}
               </div>
             </div>
           )}
 
           {/* Choose your experience */}
           <div className="experience-section">
-            <p className="section-label">Choose your experience:</p>
+            <p className="section-label">{t(session.customerPrimaryLanguage, 'experience.choose')}</p>
             <div className="experience-options">
               {session.allowedRentals.length > 0 ? (
                 session.allowedRentals.map((rental) => {
@@ -1220,12 +1407,7 @@ function App() {
                     selectionConfirmedBy === 'EMPLOYEE';
                   const lang = session.customerPrimaryLanguage;
 
-                  // Map rental types to display names
-                  let displayName = getRentalDisplayName(rental, lang);
-                  if (rental === 'STANDARD') displayName = 'Private Dressing Room';
-                  else if (rental === 'DOUBLE') displayName = 'Deluxe Dressing Room';
-                  else if (rental === 'SPECIAL') displayName = 'Special Dressing Room';
-                  else if (rental === 'LOCKER') displayName = 'Locker';
+                  const displayName = getRentalDisplayName(rental, lang);
 
                   return (
                     <button
@@ -1250,11 +1432,13 @@ function App() {
                         <span>{displayName}</span>
                         {showWarning && !isUnavailable && (
                           <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
-                            Only {availableCount} available
+                            {t(lang, 'availability.onlyAvailable', { count: availableCount })}
                           </span>
                         )}
                         {isUnavailable && (
-                          <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Unavailable</span>
+                          <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                            {t(lang, 'availability.unavailable')}
+                          </span>
                         )}
                       </div>
                     </button>
@@ -1271,62 +1455,61 @@ function App() {
           {/* Waitlist button (shown when higher tier available) */}
           {session.allowedRentals.includes('STANDARD') && (
             <button className="btn-liquid-glass waitlist-btn" onClick={handleJoinWaitlist}>
-              Join Waitlist for Upgrade
+              {t(session.customerPrimaryLanguage, 'waitlist.joinUpgrade')}
             </button>
           )}
-        </main>
+          </main>
 
-        {/* Upgrade Disclaimer Modal */}
-        {showUpgradeDisclaimer && (
-          <div className="modal-overlay" onClick={() => setShowUpgradeDisclaimer(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2>Upgrade Disclaimer</h2>
-              <div className="disclaimer-text">
-                <p>
-                  <strong>Upgrade Disclaimer</strong>
-                </p>
-                <ul
-                  style={{
-                    listStyle: 'disc',
-                    paddingLeft: '1.5rem',
-                    textAlign: 'left',
-                    marginTop: '1rem',
-                  }}
+          {/* Upgrade Disclaimer Modal */}
+          {showUpgradeDisclaimer && (
+            <div className="modal-overlay" onClick={() => setShowUpgradeDisclaimer(false)}>
+              <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                <h2>{t(session.customerPrimaryLanguage, 'upgrade.title')}</h2>
+                <div className="disclaimer-text">
+                  <p>
+                    <strong>{t(session.customerPrimaryLanguage, 'upgrade.title')}</strong>
+                  </p>
+                  <ul
+                    style={{
+                      listStyle: 'disc',
+                      paddingLeft: '1.5rem',
+                      textAlign: 'left',
+                      marginTop: '1rem',
+                    }}
+                  >
+                    <li style={{ marginBottom: '0.5rem' }}>
+                      {t(session.customerPrimaryLanguage, 'upgrade.bullet.feesApplyToRemaining')}
+                    </li>
+                    <li style={{ marginBottom: '0.5rem' }}>
+                      {t(session.customerPrimaryLanguage, 'upgrade.bullet.noExtension')}
+                    </li>
+                    <li style={{ marginBottom: '0.5rem', fontWeight: 600, color: '#ef4444' }}>
+                      {t(session.customerPrimaryLanguage, 'upgrade.bullet.noRefunds')}
+                    </li>
+                    <li style={{ marginBottom: '0.5rem' }}>
+                      {t(session.customerPrimaryLanguage, 'upgrade.bullet.chargedWhenAccepted')}
+                    </li>
+                  </ul>
+                </div>
+                <button
+                  className="btn-liquid-glass modal-ok-btn"
+                  onClick={() => void handleDisclaimerAcknowledge()}
+                  disabled={isSubmitting}
                 >
-                  <li style={{ marginBottom: '0.5rem' }}>
-                    Upgrade fees apply only to remaining time in your current stay.
-                  </li>
-                  <li style={{ marginBottom: '0.5rem' }}>
-                    Upgrades do not extend your stay. Your checkout time remains the same.
-                  </li>
-                  <li style={{ marginBottom: '0.5rem', fontWeight: 600, color: '#ef4444' }}>
-                    No refunds under any circumstances.
-                  </li>
-                  <li style={{ marginBottom: '0.5rem' }}>
-                    Upgrade fees are charged only when an upgrade becomes available and you choose
-                    to accept it.
-                  </li>
-                </ul>
+                  {t(session.customerPrimaryLanguage, 'common.ok')}
+                </button>
               </div>
-              <button
-                className="btn-liquid-glass modal-ok-btn"
-                onClick={() => void handleDisclaimerAcknowledge()}
-                disabled={isSubmitting}
-              >
-                OK
-              </button>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Customer Confirmation Modal */}
         {showCustomerConfirmation && customerConfirmationData && (
           <div className="modal-overlay" onClick={() => {}}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2>Staff Selected Different Option</h2>
+              <h2>{t(session.customerPrimaryLanguage, 'confirmDifferent.title')}</h2>
               <div className="disclaimer-text">
                 <p>
-                  You requested:{' '}
+                  {t(session.customerPrimaryLanguage, 'confirmDifferent.youRequested')}{' '}
                   <strong>
                     {getRentalDisplayName(
                       customerConfirmationData.requestedType,
@@ -1335,7 +1518,7 @@ function App() {
                   </strong>
                 </p>
                 <p>
-                  Staff selected:{' '}
+                  {t(session.customerPrimaryLanguage, 'confirmDifferent.staffSelected')}{' '}
                   <strong>
                     {getRentalDisplayName(
                       customerConfirmationData.selectedType,
@@ -1344,7 +1527,7 @@ function App() {
                     {customerConfirmationData.selectedNumber}
                   </strong>
                 </p>
-                <p>Do you accept this selection?</p>
+                <p>{t(session.customerPrimaryLanguage, 'confirmDifferent.question')}</p>
               </div>
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                 <button
@@ -1352,7 +1535,7 @@ function App() {
                   onClick={() => void handleCustomerConfirmSelection(true)}
                   disabled={isSubmitting}
                 >
-                  Accept
+                  {t(session.customerPrimaryLanguage, 'common.accept')}
                 </button>
                 <button
                   className="btn-liquid-glass modal-ok-btn"
@@ -1360,7 +1543,7 @@ function App() {
                   onClick={() => void handleCustomerConfirmSelection(false)}
                   disabled={isSubmitting}
                 >
-                  Decline
+                  {t(session.customerPrimaryLanguage, 'common.decline')}
                 </button>
               </div>
             </div>
@@ -1371,13 +1554,12 @@ function App() {
         {showWaitlistModal && waitlistDesiredType && (
           <div className="modal-overlay" onClick={() => setShowWaitlistModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2>None Available - Join Waiting List?</h2>
+              <h2>{t(session.customerPrimaryLanguage, 'waitlist.modalTitle')}</h2>
               <div className="disclaimer-text">
                 <p>
-                  <strong>
-                    {getRentalDisplayName(waitlistDesiredType, session.customerPrimaryLanguage)}
-                  </strong>{' '}
-                  is currently unavailable.
+                  {t(session.customerPrimaryLanguage, 'waitlist.currentlyUnavailable', {
+                    rental: getRentalDisplayName(waitlistDesiredType, session.customerPrimaryLanguage),
+                  })}
                 </p>
                 {waitlistPosition !== null && (
                   <div
@@ -1388,36 +1570,43 @@ function App() {
                       borderRadius: '6px',
                     }}
                   >
-                    <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Waitlist Information:</p>
+                    <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                      {t(session.customerPrimaryLanguage, 'waitlist.infoTitle')}
+                    </p>
                     <p>
-                      Position: <strong>#{waitlistPosition}</strong>
+                      {t(session.customerPrimaryLanguage, 'waitlist.position')}:{' '}
+                      <strong>#{waitlistPosition}</strong>
                     </p>
                     {waitlistETA ? (
                       <p>
-                        Estimated Ready: <strong>{new Date(waitlistETA).toLocaleString()}</strong>
+                        {t(session.customerPrimaryLanguage, 'waitlist.estimatedReady')}:{' '}
+                        <strong>{new Date(waitlistETA).toLocaleString()}</strong>
                       </p>
                     ) : (
                       <p>
-                        Estimated Ready: <strong>Unknown</strong>
+                        {t(session.customerPrimaryLanguage, 'waitlist.estimatedReady')}:{' '}
+                        <strong>{t(session.customerPrimaryLanguage, 'waitlist.unknown')}</strong>
                       </p>
                     )}
                     {waitlistUpgradeFee !== null && waitlistUpgradeFee > 0 && (
                       <p style={{ color: '#f59e0b', marginTop: '0.5rem' }}>
-                        Upgrade Fee: <strong>${waitlistUpgradeFee.toFixed(2)}</strong>
+                        {t(session.customerPrimaryLanguage, 'waitlist.upgradeFee')}:{' '}
+                        <strong>${waitlistUpgradeFee.toFixed(2)}</strong>
                       </p>
                     )}
                   </div>
                 )}
                 <p style={{ marginTop: '1rem' }}>
-                  To join the waitlist, please select a backup rental that is available now.
+                  {t(session.customerPrimaryLanguage, 'waitlist.instructions')}
                 </p>
                 <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-                  You will be charged for the backup rental. If an upgrade becomes available, you
-                  may accept it (upgrade fees apply).
+                  {t(session.customerPrimaryLanguage, 'waitlist.noteChargedBackup')}
                 </p>
               </div>
               <div style={{ marginTop: '1.5rem' }}>
-                <p style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Select backup rental:</p>
+                <p style={{ fontWeight: 600, marginBottom: '0.75rem' }}>
+                  {t(session.customerPrimaryLanguage, 'waitlist.selectBackup')}
+                </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {session.allowedRentals
                     .filter((rental) => rental !== waitlistDesiredType)
@@ -1440,7 +1629,8 @@ function App() {
                           }}
                         >
                           {getRentalDisplayName(rental, session.customerPrimaryLanguage)}
-                          {!isAvailable && ' (Unavailable)'}
+                          {!isAvailable &&
+                            ` ${t(session.customerPrimaryLanguage, 'waitlist.unavailableSuffix')}`}
                         </button>
                       );
                     })}
@@ -1452,7 +1642,7 @@ function App() {
                 disabled={isSubmitting}
                 style={{ marginTop: '1rem', backgroundColor: '#64748b' }}
               >
-                Cancel
+                {t(session.customerPrimaryLanguage, 'common.cancel')}
               </button>
             </div>
           </div>
@@ -1462,28 +1652,28 @@ function App() {
         {showRenewalDisclaimer && (
           <div className="modal-overlay" onClick={() => setShowRenewalDisclaimer(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2>Renewal Notice</h2>
+              <h2>{t(session.customerPrimaryLanguage, 'renewal.title')}</h2>
               <div className="disclaimer-text">
                 <ul style={{ listStyle: 'disc', paddingLeft: '1.5rem', textAlign: 'left' }}>
                   <li style={{ marginBottom: '0.5rem' }}>
-                    This renewal extends your stay for 6 hours from your current checkout time.
+                    {t(session.customerPrimaryLanguage, 'renewal.bullet.extendsStay')}
                     {session.blockEndsAt && (
                       <span>
                         {' '}
-                        (Current checkout: {new Date(session.blockEndsAt).toLocaleString()})
+                        {t(session.customerPrimaryLanguage, 'renewal.currentCheckout', {
+                          time: new Date(session.blockEndsAt).toLocaleString(),
+                        })}
                       </span>
                     )}
                   </li>
                   <li style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
-                    ⚠️ You are approaching the 14-hour maximum stay for a single visit.
+                    {t(session.customerPrimaryLanguage, 'renewal.bullet.approachingMax')}
                   </li>
                   <li style={{ marginBottom: '0.5rem' }}>
-                    At the end of this 6-hour renewal, you may extend one final time for 2
-                    additional hours for a flat $20 fee (same for lockers or any room type).
+                    {t(session.customerPrimaryLanguage, 'renewal.bullet.finalExtension')}
                   </li>
                   <li style={{ marginBottom: '0.5rem' }}>
-                    The $20 fee is not charged now; it applies only if you choose the final 2-hour
-                    extension later.
+                    {t(session.customerPrimaryLanguage, 'renewal.bullet.feeNotChargedNow')}
                   </li>
                 </ul>
               </div>
@@ -1496,13 +1686,56 @@ function App() {
                 }}
                 disabled={isSubmitting}
               >
-                OK
+                {t(session.customerPrimaryLanguage, 'common.ok')}
               </button>
             </div>
           </div>
         )}
-      </div>
-    </ScreenShell>
+
+        {/* Membership Purchase/Renew Modal */}
+        {showMembershipModal && membershipModalIntent && (
+          <div
+            className="modal-overlay"
+            onClick={() => {
+              setShowMembershipModal(false);
+              setMembershipModalIntent(null);
+            }}
+          >
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2>{t(session.customerPrimaryLanguage, 'membership.modal.title')}</h2>
+              <div className="disclaimer-text">
+                <p>
+                  {membershipModalIntent === 'PURCHASE'
+                    ? t(session.customerPrimaryLanguage, 'membership.modal.body.purchase')
+                    : t(session.customerPrimaryLanguage, 'membership.modal.body.renew')}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                <button
+                  className="btn-liquid-glass modal-ok-btn"
+                  onClick={() => void handleMembershipContinue()}
+                  disabled={isSubmitting}
+                >
+                  {t(session.customerPrimaryLanguage, 'common.continue')}
+                </button>
+                <button
+                  className="btn-liquid-glass modal-ok-btn"
+                  style={{ backgroundColor: '#64748b' }}
+                  onClick={() => {
+                    setShowMembershipModal(false);
+                    setMembershipModalIntent(null);
+                  }}
+                  disabled={isSubmitting}
+                >
+                  {t(session.customerPrimaryLanguage, 'common.cancel')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        </div>
+      </ScreenShell>
+    </I18nProvider>
   );
 }
 

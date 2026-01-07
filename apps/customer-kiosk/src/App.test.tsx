@@ -55,6 +55,12 @@ describe('App', () => {
           json: () => Promise.resolve({ rooms: {}, lockers: 0 }),
         } as unknown as Response);
       }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/membership-purchase-intent')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
+      }
       return Promise.resolve({ json: () => Promise.resolve({}) } as unknown as Response);
     });
   });
@@ -218,5 +224,190 @@ describe('App', () => {
     });
 
     expect(screen.queryByText(/select language/i)).toBeNull();
+  });
+
+  it('shows Active Member status (no purchase/renew CTA) when membership is not expired', async () => {
+    render(<App />);
+
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: '123',
+            customerMembershipValidUntil: '2099-01-01',
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    expect(await screen.findByText('Member')).toBeDefined();
+    expect(screen.queryByText('Purchase 6 Month Membership')).toBeNull();
+    expect(screen.queryByText('Renew Membership')).toBeNull();
+  });
+
+  it('shows Non-Member status + Purchase CTA when membership id is missing', async () => {
+    render(<App />);
+
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    expect(await screen.findByText('Non-Member')).toBeDefined();
+    expect(screen.getByText('Purchase 6 Month Membership')).toBeDefined();
+    expect(screen.queryByText('Renew Membership')).toBeNull();
+  });
+
+  it('shows Non-Member + Expired indicator + Renew CTA when membership is expired', async () => {
+    render(<App />);
+
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: '123',
+            customerMembershipValidUntil: '2000-01-01',
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    expect(await screen.findByText('Non-Member')).toBeDefined();
+    expect(screen.getByText('Expired')).toBeDefined();
+    expect(screen.getByText('Renew Membership')).toBeDefined();
+  });
+
+  it('translates membership CTA in Spanish', async () => {
+    render(<App />);
+
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'ES',
+          },
+        }),
+      });
+    });
+
+    expect(await screen.findByText('No miembro')).toBeDefined();
+    expect(screen.getByText('Comprar membresía de 6 meses')).toBeDefined();
+    // Guard: key screens should not leak obvious English CTAs when in Spanish.
+    expect(screen.queryByText('Non-Member')).toBeNull();
+    expect(screen.queryByText('Purchase 6 Month Membership')).toBeNull();
+  });
+
+  it('renders Spanish membership modal copy (no English fallback) when language is ES', async () => {
+    render(<App />);
+
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'ES',
+          },
+        }),
+      });
+    });
+
+    const purchaseBtn = await screen.findByText('Comprar membresía de 6 meses');
+    act(() => {
+      (purchaseBtn as HTMLButtonElement).click();
+    });
+
+    // Spanish title/body + Spanish buttons
+    expect(await screen.findByText('Membresía')).toBeDefined();
+    expect(screen.getByText(/Puede ahorrar/i)).toBeDefined();
+    expect(screen.getByText('Continuar')).toBeDefined();
+    expect(screen.getByText('Cancelar')).toBeDefined();
+
+    // Guard: avoid English copy leakage.
+    expect(screen.queryByText(/save on daily membership fees/i)).toBeNull();
+  });
+
+  it('purchase CTA opens modal; cancel closes; continue sets Member (Pending)', async () => {
+    render(<App />);
+
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    const purchaseBtn = await screen.findByText('Purchase 6 Month Membership');
+    act(() => {
+      (purchaseBtn as HTMLButtonElement).click();
+    });
+
+    expect(await screen.findByText('Membership')).toBeDefined();
+    expect(screen.getByText(/save on daily membership fees/i)).toBeDefined();
+    const cancel = screen.getByText('Cancel');
+    act(() => {
+      (cancel as HTMLButtonElement).click();
+    });
+    expect(screen.queryByText(/save on daily membership fees/i)).toBeNull();
+
+    // Re-open and continue
+    act(() => {
+      (purchaseBtn as HTMLButtonElement).click();
+    });
+    const continueBtn = await screen.findByText('Continue');
+    act(() => {
+      (continueBtn as HTMLButtonElement).click();
+    });
+
+    expect(await screen.findByText('Member')).toBeDefined();
+    expect(await screen.findByText('Pending')).toBeDefined();
   });
 });

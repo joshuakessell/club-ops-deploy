@@ -105,6 +105,16 @@ export interface SessionUpdatedPayload {
   sessionId: string;
   customerName: string;
   membershipNumber?: string;
+  /**
+   * Customer membership expiration date (YYYY-MM-DD).
+   * If present and in the future (inclusive), the customer is treated as an active member.
+   */
+  customerMembershipValidUntil?: string;
+  /**
+   * Customer kiosk requested a membership purchase/renewal to be included in the payment quote.
+   * Server-authoritative (stored on lane_sessions).
+   */
+  membershipPurchaseIntent?: 'PURCHASE' | 'RENEW';
   allowedRentals: string[];
   mode?: 'INITIAL' | 'RENEWAL';
   blockEndsAt?: string;

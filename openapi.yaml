@@ -553,6 +553,90 @@ paths:
         '401':
           description: Unauthorized (for employee confirmations)
 
+  /v1/checkin/lane/{laneId}/membership-purchase-intent:
+    post:
+      tags: [Check-in]
+      summary: Customer kiosk requests a 6-month membership purchase/renewal to include in the payment quote
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [intent]
+              properties:
+                intent:
+                  type: string
+                  enum: [PURCHASE, RENEW]
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
+      responses:
+        '200':
+          description: Membership purchase intent recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Invalid input or session not found
+        '404':
+          description: No active session found
+
+  /v1/checkin/lane/{laneId}/complete-membership-purchase:
+    post:
+      tags: [Check-in]
+      summary: After membership payment is accepted, staff enters membership number to activate 6-month membership
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [membershipNumber]
+              properties:
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
+                membershipNumber:
+                  type: string
+                  description: Physical membership number from the card (scanner wedge input supported client-side).
+      responses:
+        '200':
+          description: Membership activated and pending intent cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Invalid input or session not eligible
+        '401':
+          description: Unauthorized
+        '404':
+          description: No active session or payment intent not found
+
   /v1/checkin/lane/{laneId}/acknowledge-selection:
     post:
       tags: [Check-in]
