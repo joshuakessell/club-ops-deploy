@@ -115,6 +115,37 @@ function toDate(value: unknown): Date | undefined {
   return Number.isFinite(d.getTime()) ? d : undefined;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function extractPaymentLineItems(
+  raw: unknown
+): Array<{ description: string; amount: number }> | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  let parsed: unknown = raw;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!isRecord(parsed)) return undefined;
+  const items = parsed['lineItems'];
+  if (!Array.isArray(items)) return undefined;
+
+  const normalized: Array<{ description: string; amount: number }> = [];
+  for (const it of items) {
+    if (!isRecord(it)) continue;
+    const description = it['description'];
+    const amount = toNumber(it['amount']);
+    if (typeof description !== 'string' || amount === undefined) continue;
+    normalized.push({ description, amount });
+  }
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function getHttpError(error: unknown): { statusCode: number; message?: string } | null {
   if (!error || typeof error !== 'object') return null;
   if (!('statusCode' in error)) return null;
@@ -260,6 +291,9 @@ async function buildFullSessionUpdatedPayload(
   }
 
   const paymentTotal = toNumber(paymentIntent?.amount);
+  const paymentLineItems =
+    extractPaymentLineItems(session.price_quote_json) ??
+    extractPaymentLineItems(paymentIntent?.quote_json);
 
   const payload: SessionUpdatedPayload = {
     sessionId: session.id,
@@ -283,6 +317,7 @@ async function buildFullSessionUpdatedPayload(
     paymentStatus: (paymentIntent?.status as 'DUE' | 'PAID' | undefined) || undefined,
     paymentMethod: (paymentIntent?.payment_method as 'CASH' | 'CREDIT' | undefined) || undefined,
     paymentTotal,
+    paymentLineItems,
     paymentFailureReason: paymentIntent?.failure_reason || undefined,
     agreementSigned: blockForSession ? !!blockForSession.agreement_signed : false,
     assignedResourceType: assignedResourceType || undefined,
@@ -448,7 +483,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{
     Params: { laneId: string };
-    Body: { idScanValue: string; membershipScanValue?: string; checkinMode?: 'INITIAL' | 'RENEWAL'; visitId?: string };
+    Body: { idScanValue: string; membershipScanValue?: string; visitId?: string };
   }>('/v1/checkin/lane/:laneId/start', {
     preHandler: [requireAuth],
   }, async (request, reply) => {
@@ -458,17 +493,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     const staffId = request.staff.staffId;
 
     const { laneId } = request.params;
-    const { idScanValue, membershipScanValue, checkinMode = 'INITIAL', visitId } = request.body;
-
-    // Validate checkinMode
-    if (checkinMode !== 'INITIAL' && checkinMode !== 'RENEWAL') {
-      return reply.status(400).send({ error: 'Invalid checkinMode. Must be INITIAL or RENEWAL' });
-    }
-
-    // For RENEWAL mode, visitId is required
-    if (checkinMode === 'RENEWAL' && !visitId) {
-      return reply.status(400).send({ error: 'visitId is required for RENEWAL mode' });
-    }
+    const { idScanValue, membershipScanValue, visitId } = request.body;
 
     try {
       const result = await transaction(async (client) => {
@@ -517,52 +542,61 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           customerName = idScanValue || 'Customer';
         }
 
-        // For RENEWAL mode, fetch visit information
+        // Determine mode (auto-detect renewal if active visit exists or explicit visitId provided)
+        let computedMode: 'INITIAL' | 'RENEWAL' = 'INITIAL';
         let visitIdForSession: string | null = null;
-        let blockEndsAt: Date | null = null;
+        let blockEndsAtDate: Date | null = null;
         let currentTotalHours = 0;
 
-        if (checkinMode === 'RENEWAL' && visitId) {
-          // Verify visit exists and belongs to customer
-          const visitResult = await client.query<{
-            id: string;
-            customer_id: string;
-            started_at: Date;
-          }>(
-            `SELECT id, customer_id, started_at FROM visits WHERE id = $1`,
-            [visitId]
-          );
-
-          if (visitResult.rows.length === 0) {
-            throw { statusCode: 404, message: 'Visit not found' };
-          }
-
-          const visit = visitResult.rows[0]!;
-          if (customerId && visit.customer_id !== customerId) {
-            throw { statusCode: 403, message: 'Visit does not belong to this customer' };
-          }
-
-          visitIdForSession = visit.id;
-
-          // Get current blocks to calculate total hours and find latest checkout time
+        const resolveVisitBlocks = async (activeVisitId: string) => {
           const blocksResult = await client.query<{
             ends_at: Date;
             starts_at: Date;
           }>(
             `SELECT starts_at, ends_at FROM checkin_blocks 
              WHERE visit_id = $1 ORDER BY ends_at DESC`,
-            [visitId]
+            [activeVisitId]
           );
-
           if (blocksResult.rows.length > 0) {
-            // Latest block end time is the checkout time for renewal
-            blockEndsAt = blocksResult.rows[0]!.ends_at;
-
-            // Calculate total hours
+            blockEndsAtDate = blocksResult.rows[0]!.ends_at;
             for (const block of blocksResult.rows) {
               const hours = (block.ends_at.getTime() - block.starts_at.getTime()) / (1000 * 60 * 60);
               currentTotalHours += hours;
             }
+          }
+        };
+
+        if (visitId) {
+          // Explicit visit selection forces renewal
+          const visitResult = await client.query<{
+            id: string;
+            customer_id: string;
+            started_at: Date;
+            ended_at: Date | null;
+          }>(
+            `SELECT id, customer_id, started_at, ended_at FROM visits WHERE id = $1`,
+            [visitId]
+          );
+          if (visitResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'Visit not found' };
+          }
+          const visit = visitResult.rows[0]!;
+          if (customerId && visit.customer_id !== customerId) {
+            throw { statusCode: 403, message: 'Visit does not belong to this customer' };
+          }
+          visitIdForSession = visit.id;
+          computedMode = 'RENEWAL';
+          await resolveVisitBlocks(visit.id);
+        } else if (customerId) {
+          // Auto-detect active visit for this customer
+          const activeVisit = await client.query<{ id: string }>(
+            `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+            [customerId]
+          );
+          if (activeVisit.rows.length > 0) {
+            visitIdForSession = activeVisit.rows[0]!.id;
+            computedMode = 'RENEWAL';
+            await resolveVisitBlocks(activeVisit.rows[0]!.id);
           }
         }
 
@@ -590,7 +624,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                  updated_at = NOW()
              WHERE id = $6
              RETURNING *`,
-            [customerName, membershipNumber, customerId, staffId, checkinMode, existingSession.rows[0]!.id]
+            [customerName, membershipNumber, customerId, staffId, computedMode, existingSession.rows[0]!.id]
           );
           session = updateResult.rows[0]!;
         } else {
@@ -600,7 +634,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
              (lane_id, status, staff_id, customer_id, customer_display_name, membership_number, checkin_mode)
              VALUES ($1, 'ACTIVE', $2, $3, $4, $5, $6)
              RETURNING *`,
-            [laneId, staffId, customerId, customerName, membershipNumber, checkinMode]
+            [laneId, staffId, customerId, customerName, membershipNumber, computedMode]
           );
           session = newSessionResult.rows[0]!;
         }
@@ -627,10 +661,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           customerName: session.customer_display_name,
           membershipNumber: session.membership_number,
           allowedRentals,
-          mode: checkinMode,
-          blockEndsAt: blockEndsAt ? blockEndsAt.toISOString() : undefined,
+          mode: computedMode,
+          blockEndsAt: toDate(blockEndsAtDate)?.toISOString(),
           visitId: visitIdForSession || undefined,
-          currentTotalHours: checkinMode === 'RENEWAL' ? currentTotalHours : undefined,
+          currentTotalHours: computedMode === 'RENEWAL' ? currentTotalHours : undefined,
           pastDueBalance,
           pastDueBlocked,
         };
@@ -1162,6 +1196,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           payload: lockedPayload,
           timestamp: new Date().toISOString(),
         }, laneId);
+
+        if (confirmedBy === 'EMPLOYEE') {
+          fastify.broadcaster.broadcastSelectionForced({
+            sessionId: updated.id,
+            rentalType: updated.proposed_rental_type!,
+            forcedBy: 'EMPLOYEE',
+          }, laneId);
+        }
 
         return {
           sessionId: updated.id,
@@ -3100,52 +3142,121 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * Set customer's primary language preference (EN or ES).
    * Persists on customer record.
    */
+  async function setLanguageForLaneSession(params: {
+    laneId: string;
+    language: 'EN' | 'ES';
+    sessionId?: string;
+    customerName?: string;
+  }): Promise<{ sessionId: string; success: true; language: 'EN' | 'ES'; laneId: string }> {
+    const { laneId, language, sessionId, customerName } = params;
+    const result = await transaction(async (client) => {
+      // Prefer explicit sessionId, but fall back if it doesn't resolve (clients can get out of sync).
+      let sessionResult: { rows: LaneSessionRow[] };
+      if (sessionId) {
+        sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`,
+          [sessionId]
+        );
+        if (sessionResult.rows.length === 0 && customerName) {
+          sessionResult = await client.query<LaneSessionRow>(
+            `SELECT * FROM lane_sessions
+             WHERE lane_id = $1
+               AND customer_display_name = $2
+               AND status != 'COMPLETED'
+               AND status != 'CANCELLED'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [laneId, customerName]
+          );
+        }
+      } else {
+        sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions
+           WHERE lane_id = $1 AND status IN ('ACTIVE', 'AWAITING_CUSTOMER', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [laneId]
+        );
+      }
+
+      if (sessionResult.rows.length === 0) {
+        throw { statusCode: 404, message: 'No active session found' };
+      }
+
+      const session = sessionResult.rows[0]!;
+      const resolvedLaneId = session.lane_id || laneId;
+
+      if (session.status === 'COMPLETED' || session.status === 'CANCELLED') {
+        throw { statusCode: 404, message: 'No active session found' };
+      }
+
+      if (!session.customer_id) {
+        throw { statusCode: 400, message: 'Session has no customer' };
+      }
+
+      await client.query(
+        `UPDATE customers SET primary_language = $1, updated_at = NOW() WHERE id = $2`,
+        [language, session.customer_id]
+      );
+
+      return { sessionId: session.id, success: true as const, language, laneId: resolvedLaneId };
+    });
+
+    const { payload } = await transaction((client) => buildFullSessionUpdatedPayload(client, result.sessionId));
+    fastify.broadcaster.broadcastSessionUpdated(payload, result.laneId || laneId);
+
+    return result;
+  }
+
   fastify.post<{
     Params: { laneId: string };
-    Body: { language: 'EN' | 'ES' };
+    Body: { language: 'EN' | 'ES'; sessionId?: string; customerName?: string };
   }>('/v1/checkin/lane/:laneId/set-language', async (
     request,
     reply
   ) => {
     const { laneId } = request.params;
-    const { language } = request.body;
+    const { language, sessionId, customerName } = request.body;
 
     try {
-      const result = await transaction(async (client) => {
-        // Get active session
-        const sessionResult = await client.query<LaneSessionRow>(
-          `SELECT * FROM lane_sessions
-           WHERE lane_id = $1 AND status IN ('ACTIVE', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT')
-           ORDER BY created_at DESC
-           LIMIT 1`,
-          [laneId]
-        );
-
-        if (sessionResult.rows.length === 0) {
-          throw { statusCode: 404, message: 'No active session found' };
-        }
-
-        const session = sessionResult.rows[0]!;
-
-        if (!session.customer_id) {
-          throw { statusCode: 400, message: 'Session has no customer' };
-        }
-
-        // Update customer's primary language
-        await client.query(
-          `UPDATE customers SET primary_language = $1, updated_at = NOW() WHERE id = $2`,
-          [language, session.customer_id]
-        );
-
-        return { sessionId: session.id, success: true, language };
-      });
-
-      const { payload } = await transaction((client) => buildFullSessionUpdatedPayload(client, result.sessionId));
-      fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+      const result = await setLanguageForLaneSession({ laneId, language, sessionId, customerName });
 
       return reply.send(result);
     } catch (error: unknown) {
       request.log.error(error, 'Failed to set language');
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        const err = error as { statusCode: number; message?: string };
+        return reply.status(err.statusCode).send({
+          error: err.message || 'Failed to set language',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to set language',
+      });
+    }
+  });
+
+  /**
+   * GET /v1/checkin/lane/:laneId/set-language
+   *
+   * Compatibility helper: some clients/devtools may hit this URL via GET.
+   * Prefer POST from apps; GET accepts query params and performs the same update.
+   */
+  fastify.get<{
+    Params: { laneId: string };
+    Querystring: { language: 'EN' | 'ES'; sessionId?: string; customerName?: string };
+  }>('/v1/checkin/lane/:laneId/set-language', async (request, reply) => {
+    const { laneId } = request.params;
+    const { language, sessionId, customerName } = request.query;
+    if (language !== 'EN' && language !== 'ES') {
+      return reply.status(400).send({ error: 'language must be EN or ES' });
+    }
+    try {
+      const result = await setLanguageForLaneSession({ laneId, language, sessionId, customerName });
+      return reply.send(result);
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to set language (GET)');
       if (error && typeof error === 'object' && 'statusCode' in error) {
         const err = error as { statusCode: number; message?: string };
         return reply.status(err.statusCode).send({

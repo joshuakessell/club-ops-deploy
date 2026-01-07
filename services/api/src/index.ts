@@ -7,6 +7,7 @@ import {
   healthRoutes,
   authRoutes,
   webauthnRoutes,
+  customerRoutes,
   sessionRoutes,
   laneRoutes,
   inventoryRoutes,
@@ -46,6 +47,7 @@ function isWebSocketEventType(value: unknown): value is WebSocketEventType {
     case 'ROOM_RELEASED':
     case 'SESSION_UPDATED':
     case 'SELECTION_PROPOSED':
+    case 'SELECTION_FORCED':
     case 'SELECTION_LOCKED':
     case 'SELECTION_ACKNOWLEDGED':
     case 'WAITLIST_CREATED':
@@ -137,6 +139,7 @@ async function main() {
   await fastify.register(healthRoutes);
   await fastify.register(authRoutes);
   await fastify.register(webauthnRoutes);
+  await fastify.register(customerRoutes);
   await fastify.register(sessionRoutes);
   await fastify.register(laneRoutes);
   await fastify.register(inventoryRoutes);

@@ -8,6 +8,7 @@ import type {
   SelectionProposedPayload,
   SelectionLockedPayload,
   SelectionAcknowledgedPayload,
+  SelectionForcedPayload,
 } from '@club-ops/shared';
 import whiteLogo from './assets/logo_vector_transparent_hi.svg';
 import blackLogo from './assets/logo_vector_transparent_hi_black.svg';
@@ -46,6 +47,7 @@ interface SessionState {
   pastDueBalance?: number;
   paymentStatus?: 'DUE' | 'PAID';
   paymentTotal?: number;
+  paymentLineItems?: Array<{ description: string; amount: number }>;
   paymentFailureReason?: string;
   agreementSigned?: boolean;
   assignedResourceType?: 'room' | 'locker';
@@ -116,7 +118,7 @@ function App() {
   const [proposedBy, setProposedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
-  const [selectionAcknowledged, setSelectionAcknowledged] = useState(false);
+  const [selectionAcknowledged, setSelectionAcknowledged] = useState(true);
   const [, setUpgradeDisclaimerAcknowledged] = useState(false);
   const [hasScrolledAgreement, setHasScrolledAgreement] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -127,6 +129,26 @@ function App() {
   const lastWelcomeSessionIdRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
+
+  // Inject pulse animation for proposal highlight
+  useEffect(() => {
+    const styleId = 'pulse-bright-keyframes';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.innerHTML = `
+        @keyframes pulse-bright {
+          0% { box-shadow: 0 0 0 0 rgba(255,255,255,0.35); }
+          50% { box-shadow: 0 0 0 12px rgba(255,255,255,0); }
+          100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
+        }
+        .pulse-bright {
+          animation: pulse-bright 1s ease-in-out infinite;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
 
   useEffect(() => {
     sessionIdRef.current = session.sessionId;
@@ -278,6 +300,7 @@ function App() {
             pastDueBalance: payload.pastDueBalance,
             paymentStatus: payload.paymentStatus,
             paymentTotal: payload.paymentTotal,
+            paymentLineItems: payload.paymentLineItems,
             paymentFailureReason: payload.paymentFailureReason,
             agreementSigned: payload.agreementSigned,
             assignedResourceType: payload.assignedResourceType,
@@ -373,24 +396,17 @@ function App() {
             setProposedRentalType(payload.rentalType);
             setProposedBy(payload.proposedBy);
           }
-        } else if (message.type === 'SELECTION_LOCKED') {
-          const payload = message.payload as SelectionLockedPayload;
+        } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
+          const payload = message.payload as SelectionLockedPayload | SelectionForcedPayload;
           if (payload.sessionId === sessionIdRef.current) {
             setSelectionConfirmed(true);
-            setSelectionConfirmedBy(payload.confirmedBy);
+            setSelectionConfirmedBy('EMPLOYEE');
             setSelectedRental(payload.rentalType);
-            // If customer didn't confirm, show acknowledgement prompt
-            if (payload.confirmedBy === 'EMPLOYEE') {
-              setSelectionAcknowledged(false);
-            } else {
-              setSelectionAcknowledged(true);
-            }
+            setSelectionAcknowledged(true);
+            setView('payment');
           }
         } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
-          const payload = message.payload as SelectionAcknowledgedPayload;
-          if (payload.sessionId === sessionIdRef.current) {
-            setSelectionAcknowledged(true);
-          }
+          setSelectionAcknowledged(true);
         } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
           const payload = message.payload as CustomerConfirmationRequiredPayload;
           setCustomerConfirmationData(payload);
@@ -555,79 +571,6 @@ function App() {
     } catch (error) {
       console.error('Failed to propose selection:', error);
       alert(error instanceof Error ? error.message : 'Failed to process selection. Please try again.');
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleConfirmSelection = async () => {
-    if (!session.sessionId || !proposedRentalType) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          confirmedBy: 'CUSTOMER',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
-      }
-
-      setSelectedRental(proposedRentalType);
-      setSelectionConfirmed(true);
-      setSelectionConfirmedBy('CUSTOMER');
-      setSelectionAcknowledged(true);
-
-      // If renewal mode, show renewal disclaimer before agreement
-      if (checkinMode === 'RENEWAL') {
-        setShowRenewalDisclaimer(true);
-      } else {
-        // Show agreement screen after selection confirmed
-        setView('agreement');
-      }
-    } catch (error) {
-      console.error('Failed to confirm selection:', error);
-      alert(error instanceof Error ? error.message : 'Failed to confirm selection. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleAcknowledgeSelection = async () => {
-    if (!session.sessionId) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/acknowledge-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          acknowledgedBy: 'CUSTOMER',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to acknowledge selection');
-      }
-
-      setSelectionAcknowledged(true);
-    } catch (error) {
-      console.error('Failed to acknowledge selection:', error);
-      alert(error instanceof Error ? error.message : 'Failed to acknowledge selection. Please try again.');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -828,7 +771,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ language }),
+        body: JSON.stringify({ language, sessionId: session.sessionId, customerName: session.customerName || undefined }),
       });
 
       if (!response.ok) {
@@ -938,6 +881,19 @@ function App() {
           <main className="main-content">
             <div className="payment-pending-screen">
               <h1>{t(session.customerPrimaryLanguage, 'paymentPending')}</h1>
+              {session.paymentLineItems && session.paymentLineItems.length > 0 && (
+                <div className="payment-breakdown">
+                  <p className="breakdown-title">{t(session.customerPrimaryLanguage, 'charges') ?? 'Charges'}</p>
+                  <div className="breakdown-items">
+                    {session.paymentLineItems.map((li, idx) => (
+                      <div key={`${li.description}-${idx}`} className="breakdown-row">
+                        <span className="breakdown-desc">{li.description}</span>
+                        <span className="breakdown-amt">${li.amount.toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {session.paymentTotal !== undefined && (
                 <div className="payment-total">
                   <p className="total-label">{t(session.customerPrimaryLanguage, 'totalDue')}</p>
@@ -1126,36 +1082,17 @@ function App() {
           <div style={{ 
             padding: '1rem', 
             marginBottom: '1rem', 
-            background: selectionConfirmed ? '#10b981' : '#3b82f6', 
+            background: selectionConfirmed ? '#10b981' : (proposedBy === 'EMPLOYEE' ? '#2563eb' : '#334155'),
             borderRadius: '8px',
             color: 'white',
           }}>
             <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
               {selectionConfirmed 
                 ? `✓ ${t(session.customerPrimaryLanguage, 'selected')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${selectionConfirmedBy === 'CUSTOMER' ? 'You' : 'Staff'})`
-                : `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${proposedBy === 'CUSTOMER' ? 'You' : 'Staff'})`}
+                : proposedBy === 'EMPLOYEE'
+                  ? `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (Staff suggestion — tap the highlighted option to accept)`
+                  : `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (Your selection — waiting for staff to confirm)`}
             </div>
-            {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
-              <button
-                onClick={() => void handleConfirmSelection()}
-                disabled={isSubmitting || session.pastDueBlocked}
-                className="btn-liquid-glass"
-              >
-                {isSubmitting ? t(session.customerPrimaryLanguage, 'confirming') : t(session.customerPrimaryLanguage, 'confirmSelection')}
-              </button>
-            )}
-            {selectionConfirmed && selectionConfirmedBy === 'EMPLOYEE' && !selectionAcknowledged && (
-              <div>
-                <p style={{ marginBottom: '0.5rem' }}>{t(session.customerPrimaryLanguage, 'staffHasLocked')}</p>
-                <button
-                  onClick={() => void handleAcknowledgeSelection()}
-                  disabled={isSubmitting}
-                  className="btn-liquid-glass"
-                >
-                  {isSubmitting ? t(session.customerPrimaryLanguage, 'acknowledging') : t(session.customerPrimaryLanguage, 'acknowledge')}
-                </button>
-              </div>
-            )}
           </div>
         )}
 
@@ -1168,8 +1105,11 @@ function App() {
                 const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
                 const showWarning = availableCount > 0 && availableCount <= 5;
                 const isUnavailable = availableCount === 0;
-                const isDisabled = (selectionConfirmed && !selectionAcknowledged) || session.pastDueBlocked;
+                const isDisabled = session.pastDueBlocked;
                 const isSelected = proposedRentalType === rental && selectionConfirmed;
+                const isStaffProposed = proposedBy === 'EMPLOYEE' && proposedRentalType === rental && !selectionConfirmed;
+                const isPulsing = isStaffProposed;
+                const isForced = selectedRental === rental && selectionConfirmed && selectionConfirmedBy === 'EMPLOYEE';
                 const lang = session.customerPrimaryLanguage;
                 
                 // Map rental types to display names
@@ -1182,7 +1122,8 @@ function App() {
                 return (
                   <button
                     key={rental}
-                    className={`btn-liquid-glass ${isSelected ? 'btn-liquid-glass--selected' : ''} ${isDisabled ? 'btn-liquid-glass--disabled' : ''}`}
+                    className={`btn-liquid-glass ${isSelected ? 'btn-liquid-glass--selected' : ''} ${isStaffProposed ? 'btn-liquid-glass--staff-proposed' : ''} ${isDisabled ? 'btn-liquid-glass--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
+                    data-forced={isForced}
                     onClick={() => {
                       if (!isDisabled) {
                         void handleRentalSelection(rental);
@@ -1212,23 +1153,6 @@ function App() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Proceed for Payment button */}
-        <div className="proceed-section">
-          <button
-            className="btn-liquid-glass"
-            onClick={() => {
-              if (proposedRentalType && selectionConfirmed) {
-                // Selection is confirmed, proceed to payment
-                // The WebSocket will handle the transition
-              }
-            }}
-            disabled={!proposedRentalType || !selectionConfirmed || isSubmitting || session.pastDueBlocked}
-            style={{ minWidth: '200px' }}
-          >
-            Proceed for Payment
-          </button>
         </div>
 
         {/* Waitlist button (shown when higher tier available) */}

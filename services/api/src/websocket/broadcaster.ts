@@ -5,6 +5,7 @@ import type {
   RoomStatusChangedPayload,
   InventoryUpdatedPayload,
   SessionUpdatedPayload,
+  SelectionForcedPayload,
   CheckoutRequestedPayload,
   CheckoutClaimedPayload,
   CheckoutUpdatedPayload,
@@ -54,6 +55,7 @@ export type WebSocketPayload =
   | CustomerConfirmationRequiredPayload
   | CustomerConfirmedPayload
   | CustomerDeclinedPayload
+  | SelectionForcedPayload
   | AssignmentCreatedPayload
   | AssignmentFailedPayload
   | SelectionProposedPayload
@@ -91,6 +93,7 @@ export interface Broadcaster {
   broadcastCustomerConfirmationRequired(payload: CustomerConfirmationRequiredPayload, lane: string): void;
   broadcastCustomerConfirmed(payload: CustomerConfirmedPayload, lane: string): void;
   broadcastCustomerDeclined(payload: CustomerDeclinedPayload, lane: string): void;
+    broadcastSelectionForced(payload: SelectionForcedPayload, lane: string): void;
   broadcastAssignmentCreated(payload: AssignmentCreatedPayload, lane: string): void;
   broadcastAssignmentFailed(payload: AssignmentFailedPayload, lane: string): void;
   broadcastRegisterSessionUpdated(payload: RegisterSessionUpdatedPayload): void;
@@ -256,6 +259,14 @@ export function createBroadcaster(): Broadcaster {
      */
     broadcastCustomerDeclined(payload: CustomerDeclinedPayload, lane: string) {
       broadcastToLane(createEvent('CUSTOMER_DECLINED', payload), lane);
+    },
+
+    /**
+     * Broadcast a selection forced event to a specific lane.
+     * Used when employee double-taps to force selection and advance flow.
+     */
+    broadcastSelectionForced(payload: SelectionForcedPayload, lane: string) {
+      broadcastToLane(createEvent('SELECTION_FORCED', payload), lane);
     },
 
     /**

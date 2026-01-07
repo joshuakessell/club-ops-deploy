@@ -131,6 +131,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
         // Anonymous display: prefer locker number, fallback to room number, then masked ID
         displayIdentifier: row.locker_number || row.room_number || `***${row.id.substring(0, 8)}`,
         currentRentalType: row.current_rental_type,
+        customerName: row.customer_name || 'Customer',
       }));
 
       return reply.send({ entries });
