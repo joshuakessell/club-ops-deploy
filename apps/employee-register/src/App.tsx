@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { type ActiveVisit, type CheckoutRequestSummary, type CheckoutChecklist, type WebSocketEvent, type CheckoutRequestedPayload, type CheckoutClaimedPayload, type CheckoutUpdatedPayload, type SessionUpdatedPayload, type AssignmentCreatedPayload, type AssignmentFailedPayload, type CustomerConfirmedPayload, type CustomerDeclinedPayload, type SelectionProposedPayload, type SelectionLockedPayload, type SelectionAcknowledgedPayload, type SelectionForcedPayload } from '@club-ops/shared';
 import { RegisterSignIn } from './RegisterSignIn';
 import { InventorySelector } from './InventorySelector';
-import { IdScanner } from './IdScanner';
 import type { IdScanPayload } from '@club-ops/shared';
+import { ScanMode, type ScanModeResult } from './ScanMode';
 import { debounce } from './utils/debounce';
 
 interface HealthStatus {
@@ -87,14 +87,27 @@ function App() {
   });
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [scanMode, setScanMode] = useState<'id' | 'membership' | null>(null);
-  const [scanBuffer, setScanBuffer] = useState('');
-  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const handleScanRef = useRef<((value: string) => Promise<void>) | null>(null);
+  const [scanModeOpen, setScanModeOpen] = useState(false);
   const [manualEntry, setManualEntry] = useState(false);
-  const [showIdScanner, setShowIdScanner] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [membershipNumber, setMembershipNumber] = useState('');
+  const [pendingCreateFromScan, setPendingCreateFromScan] = useState<{
+    idScanValue: string;
+    idScanHash: string | null;
+    extracted: {
+      firstName?: string;
+      lastName?: string;
+      fullName?: string;
+      dob?: string;
+      idNumber?: string;
+      issuer?: string;
+      jurisdiction?: string;
+      addressLine1?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+    };
+  } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [agreementSigned, setAgreementSigned] = useState(false);
@@ -242,6 +255,21 @@ function App() {
   const handleLogout = async () => {
     try {
       if (session?.sessionToken) {
+        // IMPORTANT: release the register session (server-side) before logging out staff.
+        // This makes the separate "menu sign out" redundant and keeps register availability correct.
+        try {
+          await fetch(`${API_BASE}/v1/registers/signout`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.sessionToken}`,
+            },
+            body: JSON.stringify({ deviceId }),
+          });
+        } catch (err) {
+          console.warn('Register signout failed (continuing):', err);
+        }
+
         await fetch(`${API_BASE}/v1/auth/logout`, {
           method: 'POST',
           headers: {
@@ -254,6 +282,8 @@ function App() {
     } finally {
       localStorage.removeItem('staff_session');
       setSession(null);
+      // Ensure RegisterSignIn re-runs status checks and clears any lingering client state immediately.
+      window.location.reload();
     }
   };
   const runCustomerSearch = useCallback(
@@ -386,83 +416,14 @@ function App() {
     }
   }, [setRegisterSession, setSession]);
 
-  // Handle barcode scanner input (keyboard wedge mode)
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // Barcode scanners typically send characters quickly and end with Enter
-      if (e.key === 'Enter' && scanBuffer.trim()) {
-        const scannedValue = scanBuffer.trim();
-        void handleScanRef.current?.(scannedValue);
-        setScanBuffer('');
-        if (scanTimeoutRef.current) {
-          clearTimeout(scanTimeoutRef.current);
-          scanTimeoutRef.current = null;
-        }
-      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        // Accumulate characters (barcode scanner input)
-        setScanBuffer(prev => prev + e.key);
-        
-        // Clear buffer after 1 second of no input (normal typing)
-        if (scanTimeoutRef.current) {
-          clearTimeout(scanTimeoutRef.current);
-        }
-        scanTimeoutRef.current = setTimeout(() => {
-          setScanBuffer('');
-        }, 1000);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyPress);
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress);
-      if (scanTimeoutRef.current) {
-        clearTimeout(scanTimeoutRef.current);
-      }
-    };
-  }, [scanBuffer]);
-
-  const handleScan = async (scannedValue: string) => {
-    if (!scanMode) {
-      // Auto-detect: if it looks like a UUID, treat as ID; otherwise membership number
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(scannedValue);
-      const mode = isUuid ? 'id' : 'membership';
-      setScanMode(mode);
-      await sendScan(mode, scannedValue);
-    } else {
-      await sendScan(scanMode, scannedValue);
-    }
-  };
-
-  handleScanRef.current = handleScan;
-
-  const sendScan = async (mode: 'id' | 'membership', value: string) => {
+  const handleIdScan = async (
+    payload: IdScanPayload,
+    opts?: { suppressAlerts?: boolean }
+  ): Promise<ScanModeResult> => {
     if (!session?.sessionToken) {
-      alert('Not authenticated');
-      return;
-    }
-
-    try {
-      // Use new check-in start endpoint
-      if (mode === 'id') {
-        // ID scan - start or update session
-        await startLaneSession(value, null);
-      } else {
-        // Membership scan - update existing session with membership number
-        await startLaneSession(customerName || 'Customer', value);
-      }
-
-      // Reset scan mode after successful scan
-      setScanMode(null);
-    } catch (error) {
-      console.error('Failed to send scan:', error);
-      alert('Failed to process scan. Please try again.');
-    }
-  };
-
-  const handleIdScan = async (payload: IdScanPayload) => {
-    if (!session?.sessionToken) {
-      alert('Not authenticated');
-      return;
+      const msg = 'Not authenticated';
+      if (!opts?.suppressAlerts) alert(msg);
+      return { outcome: 'error', message: msg };
     }
 
     setIsSubmitting(true);
@@ -478,7 +439,11 @@ function App() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to scan ID');
+        const msg = getErrorMessage(errorPayload) || 'Failed to scan ID';
+        if (!opts?.suppressAlerts) alert(msg);
+        // Treat 400 as "no match / invalid ID data", keep scan mode open.
+        if (response.status === 400) return { outcome: 'no_match', message: msg };
+        return { outcome: 'error', message: msg };
       }
 
       const data = await readJson<{
@@ -487,17 +452,18 @@ function App() {
         sessionId?: string;
       }>(response);
       console.log('ID scanned, session updated:', data);
-      
+
       // Update local state
       if (data.customerName) setCustomerName(data.customerName);
       if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
       if (data.sessionId) setCurrentSessionId(data.sessionId);
-      
-      // Close scanner
-      setShowIdScanner(false);
+
+      return { outcome: 'matched' };
     } catch (error) {
       console.error('Failed to scan ID:', error);
-      alert(error instanceof Error ? error.message : 'Failed to scan ID');
+      const msg = error instanceof Error ? error.message : 'Failed to scan ID';
+      if (!opts?.suppressAlerts) alert(msg);
+      return { outcome: 'error', message: msg };
     } finally {
       setIsSubmitting(false);
     }
@@ -512,10 +478,15 @@ function App() {
     await handleIdScan(payload);
   };
 
-  const startLaneSession = async (idScanValue: string, membershipScanValue?: string | null) => {
+  const startLaneSession = async (
+    idScanValue: string,
+    membershipScanValue?: string | null,
+    opts?: { suppressAlerts?: boolean }
+  ): Promise<ScanModeResult> => {
     if (!session?.sessionToken) {
-      alert('Not authenticated');
-      return;
+      const msg = 'Not authenticated';
+      if (!opts?.suppressAlerts) alert(msg);
+      return { outcome: 'error', message: msg };
     }
 
     setIsSubmitting(true);
@@ -534,7 +505,9 @@ function App() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to start session');
+        const msg = getErrorMessage(errorPayload) || 'Failed to start session';
+        if (!opts?.suppressAlerts) alert(msg);
+        return { outcome: 'error', message: msg };
       }
 
       const data = await readJson<{
@@ -553,9 +526,62 @@ function App() {
       if (manualEntry) {
         setManualEntry(false);
       }
+      return { outcome: 'matched' };
     } catch (error) {
       console.error('Failed to start session:', error);
-      alert(error instanceof Error ? error.message : 'Failed to start session');
+      const msg = error instanceof Error ? error.message : 'Failed to start session';
+      if (!opts?.suppressAlerts) alert(msg);
+      return { outcome: 'error', message: msg };
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const startLaneSessionByCustomerId = async (
+    customerId: string,
+    opts?: { suppressAlerts?: boolean }
+  ): Promise<ScanModeResult> => {
+    if (!session?.sessionToken) {
+      const msg = 'Not authenticated';
+      if (!opts?.suppressAlerts) alert(msg);
+      return { outcome: 'error', message: msg };
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ customerId }),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        const msg = getErrorMessage(errorPayload) || 'Failed to start session';
+        if (!opts?.suppressAlerts) alert(msg);
+        return { outcome: 'error', message: msg };
+      }
+
+      const data = await readJson<{
+        sessionId?: string;
+        customerName?: string;
+        membershipNumber?: string;
+      }>(response);
+
+      if (data.customerName) setCustomerName(data.customerName);
+      if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
+      if (data.sessionId) setCurrentSessionId(data.sessionId);
+
+      if (manualEntry) setManualEntry(false);
+      return { outcome: 'matched' };
+    } catch (error) {
+      console.error('Failed to start session by customerId:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to start session';
+      if (!opts?.suppressAlerts) alert(msg);
+      return { outcome: 'error', message: msg };
     } finally {
       setIsSubmitting(false);
     }
@@ -569,6 +595,149 @@ function App() {
     }
     // Use scan-id endpoint for manual entry too (with minimal payload)
     await handleManualIdEntry(customerName.trim());
+  };
+
+  const onBarcodeCaptured = async (rawScanText: string): Promise<ScanModeResult> => {
+    if (!session?.sessionToken) {
+      return { outcome: 'error', message: 'Not authenticated' };
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/scan`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          laneId: lane,
+          rawScanText,
+        }),
+      });
+
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const msg = getErrorMessage(payload) || 'Failed to process scan';
+        return { outcome: 'error', message: msg };
+      }
+
+      const data = payload as {
+        result: 'MATCHED' | 'NO_MATCH' | 'ERROR';
+        scanType?: 'STATE_ID' | 'MEMBERSHIP';
+        customer?: { id: string; name: string; membershipNumber: string | null };
+        extracted?: {
+          firstName?: string;
+          lastName?: string;
+          fullName?: string;
+          dob?: string;
+          idNumber?: string;
+          issuer?: string;
+          jurisdiction?: string;
+        };
+        normalizedRawScanText?: string;
+        idScanHash?: string;
+        membershipCandidate?: string;
+        error?: { code?: string; message?: string };
+      };
+
+      if (data.result === 'ERROR') {
+        return { outcome: 'error', message: data.error?.message || 'Scan failed' };
+      }
+
+      if (data.result === 'MATCHED' && data.customer?.id) {
+        setPendingCreateFromScan(null);
+        // Open customer record (start lane session) using the resolved customerId.
+        return await startLaneSessionByCustomerId(data.customer.id, { suppressAlerts: true });
+      }
+
+      // NO_MATCH
+      if (data.scanType === 'STATE_ID') {
+        const extracted = data.extracted || {};
+        setPendingCreateFromScan({
+          idScanValue: data.normalizedRawScanText || rawScanText,
+          idScanHash: data.idScanHash || null,
+          extracted: {
+            firstName: extracted.firstName,
+            lastName: extracted.lastName,
+            fullName: extracted.fullName,
+            dob: extracted.dob,
+            idNumber: extracted.idNumber,
+            issuer: extracted.issuer,
+            jurisdiction: extracted.jurisdiction,
+          },
+        });
+        return { outcome: 'no_match', message: 'No match found. Create new account?', canCreate: true };
+      }
+
+      // Membership/general barcode no-match: do not create implicitly.
+      setPendingCreateFromScan(null);
+      const label = data.membershipCandidate ? ` (${data.membershipCandidate})` : '';
+      return {
+        outcome: 'no_match',
+        message: `No match found${label}. Scan ID or use Manual Entry.`,
+        canCreate: false,
+      };
+    } catch (error) {
+      console.error('Scan failed:', error);
+      return { outcome: 'error', message: error instanceof Error ? error.message : 'Scan failed' };
+    }
+  };
+
+  const handleCreateFromNoMatch = async (): Promise<ScanModeResult> => {
+    if (!pendingCreateFromScan) {
+      return { outcome: 'error', message: 'Nothing to create (no pending scan)' };
+    }
+    if (!session?.sessionToken) {
+      return { outcome: 'error', message: 'Not authenticated' };
+    }
+
+    const { extracted, idScanValue, idScanHash } = pendingCreateFromScan;
+    const firstName = extracted.firstName || '';
+    const lastName = extracted.lastName || '';
+    const dob = extracted.dob || '';
+    if (!firstName || !lastName || !dob) {
+      return { outcome: 'error', message: 'Missing required fields to create customer' };
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/v1/customers/create-from-scan`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          idScanValue,
+          idScanHash: idScanHash || undefined,
+          firstName,
+          lastName,
+          dob,
+          fullName: extracted.fullName || undefined,
+          addressLine1: extracted.addressLine1 || undefined,
+          city: extracted.city || undefined,
+          state: extracted.state || undefined,
+          postalCode: extracted.postalCode || undefined,
+        }),
+      });
+
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const msg = getErrorMessage(payload) || 'Failed to create customer';
+        return { outcome: 'error', message: msg };
+      }
+
+      const data = payload as { customer?: { id?: string } };
+      const customerId = data.customer?.id;
+      if (!customerId) {
+        return { outcome: 'error', message: 'Create returned no customer id' };
+      }
+
+      setPendingCreateFromScan(null);
+      return await startLaneSessionByCustomerId(customerId, { suppressAlerts: true });
+    } catch (error) {
+      console.error('Failed to create customer from scan:', error);
+      return { outcome: 'error', message: error instanceof Error ? error.message : 'Failed to create customer' };
+    }
   };
 
   const handleClearSession = async () => {
@@ -949,6 +1118,22 @@ function App() {
           }
         } else if (message.type === 'SESSION_UPDATED') {
           const payload = message.payload as SessionUpdatedPayload;
+          // Core identity/session fields (keep register in sync without manual refresh)
+          if (payload.sessionId !== undefined) {
+            setCurrentSessionId(payload.sessionId || null);
+          }
+          if (payload.customerName !== undefined) {
+            setCustomerName(payload.customerName || '');
+          }
+          if (payload.membershipNumber !== undefined) {
+            setMembershipNumber(payload.membershipNumber || '');
+          }
+
+          // Agreement completion sync
+          if (payload.agreementSigned !== undefined) {
+            setAgreementSigned(Boolean(payload.agreementSigned));
+          }
+
           // Update selection state
           if (payload.proposedRentalType) {
             setProposedRentalType(payload.proposedRentalType);
@@ -998,6 +1183,25 @@ function App() {
               setShowPastDueModal(true);
             }
           }
+
+          // If server cleared the lane session (COMPLETED with empty customer name), reset local UI.
+          if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
+            setCurrentSessionId(null);
+            setCustomerName('');
+            setMembershipNumber('');
+            setAgreementSigned(false);
+            setAssignedResourceType(null);
+            setAssignedResourceNumber(null);
+            setSelectedInventoryItem(null);
+            setPaymentIntentId(null);
+            setPaymentQuote(null);
+            setPaymentStatus(null);
+            setProposedRentalType(null);
+            setProposedBy(null);
+            setSelectionConfirmed(false);
+            setSelectionConfirmedBy(null);
+            setSelectionAcknowledged(true);
+          }
         } else if (message.type === 'WAITLIST_UPDATED') {
           // Refresh waitlist when updated
           void fetchWaitlistRef.current?.();
@@ -1007,11 +1211,19 @@ function App() {
             setProposedRentalType(payload.rentalType);
             setProposedBy(payload.proposedBy);
           }
-        } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
-          const payload = message.payload as SelectionLockedPayload | SelectionForcedPayload;
+        } else if (message.type === 'SELECTION_LOCKED') {
+          const payload = message.payload as SelectionLockedPayload;
           if (payload.sessionId === currentSessionId) {
             setSelectionConfirmed(true);
-            setSelectionConfirmedBy(payload.confirmedBy || 'EMPLOYEE');
+            setSelectionConfirmedBy(payload.confirmedBy);
+            setCustomerSelectedType(payload.rentalType);
+            setSelectionAcknowledged(true);
+          }
+        } else if (message.type === 'SELECTION_FORCED') {
+          const payload = message.payload as SelectionForcedPayload;
+          if (payload.sessionId === currentSessionId) {
+            setSelectionConfirmed(true);
+            setSelectionConfirmedBy('EMPLOYEE');
             setCustomerSelectedType(payload.rentalType);
             setSelectionAcknowledged(true);
           }
@@ -2416,31 +2628,19 @@ function App() {
           <h2>Lane Session</h2>
           <div className="action-buttons">
             <button 
-              className={`action-btn ${showIdScanner ? 'active' : ''}`}
+              className={`action-btn ${scanModeOpen ? 'active' : ''}`}
               onClick={() => {
-                setShowIdScanner(true);
-                setScanMode(null);
                 setManualEntry(false);
+                setScanModeOpen(true);
               }}
             >
-              <span className="btn-icon">🆔</span>
-              SCAN ID
-            </button>
-            <button 
-              className={`action-btn ${scanMode === 'membership' ? 'active' : ''}`}
-              onClick={() => {
-                setScanMode(scanMode === 'membership' ? null : 'membership');
-                setManualEntry(false);
-              }}
-            >
-              <span className="btn-icon">🏷️</span>
-              {scanMode === 'membership' ? 'Scanning Membership...' : 'Scan Membership'}
+              <span className="btn-icon">📡</span>
+              Scan
             </button>
             <button 
               className={`action-btn ${manualEntry ? 'active' : ''}`}
               onClick={() => {
                 setManualEntry(!manualEntry);
-                setScanMode(null);
               }}
             >
               <span className="btn-icon">✏️</span>
@@ -2455,17 +2655,6 @@ function App() {
               Clear Session
             </button>
           </div>
-          
-          {scanMode && (
-            <div className="scan-status">
-              <p>
-                {scanMode === 'id' ? 'Ready to scan ID' : 'Ready to scan membership card'}
-              </p>
-              <p className="scan-hint">
-                Point barcode scanner and scan, or press Enter
-              </p>
-            </div>
-          )}
 
           {manualEntry && (
             <form className="manual-entry-form" onSubmit={(e) => void handleManualSubmit(e)}>
@@ -2719,15 +2908,15 @@ function App() {
         </div>
       )}
 
-      {/* ID Scanner Modal */}
-      <IdScanner
-        isOpen={showIdScanner}
-        onClose={() => setShowIdScanner(false)}
-        onScan={(payload) => void handleIdScan(payload)}
-        onManualEntry={() => {
-          setShowIdScanner(false);
-          setManualEntry(true);
+      {/* Full-screen Scan Mode (keyboard-wedge scanner; no iPad camera) */}
+      <ScanMode
+        isOpen={scanModeOpen}
+        onCancel={() => {
+          setScanModeOpen(false);
+          setPendingCreateFromScan(null);
         }}
+        onBarcodeCaptured={onBarcodeCaptured}
+        onCreateFromNoMatch={handleCreateFromNoMatch}
       />
 
       {/* Past-Due Payment Modal */}

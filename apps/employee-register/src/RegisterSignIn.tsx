@@ -30,7 +30,6 @@ interface RegisterSignInProps {
 export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignInProps) {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [registerSession, setRegisterSession] = useState<RegisterSession | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   
@@ -218,41 +217,6 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     onSignedIn(sessionWithoutPin);
   };
 
-  const handleSignOut = async () => {
-    try {
-      // Get session token from localStorage (from staff session)
-      const stored = localStorage.getItem('staff_session');
-      if (stored) {
-        const parsed: unknown = JSON.parse(stored) as unknown;
-        const token = isRecord(parsed) && typeof parsed.sessionToken === 'string' ? parsed.sessionToken : null;
-        if (!token) return;
-        await fetch(`${API_BASE}/v1/registers/signout`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({ deviceId }),
-        });
-      }
-    } catch (error) {
-      console.error('Sign out error:', error);
-    }
-
-    // Clear heartbeat
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      setHeartbeatInterval(null);
-    }
-
-    setRegisterSession(null);
-    setMenuOpen(false);
-    // Clear staff session as well
-    localStorage.removeItem('staff_session');
-    // Reload to show sign-in screen
-    window.location.reload();
-  };
-
   // If not signed in, show initial state
   if (!registerSession) {
     return (
@@ -330,26 +294,11 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
       <div className="register-sign-in-logo">Club Dallas</div>
       
       <div className="register-top-bar">
-        <button
-          className="register-menu-button"
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Menu"
-        >
-          ☰
-        </button>
+        <div style={{ width: '40px' }} />
         <div className="register-top-bar-center">
           {registerSession.employeeName} • Register {registerSession.registerNumber}
         </div>
         <div style={{ width: '40px' }} /> {/* Spacer for alignment */}
-      </div>
-
-      <div className={`register-menu ${menuOpen ? 'open' : ''}`}>
-        <button
-          className="register-menu-item"
-          onClick={() => void handleSignOut()}
-        >
-          Sign Out
-        </button>
       </div>
 
       {children}

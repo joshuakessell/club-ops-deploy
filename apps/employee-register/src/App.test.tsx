@@ -1,15 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import App from './App';
 
 // Mock WebSocket
-global.WebSocket = vi.fn(() => ({
-  onopen: null,
-  onclose: null,
-  onmessage: null,
-  close: vi.fn(),
-  send: vi.fn(),
-})) as unknown as typeof WebSocket;
+type MockWebSocket = {
+  onopen: ((ev: Event) => unknown) | null;
+  onclose: ((ev: CloseEvent) => unknown) | null;
+  onmessage: ((ev: { data: string }) => unknown) | null;
+  close: ReturnType<typeof vi.fn>;
+  send: ReturnType<typeof vi.fn>;
+};
+let lastWs: MockWebSocket | null = null;
+global.WebSocket = vi.fn(() => {
+  lastWs = {
+    onopen: null,
+    onclose: null,
+    onmessage: null,
+    close: vi.fn(),
+    send: vi.fn(),
+  };
+  return lastWs;
+}) as unknown as typeof WebSocket;
 
 // Mock fetch
 global.fetch = vi.fn();
@@ -119,6 +130,78 @@ describe('App', () => {
     
     render(<App />);
     expect(await screen.findByText('Lane Session')).toBeDefined();
+  });
+
+  it('updates agreement status when receiving SESSION_UPDATED with agreementSigned=true', async () => {
+    localStorage.setItem('staff_session', JSON.stringify({
+      staffId: 'staff-1',
+      sessionToken: 'test-token',
+      name: 'Test User',
+      role: 'STAFF',
+    }));
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
+      if (u.includes('/v1/registers/status')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            signedIn: true,
+            employee: { id: 'emp-1', name: 'Test Employee' },
+            registerNumber: 1,
+          }),
+        } as unknown as Response);
+      }
+      if (u.includes('/health')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }) } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
+    });
+
+    render(<App />);
+    expect(await screen.findByText('Lane Session')).toBeDefined();
+
+    // Wait until App has attached its onmessage handler, then simulate an agreement-signed update.
+    // React StrictMode can create multiple WS instances; use the one that has the handler attached.
+    let wsWithHandler: MockWebSocket | null = null;
+    await waitFor(() => {
+      const results = (global.WebSocket as unknown as ReturnType<typeof vi.fn>).mock.results;
+      const instances = results.map((r: { value: unknown }) => r.value as MockWebSocket | undefined).filter(Boolean);
+      wsWithHandler = instances.find((w) => typeof w.onmessage === 'function') || null;
+      expect(wsWithHandler).toBeTruthy();
+    });
+
+    act(() => {
+      wsWithHandler?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-123',
+            customerName: 'Alex Rivera',
+            membershipNumber: '700001',
+            allowedRentals: ['LOCKER'],
+            agreementSigned: true,
+          },
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Current Session:/i)).toBeDefined();
+      expect(screen.getByText(/Name:\s*Alex Rivera/i)).toBeDefined();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Agreement signed/i)).toBeDefined();
+    });
   });
 
   it('shows customer suggestions at 3+ characters and confirm triggers session', async () => {

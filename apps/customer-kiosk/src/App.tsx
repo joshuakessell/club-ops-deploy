@@ -7,10 +7,8 @@ import type {
   InventoryUpdatedPayload,
   SelectionProposedPayload,
   SelectionLockedPayload,
-  SelectionAcknowledgedPayload,
   SelectionForcedPayload,
 } from '@club-ops/shared';
-import whiteLogo from './assets/logo_vector_transparent_hi.svg';
 import blackLogo from './assets/logo_vector_transparent_hi_black.svg';
 import { t, type Language } from './i18n';
 import { ScreenShell } from './components/ScreenShell';
@@ -118,7 +116,8 @@ function App() {
   const [proposedBy, setProposedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
   const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
-  const [selectionAcknowledged, setSelectionAcknowledged] = useState(true);
+  // Selection acknowledgement is tracked for gating/coordination (currently no direct UI).
+  const [, setSelectionAcknowledged] = useState(true);
   const [, setUpgradeDisclaimerAcknowledged] = useState(false);
   const [hasScrolledAgreement, setHasScrolledAgreement] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1039,6 +1038,56 @@ function App() {
               ) : (
                 <p>{t(lang, 'assignmentComplete')}</p>
               )}
+
+              <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center' }}>
+                <button
+                  className="btn-liquid-glass modal-ok-btn"
+                  onClick={() => void (async () => {
+                    setIsSubmitting(true);
+                    try {
+                      // Kiosk acknowledgement: clears lane session UI state so this kiosk resets for the next customer.
+                      await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                      });
+                    } catch (error) {
+                      console.error('Failed to kiosk-ack completion:', error);
+                      // Continue to local reset even if server call fails; WS will reconcile when possible.
+                    } finally {
+                      // Local reset (immediate UX), server broadcast will also clear deterministically.
+                      setView('idle');
+                      setSession({
+                        sessionId: null,
+                        customerName: null,
+                        membershipNumber: null,
+                        allowedRentals: [],
+                        blockEndsAt: undefined,
+                      });
+                      setSelectedRental(null);
+                      setAgreed(false);
+                      setSignatureData(null);
+                      setShowUpgradeDisclaimer(false);
+                      setUpgradeAction(null);
+                      setShowRenewalDisclaimer(false);
+                      setCheckinMode(null);
+                      setShowWaitlistModal(false);
+                      setWaitlistDesiredType(null);
+                      setWaitlistBackupType(null);
+                      setProposedRentalType(null);
+                      setProposedBy(null);
+                      setSelectionConfirmed(false);
+                      setSelectionConfirmedBy(null);
+                      setSelectionAcknowledged(false);
+                      setUpgradeDisclaimerAcknowledged(false);
+                      setHasScrolledAgreement(false);
+                      setIsSubmitting(false);
+                    }
+                  })()}
+                  disabled={isSubmitting}
+                >
+                  OK
+                </button>
+              </div>
             </div>
           </main>
         </div>

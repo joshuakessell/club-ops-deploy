@@ -403,6 +403,139 @@ body::before {
   color: var(--text-muted) !important;
 }
 
+/* Full-screen Scan Mode (keyboard-wedge scanner) */
+.scan-mode-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(2, 6, 23, 0.96);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+}
+
+.scan-mode-topbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.92);
+}
+
+.scan-mode-title {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.scan-mode-spacer {
+  width: 120px;
+}
+
+.scan-mode-cancel {
+  width: 120px;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.scan-mode-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  gap: 2rem;
+}
+
+.scan-mode-reticle {
+  width: min(720px, 92vw);
+  height: min(360px, 40vh);
+  border-radius: 20px;
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  box-shadow:
+    0 0 0 6px rgba(59, 130, 246, 0.12),
+    0 20px 60px rgba(0, 0, 0, 0.55);
+  position: relative;
+}
+
+.scan-mode-reticle-inner {
+  position: absolute;
+  inset: 14px;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+}
+
+.scan-mode-status {
+  text-align: center;
+  max-width: 720px;
+}
+
+.scan-mode-status-text {
+  font-size: 2rem;
+  font-weight: 900;
+}
+
+.scan-mode-message {
+  margin-top: 0.75rem;
+  font-size: 1rem;
+  color: rgba(226, 232, 240, 0.9);
+}
+
+.scan-mode-subhint {
+  margin-top: 0.75rem;
+  font-size: 0.95rem;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.scan-mode-actions {
+  margin-top: 0.5rem;
+}
+
+.scan-mode-primary {
+  padding: 0.9rem 1.25rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(59, 130, 246, 0.55);
+  background: rgba(59, 130, 246, 0.22);
+  color: #dbeafe;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.scan-mode-processing-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-mode-processing-card {
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: var(--text);
+  font-weight: 800;
+}
+
+.scan-mode-hidden-input {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Manual Entry Form */
 .manual-entry-form {
   margin-top: 1rem;

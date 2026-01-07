@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
+import crypto from 'crypto';
 
 const SearchQuerySchema = z.object({
   q: z.string().min(3),
@@ -13,6 +14,26 @@ interface CustomerRow {
   name: string;
   membership_number: string | null;
   dob: string | Date | null;
+}
+
+function normalizeScanText(raw: string): string {
+  const lf = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = lf
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trimEnd());
+  return lines.join('\n').trim();
+}
+
+function computeSha256Hex(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function toDateOnly(dob: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return null;
+  // Validate it parses to a real date.
+  const d = new Date(`${dob}T00:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return null;
+  return dob;
 }
 
 // eslint-disable-next-line @typescript-eslint/require-await
@@ -99,6 +120,133 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send({ suggestions });
     } catch (error) {
       request.log.error(error, 'Failed to search customers');
+      return reply.status(500).send({ error: 'Internal server error' });
+    }
+  });
+
+  /**
+   * POST /v1/customers/create-from-scan
+   *
+   * Creates (or returns existing) customer record derived from an ID scan that produced NO_MATCH.
+   * Persists id_scan_hash + id_scan_value so subsequent scans match instantly.
+   *
+   * Auth required.
+   */
+  const CreateFromScanSchema = z.object({
+    // Preferred: send normalized value + hash from /v1/checkin/scan response.
+    idScanValue: z.string().min(1).optional(),
+    idScanHash: z.string().min(16).optional(),
+    // Fallback: raw scan text; server will normalize + hash.
+    rawScanText: z.string().min(1).optional(),
+    // Identity fields (minimum)
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    dob: z.string().min(1),
+    fullName: z.string().optional(),
+    // Optional prefill fields (not currently persisted in DB schema)
+    addressLine1: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    postalCode: z.string().optional(),
+  }).refine((v) => Boolean(v.idScanValue || v.rawScanText), {
+    message: 'idScanValue or rawScanText is required',
+  });
+
+  fastify.post('/v1/customers/create-from-scan', { preHandler: [requireAuth] }, async (request, reply) => {
+    if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+
+    let body: z.infer<typeof CreateFromScanSchema>;
+    try {
+      body = CreateFromScanSchema.parse(request.body);
+    } catch (error) {
+      return reply.status(400).send({
+        error: 'Validation failed',
+        details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+      });
+    }
+
+    const idScanValue = normalizeScanText(body.idScanValue || body.rawScanText || '');
+    if (!idScanValue) {
+      return reply.status(400).send({ error: 'Invalid scan input' });
+    }
+
+    const idScanHash = body.idScanHash || computeSha256Hex(idScanValue);
+    const dob = toDateOnly(body.dob);
+    if (!dob) {
+      return reply.status(400).send({ error: 'Invalid dob; expected YYYY-MM-DD' });
+    }
+
+    const name = (body.fullName?.trim() || `${body.firstName} ${body.lastName}`.trim()).slice(0, 255);
+    if (!name) {
+      return reply.status(400).send({ error: 'Invalid name' });
+    }
+
+    try {
+      // Idempotent behavior: if another lane already created this customer, return it.
+      const existing = await query<{
+        id: string;
+        name: string;
+        dob: string | Date | null;
+        membership_number: string | null;
+        banned_until: Date | null;
+        id_scan_hash: string | null;
+        id_scan_value: string | null;
+      }>(
+        `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+         FROM customers
+         WHERE id_scan_hash = $1 OR id_scan_value = $2
+         LIMIT 1`,
+        [idScanHash, idScanValue]
+      );
+
+      if (existing.rows.length > 0) {
+        const row = existing.rows[0]!;
+        if (row.banned_until && row.banned_until > new Date()) {
+          return reply.status(403).send({ error: 'Customer is banned' });
+        }
+
+        // Backfill missing identifiers if needed.
+        if (!row.id_scan_hash || !row.id_scan_value) {
+          await query(
+            `UPDATE customers
+             SET id_scan_hash = COALESCE(id_scan_hash, $1),
+                 id_scan_value = COALESCE(id_scan_value, $2),
+                 updated_at = NOW()
+             WHERE id = $3`,
+            [idScanHash, idScanValue, row.id]
+          );
+        }
+
+        return reply.send({
+          created: false,
+          customer: {
+            id: row.id,
+            name: row.name,
+            dob: row.dob instanceof Date ? row.dob.toISOString().slice(0, 10) : row.dob,
+            membershipNumber: row.membership_number,
+          },
+        });
+      }
+
+      const inserted = await query<{ id: string; name: string; dob: Date | null; membership_number: string | null }>(
+        `INSERT INTO customers (name, dob, id_scan_hash, id_scan_value, created_at, updated_at)
+         VALUES ($1, $2::date, $3, $4, NOW(), NOW())
+         RETURNING id, name, dob, membership_number`,
+        [name, dob, idScanHash, idScanValue]
+      );
+
+      const row = inserted.rows[0]!;
+      return reply.send({
+        created: true,
+        customer: {
+          id: row.id,
+          name: row.name,
+          dob: row.dob ? row.dob.toISOString().slice(0, 10) : null,
+          membershipNumber: row.membership_number,
+        },
+      });
+    } catch (error) {
+      request.log.error(error, 'Failed to create customer from scan');
       return reply.status(500).send({ error: 'Internal server error' });
     }
   });

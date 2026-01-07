@@ -19,6 +19,7 @@ import type {
 import { calculatePriceQuote, type PricingInput } from '../pricing/engine.js';
 import { IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
 import crypto from 'crypto';
+import { Parse as ParseAamva } from 'aamva-parser';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -113,6 +114,115 @@ function toDate(value: unknown): Date | undefined {
   if (value instanceof Date) return value;
   const d = new Date(String(value));
   return Number.isFinite(d.getTime()) ? d : undefined;
+}
+
+function normalizeScanText(raw: string): string {
+  // Normalize line endings and whitespace while preserving line breaks.
+  // Honeywell scanners often emit already-decoded PDF417 text that may include \r\n or \r.
+  const lf = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = lf
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trimEnd());
+  return lines.join('\n').trim();
+}
+
+function computeSha256Hex(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function isLikelyAamvaPdf417Text(raw: string): boolean {
+  // Heuristic detection for AAMVA DL/ID text payloads.
+  const s = raw;
+  return (
+    s.startsWith('@') ||
+    s.includes('ANSI ') ||
+    s.includes('AAMVA') ||
+    /\nDCS/.test(s) ||
+    /\nDAC/.test(s) ||
+    /\nDBD/.test(s) ||
+    /\nDAQ/.test(s)
+  );
+}
+
+type ExtractedIdIdentity = {
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  dob?: string; // YYYY-MM-DD
+  idNumber?: string;
+  issuer?: string;
+  jurisdiction?: string;
+};
+
+function minimalAamvaExtract(raw: string): ExtractedIdIdentity {
+  const lines = raw.split('\n');
+  const out: ExtractedIdIdentity = {};
+  for (const lineRaw of lines) {
+    const line = lineRaw ?? '';
+    if (line.startsWith('DCS')) out.lastName = line.substring(3).trim() || out.lastName;
+    else if (line.startsWith('DAC')) out.firstName = line.substring(3).trim() || out.firstName;
+    else if (line.startsWith('DAA')) out.fullName = line.substring(3).trim() || out.fullName;
+    else if (line.startsWith('DAQ')) out.idNumber = line.substring(3).trim() || out.idNumber;
+    else if (line.startsWith('DBD')) {
+      const dobStr = line.substring(3).trim();
+      // Common AAMVA DBD format: YYYYMMDD
+      if (/^\d{8}$/.test(dobStr)) {
+        const yyyy = dobStr.slice(0, 4);
+        const mm = dobStr.slice(4, 6);
+        const dd = dobStr.slice(6, 8);
+        out.dob = `${yyyy}-${mm}-${dd}`;
+      }
+    } else if (line.startsWith('DCI')) {
+      const j = line.substring(3).trim();
+      if (j) {
+        out.jurisdiction = j;
+        out.issuer = out.issuer || j;
+      }
+    }
+  }
+  if (!out.fullName && out.firstName && out.lastName) {
+    out.fullName = `${out.firstName} ${out.lastName}`.trim();
+  }
+  return out;
+}
+
+function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity {
+  // Use a maintained parser first; fall back to minimal AAMVA tag parsing for robustness.
+  const minimal = minimalAamvaExtract(rawNormalized);
+  try {
+    const parsed = ParseAamva(rawNormalized) as unknown as {
+      firstName?: string | null;
+      lastName?: string | null;
+      dateOfBirth?: Date | string | null;
+      driversLicenseId?: string | null;
+      state?: string | null;
+      pdf417?: string | null;
+    };
+
+    const dob =
+      parsed?.dateOfBirth instanceof Date
+        ? parsed.dateOfBirth.toISOString().slice(0, 10)
+        : typeof parsed?.dateOfBirth === 'string'
+          ? (() => {
+              const d = new Date(parsed.dateOfBirth);
+              return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) : undefined;
+            })()
+          : undefined;
+
+    const merged: ExtractedIdIdentity = {
+      firstName: (parsed?.firstName ?? undefined) || minimal.firstName,
+      lastName: (parsed?.lastName ?? undefined) || minimal.lastName,
+      dob: dob || minimal.dob,
+      idNumber: (parsed?.driversLicenseId ?? undefined) || minimal.idNumber,
+      jurisdiction: (parsed?.state ?? undefined) || minimal.jurisdiction,
+      issuer: (parsed?.state ?? undefined) || minimal.issuer,
+    };
+    if (minimal.fullName) merged.fullName = minimal.fullName;
+    else if (merged.firstName && merged.lastName) merged.fullName = `${merged.firstName} ${merged.lastName}`.trim();
+    return merged;
+  } catch {
+    return minimal;
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -733,6 +843,229 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   });
 
   /**
+   * POST /v1/checkin/scan
+   *
+   * Server-side scan normalization, classification, parsing, and customer matching.
+   * Input: { laneId, rawScanText }
+   *
+   * Returns one of:
+   * - MATCHED: customer record (and enrichment applied if match was via name+DOB)
+   * - NO_MATCH: extracted identity payload for prefill (ID scans) or membership candidate (non-ID)
+   * - ERROR: banned / invalid scan / auth error
+   */
+  const CheckinScanBodySchema = z.object({
+    laneId: z.string().min(1),
+    rawScanText: z.string().min(1),
+  });
+
+  fastify.post('/v1/checkin/scan', { preHandler: [requireAuth] }, async (request, reply) => {
+    if (!request.staff) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
+
+    let body: z.infer<typeof CheckinScanBodySchema>;
+    try {
+      body = CheckinScanBodySchema.parse(request.body);
+    } catch (error) {
+      return reply.status(400).send({
+        error: 'Validation failed',
+        details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+      });
+    }
+
+    const normalized = normalizeScanText(body.rawScanText);
+    if (!normalized) {
+      return reply.status(400).send({
+        result: 'ERROR',
+        error: { code: 'INVALID_SCAN', message: 'Empty scan input' },
+      });
+    }
+
+    const isAamva = isLikelyAamvaPdf417Text(normalized);
+
+    try {
+      const result = await transaction(async (client) => {
+        type CustomerIdentityRow = {
+          id: string;
+          name: string;
+          dob: Date | null;
+          membership_number: string | null;
+          banned_until: Date | null;
+          id_scan_hash: string | null;
+          id_scan_value: string | null;
+        };
+
+        const checkBanned = (row: CustomerIdentityRow) => {
+          const bannedUntil = toDate(row.banned_until);
+          if (bannedUntil && bannedUntil > new Date()) {
+            throw { statusCode: 403, code: 'BANNED', message: `Customer is banned until ${bannedUntil.toISOString()}` };
+          }
+        };
+
+        if (isAamva) {
+          const extracted = extractAamvaIdentity(normalized);
+          const idScanValue = normalized;
+          const idScanHash = computeSha256Hex(idScanValue);
+
+          // Matching order:
+          // 1) customers.id_scan_hash OR customers.id_scan_value
+          const byHashOrValue = await client.query<CustomerIdentityRow>(
+            `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+             FROM customers
+             WHERE id_scan_hash = $1 OR id_scan_value = $2
+             LIMIT 2`,
+            [idScanHash, idScanValue]
+          );
+
+          if (byHashOrValue.rows.length > 0) {
+            const matched =
+              byHashOrValue.rows.find((r) => r.id_scan_hash === idScanHash) ??
+              byHashOrValue.rows[0]!;
+
+            checkBanned(matched);
+
+            // Ensure both identifiers are persisted for future instant matches.
+            if (!matched.id_scan_hash || !matched.id_scan_value) {
+              await client.query(
+                `UPDATE customers
+                 SET id_scan_hash = COALESCE(id_scan_hash, $1),
+                     id_scan_value = COALESCE(id_scan_value, $2),
+                     updated_at = NOW()
+                 WHERE id = $3`,
+                [idScanHash, idScanValue, matched.id]
+              );
+            }
+
+            return {
+              result: 'MATCHED' as const,
+              scanType: 'STATE_ID' as const,
+              normalizedRawScanText: idScanValue,
+              idScanHash,
+              customer: {
+                id: matched.id,
+                name: matched.name,
+                dob: matched.dob ? matched.dob.toISOString().slice(0, 10) : null,
+                membershipNumber: matched.membership_number,
+              },
+              extracted,
+              enriched: false,
+            };
+          }
+
+          // 2) fallback match by (first_name,last_name,birthdate) normalized
+          if (extracted.firstName && extracted.lastName && extracted.dob) {
+            // Compare against customers.dob (DATE) using an explicit date cast to avoid timezone issues.
+            const dobStr = extracted.dob;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dobStr)) {
+              const byNameDob = await client.query<CustomerIdentityRow>(
+                `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+                 FROM customers
+                 WHERE dob = $1::date
+                   AND lower(split_part(name, ' ', 1)) = lower($2)
+                   AND lower(regexp_replace(name, '^.*\\s', '')) = lower($3)
+                 LIMIT 2`,
+                [dobStr, extracted.firstName, extracted.lastName]
+              );
+
+              if (byNameDob.rows.length > 0) {
+                const matched = byNameDob.rows[0]!;
+                checkBanned(matched);
+
+                // Enrich customer for future instant matches
+                await client.query(
+                  `UPDATE customers
+                   SET id_scan_hash = COALESCE(id_scan_hash, $1),
+                       id_scan_value = COALESCE(id_scan_value, $2),
+                       updated_at = NOW()
+                   WHERE id = $3`,
+                  [idScanHash, idScanValue, matched.id]
+                );
+
+                return {
+                  result: 'MATCHED' as const,
+                  scanType: 'STATE_ID' as const,
+                  normalizedRawScanText: idScanValue,
+                  idScanHash,
+                  customer: {
+                    id: matched.id,
+                    name: matched.name,
+                    dob: matched.dob ? matched.dob.toISOString().slice(0, 10) : null,
+                    membershipNumber: matched.membership_number,
+                  },
+                  extracted,
+                  enriched: true,
+                };
+              }
+            }
+          }
+
+          // 3) no match: return extracted identity for prefill
+          return {
+            result: 'NO_MATCH' as const,
+            scanType: 'STATE_ID' as const,
+            normalizedRawScanText: idScanValue,
+            idScanHash,
+            extracted,
+          };
+        }
+
+        // Non-state-ID: treat as membership/general barcode
+        const membershipCandidate =
+          parseMembershipNumber(normalized) || normalized;
+
+        const byMembership = await client.query<CustomerIdentityRow>(
+          `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+           FROM customers
+           WHERE membership_number = $1
+           LIMIT 1`,
+          [membershipCandidate]
+        );
+
+        if (byMembership.rows.length > 0) {
+          const matched = byMembership.rows[0]!;
+          checkBanned(matched);
+          return {
+            result: 'MATCHED' as const,
+            scanType: 'MEMBERSHIP' as const,
+            normalizedRawScanText: normalized,
+            membershipNumber: matched.membership_number,
+            customer: {
+              id: matched.id,
+              name: matched.name,
+              dob: matched.dob ? matched.dob.toISOString().slice(0, 10) : null,
+              membershipNumber: matched.membership_number,
+            },
+          };
+        }
+
+        return {
+          result: 'NO_MATCH' as const,
+          scanType: 'MEMBERSHIP' as const,
+          normalizedRawScanText: normalized,
+          membershipCandidate,
+        };
+      });
+
+      return reply.send(result);
+    } catch (error) {
+      request.log.error(error, 'Failed to process checkin scan');
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        const statusCode = (error as { statusCode: number }).statusCode;
+        const code = (error as { code?: string }).code;
+        const message = (error as { message?: string }).message;
+        return reply.status(statusCode).send({
+          result: 'ERROR',
+          error: { code: code || 'ERROR', message: message || 'Failed to process scan' },
+        });
+      }
+      return reply.status(500).send({
+        result: 'ERROR',
+        error: { code: 'INTERNAL', message: 'Failed to process scan' },
+      });
+    }
+  });
+
+  /**
    * POST /v1/checkin/lane/:laneId/scan-id
    * 
    * Scan ID (PDF417 barcode) to identify customer and start/update lane session.
@@ -768,14 +1101,15 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await transaction(async (client) => {
         // Compute id_scan_hash from raw barcode (SHA-256 of normalized string)
         let idScanHash: string | null = null;
+        let idScanValue: string | null = null;
         if (body.raw) {
-          const normalized = body.raw.trim().replace(/\s+/g, ' ');
-          idScanHash = crypto.createHash('sha256').update(normalized).digest('hex');
+          idScanValue = normalizeScanText(body.raw);
+          idScanHash = computeSha256Hex(idScanValue);
         } else if (body.idNumber && (body.issuer || body.jurisdiction)) {
           // Fallback: derive hash from issuer + idNumber
           const issuer = body.issuer || body.jurisdiction || '';
           const combined = `${issuer}:${body.idNumber}`;
-          idScanHash = crypto.createHash('sha256').update(combined).digest('hex');
+          idScanHash = computeSha256Hex(combined);
         }
 
         // Determine customer name from parsed fields
@@ -805,8 +1139,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (idScanHash) {
           // Look for existing customer by hash
           const existingCustomer = await client.query<{ id: string; name: string; dob: Date | null }>(
-            `SELECT id, name, dob FROM customers WHERE id_scan_hash = $1 LIMIT 1`,
-            [idScanHash]
+            `SELECT id, name, dob FROM customers WHERE id_scan_hash = $1 OR id_scan_value = $2 LIMIT 1`,
+            [idScanHash, idScanValue]
           );
 
           if (existingCustomer.rows.length > 0) {
@@ -825,13 +1159,25 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 [dob, customerId]
               );
             }
+
+            // Ensure scan identifiers are persisted for future matches.
+            if (idScanValue) {
+              await client.query(
+                `UPDATE customers
+                 SET id_scan_hash = COALESCE(id_scan_hash, $1),
+                     id_scan_value = COALESCE(id_scan_value, $2),
+                     updated_at = NOW()
+                 WHERE id = $3`,
+                [idScanHash, idScanValue, customerId]
+              );
+            }
           } else {
             // Create new customer
             const newCustomer = await client.query<{ id: string }>(
               `INSERT INTO customers (name, dob, id_scan_hash, id_scan_value, created_at, updated_at)
                VALUES ($1, $2, $3, $4, NOW(), NOW())
                RETURNING id`,
-              [customerName, dob, idScanHash, body.raw || null]
+              [customerName, dob, idScanHash, idScanValue]
             );
             customerId = newCustomer.rows[0]!.id;
           }
@@ -842,7 +1188,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             `INSERT INTO customers (name, dob, id_scan_value, created_at, updated_at)
              VALUES ($1, $2, $3, NOW(), NOW())
              RETURNING id`,
-            [customerName, dob, body.raw || null]
+            [customerName, dob, idScanValue]
           );
           customerId = newCustomer.rows[0]!.id;
         }
@@ -3597,6 +3943,84 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.status(500).send({
         error: 'Internal Server Error',
         message: 'Failed to reset session',
+      });
+    }
+  });
+
+  /**
+   * POST /v1/checkin/lane/:laneId/kiosk-ack
+   *
+   * Public kiosk acknowledgement that the customer has tapped OK on the completion screen.
+   * This clears lane_session coordination fields so kiosks/lanes reset to idle deterministically.
+   *
+   * Security: optionalAuth (kiosk does not have staff token).
+   * Guard: only operates on sessions already in COMPLETED status.
+   */
+  fastify.post<{
+    Params: { laneId: string };
+  }>('/v1/checkin/lane/:laneId/kiosk-ack', {
+    preHandler: [optionalAuth],
+  }, async (request, reply) => {
+    const { laneId } = request.params;
+    try {
+      const result = await transaction(async (client) => {
+        const sessionResult = await client.query<LaneSessionRow>(
+          `SELECT * FROM lane_sessions
+           WHERE lane_id = $1 AND status = 'COMPLETED'
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [laneId]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          throw { statusCode: 404, message: 'No completed session found' };
+        }
+
+        const session = sessionResult.rows[0]!;
+
+        // Clear coordination fields (same shape as staff reset), but only for already-completed sessions.
+        await client.query(
+          `UPDATE lane_sessions
+           SET staff_id = NULL,
+               customer_id = NULL,
+               customer_display_name = NULL,
+               membership_number = NULL,
+               desired_rental_type = NULL,
+               waitlist_desired_type = NULL,
+               backup_rental_type = NULL,
+               assigned_resource_id = NULL,
+               assigned_resource_type = NULL,
+               price_quote_json = NULL,
+               payment_intent_id = NULL,
+               proposed_rental_type = NULL,
+               proposed_by = NULL,
+               selection_confirmed = false,
+               selection_confirmed_by = NULL,
+               selection_locked_at = NULL,
+               disclaimers_ack_json = NULL,
+               updated_at = NOW()
+           WHERE id = $1`,
+          [session.id]
+        );
+
+        return { sessionId: session.id };
+      });
+
+      const { payload } = await transaction((client) => buildFullSessionUpdatedPayload(client, result.sessionId));
+      fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+      return reply.send({ success: true });
+    } catch (error: unknown) {
+      request.log.error(error, 'Failed to kiosk-ack session');
+      const httpErr = getHttpError(error);
+      if (httpErr) {
+        return reply.status(httpErr.statusCode).send({
+          error: httpErr.message ?? 'Failed to kiosk-ack',
+        });
+      }
+      return reply.status(500).send({
+        error: 'Internal Server Error',
+        message: 'Failed to kiosk-ack session',
       });
     }
   });

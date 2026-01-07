@@ -64,7 +64,9 @@ describe('App', () => {
     render(<App />);
     const logo = screen.getByAltText('Club Dallas');
     expect(logo).toBeDefined();
-    expect(logo.className).toBe('logo-idle');
+    // Idle should be logo-only; implementation details (class names) may change with layout/watermark updates.
+    expect(screen.queryByText(/Welcome,/i)).toBeNull();
+    expect(screen.queryByText(/Select Language/i)).toBeNull();
   });
 
   it('shows idle state when no session exists', () => {
@@ -72,9 +74,9 @@ describe('App', () => {
     // Should show logo-only idle screen
     const logo = screen.getByAltText('Club Dallas');
     expect(logo).toBeDefined();
-    expect(logo.className).toBe('logo-idle');
     // Should not show customer info
     expect(screen.queryByText(/Membership:/)).toBeNull();
+    expect(screen.queryByText(/Choose your experience/i)).toBeNull();
   });
 
   it('never shows a payment decline reason (generic guidance only)', async () => {
@@ -108,6 +110,104 @@ describe('App', () => {
 
     // Decline reason must never be displayed to customer
     expect(screen.queryByText(/CVV mismatch/i)).toBeNull();
+  });
+
+  it('persists language: after set-language, reload does not show language prompt again', async () => {
+    // Make set-language succeed
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
+      if (u.includes('/health')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/inventory/available')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rooms: {}, lockers: 0 }) } as unknown as Response);
+      }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/set-language')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
+    });
+
+    const { unmount } = render(<App />);
+
+    // Initial session with no language set should show language prompt.
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            // customerPrimaryLanguage intentionally omitted
+          },
+        }),
+      });
+    });
+
+    expect(await screen.findByText(/select language/i)).toBeDefined();
+
+    // Select English.
+    const englishBtn = await screen.findByText(/english/i);
+    act(() => {
+      (englishBtn as HTMLButtonElement).click();
+    });
+
+    // Server broadcasts updated session with language set; kiosk should not show language prompt.
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    expect(screen.queryByText(/select language/i)).toBeNull();
+
+    // "Reload": unmount + remount. When the same customer/session arrives with language already set,
+    // the language prompt must not reappear.
+    unmount();
+    render(<App />);
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    expect(screen.queryByText(/select language/i)).toBeNull();
   });
 });
 

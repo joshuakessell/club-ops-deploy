@@ -5,6 +5,7 @@ import websocket from '@fastify/websocket';
 import { query, initializeDatabase, closeDatabase } from '../src/db/index.js';
 import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaster.js';
 import { checkinRoutes } from '../src/routes/checkin.js';
+import { customerRoutes } from '../src/routes/customers.js';
 import { hashPin, generateSessionToken } from '../src/auth/utils.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { truncateAllTables } from './testDb.js';
@@ -58,6 +59,7 @@ describe('Check-in Flow', () => {
     // Register check-in routes
     // Note: Tests will need to properly authenticate or we'll mock requireAuth
     await app.register(checkinRoutes);
+    await app.register(customerRoutes);
 
     await app.ready();
   });
@@ -903,6 +905,226 @@ describe('Check-in Flow', () => {
     }));
   });
 
+  describe('POST /v1/checkin/lane/:laneId/kiosk-ack', () => {
+    it('clears a completed lane session so kiosks reset to idle', runIfDbAvailable(async () => {
+      // Create a minimal completed lane session with display fields set (mirrors sign-agreement completion).
+      const sessionResult = await query<{ id: string }>(
+        `INSERT INTO lane_sessions (lane_id, status, customer_display_name, checkin_mode)
+         VALUES ($1, 'COMPLETED', 'Done Customer', 'INITIAL')
+         RETURNING id`,
+        [laneId]
+      );
+      const sessionId = sessionResult.rows[0]!.id;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/checkin/lane/${laneId}/kiosk-ack`,
+      });
+      expect(response.statusCode).toBe(200);
+
+      const cleared = await query<{ customer_display_name: string | null; customer_id: string | null }>(
+        `SELECT customer_display_name, customer_id FROM lane_sessions WHERE id = $1`,
+        [sessionId]
+      );
+      expect(cleared.rows[0]!.customer_display_name).toBeNull();
+      expect(cleared.rows[0]!.customer_id).toBeNull();
+    }));
+  });
+
+  describe('POST /v1/checkin/scan', () => {
+    it('matches ID scans by id_scan_hash or id_scan_value', runIfDbAvailable(async () => {
+      const raw = '@\nDCSDOE\nDACJOHN\nDBD19800115\nDAQ123456789\nDCITX\n';
+
+      // Seed a customer with id_scan_value only (no hash), so scan matches by value and backfills hash.
+      const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map(l => l.replace(/[ \t]+/g, ' ').trimEnd()).join('\n').trim();
+      const customerResult = await query<{ id: string }>(
+        `INSERT INTO customers (name, dob, id_scan_value, created_at, updated_at)
+         VALUES ($1, $2, $3, NOW(), NOW())
+         RETURNING id`,
+        ['JOHN DOE', '1980-01-15', normalized]
+      );
+      const customerId = customerResult.rows[0]!.id;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/checkin/scan',
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { laneId, rawScanText: raw },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.result).toBe('MATCHED');
+      expect(data.scanType).toBe('STATE_ID');
+      expect(data.customer.id).toBe(customerId);
+
+      // Verify hash backfilled for future instant matches.
+      const hashRow = await query<{ id_scan_hash: string | null }>(
+        `SELECT id_scan_hash FROM customers WHERE id = $1`,
+        [customerId]
+      );
+      expect(hashRow.rows[0]!.id_scan_hash).toBeTruthy();
+    }));
+
+    it('falls back to name+DOB matching and enriches id_scan_hash/value', runIfDbAvailable(async () => {
+      // Customer exists without scan identifiers.
+      const customerResult = await query<{ id: string }>(
+        `INSERT INTO customers (name, dob, created_at, updated_at)
+         VALUES ($1, $2, NOW(), NOW())
+         RETURNING id`,
+        ['JOHN DOE', '1980-01-15']
+      );
+      const customerId = customerResult.rows[0]!.id;
+
+      const raw = '@\nDCSDOE\nDACJOHN\nDBD19800115\nDAQ555555555\nDCITX\n';
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/checkin/scan',
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { laneId, rawScanText: raw },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.result).toBe('MATCHED');
+      expect(data.enriched).toBe(true);
+      expect(data.customer.id).toBe(customerId);
+
+      const row = await query<{ id_scan_hash: string | null; id_scan_value: string | null }>(
+        `SELECT id_scan_hash, id_scan_value FROM customers WHERE id = $1`,
+        [customerId]
+      );
+      expect(row.rows[0]!.id_scan_hash).toBeTruthy();
+      expect(row.rows[0]!.id_scan_value).toBeTruthy();
+    }));
+
+    it('matches non-ID scans as membership/general barcode', runIfDbAvailable(async () => {
+      const customerResult = await query<{ id: string }>(
+        `INSERT INTO customers (name, membership_number, created_at, updated_at)
+         VALUES ($1, $2, NOW(), NOW())
+         RETURNING id`,
+        ['Member One', '700001']
+      );
+      const customerId = customerResult.rows[0]!.id;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/checkin/scan',
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { laneId, rawScanText: '700001' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.result).toBe('MATCHED');
+      expect(data.scanType).toBe('MEMBERSHIP');
+      expect(data.customer.id).toBe(customerId);
+    }));
+
+    it('returns NO_MATCH with extracted identity for unknown ID scans', runIfDbAvailable(async () => {
+      const raw = '@\nDCSDOE\nDACJANE\nDBD19920102\nDAQ000000000\nDCITX\n';
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/checkin/scan',
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { laneId, rawScanText: raw },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const data = JSON.parse(response.body);
+      expect(data.result).toBe('NO_MATCH');
+      expect(data.scanType).toBe('STATE_ID');
+      expect(data.extracted).toBeDefined();
+      expect(data.extracted.firstName).toBe('JANE');
+      expect(data.extracted.lastName).toBe('DOE');
+      expect(data.extracted.dob).toBe('1992-01-02');
+    }));
+
+    it('rejects scan when matched customer is banned', runIfDbAvailable(async () => {
+      const raw = '@\nDCSDOE\nDACBANNED\nDBD19800115\nDAQBAN123\nDCITX\n';
+      const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map(l => l.replace(/[ \t]+/g, ' ').trimEnd()).join('\n').trim();
+      const customerResult = await query<{ id: string }>(
+        `INSERT INTO customers (name, dob, id_scan_value, created_at, updated_at)
+         VALUES ($1, $2, $3, NOW(), NOW())
+         RETURNING id`,
+        ['BANNED DOE', '1980-01-15', normalized]
+      );
+      const customerId = customerResult.rows[0]!.id;
+      const banUntil = new Date();
+      banUntil.setDate(banUntil.getDate() + 1);
+      await query(`UPDATE customers SET banned_until = $1 WHERE id = $2`, [banUntil, customerId]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/checkin/scan',
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { laneId, rawScanText: raw },
+      });
+
+      expect(response.statusCode).toBe(403);
+      const data = JSON.parse(response.body);
+      expect(data.result).toBe('ERROR');
+      expect(data.error.code).toBe('BANNED');
+    }));
+
+    it('create-from-scan creates a customer and subsequent scan matches instantly', runIfDbAvailable(async () => {
+      const raw = '@\nDCSDOE\nDACNEW\nDBD19920102\nDAQNEW999\nDCITX\n';
+
+      // First lookup yields NO_MATCH
+      const lookup = await app.inject({
+        method: 'POST',
+        url: '/v1/checkin/scan',
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { laneId, rawScanText: raw },
+      });
+      expect(lookup.statusCode).toBe(200);
+      const lookupData = JSON.parse(lookup.body);
+      expect(lookupData.result).toBe('NO_MATCH');
+      expect(lookupData.scanType).toBe('STATE_ID');
+      expect(lookupData.extracted.firstName).toBe('NEW');
+      expect(lookupData.extracted.lastName).toBe('DOE');
+      expect(lookupData.extracted.dob).toBe('1992-01-02');
+
+      // Create customer from extracted payload
+      const create = await app.inject({
+        method: 'POST',
+        url: '/v1/customers/create-from-scan',
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: {
+          idScanValue: lookupData.normalizedRawScanText,
+          idScanHash: lookupData.idScanHash,
+          firstName: lookupData.extracted.firstName,
+          lastName: lookupData.extracted.lastName,
+          dob: lookupData.extracted.dob,
+          fullName: lookupData.extracted.fullName,
+        },
+      });
+      expect(create.statusCode).toBe(200);
+      const createData = JSON.parse(create.body);
+      expect(createData.customer?.id).toBeTruthy();
+
+      // Verify stored identifiers
+      const row = await query<{ id_scan_hash: string | null; id_scan_value: string | null }>(
+        `SELECT id_scan_hash, id_scan_value FROM customers WHERE id = $1`,
+        [createData.customer.id]
+      );
+      expect(row.rows[0]!.id_scan_hash).toBeTruthy();
+      expect(row.rows[0]!.id_scan_value).toBeTruthy();
+
+      // Re-scan should match
+      const lookup2 = await app.inject({
+        method: 'POST',
+        url: '/v1/checkin/scan',
+        headers: { 'Authorization': `Bearer ${staffToken}` },
+        payload: { laneId, rawScanText: raw },
+      });
+      expect(lookup2.statusCode).toBe(200);
+      const lookup2Data = JSON.parse(lookup2.body);
+      expect(lookup2Data.result).toBe('MATCHED');
+      expect(lookup2Data.customer.id).toBe(createData.customer.id);
+    }));
+  });
+
   describe('POST /v1/checkin/lane/:laneId/sign-agreement', () => {
     it('should require INITIAL or RENEWAL mode for agreement signing', runIfDbAvailable(async () => {
       // Start a lane session in INITIAL mode
@@ -1041,6 +1263,12 @@ describe('Check-in Flow', () => {
       );
       expect(blockResult.rows[0]!.session_id).toBe(startData.sessionId);
       expect(blockResult.rows[0]!.agreement_signed).toBe(true);
+
+      // Agreement completion sync: ensure the server broadcast SESSION_UPDATED includes agreementSigned=true
+      const matchingEvents = sessionUpdatedEvents.filter((e) => e.payload.sessionId === startData.sessionId);
+      expect(matchingEvents.length).toBeGreaterThan(0);
+      const last = matchingEvents[matchingEvents.length - 1]!;
+      expect(last.payload.agreementSigned).toBe(true);
 
       // Verify room status changed to OCCUPIED
       const roomStatusResult = await query<{ status: string }>(

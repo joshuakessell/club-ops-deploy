@@ -223,6 +223,170 @@ paths:
         '401':
           description: Unauthorized
 
+  /v1/checkin/scan:
+    post:
+      tags: [Check-in]
+      summary: Normalize/classify a raw scan and resolve customer identity (server-side)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [laneId, rawScanText]
+              properties:
+                laneId:
+                  type: string
+                  description: Lane identifier (e.g. lane-1 or lane-2)
+                rawScanText:
+                  type: string
+                  description: Raw decoded scan text from a keyboard-wedge scanner (may include newlines)
+      responses:
+        '200':
+          description: Scan resolved (matched or no-match)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: string
+                    enum: [MATCHED, NO_MATCH, ERROR]
+                  scanType:
+                    type: string
+                    enum: [STATE_ID, MEMBERSHIP]
+                  normalizedRawScanText:
+                    type: string
+                  idScanHash:
+                    type: string
+                    nullable: true
+                  membershipCandidate:
+                    type: string
+                    nullable: true
+                  customer:
+                    type: object
+                    nullable: true
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      dob:
+                        type: string
+                        nullable: true
+                      membershipNumber:
+                        type: string
+                        nullable: true
+                  extracted:
+                    type: object
+                    nullable: true
+                    properties:
+                      firstName:
+                        type: string
+                      lastName:
+                        type: string
+                      fullName:
+                        type: string
+                      dob:
+                        type: string
+                      idNumber:
+                        type: string
+                      issuer:
+                        type: string
+                      jurisdiction:
+                        type: string
+                  enriched:
+                    type: boolean
+                    nullable: true
+                  error:
+                    type: object
+                    nullable: true
+                    properties:
+                      code:
+                        type: string
+                      message:
+                        type: string
+        '400':
+          description: Invalid scan input
+        '401':
+          description: Unauthorized
+        '403':
+          description: Customer banned
+
+  /v1/customers/create-from-scan:
+    post:
+      tags: [Check-in]
+      summary: Create (or return existing) customer from extracted ID scan fields (NO_MATCH flow)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firstName, lastName, dob]
+              properties:
+                idScanValue:
+                  type: string
+                  description: Normalized scan value (preferred, from /v1/checkin/scan)
+                idScanHash:
+                  type: string
+                  description: sha256 hash for the normalized scan value (preferred, from /v1/checkin/scan)
+                rawScanText:
+                  type: string
+                  description: Raw scan text (fallback; server will normalize/hash)
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                dob:
+                  type: string
+                  description: Date of birth YYYY-MM-DD
+                fullName:
+                  type: string
+                addressLine1:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                postalCode:
+                  type: string
+      responses:
+        '200':
+          description: Customer created or returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: boolean
+                  customer:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      dob:
+                        type: string
+                        nullable: true
+                      membershipNumber:
+                        type: string
+                        nullable: true
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+        '403':
+          description: Customer banned
+
   /v1/checkin/lane/{laneId}/scan-id:
     post:
       tags: [Check-in]
@@ -551,6 +715,24 @@ paths:
       responses:
         '200':
           description: Signature stored
+
+  /v1/checkin/lane/{laneId}/kiosk-ack:
+    post:
+      tags: [Check-in]
+      summary: Kiosk acknowledgement of completion (clears lane session UI state)
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+      responses:
+        '200':
+          description: Kiosk acknowledged; session UI state cleared
+        '404':
+          description: No completed session found
 
   /v1/checkin/lane/{laneId}/customer-confirm:
     post:
