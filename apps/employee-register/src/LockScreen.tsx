@@ -106,7 +106,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
 
   const handlePinSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    
+
     if (!staffLookup.trim() || !pin.trim()) {
       setError('Please enter your name/ID and PIN');
       return;
@@ -181,11 +181,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
           </button>
         </div>
 
-        {error && (
-          <div className="lock-screen-error">
-            {error}
-          </div>
-        )}
+        {error && <div className="lock-screen-error">{error}</div>}
 
         {mode === 'webauthn' ? (
           <div className="lock-screen-webauthn">

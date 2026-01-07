@@ -30,5 +30,3 @@ export async function truncateAllTables(query: QueryFn): Promise<void> {
 
   await query(`TRUNCATE TABLE ${names.join(', ')} RESTART IDENTITY CASCADE`);
 }
-
-

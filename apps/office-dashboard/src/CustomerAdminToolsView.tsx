@@ -19,7 +19,9 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reauthOpen, setReauthOpen] = useState(false);
-  const [pendingAction, setPendingAction] = useState<null | { type: 'clearNotes' | 'waivePastDue' }>(null);
+  const [pendingAction, setPendingAction] = useState<null | {
+    type: 'clearNotes' | 'waivePastDue';
+  }>(null);
 
   const canSearch = q.trim().length >= 2;
 
@@ -47,10 +49,7 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
 
   const performAdminUpdate = async (action: 'clearNotes' | 'waivePastDue') => {
     if (!selected) return;
-    const body =
-      action === 'clearNotes'
-        ? { notes: '' }
-        : { pastDueBalance: 0 };
+    const body = action === 'clearNotes' ? { notes: '' } : { pastDueBalance: 0 };
 
     try {
       setError(null);
@@ -104,7 +103,15 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
         </div>
         <div className="panel-content" style={{ padding: '1.25rem' }}>
           {error && (
-            <div style={{ marginBottom: '1rem', padding: '0.75rem', border: '1px solid var(--error)', borderRadius: 8, color: 'var(--error)' }}>
+            <div
+              style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                border: '1px solid var(--error)',
+                borderRadius: 8,
+                color: 'var(--error)',
+              }}
+            >
               {error}
             </div>
           )}
@@ -133,7 +140,9 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
         </div>
       </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}>
+      <div
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}
+      >
         <section className="panel">
           <div className="panel-header">
             <h2>Results ({results.length})</h2>
@@ -157,11 +166,19 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                     <tr
                       key={c.id}
                       onClick={() => selectCustomer(c)}
-                      style={{ cursor: 'pointer', background: selected?.id === c.id ? 'rgba(43, 102, 184, 0.12)' : undefined }}
+                      style={{
+                        cursor: 'pointer',
+                        background: selected?.id === c.id ? 'rgba(43, 102, 184, 0.12)' : undefined,
+                      }}
                     >
                       <td className="room-number">{c.name}</td>
                       <td>{c.membershipNumber || '—'}</td>
-                      <td style={{ color: c.pastDueBalance > 0 ? 'var(--warning)' : 'var(--text-muted)', fontWeight: 700 }}>
+                      <td
+                        style={{
+                          color: c.pastDueBalance > 0 ? 'var(--warning)' : 'var(--text-muted)',
+                          fontWeight: 700,
+                        }}
+                      >
                         ${c.pastDueBalance.toFixed(2)}
                       </td>
                     </tr>
@@ -196,7 +213,12 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                     </tr>
                     <tr>
                       <td style={{ color: 'var(--text-muted)' }}>Past Due Balance</td>
-                      <td style={{ fontWeight: 800, color: selected.pastDueBalance > 0 ? 'var(--warning)' : 'var(--text)' }}>
+                      <td
+                        style={{
+                          fontWeight: 800,
+                          color: selected.pastDueBalance > 0 ? 'var(--warning)' : 'var(--text)',
+                        }}
+                      >
                         ${selected.pastDueBalance.toFixed(2)}
                       </td>
                     </tr>
@@ -205,11 +227,21 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
 
                 <div className="csRaisedCard" style={{ padding: '1rem', marginBottom: '1rem' }}>
                   <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>Notes</div>
-                  <pre style={{ whiteSpace: 'pre-wrap', margin: 0, color: selected.notes ? 'var(--text)' : 'var(--text-muted)' }}>
+                  <pre
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      margin: 0,
+                      color: selected.notes ? 'var(--text)' : 'var(--text-muted)',
+                    }}
+                  >
                     {selected.notes?.trim() ? selected.notes : 'No notes.'}
                   </pre>
                   <div style={{ marginTop: '0.75rem' }}>
-                    <button className="btn-secondary" disabled={busy} onClick={() => performAdminUpdate('clearNotes')}>
+                    <button
+                      className="btn-secondary"
+                      disabled={busy}
+                      onClick={() => performAdminUpdate('clearNotes')}
+                    >
                       Clear Notes (admin)
                     </button>
                   </div>
@@ -220,7 +252,11 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                   <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                     Waiving past due sets the customer’s past due balance to $0.00.
                   </div>
-                  <button className="btn-secondary" disabled={busy || selected.pastDueBalance <= 0} onClick={() => performAdminUpdate('waivePastDue')}>
+                  <button
+                    className="btn-secondary"
+                    disabled={busy || selected.pastDueBalance <= 0}
+                    onClick={() => performAdminUpdate('waivePastDue')}
+                  >
                     Waive Past Due (admin)
                   </button>
                 </div>
@@ -232,5 +268,3 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
     </div>
   );
 }
-
-

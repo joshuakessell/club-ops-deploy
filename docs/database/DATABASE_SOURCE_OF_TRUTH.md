@@ -9,7 +9,7 @@ If anything in code, migrations, `db/schema.sql`, OpenAPI docs, or other markdow
 
 ## What this document is (and isn’t)
 
-- **This is**: the authoritative place to define *what the database means* (entity semantics, invariants, and contract expectations that code must uphold).
+- **This is**: the authoritative place to define _what the database means_ (entity semantics, invariants, and contract expectations that code must uphold).
 - **This is not**: a generated DDL dump.
 
 For the current physical schema snapshot and the change history, see:
@@ -24,5 +24,3 @@ Those artifacts must remain consistent with the contract described here and in `
 - **Naming/meaning beats legacy notes**: Any older schema notes are non-authoritative.
 - **Invariants are enforceable**: When feasible, invariants should be enforced in the DB (constraints) and defended in the API layer.
 - **Migrations follow the contract**: If a migration comment references older schema docs, it should be updated to reference these canonical docs.
-
-

@@ -6,7 +6,7 @@
   /* Base Colors */
   --cs-black: #0b1224;
   --cs-white: #f8fafc;
-  
+
   /* Slate Palette (Tailwind-inspired) */
   --cs-gray-50: #f8fafc;
   --cs-gray-100: #e2e8f0;
@@ -18,7 +18,7 @@
   --cs-gray-700: #1f2937;
   --cs-gray-800: #111827;
   --cs-gray-900: #0f172a;
-  
+
   /* Brand / Accent Colors (TailAdmin) */
   --cs-primary: #3c50e0;
   --cs-primary-light: #5667f5;
@@ -29,7 +29,7 @@
   --cs-accent: #f59e0b;
   --cs-accent-light: #fbbf24;
   --cs-accent-dark: #d97706;
-  
+
   /* Status Colors */
   --cs-success: #22c55e;
   --cs-success-light: #4ade80;
@@ -43,7 +43,7 @@
   --cs-info: #38bdf8;
   --cs-info-light: #7dd3fc;
   --cs-info-dark: #0ea5e9;
-  
+
   /* Semantic Colors - Dark Mode (Default) */
   --cs-bg: #0f172a;
   --cs-bg-secondary: #111827;
@@ -52,21 +52,23 @@
   --cs-bg-overlay: rgba(6, 9, 20, 0.85);
   --cs-bg-hover: rgba(148, 163, 184, 0.12);
   --cs-bg-active: rgba(60, 80, 224, 0.22);
-  
+
   --cs-text: #e2e8f0;
   --cs-text-primary: #f8fafc;
   --cs-text-secondary: #cbd5e1;
   --cs-text-muted: #94a3b8;
   --cs-text-disabled: #64748b;
-  
+
   --cs-border: #1e293b;
   --cs-border-light: #334155;
   --cs-border-dark: #0f172a;
-  
+
   /* Typography */
-  --cs-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --cs-font-family:
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
   --cs-font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Courier New', monospace;
-  
+
   /* Font Sizes */
   --cs-text-xs: 0.75rem;
   --cs-text-sm: 0.875rem;
@@ -77,19 +79,19 @@
   --cs-text-3xl: clamp(1.75rem, 3vw, 2.5rem);
   --cs-text-4xl: clamp(2rem, 4vw, 3rem);
   --cs-text-5xl: clamp(2.5rem, 5vw, 4rem);
-  
+
   /* Font Weights */
   --cs-font-light: 300;
   --cs-font-normal: 400;
   --cs-font-medium: 500;
   --cs-font-semibold: 600;
   --cs-font-bold: 700;
-  
+
   /* Line Heights */
   --cs-leading-tight: 1.2;
   --cs-leading-normal: 1.5;
   --cs-leading-relaxed: 1.75;
-  
+
   /* Spacing Scale (8px grid) */
   --cs-space-xs: 0.25rem;
   --cs-space-sm: 0.5rem;
@@ -99,7 +101,7 @@
   --cs-space-2xl: 3rem;
   --cs-space-3xl: 4rem;
   --cs-space-4xl: 6rem;
-  
+
   /* Border Radius */
   --cs-radius-none: 0;
   --cs-radius-sm: 0.375rem;
@@ -108,33 +110,33 @@
   --cs-radius-xl: 1rem;
   --cs-radius-2xl: 1.5rem;
   --cs-radius-full: 9999px;
-  
+
   /* Shadows */
   --cs-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
   --cs-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.22);
   --cs-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.35), 0 4px 6px -2px rgba(0, 0, 0, 0.25);
   --cs-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
   --cs-shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  
+
   /* Elevation */
   --cs-elevation-1: 0 1px 3px rgba(0, 0, 0, 0.28);
   --cs-elevation-2: 0 1px 5px rgba(0, 0, 0, 0.32), 0 2px 2px rgba(0, 0, 0, 0.22);
   --cs-elevation-3: 0 1px 8px rgba(0, 0, 0, 0.34), 0 3px 4px rgba(0, 0, 0, 0.24);
   --cs-elevation-4: 0 2px 4px rgba(0, 0, 0, 0.36), 0 7px 13px rgba(0, 0, 0, 0.28);
   --cs-elevation-5: 0 3px 5px rgba(0, 0, 0, 0.38), 0 9px 18px rgba(0, 0, 0, 0.3);
-  
+
   /* Transitions */
   --cs-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --cs-transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
   --cs-transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
   --cs-transition-slower: 400ms cubic-bezier(0.4, 0, 0.2, 1);
-  
+
   /* Easing */
   --cs-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --cs-ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
   --cs-ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
   --cs-ease-sharp: cubic-bezier(0.4, 0, 0.6, 1);
-  
+
   /* Z-Index Scale */
   --cs-z-base: 0;
   --cs-z-dropdown: 1000;
@@ -144,39 +146,33 @@
   --cs-z-modal: 1050;
   --cs-z-popover: 1060;
   --cs-z-tooltip: 1070;
-  
+
   /* Touch Targets */
   --cs-touch-target-min: 48px;
 }
 
 /* Light Mode Overrides (if needed) */
-[data-theme="light"] {
+[data-theme='light'] {
   --cs-bg: #f8fafc;
   --cs-bg-secondary: #ffffff;
   --cs-bg-card: #ffffff;
   --cs-bg-sidebar: #ffffff;
   --cs-bg-hover: rgba(15, 23, 42, 0.06);
   --cs-bg-active: rgba(60, 80, 224, 0.14);
-  
+
   --cs-text: #0f172a;
   --cs-text-primary: #0b1224;
   --cs-text-secondary: #334155;
   --cs-text-muted: #475569;
   --cs-text-disabled: #94a3b8;
-  
+
   --cs-border: #e2e8f0;
   --cs-border-light: #f1f5f9;
   --cs-border-dark: #cbd5e1;
-  
+
   --cs-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.06);
   --cs-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.05);
   --cs-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.08);
   --cs-shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 10px 10px -5px rgba(0, 0, 0, 0.06);
   --cs-shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.18);
 }
-
-
-
-
-
-

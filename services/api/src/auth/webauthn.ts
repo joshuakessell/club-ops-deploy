@@ -23,7 +23,7 @@ export function getRpOrigin(requestOrigin?: string): string {
   if (process.env.WEBAUTHN_RP_ORIGIN) {
     return process.env.WEBAUTHN_RP_ORIGIN;
   }
-  
+
   // For development, use localhost
   if (requestOrigin) {
     try {
@@ -33,7 +33,7 @@ export function getRpOrigin(requestOrigin?: string): string {
       // Fallback
     }
   }
-  
+
   return `http://${getRpId()}:3000`;
 }
 
@@ -93,10 +93,7 @@ export async function consumeChallenge(challenge: string): Promise<{
   const row = result.rows[0]!;
 
   // Delete the challenge after consuming it (single-use)
-  await query(
-    `DELETE FROM webauthn_challenges WHERE challenge = $1`,
-    [challenge]
-  );
+  await query(`DELETE FROM webauthn_challenges WHERE challenge = $1`, [challenge]);
 
   return {
     staffId: row.staff_id,
@@ -134,9 +131,7 @@ export async function getStaffCredentials(staffId: string): Promise<Authenticato
 /**
  * Get a credential by credential ID (for authentication).
  */
-export async function getCredentialByCredentialId(
-  credentialId: string
-): Promise<{
+export async function getCredentialByCredentialId(credentialId: string): Promise<{
   staffId: string;
   credential: AuthenticatorDevice;
 } | null> {
@@ -165,7 +160,7 @@ export async function getCredentialByCredentialId(
       credentialID: Buffer.from(credentialId, 'base64url'),
       credentialPublicKey: Buffer.from(row.public_key, 'base64'),
       counter: Number(row.sign_count),
-        transports: parseTransports(row.transports),
+      transports: parseTransports(row.transports),
     },
   };
 }
@@ -216,10 +211,6 @@ export async function updateCredentialSignCount(
  * Clean up expired challenges (should be run periodically).
  */
 export async function cleanupExpiredChallenges(): Promise<number> {
-  const result = await query(
-    `DELETE FROM webauthn_challenges WHERE expires_at < NOW()`
-  );
+  const result = await query(`DELETE FROM webauthn_challenges WHERE expires_at < NOW()`);
   return result.rowCount || 0;
 }
-
-

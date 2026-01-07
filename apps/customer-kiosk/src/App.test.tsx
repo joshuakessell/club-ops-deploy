@@ -46,11 +46,14 @@ describe('App', () => {
               : '';
       if (u.includes('/health')) {
         return Promise.resolve({
-          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+          json: () =>
+            Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
         } as unknown as Response);
       }
       if (u.includes('/v1/inventory/available')) {
-        return Promise.resolve({ json: () => Promise.resolve({ rooms: {}, lockers: 0 }) } as unknown as Response);
+        return Promise.resolve({
+          json: () => Promise.resolve({ rooms: {}, lockers: 0 }),
+        } as unknown as Response);
       }
       return Promise.resolve({ json: () => Promise.resolve({}) } as unknown as Response);
     });
@@ -126,14 +129,21 @@ describe('App', () => {
       if (u.includes('/health')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+          json: () =>
+            Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
         } as unknown as Response);
       }
       if (u.includes('/v1/inventory/available')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rooms: {}, lockers: 0 }) } as unknown as Response);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rooms: {}, lockers: 0 }),
+        } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/set-language')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) } as unknown as Response);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
@@ -210,4 +220,3 @@ describe('App', () => {
     expect(screen.queryByText(/select language/i)).toBeNull();
   });
 });
-

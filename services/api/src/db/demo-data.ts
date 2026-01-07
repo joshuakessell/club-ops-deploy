@@ -77,21 +77,124 @@ interface GenerateOptions {
 
 // Curated list of typical male full names (~120) to make demo search reliable.
 const MALE_FULL_NAMES = [
-  'James Smith', 'Michael Johnson', 'Robert Williams', 'John Brown', 'David Jones', 'William Garcia', 'Richard Miller', 'Joseph Davis',
-  'Thomas Rodriguez', 'Charles Martinez', 'Christopher Hernandez', 'Daniel Lopez', 'Matthew Gonzalez', 'Anthony Wilson', 'Mark Anderson',
-  'Donald Thomas', 'Steven Taylor', 'Paul Moore', 'Andrew Jackson', 'Joshua Martin', 'Kenneth Lee', 'Kevin Perez', 'Brian Thompson',
-  'George White', 'Timothy Harris', 'Ronald Sanchez', 'Jason Clark', 'Jeffrey Ramirez', 'Ryan Lewis', 'Jacob Robinson', 'Gary Walker',
-  'Nicholas Young', 'Eric Allen', 'Jonathan King', 'Stephen Wright', 'Larry Scott', 'Justin Torres', 'Scott Nguyen', 'Brandon Hill',
-  'Benjamin Flores', 'Samuel Green', 'Gregory Adams', 'Frank Nelson', 'Alexander Baker', 'Raymond Hall', 'Patrick Rivera', 'Jack Campbell',
-  'Dennis Mitchell', 'Jerry Carter', 'Tyler Roberts', 'Aaron Gomez', 'Jose Phillips', 'Adam Evans', 'Henry Turner', 'Nathan Diaz',
-  'Douglas Parker', 'Zachary Cruz', 'Peter Edwards', 'Kyle Collins', 'Walter Stewart', 'Harold Morris', 'Jeremy Rogers', 'Ethan Reed',
-  'Carl Cook', 'Keith Morgan', 'Roger Bell', 'Arthur Murphy', 'Terry Bailey', 'Lawrence Cooper', 'Sean Richardson', 'Christian Cox',
-  'Albert Howard', 'Joe Ward', 'Austin Brooks', 'Jesse Watson', 'Willie Kelly', 'Billy Sanders', 'Bruce Price', 'Bryan Bennett',
-  'Ralph Wood', 'Roy Barnes', 'Jordan Ross', 'Noah Henderson', 'Dylan Coleman', 'Wayne Jenkins', 'Alan Perry', 'Juan Powell',
-  'Louis Long', 'Russell Patterson', 'Philip Hughes', 'Bobby Flores', 'Vincent Washington', 'Logan Butler', 'Bradley Simmons',
-  'Curtis Foster', 'Corey Bryant', 'Martin Alexander', 'Manuel Russell', 'Leo Griffin', 'Jay Diaz', 'Theo Hayes', 'Caleb Myers',
-  'Connor Ford', 'Owen Hamilton', 'Gavin Graham', 'Colin Sullivan', 'Evan Wallace', 'Trevor West', 'Spencer Cole', 'Ian Powell',
-  'Shawn Daniels', 'Devin Stephens', 'Miles Fisher', 'Elliot Bishop', 'Grant Walsh', 'Austin Little', 'Cole Carpenter', 'Chase Weaver'
+  'James Smith',
+  'Michael Johnson',
+  'Robert Williams',
+  'John Brown',
+  'David Jones',
+  'William Garcia',
+  'Richard Miller',
+  'Joseph Davis',
+  'Thomas Rodriguez',
+  'Charles Martinez',
+  'Christopher Hernandez',
+  'Daniel Lopez',
+  'Matthew Gonzalez',
+  'Anthony Wilson',
+  'Mark Anderson',
+  'Donald Thomas',
+  'Steven Taylor',
+  'Paul Moore',
+  'Andrew Jackson',
+  'Joshua Martin',
+  'Kenneth Lee',
+  'Kevin Perez',
+  'Brian Thompson',
+  'George White',
+  'Timothy Harris',
+  'Ronald Sanchez',
+  'Jason Clark',
+  'Jeffrey Ramirez',
+  'Ryan Lewis',
+  'Jacob Robinson',
+  'Gary Walker',
+  'Nicholas Young',
+  'Eric Allen',
+  'Jonathan King',
+  'Stephen Wright',
+  'Larry Scott',
+  'Justin Torres',
+  'Scott Nguyen',
+  'Brandon Hill',
+  'Benjamin Flores',
+  'Samuel Green',
+  'Gregory Adams',
+  'Frank Nelson',
+  'Alexander Baker',
+  'Raymond Hall',
+  'Patrick Rivera',
+  'Jack Campbell',
+  'Dennis Mitchell',
+  'Jerry Carter',
+  'Tyler Roberts',
+  'Aaron Gomez',
+  'Jose Phillips',
+  'Adam Evans',
+  'Henry Turner',
+  'Nathan Diaz',
+  'Douglas Parker',
+  'Zachary Cruz',
+  'Peter Edwards',
+  'Kyle Collins',
+  'Walter Stewart',
+  'Harold Morris',
+  'Jeremy Rogers',
+  'Ethan Reed',
+  'Carl Cook',
+  'Keith Morgan',
+  'Roger Bell',
+  'Arthur Murphy',
+  'Terry Bailey',
+  'Lawrence Cooper',
+  'Sean Richardson',
+  'Christian Cox',
+  'Albert Howard',
+  'Joe Ward',
+  'Austin Brooks',
+  'Jesse Watson',
+  'Willie Kelly',
+  'Billy Sanders',
+  'Bruce Price',
+  'Bryan Bennett',
+  'Ralph Wood',
+  'Roy Barnes',
+  'Jordan Ross',
+  'Noah Henderson',
+  'Dylan Coleman',
+  'Wayne Jenkins',
+  'Alan Perry',
+  'Juan Powell',
+  'Louis Long',
+  'Russell Patterson',
+  'Philip Hughes',
+  'Bobby Flores',
+  'Vincent Washington',
+  'Logan Butler',
+  'Bradley Simmons',
+  'Curtis Foster',
+  'Corey Bryant',
+  'Martin Alexander',
+  'Manuel Russell',
+  'Leo Griffin',
+  'Jay Diaz',
+  'Theo Hayes',
+  'Caleb Myers',
+  'Connor Ford',
+  'Owen Hamilton',
+  'Gavin Graham',
+  'Colin Sullivan',
+  'Evan Wallace',
+  'Trevor West',
+  'Spencer Cole',
+  'Ian Powell',
+  'Shawn Daniels',
+  'Devin Stephens',
+  'Miles Fisher',
+  'Elliot Bishop',
+  'Grant Walsh',
+  'Austin Little',
+  'Cole Carpenter',
+  'Chase Weaver',
 ];
 
 function randomInt(min: number, max: number): number {
@@ -135,7 +238,12 @@ function rentalFromRoomType(type: RoomType): RentalType {
 }
 
 function pickAvailableRoom(rooms: DemoRoom[], preferred?: RentalType): DemoRoom | null {
-  const cleanRooms = rooms.filter((r) => r.status === RoomStatus.CLEAN || r.status === RoomStatus.DIRTY || r.status === RoomStatus.CLEANING);
+  const cleanRooms = rooms.filter(
+    (r) =>
+      r.status === RoomStatus.CLEAN ||
+      r.status === RoomStatus.DIRTY ||
+      r.status === RoomStatus.CLEANING
+  );
   if (preferred) {
     const match = cleanRooms.find((r) => rentalFromRoomType(r.type) === preferred);
     if (match) return match;
@@ -195,7 +303,10 @@ function planVisitsForCustomer(
 
     // Respect 3-starts-per-week invariant by moving to next week if needed
     let adjustedStart = new Date(start);
-    while (weekCounts.get(getWeekKey(adjustedStart)) && weekCounts.get(getWeekKey(adjustedStart))! >= 3) {
+    while (
+      weekCounts.get(getWeekKey(adjustedStart)) &&
+      weekCounts.get(getWeekKey(adjustedStart))! >= 3
+    ) {
       // Move to next Monday 9am
       const day = (adjustedStart.getDay() + 6) % 7;
       adjustedStart.setDate(adjustedStart.getDate() + (7 - day));
@@ -237,7 +348,10 @@ function planVisitsForCustomer(
         rental_type: rental,
         room_id: null,
         locker_id: null,
-        has_tv_remote: rental !== RentalType.LOCKER && rental !== RentalType.GYM_LOCKER ? Math.random() < 0.2 : false,
+        has_tv_remote:
+          rental !== RentalType.LOCKER && rental !== RentalType.GYM_LOCKER
+            ? Math.random() < 0.2
+            : false,
         agreement_signed: true,
         waitlist_id: null,
       });
@@ -317,7 +431,9 @@ function planVisitsForCustomer(
 
 function createWaitlistEntries(visits: DemoVisit[], now: Date): DemoWaitlistEntry[] {
   const entries: DemoWaitlistEntry[] = [];
-  const candidates = visits.filter((v) => v.blocks.some((b) => b.rental_type !== RentalType.SPECIAL));
+  const candidates = visits.filter((v) =>
+    v.blocks.some((b) => b.rental_type !== RentalType.SPECIAL)
+  );
   const desiredTiers: RentalType[] = [RentalType.DOUBLE, RentalType.SPECIAL];
 
   for (let i = 0; i < candidates.length && entries.length < 8; i++) {
@@ -377,4 +493,3 @@ export function generateDemoData(options: GenerateOptions): DemoData {
 
   return { customers, visits, waitlistEntries };
 }
-

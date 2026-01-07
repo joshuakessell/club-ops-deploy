@@ -46,9 +46,7 @@ async function loadMigrations(): Promise<Migration[]> {
   const migrationsDir = join(__dirname, '../../migrations');
   const files = await readdir(migrationsDir);
 
-  const sqlFiles = files
-    .filter((f) => f.endsWith('.sql'))
-    .sort(); // Ensure alphabetical order
+  const sqlFiles = files.filter((f) => f.endsWith('.sql')).sort(); // Ensure alphabetical order
 
   const migrations: Migration[] = [];
 
@@ -90,9 +88,7 @@ export async function runMigrations(): Promise<void> {
     const executedMigrations = await getExecutedMigrations(client);
     const migrations = await loadMigrations();
 
-    const pendingMigrations = migrations.filter(
-      (m) => !executedMigrations.has(m.name)
-    );
+    const pendingMigrations = migrations.filter((m) => !executedMigrations.has(m.name));
 
     if (pendingMigrations.length === 0) {
       console.log('No pending migrations');
@@ -108,10 +104,7 @@ export async function runMigrations(): Promise<void> {
 
       try {
         await client.query(migration.sql);
-        await client.query(
-          `INSERT INTO ${MIGRATIONS_TABLE} (name) VALUES ($1)`,
-          [migration.name]
-        );
+        await client.query(`INSERT INTO ${MIGRATIONS_TABLE} (name) VALUES ($1)`, [migration.name]);
         await client.query('COMMIT');
         console.log(`  ✓ ${migration.filename}`);
       } catch (error) {
@@ -152,10 +145,7 @@ export async function rollbackLastMigration(): Promise<void> {
 
     // Note: This only removes the migration record.
     // Actual rollback SQL would need to be implemented per-migration.
-    await client.query(
-      `DELETE FROM ${MIGRATIONS_TABLE} WHERE name = $1`,
-      [lastMigration]
-    );
+    await client.query(`DELETE FROM ${MIGRATIONS_TABLE} WHERE name = $1`, [lastMigration]);
 
     console.log(`Removed migration record: ${lastMigration}`);
     console.log('Note: Database schema changes were NOT reverted. Manual cleanup may be required.');
@@ -189,7 +179,9 @@ export async function showMigrationStatus(): Promise<void> {
     }
 
     console.log('─'.repeat(60));
-    console.log(`Total: ${migrations.length}, Executed: ${executedMigrations.size}, Pending: ${migrations.length - executedMigrations.size}`);
+    console.log(
+      `Total: ${migrations.length}, Executed: ${executedMigrations.size}, Pending: ${migrations.length - executedMigrations.size}`
+    );
   } finally {
     client.release();
     await pool.end();
@@ -232,4 +224,3 @@ switch (command) {
     console.log('  rollback      Rollback last migration record');
     process.exit(1);
 }
-

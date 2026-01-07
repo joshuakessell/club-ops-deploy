@@ -11,12 +11,20 @@ import { truncateAllTables } from './testDb.js';
 // For checkout tests, we'll validate real tokens when provided
 vi.mock('../src/auth/middleware.js', async () => {
   const { query } = await import('../src/db/index.js');
-  async function ensureDefaultStaff(): Promise<{ staffId: string; name: string; role: 'STAFF' | 'ADMIN' }> {
+  async function ensureDefaultStaff(): Promise<{
+    staffId: string;
+    name: string;
+    role: 'STAFF' | 'ADMIN';
+  }> {
     const existing = await query<{ id: string; name: string; role: 'STAFF' | 'ADMIN' }>(
       `SELECT id, name, role FROM staff WHERE active = true ORDER BY created_at ASC LIMIT 1`
     );
     if (existing.rows.length > 0) {
-      return { staffId: existing.rows[0]!.id, name: existing.rows[0]!.name, role: existing.rows[0]!.role };
+      return {
+        staffId: existing.rows[0]!.id,
+        name: existing.rows[0]!.name,
+        role: existing.rows[0]!.role,
+      };
     }
     const created = await query<{ id: string; name: string; role: 'STAFF' | 'ADMIN' }>(
       `INSERT INTO staff (name, role, pin_hash, active)
@@ -35,7 +43,7 @@ vi.mock('../src/auth/middleware.js', async () => {
         request.staff = { staffId: staff.staffId, name: staff.name, role: staff.role };
         return;
       }
-      
+
       const token = authHeader.substring(7);
       // Validate token against database
       try {
@@ -46,7 +54,7 @@ vi.mock('../src/auth/middleware.js', async () => {
            WHERE s.session_token = $1 AND s.revoked_at IS NULL AND st.active = true`,
           [token]
         );
-        
+
         if (sessionResult.rows.length > 0) {
           const session = sessionResult.rows[0]!;
           request.staff = {
@@ -59,7 +67,7 @@ vi.mock('../src/auth/middleware.js', async () => {
       } catch (error) {
         // Fall through to default
       }
-      
+
       // Default for tests
       const staff = await ensureDefaultStaff();
       request.staff = { staffId: staff.staffId, name: staff.name, role: staff.role };
@@ -173,10 +181,10 @@ describe('Checkout Flow', () => {
     );
     testBlockId = blockResult.rows[0]!.id;
 
-    await pool.query(
-      `UPDATE rooms SET assigned_to_customer_id = $1 WHERE id = $2`,
-      [testCustomerId, testRoomId]
-    );
+    await pool.query(`UPDATE rooms SET assigned_to_customer_id = $1 WHERE id = $2`, [
+      testCustomerId,
+      testRoomId,
+    ]);
   });
 
   afterAll(async () => {
@@ -197,7 +205,7 @@ describe('Checkout Flow', () => {
   beforeEach(async () => {
     // Ensure visit is active for each test
     await pool.query('UPDATE visits SET ended_at = NULL WHERE id = $1', [testVisitId]);
-    
+
     fastify = Fastify();
     const broadcaster = createBroadcaster();
     fastify.decorate('broadcaster', broadcaster);
@@ -226,7 +234,7 @@ describe('Checkout Flow', () => {
         method: 'POST',
         url: '/v1/checkout/resolve-key',
         headers: {
-          'Authorization': `Bearer ${testStaffToken}`,
+          Authorization: `Bearer ${testStaffToken}`,
         },
         payload: {
           token: 'TEST-KEY-001',
@@ -252,7 +260,7 @@ describe('Checkout Flow', () => {
         method: 'POST',
         url: '/v1/checkout/resolve-key',
         headers: {
-          'Authorization': `Bearer ${testStaffToken}`,
+          Authorization: `Bearer ${testStaffToken}`,
         },
         payload: {
           token: 'TEST-KEY-001',
@@ -278,7 +286,7 @@ describe('Checkout Flow', () => {
         method: 'POST',
         url: '/v1/checkout/resolve-key',
         headers: {
-          'Authorization': `Bearer ${testStaffToken}`,
+          Authorization: `Bearer ${testStaffToken}`,
         },
         payload: {
           token: 'TEST-KEY-001',
@@ -304,7 +312,7 @@ describe('Checkout Flow', () => {
         method: 'POST',
         url: '/v1/checkout/resolve-key',
         headers: {
-          'Authorization': `Bearer ${testStaffToken}`,
+          Authorization: `Bearer ${testStaffToken}`,
         },
         payload: {
           token: 'TEST-KEY-001',
@@ -325,10 +333,10 @@ describe('Checkout Flow', () => {
       // Ban the customer
       const banUntil = new Date();
       banUntil.setDate(banUntil.getDate() + 30);
-      await pool.query(
-        `UPDATE customers SET banned_until = $1 WHERE id = $2`,
-        [banUntil, testCustomerId]
-      );
+      await pool.query(`UPDATE customers SET banned_until = $1 WHERE id = $2`, [
+        banUntil,
+        testCustomerId,
+      ]);
 
       const response = await fastify.inject({
         method: 'POST',
@@ -376,10 +384,9 @@ describe('Checkout Flow', () => {
       expect(data.requestId).toBeDefined();
 
       // Verify request was created
-      const requestResult = await pool.query(
-        'SELECT * FROM checkout_requests WHERE id = $1',
-        [data.requestId]
-      );
+      const requestResult = await pool.query('SELECT * FROM checkout_requests WHERE id = $1', [
+        data.requestId,
+      ]);
       expect(requestResult.rows.length).toBe(1);
       expect(requestResult.rows[0]!.late_minutes).toBeGreaterThanOrEqual(30);
       // late_fee_amount is DECIMAL in DB, returned as string, so parse it
@@ -443,15 +450,18 @@ describe('Checkout Flow', () => {
       expect(roomResult.rows[0]!.status).toBe(RoomStatus.DIRTY);
 
       // Verify visit was ended
-      const visitResult = await pool.query('SELECT ended_at FROM visits WHERE id = $1', [testVisitId]);
+      const visitResult = await pool.query('SELECT ended_at FROM visits WHERE id = $1', [
+        testVisitId,
+      ]);
       expect(visitResult.rows[0]!.ended_at).not.toBeNull();
 
       // Clean up
       await pool.query('DELETE FROM checkout_requests WHERE id = $1', [requestId]);
-      await pool.query('UPDATE rooms SET status = $1, assigned_to_customer_id = NULL WHERE id = $2', [RoomStatus.CLEAN, testRoomId]);
+      await pool.query(
+        'UPDATE rooms SET status = $1, assigned_to_customer_id = NULL WHERE id = $2',
+        [RoomStatus.CLEAN, testRoomId]
+      );
       await pool.query('UPDATE visits SET ended_at = NULL WHERE id = $1', [testVisitId]);
     });
   });
 });
-
-

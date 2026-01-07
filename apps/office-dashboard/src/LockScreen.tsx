@@ -1,26 +1,26 @@
 import { useState, useEffect } from 'react';
-import { 
-  Box, 
-  Container, 
-  Typography, 
-  Button, 
-  TextField, 
-  Card, 
-  CardContent, 
-  Avatar, 
+import {
+  Box,
+  Container,
+  Typography,
+  Button,
+  TextField,
+  Card,
+  CardContent,
+  Avatar,
   CircularProgress,
   Alert,
   Fade,
   Paper,
-  Stack
+  Stack,
 } from '@mui/material';
-import { 
-  Person, 
-  Lock, 
+import {
+  Person,
+  Lock,
   Login as LoginIcon,
   BusinessCenter,
   Schedule,
-  Assessment
+  Assessment,
 } from '@mui/icons-material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -125,16 +125,19 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
         const response = await fetch(`${API_BASE}/v1/auth/staff`);
         if (response.ok) {
           const data = await response.json();
-          const staffList: Employee[] = (data.staff || []).map((staff: { id: string; name: string; role: 'STAFF' | 'ADMIN' }) => ({
-            id: staff.id,
-            name: staff.name,
-            role: staff.role,
-            accessLevel: staff.role === 'ADMIN' ? 'full' : 'limited',
-            description: staff.role === 'ADMIN'
-              ? 'Admin — Monitor, Waitlist, Reports, Customer Tools'
-              : 'Staff — Schedule, Messages (stub)',
-            icon: staff.role === 'ADMIN' ? <Assessment /> : <Schedule />,
-          }));
+          const staffList: Employee[] = (data.staff || []).map(
+            (staff: { id: string; name: string; role: 'STAFF' | 'ADMIN' }) => ({
+              id: staff.id,
+              name: staff.name,
+              role: staff.role,
+              accessLevel: staff.role === 'ADMIN' ? 'full' : 'limited',
+              description:
+                staff.role === 'ADMIN'
+                  ? 'Admin — Monitor, Waitlist, Reports, Customer Tools'
+                  : 'Staff — Schedule, Messages (stub)',
+              icon: staff.role === 'ADMIN' ? <Assessment /> : <Schedule />,
+            })
+          );
           setEmployees(staffList);
         } else {
           setError('Failed to load staff list');
@@ -164,7 +167,7 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!selectedEmployee || !pin.trim()) {
       setError('Please enter your PIN');
       return;
@@ -199,14 +202,15 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
       }
 
       const session: StaffSession = await response.json();
-      
+
       // Use the session data from the server (authenticated and verified)
       onLogin(session);
       setPin('');
       setSelectedEmployee(null);
     } catch (error) {
       console.error('Login error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Invalid PIN. Please try again.';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Invalid PIN. Please try again.';
       setError(errorMessage);
       setPin('');
     } finally {
@@ -279,42 +283,41 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                   ) : (
                     <Stack spacing={2}>
                       {employees.map((employee) => (
-                      <Card
-                        key={employee.id}
-                        sx={{
-                          cursor: 'pointer',
-                          border: '2px solid transparent',
-                          '&:hover': {
-                            borderColor: 'primary.main',
-                          },
-                        }}
-                        onClick={() => handleEmployeeSelect(employee)}
-                      >
-                        <CardContent>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Avatar
-                              sx={{
-                                bgcolor: employee.role === 'ADMIN' 
-                                  ? 'primary.main' 
-                                  : 'secondary.main',
-                                width: 48,
-                                height: 48,
-                              }}
-                            >
-                              {employee.icon}
-                            </Avatar>
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                {employee.name}
-                              </Typography>
-                              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                {employee.description}
-                              </Typography>
+                        <Card
+                          key={employee.id}
+                          sx={{
+                            cursor: 'pointer',
+                            border: '2px solid transparent',
+                            '&:hover': {
+                              borderColor: 'primary.main',
+                            },
+                          }}
+                          onClick={() => handleEmployeeSelect(employee)}
+                        >
+                          <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                              <Avatar
+                                sx={{
+                                  bgcolor:
+                                    employee.role === 'ADMIN' ? 'primary.main' : 'secondary.main',
+                                  width: 48,
+                                  height: 48,
+                                }}
+                              >
+                                {employee.icon}
+                              </Avatar>
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                  {employee.name}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                  {employee.description}
+                                </Typography>
+                              </Box>
+                              <LoginIcon sx={{ color: 'text.secondary' }} />
                             </Box>
-                            <LoginIcon sx={{ color: 'text.secondary' }} />
-                          </Box>
-                        </CardContent>
-                      </Card>
+                          </CardContent>
+                        </Card>
                       ))}
                     </Stack>
                   )}
@@ -334,9 +337,8 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                   <Box sx={{ textAlign: 'center', mb: 4 }}>
                     <Avatar
                       sx={{
-                        bgcolor: selectedEmployee.role === 'ADMIN' 
-                          ? 'primary.main' 
-                          : 'secondary.main',
+                        bgcolor:
+                          selectedEmployee.role === 'ADMIN' ? 'primary.main' : 'secondary.main',
                         width: 80,
                         height: 80,
                         margin: '0 auto 16px',
@@ -380,9 +382,7 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
                           pattern: '[0-9]*',
                         }}
                         InputProps={{
-                          startAdornment: (
-                            <Lock sx={{ mr: 1, color: 'text.secondary' }} />
-                          ),
+                          startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary' }} />,
                         }}
                         sx={{
                           '& .MuiOutlinedInput-root': {

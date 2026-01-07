@@ -109,10 +109,9 @@ describe('demo seed generator', () => {
         checkInTime: now,
         customerAge: 30,
       });
-      expect(
-        quote.lineItems.some((li) => li.description.toLowerCase().includes('late'))
-      ).toBe(false);
+      expect(quote.lineItems.some((li) => li.description.toLowerCase().includes('late'))).toBe(
+        false
+      );
     }
   });
 });
-

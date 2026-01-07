@@ -19,9 +19,7 @@ declare module 'fastify' {
  * Extract and validate session token from Authorization header.
  * Attaches staff information to request.staff if valid.
  */
-async function extractStaffFromToken(
-  request: FastifyRequest
-): Promise<boolean> {
+async function extractStaffFromToken(request: FastifyRequest): Promise<boolean> {
   const authHeader =
     request.headers.authorization ??
     // Defensive: some test/inject clients may pass non-normalized header keys
@@ -77,10 +75,7 @@ async function extractStaffFromToken(
  * Middleware to require authentication.
  * Validates Bearer token and attaches staff info to request.
  */
-export async function requireAuth(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   const isValid = await extractStaffFromToken(request);
   if (!isValid) {
     reply.status(401).send({
@@ -95,10 +90,7 @@ export async function requireAuth(
  * Middleware to require admin role.
  * Must be used after requireAuth.
  */
-export async function requireAdmin(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function requireAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!request.staff) {
     reply.status(401).send({
       error: 'Unauthorized',
@@ -121,10 +113,7 @@ export async function requireAdmin(
  * Checks that reauth_ok_until is within the last 5 minutes.
  * Must be used after requireAuth.
  */
-export async function requireReauth(
-  request: FastifyRequest,
-  reply: FastifyReply
-): Promise<void> {
+export async function requireReauth(request: FastifyRequest, reply: FastifyReply): Promise<void> {
   if (!request.staff) {
     reply.status(401).send({
       error: 'Unauthorized',
@@ -223,10 +212,7 @@ export async function requireReauthForAdmin(
  * Attaches staff info to request if a valid token is present, but never 401s.
  * Use this for kiosk-facing endpoints where auth is optional.
  */
-export async function optionalAuth(
-  request: FastifyRequest,
-  _reply: FastifyReply
-): Promise<void> {
+export async function optionalAuth(request: FastifyRequest, _reply: FastifyReply): Promise<void> {
   // Try to extract staff, but don't fail if not present
   await extractStaffFromToken(request);
 }

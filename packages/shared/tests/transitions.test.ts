@@ -53,4 +53,3 @@ describe('validateTransition', () => {
     expect(result.ok).toBe(true);
   });
 });
-

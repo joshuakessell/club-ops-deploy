@@ -22,24 +22,72 @@ interface LockerSeed {
  */
 const seedRooms: RoomSeed[] = [
   // DIRTY rooms
-  { number: '101', type: RoomType.STANDARD, status: RoomStatus.DIRTY, floor: 1, tagCode: 'ROOM-101' },
-  { number: '102', type: RoomType.STANDARD, status: RoomStatus.DIRTY, floor: 1, tagCode: 'ROOM-102' },
-  
+  {
+    number: '101',
+    type: RoomType.STANDARD,
+    status: RoomStatus.DIRTY,
+    floor: 1,
+    tagCode: 'ROOM-101',
+  },
+  {
+    number: '102',
+    type: RoomType.STANDARD,
+    status: RoomStatus.DIRTY,
+    floor: 1,
+    tagCode: 'ROOM-102',
+  },
+
   // CLEANING rooms
-  { number: '103', type: RoomType.STANDARD, status: RoomStatus.CLEANING, floor: 1, tagCode: 'ROOM-103' },
-  { number: '216', type: RoomType.DOUBLE, status: RoomStatus.CLEANING, floor: 2, tagCode: 'ROOM-216' },
-  
+  {
+    number: '103',
+    type: RoomType.STANDARD,
+    status: RoomStatus.CLEANING,
+    floor: 1,
+    tagCode: 'ROOM-103',
+  },
+  {
+    number: '216',
+    type: RoomType.DOUBLE,
+    status: RoomStatus.CLEANING,
+    floor: 2,
+    tagCode: 'ROOM-216',
+  },
+
   // CLEAN rooms - intentionally low counts for demo
   // STANDARD rooms
-  { number: '104', type: RoomType.STANDARD, status: RoomStatus.CLEAN, floor: 1, tagCode: 'ROOM-104' },
-  { number: '105', type: RoomType.STANDARD, status: RoomStatus.CLEAN, floor: 1, tagCode: 'ROOM-105' },
-  { number: '106', type: RoomType.STANDARD, status: RoomStatus.CLEAN, floor: 1, tagCode: 'ROOM-106' },
-  { number: '107', type: RoomType.STANDARD, status: RoomStatus.CLEAN, floor: 1, tagCode: 'ROOM-107' },
-  
+  {
+    number: '104',
+    type: RoomType.STANDARD,
+    status: RoomStatus.CLEAN,
+    floor: 1,
+    tagCode: 'ROOM-104',
+  },
+  {
+    number: '105',
+    type: RoomType.STANDARD,
+    status: RoomStatus.CLEAN,
+    floor: 1,
+    tagCode: 'ROOM-105',
+  },
+  {
+    number: '106',
+    type: RoomType.STANDARD,
+    status: RoomStatus.CLEAN,
+    floor: 1,
+    tagCode: 'ROOM-106',
+  },
+  {
+    number: '107',
+    type: RoomType.STANDARD,
+    status: RoomStatus.CLEAN,
+    floor: 1,
+    tagCode: 'ROOM-107',
+  },
+
   // DOUBLE rooms - <5 available (only 2 clean)
   { number: '218', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-218' },
   { number: '225', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-225' },
-  
+
   // SPECIAL rooms - 0 available (none seeded as CLEAN)
   // Note: Room 201, 232, 256 are SPECIAL but not seeded as CLEAN
 ];
@@ -62,10 +110,8 @@ async function seed() {
     console.log('Starting seed process...');
 
     // Check if rooms already exist
-    const existingRooms = await query<{ count: string }>(
-      'SELECT COUNT(*) as count FROM rooms'
-    );
-    
+    const existingRooms = await query<{ count: string }>('SELECT COUNT(*) as count FROM rooms');
+
     if (parseInt(existingRooms.rows[0]?.count || '0', 10) > 0) {
       console.log('⚠️  Rooms already exist in database. Skipping room seed.');
       console.log('   To reseed rooms, clear the database first: pnpm db:reset && pnpm db:migrate');
@@ -86,16 +132,16 @@ async function seed() {
           [roomId, roomSeed.tagCode]
         );
 
-        console.log(`✓ Seeded room ${roomSeed.number} (${roomSeed.status}) with tag ${roomSeed.tagCode}`);
+        console.log(
+          `✓ Seeded room ${roomSeed.number} (${roomSeed.status}) with tag ${roomSeed.tagCode}`
+        );
       }
 
       console.log(`\n✅ Successfully seeded ${seedRooms.length} rooms with key tags`);
     }
 
     // Seed lockers (001–108) and their key tags
-    const existingLockers = await query<{ count: string }>(
-      'SELECT COUNT(*) as count FROM lockers'
-    );
+    const existingLockers = await query<{ count: string }>('SELECT COUNT(*) as count FROM lockers');
 
     if (parseInt(existingLockers.rows[0]?.count || '0', 10) > 0) {
       console.log('⚠️  Lockers already exist in database. Skipping locker seed.');
@@ -130,7 +176,7 @@ async function seed() {
 
     // Seed staff users
     console.log('\nSeeding staff users...');
-    
+
     const staffUsers = [
       {
         name: 'John Erikson',
@@ -165,13 +211,11 @@ async function seed() {
     ];
 
     // Check if staff already exist
-    const existingStaff = await query<{ count: string }>(
-      'SELECT COUNT(*) as count FROM staff'
-    );
-    
+    const existingStaff = await query<{ count: string }>('SELECT COUNT(*) as count FROM staff');
+
     if (parseInt(existingStaff.rows[0]?.count || '0', 10) > 0) {
       console.log('⚠️  Staff users already exist. Updating existing staff to match seed data...');
-      
+
       // Update existing staff if they match old names or create new ones
       for (const staff of staffUsers) {
         const qrTokenHash = hashQrToken(staff.qrToken);
@@ -227,7 +271,7 @@ async function seed() {
     }
 
     console.log('\nStaff login credentials for testing:');
-    staffUsers.forEach(staff => {
+    staffUsers.forEach((staff) => {
       console.log(`  - ${staff.name} (${staff.role}):`);
       console.log(`    QR Token: ${staff.qrToken}`);
       console.log(`    PIN: ${staff.pin}`);
@@ -235,18 +279,18 @@ async function seed() {
 
     // Seed devices for register use
     console.log('\nSeeding devices...');
-    
+
     const seedDevices = [
       { deviceId: 'register-1', displayName: 'Register 1' },
       { deviceId: 'register-2', displayName: 'Register 2' },
     ];
-    
+
     for (const device of seedDevices) {
       const existing = await query<{ count: string }>(
         'SELECT COUNT(*) as count FROM devices WHERE device_id = $1',
         [device.deviceId]
       );
-      
+
       if (parseInt(existing.rows[0]?.count || '0', 10) === 0) {
         await query(
           `INSERT INTO devices (device_id, display_name, enabled)
@@ -256,23 +300,23 @@ async function seed() {
         console.log(`✓ Seeded device: ${device.displayName} (${device.deviceId})`);
       } else {
         // Update existing device to ensure it's enabled
-        await query(
-          `UPDATE devices SET enabled = true, display_name = $1 WHERE device_id = $2`,
-          [device.displayName, device.deviceId]
-        );
+        await query(`UPDATE devices SET enabled = true, display_name = $1 WHERE device_id = $2`, [
+          device.displayName,
+          device.deviceId,
+        ]);
         console.log(`✓ Updated device: ${device.displayName} (${device.deviceId})`);
       }
     }
-    
+
     console.log('✅ Devices seeded successfully');
 
     // Seed active agreement
     console.log('\nSeeding active agreement...');
-    
+
     const existingAgreement = await query<{ count: string }>(
       'SELECT COUNT(*) as count FROM agreements WHERE active = true'
     );
-    
+
     const agreementBodyText = `<h2 style="text-align:center; margin: 0 0 12px 0;">CLUB DALLAS ENTRY &amp; LIABILITY WAIVER</h2>
 <p style="text-align:center; margin: 0 0 18px 0; font-size: 12px;">Effective Date: Today</p>
 
@@ -309,17 +353,19 @@ async function seed() {
 <p>This Agreement represents the entire understanding regarding entry to the premises and supersedes prior communications on this subject. By signing below, you acknowledge that you have read and understood this Agreement and agree to be bound by it.</p>
 
 <p style="margin-top: 18px;"><strong>ACKNOWLEDGMENT:</strong> I have read this Agreement, understand it, and agree to its terms.</p>`;
-    
+
     if (parseInt(existingAgreement.rows[0]?.count || '0', 10) > 0) {
       // Update existing active agreement if body_text is empty
       const activeAgreement = await query<{ body_text: string }>(
         'SELECT body_text FROM agreements WHERE active = true LIMIT 1'
       );
-      if (activeAgreement.rows.length > 0 && (!activeAgreement.rows[0]?.body_text || activeAgreement.rows[0].body_text.trim() === '')) {
-        await query(
-          `UPDATE agreements SET body_text = $1 WHERE active = true`,
-          [agreementBodyText]
-        );
+      if (
+        activeAgreement.rows.length > 0 &&
+        (!activeAgreement.rows[0]?.body_text || activeAgreement.rows[0].body_text.trim() === '')
+      ) {
+        await query(`UPDATE agreements SET body_text = $1 WHERE active = true`, [
+          agreementBodyText,
+        ]);
         console.log('✓ Updated active agreement with real content');
       } else {
         console.log('⚠️  Active agreement already exists with content. Skipping agreement seed.');
@@ -333,7 +379,6 @@ async function seed() {
       console.log('✓ Seeded active agreement: demo-v1');
       console.log('✅ Agreement seeded successfully');
     }
-
   } catch (error) {
     console.error('❌ Seed failed:', error);
     throw error;
@@ -354,4 +399,3 @@ seed()
   });
 
 export { seed };
-

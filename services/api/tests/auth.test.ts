@@ -6,7 +6,11 @@ import { authRoutes } from '../src/routes/auth.js';
 import { webauthnRoutes } from '../src/routes/webauthn.js';
 import { adminRoutes } from '../src/routes/admin.js';
 import { hashPin, generateSessionToken } from '../src/auth/utils.js';
-import { storeChallenge, consumeChallenge, cleanupExpiredChallenges } from '../src/auth/webauthn.js';
+import {
+  storeChallenge,
+  consumeChallenge,
+  cleanupExpiredChallenges,
+} from '../src/auth/webauthn.js';
 
 // Mock WebAuthn verification to avoid needing real authenticators
 vi.mock('@simplewebauthn/server', () => ({
@@ -30,7 +34,7 @@ describe('Auth Tests', () => {
     // Initialize test database once
     try {
       await initializeDatabase();
-      
+
       // Ensure audit action enum has required values (in case migrations haven't run)
       // Note: ALTER TYPE ADD VALUE cannot be run in transaction and IF NOT EXISTS doesn't work
       // So we check if it exists first using a DO block
@@ -146,19 +150,15 @@ describe('Auth Tests', () => {
       expect(body.name).toBe('Staff User');
 
       // Verify session was created
-      const sessionResult = await query(
-        `SELECT * FROM staff_sessions WHERE session_token = $1`,
-        [body.sessionToken]
-      );
+      const sessionResult = await query(`SELECT * FROM staff_sessions WHERE session_token = $1`, [
+        body.sessionToken,
+      ]);
       expect(sessionResult.rows.length).toBe(1);
     });
 
     it('should fail login for inactive staff', async () => {
       // Deactivate staff
-      await query(
-        `UPDATE staff SET active = false WHERE id = $1`,
-        [staffStaffId]
-      );
+      await query(`UPDATE staff SET active = false WHERE id = $1`, [staffStaffId]);
 
       const response = await fastify.inject({
         method: 'POST',
@@ -289,7 +289,7 @@ describe('Auth Tests', () => {
       await storeChallenge(challenge, staffStaffId, 'test-device', 'authentication');
 
       await consumeChallenge(challenge);
-      
+
       // Try to consume again - should fail
       const consumedAgain = await consumeChallenge(challenge);
       expect(consumedAgain).toBeNull();
@@ -302,7 +302,7 @@ describe('Auth Tests', () => {
         method: 'GET',
         url: `/v1/auth/webauthn/credentials/${staffStaffId}`,
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
       });
 
@@ -322,7 +322,7 @@ describe('Auth Tests', () => {
         method: 'GET',
         url: `/v1/auth/webauthn/credentials/${staffStaffId}`,
         headers: {
-          'Authorization': `Bearer ${staffToken}`,
+          Authorization: `Bearer ${staffToken}`,
         },
       });
 
@@ -344,7 +344,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: '/v1/auth/reauth-pin',
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         payload: {
           pin: '222222',
@@ -356,7 +356,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: `/v1/auth/webauthn/credentials/${credentialId}/revoke`,
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
       });
 
@@ -383,7 +383,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: `/v1/auth/webauthn/credentials/${credentialId}/revoke`,
         headers: {
-          'Authorization': `Bearer ${staffToken}`,
+          Authorization: `Bearer ${staffToken}`,
         },
       });
 
@@ -403,10 +403,7 @@ describe('Auth Tests', () => {
       );
 
       // Deactivate staff
-      await query(
-        `UPDATE staff SET active = false WHERE id = $1`,
-        [staffStaffId]
-      );
+      await query(`UPDATE staff SET active = false WHERE id = $1`, [staffStaffId]);
 
       // Try to get authentication options - should fail due to inactive status
       const optionsResponse = await fastify.inject({
@@ -437,10 +434,7 @@ describe('Auth Tests', () => {
       await storeChallenge(challenge, staffStaffId, 'test-device', 'authentication');
 
       // Deactivate staff AFTER challenge is created (simulating deactivation during auth flow)
-      await query(
-        `UPDATE staff SET active = false WHERE id = $1`,
-        [staffStaffId]
-      );
+      await query(`UPDATE staff SET active = false WHERE id = $1`, [staffStaffId]);
 
       // Mock WebAuthn verification to succeed
       const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
@@ -463,7 +457,9 @@ describe('Auth Tests', () => {
             id: credentialId,
             rawId: credentialId,
             response: {
-              clientDataJSON: Buffer.from(JSON.stringify({ challenge, origin: 'http://localhost:3000' })).toString('base64url'),
+              clientDataJSON: Buffer.from(
+                JSON.stringify({ challenge, origin: 'http://localhost:3000' })
+              ).toString('base64url'),
               authenticatorData: 'test-auth-data',
               signature: 'test-signature',
               userHandle: null,
@@ -481,7 +477,7 @@ describe('Auth Tests', () => {
   describe('Revoke Passkey', () => {
     it('should prevent authentication with revoked credential', async () => {
       const credentialId = toBase64Url('test-credential-revoked');
-      
+
       // Create and immediately revoke credential
       await query(
         `INSERT INTO staff_webauthn_credentials 
@@ -514,7 +510,7 @@ describe('Auth Tests', () => {
 
     it('should prevent revoked credential from being used in authentication verify', async () => {
       const credentialId = toBase64Url('test-credential-revoked-verify');
-      
+
       // Create credential
       await query(
         `INSERT INTO staff_webauthn_credentials 
@@ -553,10 +549,9 @@ describe('Auth Tests', () => {
       const deletedCount = await cleanupExpiredChallenges();
       expect(deletedCount).toBeGreaterThan(0);
 
-      const remaining = await query(
-        `SELECT * FROM webauthn_challenges WHERE challenge = $1`,
-        [expiredChallenge]
-      );
+      const remaining = await query(`SELECT * FROM webauthn_challenges WHERE challenge = $1`, [
+        expiredChallenge,
+      ]);
       expect(remaining.rows.length).toBe(0);
     });
   });
@@ -567,7 +562,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: '/v1/auth/reauth-pin',
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         payload: {
           pin: '222222',
@@ -585,7 +580,7 @@ describe('Auth Tests', () => {
         [adminToken]
       );
       expect(sessionResult.rows[0]?.reauth_ok_until).not.toBeNull();
-      
+
       const reauthOkUntil = new Date(sessionResult.rows[0]!.reauth_ok_until);
       const now = new Date();
       // Should be approximately 5 minutes from now (within 10 seconds tolerance)
@@ -599,7 +594,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: '/v1/auth/reauth-pin',
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         payload: {
           pin: '999999',
@@ -617,7 +612,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: `/v1/admin/staff/${staffStaffId}/pin-reset`,
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
           'Content-Type': 'application/json',
         },
         payload: {
@@ -636,7 +631,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: '/v1/auth/reauth-pin',
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         payload: {
           pin: '222222',
@@ -650,7 +645,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: `/v1/admin/staff/${staffStaffId}/pin-reset`,
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
           'Content-Type': 'application/json',
         },
         payload: {
@@ -661,10 +656,7 @@ describe('Auth Tests', () => {
       expect(resetResponse.statusCode).toBe(200);
 
       // Verify PIN was actually changed
-      const staffResult = await query(
-        `SELECT pin_hash FROM staff WHERE id = $1`,
-        [staffStaffId]
-      );
+      const staffResult = await query(`SELECT pin_hash FROM staff WHERE id = $1`, [staffStaffId]);
       const newPinHash = staffResult.rows[0]!.pin_hash;
 
       // Try to login with new PIN
@@ -696,7 +688,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: `/v1/auth/webauthn/credentials/${credentialId}/revoke`,
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
       });
 
@@ -720,7 +712,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: '/v1/auth/reauth-pin',
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         payload: {
           pin: '222222',
@@ -734,7 +726,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: `/v1/auth/webauthn/credentials/${credentialId}/revoke`,
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
       });
 
@@ -754,7 +746,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: '/v1/auth/reauth-pin',
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
         },
         payload: {
           pin: '222222',
@@ -776,7 +768,7 @@ describe('Auth Tests', () => {
         method: 'POST',
         url: `/v1/admin/staff/${staffStaffId}/pin-reset`,
         headers: {
-          'Authorization': `Bearer ${adminToken}`,
+          Authorization: `Bearer ${adminToken}`,
           'Content-Type': 'application/json',
         },
         payload: {

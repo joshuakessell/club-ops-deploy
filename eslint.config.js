@@ -6,7 +6,15 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default tseslint.config(
   {
-    ignores: ['dist', 'node_modules', '*.cjs', '**/*.config.js', '**/*.config.ts', '**/dist/**', '**/node_modules/**'],
+    ignores: [
+      'dist',
+      'node_modules',
+      '*.cjs',
+      '**/*.config.js',
+      '**/*.config.ts',
+      '**/dist/**',
+      '**/node_modules/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -20,7 +28,12 @@ export default tseslint.config(
       ecmaVersion: 'latest',
       sourceType: 'module',
       parserOptions: {
-        project: ['./tsconfig.json', './apps/*/tsconfig.json', './packages/*/tsconfig.json', './services/*/tsconfig.json'],
+        project: [
+          './tsconfig.json',
+          './apps/*/tsconfig.json',
+          './packages/*/tsconfig.json',
+          './services/*/tsconfig.json',
+        ],
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -85,5 +98,3 @@ export default tseslint.config(
     },
   }
 );
-
-

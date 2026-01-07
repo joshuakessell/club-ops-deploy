@@ -19,7 +19,8 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
 
   useEffect(() => {
     // Check if WebAuthn is supported
-    const supported = typeof window !== 'undefined' &&
+    const supported =
+      typeof window !== 'undefined' &&
       typeof window.PublicKeyCredential !== 'undefined' &&
       typeof navigator.credentials !== 'undefined';
     setWebauthnSupported(supported);
@@ -49,7 +50,7 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`,
+          Authorization: `Bearer ${sessionToken}`,
         },
       });
 
@@ -73,7 +74,7 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`,
+          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           credentialResponse: credential,
@@ -99,7 +100,7 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!pin.trim()) {
       setError('Please enter your PIN');
       return;
@@ -113,7 +114,7 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`,
+          Authorization: `Bearer ${sessionToken}`,
         },
         body: JSON.stringify({
           pin: pin.trim(),
@@ -167,7 +168,10 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
           Re-authentication Required
         </h2>
         <p style={{ marginBottom: '1.5rem', color: '#9ca3af', fontSize: '0.875rem' }}>
-          This action requires re-authentication. {authMethod === 'webauthn' ? 'Use your passkey or enter your PIN.' : 'Please enter your PIN to continue.'}
+          This action requires re-authentication.{' '}
+          {authMethod === 'webauthn'
+            ? 'Use your passkey or enter your PIN.'
+            : 'Please enter your PIN to continue.'}
         </p>
 
         {error && (
@@ -329,4 +333,3 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
     </div>
   );
 }
-

@@ -59,4 +59,3 @@ export function validateTransition(
   // Invalid transition without override
   return { ok: false, needsOverride: true };
 }
-

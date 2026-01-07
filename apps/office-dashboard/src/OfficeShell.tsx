@@ -2,7 +2,13 @@ import { useMemo } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 
-type NavItem = { to: string; label: string; icon: string; adminOnly?: boolean; staffOnly?: boolean };
+type NavItem = {
+  to: string;
+  label: string;
+  icon: string;
+  adminOnly?: boolean;
+  staffOnly?: boolean;
+};
 
 export function OfficeShell({
   session,
@@ -35,7 +41,11 @@ export function OfficeShell({
   return (
     <div className="dashboard">
       <aside className="sidebar">
-        <div className="logo" onClick={() => navigate(isAdmin ? '/overview' : '/schedule')} style={{ cursor: 'pointer' }}>
+        <div
+          className="logo"
+          onClick={() => navigate(isAdmin ? '/overview' : '/schedule')}
+          style={{ cursor: 'pointer' }}
+        >
           <span className="logo-icon">🏢</span>
           <span className="logo-text">Club Ops</span>
         </div>
@@ -68,9 +78,7 @@ export function OfficeShell({
 
       <main className="main-content">
         <header className="topbar">
-          <h1>
-            {isAdmin ? 'Office Dashboard (Admin)' : 'Office Dashboard (Staff)'}
-          </h1>
+          <h1>{isAdmin ? 'Office Dashboard (Admin)' : 'Office Dashboard (Staff)'}</h1>
           <div className="topbar-status" style={{ display: 'flex', alignItems: 'center' }}>
             <span style={{ color: 'var(--text-muted)' }}>{location.pathname}</span>
             <button
@@ -99,5 +107,3 @@ export function OfficeShell({
     </div>
   );
 }
-
-

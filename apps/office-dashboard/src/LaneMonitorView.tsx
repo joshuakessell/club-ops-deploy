@@ -39,11 +39,16 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      const regs = await apiJson<RegisterSession[]>('/v1/admin/register-sessions', { sessionToken: session.sessionToken });
+      const regs = await apiJson<RegisterSession[]>('/v1/admin/register-sessions', {
+        sessionToken: session.sessionToken,
+      });
       const reg = regs.find((r) => r.registerNumber === laneNumber) || null;
       if (mounted) setRegister(reg);
 
-      const sessions = await apiJson<{ sessions: LaneSessionSummary[] }>('/v1/checkin/lane-sessions', { sessionToken: session.sessionToken });
+      const sessions = await apiJson<{ sessions: LaneSessionSummary[] }>(
+        '/v1/checkin/lane-sessions',
+        { sessionToken: session.sessionToken }
+      );
       const ls = (sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null;
       if (mounted) setLaneSession(ls);
     };
@@ -57,18 +62,20 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
     const ws = new WebSocket(`${wsBaseUrl()}?lane=${lane}`);
     ws.onopen = () => {
       setWsConnected(true);
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        events: [
-          'SESSION_UPDATED',
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'CUSTOMER_CONFIRMATION_REQUIRED',
-          'CUSTOMER_CONFIRMED',
-          'CUSTOMER_DECLINED',
-          'REGISTER_SESSION_UPDATED',
-        ],
-      }));
+      ws.send(
+        JSON.stringify({
+          type: 'subscribe',
+          events: [
+            'SESSION_UPDATED',
+            'SELECTION_PROPOSED',
+            'SELECTION_LOCKED',
+            'CUSTOMER_CONFIRMATION_REQUIRED',
+            'CUSTOMER_CONFIRMED',
+            'CUSTOMER_DECLINED',
+            'REGISTER_SESSION_UPDATED',
+          ],
+        })
+      );
     };
     ws.onclose = () => setWsConnected(false);
     ws.onmessage = async (event) => {
@@ -77,13 +84,20 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
         if (msg.type === 'SESSION_UPDATED') {
           setLastLaneEvent(msg.timestamp);
           // Lane-scoped already; fetch full summary list (cheap enough for demo).
-          const sessions = await apiJson<{ sessions: LaneSessionSummary[] }>('/v1/checkin/lane-sessions', { sessionToken: session.sessionToken });
-          setLaneSession((sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null);
+          const sessions = await apiJson<{ sessions: LaneSessionSummary[] }>(
+            '/v1/checkin/lane-sessions',
+            { sessionToken: session.sessionToken }
+          );
+          setLaneSession(
+            (sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null
+          );
         }
         if (msg.type === 'REGISTER_SESSION_UPDATED') {
           const payload = msg.payload as RegisterSessionUpdatedPayload;
           if (payload.registerNumber === laneNumber) {
-            const regs = await apiJson<RegisterSession[]>('/v1/admin/register-sessions', { sessionToken: session.sessionToken });
+            const regs = await apiJson<RegisterSession[]>('/v1/admin/register-sessions', {
+              sessionToken: session.sessionToken,
+            });
             setRegister(regs.find((r) => r.registerNumber === laneNumber) || null);
           }
         }
@@ -123,12 +137,15 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
         </div>
         <div className="panel-content" style={{ padding: '1.25rem' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            Mirrored summary of employee-register + customer-kiosk lane state. Last lane event: {lastLaneEvent ? new Date(lastLaneEvent).toLocaleString() : '—'}
+            Mirrored summary of employee-register + customer-kiosk lane state. Last lane event:{' '}
+            {lastLaneEvent ? new Date(lastLaneEvent).toLocaleString() : '—'}
           </div>
         </div>
       </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}>
+      <div
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}
+      >
         <section className="panel">
           <div className="panel-header">
             <h2>Employee Register (Lane {lane})</h2>
@@ -142,7 +159,9 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
                   <tr>
                     <td style={{ color: 'var(--text-muted)' }}>Status</td>
                     <td>
-                      <span className={`status-badge ${register.active ? 'status-clean' : 'status-dirty'}`}>
+                      <span
+                        className={`status-badge ${register.active ? 'status-clean' : 'status-dirty'}`}
+                      >
                         {register.active ? 'IN USE' : 'AVAILABLE'}
                       </span>
                     </td>
@@ -161,7 +180,11 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
                   </tr>
                   <tr>
                     <td style={{ color: 'var(--text-muted)' }}>Last Heartbeat</td>
-                    <td>{register.lastHeartbeatAt ? new Date(register.lastHeartbeatAt).toLocaleString() : '—'}</td>
+                    <td>
+                      {register.lastHeartbeatAt
+                        ? new Date(register.lastHeartbeatAt).toLocaleString()
+                        : '—'}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -184,7 +207,9 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
                 <tbody>
                   <tr>
                     <td style={{ color: 'var(--text-muted)' }}>Status</td>
-                    <td><span className="status-badge status-cleaning">{laneSession.status}</span></td>
+                    <td>
+                      <span className="status-badge status-cleaning">{laneSession.status}</span>
+                    </td>
                   </tr>
                   <tr>
                     <td style={{ color: 'var(--text-muted)' }}>Customer</td>
@@ -223,5 +248,3 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
     </div>
   );
 }
-
-

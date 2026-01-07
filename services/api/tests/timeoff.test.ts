@@ -65,7 +65,9 @@ describe('Time off requests', () => {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
-    await query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_time_off_requests_employee_day ON time_off_requests(employee_id, day);`);
+    await query(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_time_off_requests_employee_day ON time_off_requests(employee_id, day);`
+    );
 
     fastify = Fastify({ logger: false });
     await fastify.register(timeoffRoutes);
@@ -157,5 +159,3 @@ describe('Time off requests', () => {
     expect(after.rows[0]!.status).toBe('APPROVED');
   });
 });
-
-

@@ -49,10 +49,7 @@ async function updateStaffNames() {
       } else {
         // Update PIN to 1234 if exists
         const pinHash = await hashPin('1234');
-        await query(
-          `UPDATE staff SET pin_hash = $1 WHERE name = 'John Erikson'`,
-          [pinHash]
-        );
+        await query(`UPDATE staff SET pin_hash = $1 WHERE name = 'John Erikson'`, [pinHash]);
         console.log('✓ Updated John Erikson PIN to 1234');
       }
     }
@@ -92,10 +89,7 @@ async function updateStaffNames() {
       } else {
         // Update PIN to 1234 if exists
         const pinHash = await hashPin('1234');
-        await query(
-          `UPDATE staff SET pin_hash = $1 WHERE name = 'Cruz Martinez'`,
-          [pinHash]
-        );
+        await query(`UPDATE staff SET pin_hash = $1 WHERE name = 'Cruz Martinez'`, [pinHash]);
         console.log('✓ Updated Cruz Martinez PIN to 1234');
       }
     }
@@ -119,4 +113,3 @@ updateStaffNames()
     console.error('Update failed:', error);
     process.exit(1);
   });
-

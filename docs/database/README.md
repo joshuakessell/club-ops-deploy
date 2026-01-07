@@ -8,5 +8,3 @@ The canonical sources of truth for **database/schema meaning**, **table/column c
 All other schema overviews and scattered notes across the repo are **non-authoritative** and must defer to these docs.
 
 If there is any conflict, **these docs win** (update code/migrations/docs elsewhere to match).
-
-

@@ -32,7 +32,3 @@ describe('Agreement PDF generation', () => {
     expect(parsed.text).toContain('Test Customer');
   });
 });
-
-
-
-

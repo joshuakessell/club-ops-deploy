@@ -21,6 +21,7 @@ docker ps
 ```
 
 This starts a PostgreSQL 16 container with:
+
 - **Host**: localhost
 - **Port**: 5433 (mapped from container port 5432 to avoid conflicts on Windows)
 - **Database**: club_operations
@@ -45,11 +46,13 @@ pnpm seed
 ```
 
 This creates:
+
 - 10 rooms with various statuses (DIRTY, CLEANING, CLEAN)
 - Key tags with QR scan tokens (e.g., `ROOM-101`, `ROOM-102`, etc.)
 - Mix of room types (STANDARD, DOUBLE, SPECIAL, LOCKER)
 
 **Scan tokens for testing:**
+
 - `ROOM-101`, `ROOM-102`, `ROOM-201` → DIRTY rooms
 - `ROOM-103`, `ROOM-202` → CLEANING rooms
 - `ROOM-104`, `ROOM-105`, `ROOM-203`, `ROOM-301`, `LOCKER-01` → CLEAN rooms
@@ -66,21 +69,22 @@ pnpm start
 ```
 
 The API server will be available at:
+
 - **REST API**: http://localhost:3001
 - **WebSocket**: ws://localhost:3001/ws
 - **Health Check**: http://localhost:3001/health
 
 ## Database Commands
 
-| Command | Description |
-|---------|-------------|
-| `pnpm db:start` | Start PostgreSQL container |
-| `pnpm db:stop` | Stop PostgreSQL container |
-| `pnpm db:migrate` | Run pending migrations |
-| `pnpm db:migrate:status` | Show migration status |
-| `pnpm db:migrate:rollback` | Rollback last migration record |
-| `pnpm db:reset` | Reset database (destroys all data) |
-| `pnpm seed` | Insert seed data (rooms and key tags) |
+| Command                    | Description                           |
+| -------------------------- | ------------------------------------- |
+| `pnpm db:start`            | Start PostgreSQL container            |
+| `pnpm db:stop`             | Stop PostgreSQL container             |
+| `pnpm db:migrate`          | Run pending migrations                |
+| `pnpm db:migrate:status`   | Show migration status                 |
+| `pnpm db:migrate:rollback` | Rollback last migration record        |
+| `pnpm db:reset`            | Reset database (destroys all data)    |
+| `pnpm seed`                | Insert seed data (rooms and key tags) |
 
 ## Environment Variables
 
@@ -90,18 +94,18 @@ Copy `.env.example` to `.env` and configure as needed:
 cp .env.example .env
 ```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | 3001 | API server port |
-| `HOST` | 0.0.0.0 | API server host |
-| `DB_HOST` | localhost | PostgreSQL host |
-| `DB_PORT` | 5433 | PostgreSQL port (host port, container uses 5432) |
-| `DB_NAME` | club_operations | Database name |
-| `DB_USER` | clubops | Database user |
-| `DB_PASSWORD` | clubops_dev | Database password |
-| `DB_SSL` | false | Enable SSL for database |
-| `DB_POOL_MAX` | 20 | Max connections in pool |
-| `DB_LOG_QUERIES` | false | Log all database queries |
+| Variable         | Default         | Description                                      |
+| ---------------- | --------------- | ------------------------------------------------ |
+| `PORT`           | 3001            | API server port                                  |
+| `HOST`           | 0.0.0.0         | API server host                                  |
+| `DB_HOST`        | localhost       | PostgreSQL host                                  |
+| `DB_PORT`        | 5433            | PostgreSQL port (host port, container uses 5432) |
+| `DB_NAME`        | club_operations | Database name                                    |
+| `DB_USER`        | clubops         | Database user                                    |
+| `DB_PASSWORD`    | clubops_dev     | Database password                                |
+| `DB_SSL`         | false           | Enable SSL for database                          |
+| `DB_POOL_MAX`    | 20              | Max connections in pool                          |
+| `DB_LOG_QUERIES` | false           | Log all database queries                         |
 
 ## Database Schema
 
@@ -184,6 +188,7 @@ curl -X POST http://localhost:3001/v1/keys/resolve \
 ```
 
 Expected response includes:
+
 - `rooms`: Array of resolved rooms with statuses
 - `statusCounts`: Count of rooms by status
 - `isMixedStatus`: Whether rooms have different statuses
@@ -212,6 +217,7 @@ curl -X POST http://localhost:3001/v1/cleaning/batch \
 ```
 
 The batch endpoint:
+
 - ✅ Uses database transactions (all-or-nothing)
 - ✅ Uses row locking (`FOR UPDATE`) to prevent race conditions
 - ✅ Broadcasts WebSocket events for status changes
@@ -249,6 +255,3 @@ ws.onmessage = (event) => {
 ### Port 5432 already in use
 
 The Docker Compose configuration uses port 5433 on the host (mapped to container port 5432) to avoid conflicts with other PostgreSQL instances. If you need to use a different port, update both `docker-compose.yml` and the `DB_PORT` environment variable.
-
-
-

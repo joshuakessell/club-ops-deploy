@@ -116,7 +116,13 @@ export async function generateAgreementPdf(params: {
 
   page.drawText(title, { x: margin, y: headerY, size: 18, font: fontBold, color: black });
   if (version) {
-    page.drawText(`Version: ${version}`, { x: margin, y: headerY - 22, size: 10, font, color: gray });
+    page.drawText(`Version: ${version}`, {
+      x: margin,
+      y: headerY - 22,
+      size: 10,
+      font,
+      color: gray,
+    });
   }
 
   // Customer + timestamp
@@ -171,7 +177,13 @@ export async function generateAgreementPdf(params: {
   }
 
   // Signature label + box
-  page.drawText('Signature (PNG):', { x: signatureBoxX, y: signatureBoxY + signatureBoxHeight + 4, size: 11, font: fontBold, color: black });
+  page.drawText('Signature (PNG):', {
+    x: signatureBoxX,
+    y: signatureBoxY + signatureBoxHeight + 4,
+    size: 11,
+    font: fontBold,
+    color: black,
+  });
   page.drawRectangle({
     x: signatureBoxX,
     y: signatureBoxY,
@@ -202,11 +214,16 @@ export async function generateAgreementPdf(params: {
     const textY = signatureBoxY + signatureBoxHeight / 2 - 6;
     page.drawText(params.signatureText, { x: textX, y: textY, size: 12, font, color: black });
   } else {
-    page.drawText('(no signature image provided)', { x: signatureBoxX + 10, y: signatureBoxY + signatureBoxHeight / 2 - 4, size: 10, font, color: gray });
+    page.drawText('(no signature image provided)', {
+      x: signatureBoxX + 10,
+      y: signatureBoxY + signatureBoxHeight / 2 - 4,
+      size: 10,
+      font,
+      color: gray,
+    });
   }
 
   // Use a more traditional PDF structure for maximum compatibility with older parsers/readers.
   const pdfBytes = await pdfDoc.save({ useObjectStreams: false });
   return Buffer.from(pdfBytes);
 }
-

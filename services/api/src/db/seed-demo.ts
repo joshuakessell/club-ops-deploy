@@ -166,7 +166,9 @@ export async function seedDemoData(): Promise<void> {
         }
       }
 
-      console.log(`✅ Demo customers seeded (${demoData.customers.length}), visits: ${demoData.visits.length}, waitlist entries: ${demoData.waitlistEntries.length}`);
+      console.log(
+        `✅ Demo customers seeded (${demoData.customers.length}), visits: ${demoData.visits.length}, waitlist entries: ${demoData.waitlistEntries.length}`
+      );
     }
 
     // -----------------------------------------------------------------------
@@ -205,7 +207,7 @@ export async function seedDemoData(): Promise<void> {
     }
 
     const staff = staffResult.rows;
-    const adminStaff = staff.find(s => s.role === 'ADMIN') || staff[0]!;
+    const adminStaff = staff.find((s) => s.role === 'ADMIN') || staff[0]!;
 
     // Define shift windows (America/Chicago timezone)
     // Shift A: 12:00 AM to 8:00 AM
@@ -287,7 +289,8 @@ export async function seedDemoData(): Promise<void> {
       if (dayOffset < 0) {
         // Shift A timeclock
         const scenarioA = Math.random();
-        if (scenarioA < 0.95) { // 95% show up
+        if (scenarioA < 0.95) {
+          // 95% show up
           let clockIn = new Date(shiftAStart);
           let clockOut = new Date(shiftAEnd);
 
@@ -456,4 +459,3 @@ if (isDirectRun) {
     process.exitCode = 1;
   });
 }
-

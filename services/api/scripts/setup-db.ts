@@ -41,12 +41,3 @@ if (osPlatform === 'win32') {
     process.exit(1);
   }
 }
-
-
-
-
-
-
-
-
-

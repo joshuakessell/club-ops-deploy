@@ -102,9 +102,7 @@ export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
 /**
  * Execute a transaction with automatic commit/rollback.
  */
-export async function transaction<T>(
-  callback: (client: pg.PoolClient) => Promise<T>
-): Promise<T> {
+export async function transaction<T>(callback: (client: pg.PoolClient) => Promise<T>): Promise<T> {
   const dbPool = getPool();
   const client = await dbPool.connect();
 
@@ -145,6 +143,3 @@ export async function serializableTransaction<T>(
 }
 
 export { pg };
-
-
-

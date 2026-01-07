@@ -14,5 +14,3 @@ for (const file of readdirSync(srcDir)) {
     console.log(`Copied ${file} -> dist/styles/${file}`);
   }
 }
-
-

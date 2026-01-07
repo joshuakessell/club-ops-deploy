@@ -26,6 +26,7 @@ This specification defines the admin monitoring and control features for employe
 ### Register Monitoring
 
 Admins can view the status of both Register 1 and Register 2:
+
 - Current active/inactive status
 - Employee name and role (if active)
 - Device ID
@@ -35,6 +36,7 @@ Admins can view the status of both Register 1 and Register 2:
 ### Force Sign-Out
 
 Admins can force sign-out any active register session:
+
 - Server marks the session as signed out immediately
 - Logs an audit entry (see canonical database docs for audit logging contract)
 - Broadcasts `REGISTER_SESSION_UPDATED` event with reason `FORCED_SIGN_OUT`
@@ -109,6 +111,7 @@ Admins can force sign-out any active register session:
 ### Client-Side Handling
 
 When employee-register receives:
+
 - 404 from `/v1/registers/heartbeat`: Session not found, return to splash
 - `DEVICE_DISABLED` error code: Device disabled, return to splash
 - `REGISTER_SESSION_UPDATED` with `active: false` and matching `deviceId`: Forced sign-out, return to splash
@@ -116,12 +119,14 @@ When employee-register receives:
 ### Server-Side Enforcement
 
 Runtime endpoints reject requests from **disabled** devices:
+
 - `/v1/auth/verify-pin`
 - `/v1/registers/assign`
 - `/v1/registers/confirm`
 - `/v1/registers/heartbeat`
 
 Error response format:
+
 ```json
 {
   "error": "Device not allowed",
@@ -139,6 +144,7 @@ Error response format:
 Returns array with exactly two entries (Register 1 and Register 2).
 
 Response:
+
 ```json
 [
   {
@@ -185,6 +191,7 @@ Forces sign-out of active session for specified register.
 Returns all devices.
 
 Response:
+
 ```json
 [
   {
@@ -200,6 +207,7 @@ Response:
 Adds a new device.
 
 Request:
+
 ```json
 {
   "deviceId": "device-123",
@@ -215,6 +223,7 @@ Request:
 Enables or disables a device.
 
 Request:
+
 ```json
 {
   "enabled": false
@@ -262,9 +271,3 @@ And for the concrete schema snapshot:
   - Clear `staff_session` from localStorage
   - Return to splash screen (RegisterSignIn component)
 - Heartbeat loop checks for 404/DEVICE_DISABLED errors and handles same way
-
-
-
-
-
-

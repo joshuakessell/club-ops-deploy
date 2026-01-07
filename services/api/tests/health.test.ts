@@ -29,4 +29,3 @@ describe('Health endpoint', () => {
     expect(typeof body.uptime).toBe('number');
   });
 });
-

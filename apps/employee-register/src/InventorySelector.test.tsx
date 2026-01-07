@@ -16,16 +16,19 @@ type MockWebSocket = {
   onerror: ((this: WebSocket, ev: Event) => unknown) | null;
   onclose: ((this: WebSocket, ev: CloseEvent) => unknown) | null;
 };
-global.WebSocket = vi.fn(() => ({
-  send: vi.fn(),
-  close: vi.fn(),
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  onopen: null,
-  onmessage: null,
-  onerror: null,
-  onclose: null,
-}) satisfies MockWebSocket) as unknown as typeof WebSocket;
+global.WebSocket = vi.fn(
+  () =>
+    ({
+      send: vi.fn(),
+      close: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      onopen: null,
+      onmessage: null,
+      onerror: null,
+      onclose: null,
+    }) satisfies MockWebSocket
+) as unknown as typeof WebSocket;
 
 describe('InventorySelector', () => {
   const mockProps = {
@@ -82,10 +85,10 @@ describe('InventorySelector', () => {
     });
 
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
-    
+
     // Wait for data to load
     await screen.findByText(/standard rooms/i);
-    
+
     // Check that sections are rendered
     expect(screen.getByText(/standard rooms/i)).toBeDefined();
   });
@@ -97,9 +100,9 @@ describe('InventorySelector', () => {
     });
 
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
-    
+
     await screen.findByText(/standard rooms/i);
-    
+
     // Section should be expanded (we can check by looking for room numbers)
     // This is a basic test - in a real scenario, we'd check the expanded state
   });
@@ -112,25 +115,15 @@ describe('InventorySelector', () => {
 
     const onSelect = vi.fn();
     render(
-      <InventorySelector
-        {...mockProps}
-        customerSelectedType="STANDARD"
-        onSelect={onSelect}
-      />
+      <InventorySelector {...mockProps} customerSelectedType="STANDARD" onSelect={onSelect} />
     );
-    
+
     await screen.findByText(/standard rooms/i);
-    
+
     // Auto-selection happens in useEffect, so we wait a bit
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
     // onSelect should be called with the first available room
-    expect(onSelect).toHaveBeenCalledWith(
-      'room',
-      'room-1',
-      '101',
-      'STANDARD'
-    );
+    expect(onSelect).toHaveBeenCalledWith('room', 'room-1', '101', 'STANDARD');
   });
 });
-

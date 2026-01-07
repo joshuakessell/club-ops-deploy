@@ -13,7 +13,10 @@ type InventorySummaryResponse = {
 export function DemoOverview({ session }: { session: StaffSession }) {
   const navigate = useNavigate();
   const [inventory, setInventory] = useState<InventorySummaryResponse | null>(null);
-  const [waitlistMetrics, setWaitlistMetrics] = useState<{ activeCount: number; offeredCount: number } | null>(null);
+  const [waitlistMetrics, setWaitlistMetrics] = useState<{
+    activeCount: number;
+    offeredCount: number;
+  } | null>(null);
 
   const lowAvailability = useMemo(() => {
     const byType = inventory?.byType || {};
@@ -37,7 +40,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
 
     const ws = new WebSocket(wsBaseUrl());
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe', events: ['INVENTORY_UPDATED', 'WAITLIST_UPDATED'] }));
+      ws.send(
+        JSON.stringify({ type: 'subscribe', events: ['INVENTORY_UPDATED', 'WAITLIST_UPDATED'] })
+      );
     };
     ws.onmessage = (event) => {
       try {
@@ -51,7 +56,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
             '/v1/metrics/waitlist',
             { sessionToken: session.sessionToken }
           )
-            .then((m) => setWaitlistMetrics({ activeCount: m.activeCount, offeredCount: m.offeredCount }))
+            .then((m) =>
+              setWaitlistMetrics({ activeCount: m.activeCount, offeredCount: m.offeredCount })
+            )
             .catch(() => setWaitlistMetrics(null));
         }
       } catch {
@@ -77,7 +84,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
           <span className="stat-label">Cleaning</span>
         </div>
         <div className="stat-card stat-occupied">
-          <span className="stat-value">{waitlistMetrics ? waitlistMetrics.activeCount + waitlistMetrics.offeredCount : '—'}</span>
+          <span className="stat-value">
+            {waitlistMetrics ? waitlistMetrics.activeCount + waitlistMetrics.offeredCount : '—'}
+          </span>
           <span className="stat-label">Waitlist (A+O)</span>
         </div>
       </section>
@@ -87,13 +96,21 @@ export function DemoOverview({ session }: { session: StaffSession }) {
           <h2>Administrative Demo Overview</h2>
         </div>
         <div className="panel-content" style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1rem' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: '1rem',
+            }}
+          >
             <div className="csRaisedCard" style={{ padding: '1rem' }}>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Live Lane Monitor</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Pick lane 1 or 2; see employee + customer mirrored state with live WS updates.
               </div>
-              <button className="btn-primary" onClick={() => navigate('/monitor')}>Open Monitor</button>
+              <button className="btn-primary" onClick={() => navigate('/monitor')}>
+                Open Monitor
+              </button>
             </div>
 
             <div className="csRaisedCard" style={{ padding: '1rem' }}>
@@ -101,7 +118,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Active / Offered lists, offer upgrades, complete or cancel, live refresh.
               </div>
-              <button className="btn-primary" onClick={() => navigate('/waitlist')}>Manage Waitlist</button>
+              <button className="btn-primary" onClick={() => navigate('/waitlist')}>
+                Manage Waitlist
+              </button>
             </div>
 
             <div className="csRaisedCard" style={{ padding: '1rem' }}>
@@ -109,7 +128,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Search customers; admin can clear notes and waive past-due balance.
               </div>
-              <button className="btn-primary" onClick={() => navigate('/customers')}>Open Customer Tools</button>
+              <button className="btn-primary" onClick={() => navigate('/customers')}>
+                Open Customer Tools
+              </button>
             </div>
 
             <div className="csRaisedCard" style={{ padding: '1rem' }}>
@@ -117,7 +138,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Inventory summary + low-availability tiers; cash totals by method/register.
               </div>
-              <button className="btn-primary" onClick={() => navigate('/reports')}>Open Reports</button>
+              <button className="btn-primary" onClick={() => navigate('/reports')}>
+                Open Reports
+              </button>
             </div>
           </div>
         </div>
@@ -141,14 +164,26 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               </thead>
               <tbody>
                 {lowAvailability.map((row) => (
-                  <tr key={row.tier} style={{ background: row.available < 5 ? 'rgba(245, 158, 11, 0.08)' : undefined }}>
+                  <tr
+                    key={row.tier}
+                    style={{
+                      background: row.available < 5 ? 'rgba(245, 158, 11, 0.08)' : undefined,
+                    }}
+                  >
                     <td className="room-number">{row.tier}</td>
-                    <td style={{ fontWeight: 700, color: row.available < 5 ? 'var(--warning)' : 'var(--text)' }}>
+                    <td
+                      style={{
+                        fontWeight: 700,
+                        color: row.available < 5 ? 'var(--warning)' : 'var(--text)',
+                      }}
+                    >
                       {row.available}
                     </td>
                     <td>
                       {row.available < 5 ? (
-                        <button className="btn-secondary" onClick={() => navigate('/monitor')}>Monitor lanes</button>
+                        <button className="btn-secondary" onClick={() => navigate('/monitor')}>
+                          Monitor lanes
+                        </button>
                       ) : (
                         <span style={{ color: 'var(--text-muted)' }}>—</span>
                       )}
@@ -163,5 +198,3 @@ export function DemoOverview({ session }: { session: StaffSession }) {
     </div>
   );
 }
-
-

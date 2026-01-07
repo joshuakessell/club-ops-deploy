@@ -24,15 +24,18 @@ type ShiftRow = {
 export async function scheduleRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.get<{
     Querystring: { from?: string; to?: string };
-  }>('/v1/schedule/shifts', {
-    preHandler: [requireAuth],
-  }, async (request, reply) => {
-    const from = request.query.from ? IsoDateTimeSchema.parse(request.query.from) : undefined;
-    const to = request.query.to ? IsoDateTimeSchema.parse(request.query.to) : undefined;
+  }>(
+    '/v1/schedule/shifts',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      const from = request.query.from ? IsoDateTimeSchema.parse(request.query.from) : undefined;
+      const to = request.query.to ? IsoDateTimeSchema.parse(request.query.to) : undefined;
 
-    const params: unknown[] = [];
-    let i = 0;
-    let sql = `
+      const params: unknown[] = [];
+      let i = 0;
+      let sql = `
       SELECT
         es.id,
         es.employee_id,
@@ -46,35 +49,34 @@ export async function scheduleRoutes(fastify: FastifyInstance): Promise<void> {
       JOIN staff s ON s.id = es.employee_id
       WHERE es.employee_id = $1
     `;
-    params.push(request.staff!.staffId);
-    i = 1;
+      params.push(request.staff!.staffId);
+      i = 1;
 
-    if (from) {
-      i++;
-      sql += ` AND es.starts_at >= $${i}`;
-      params.push(from);
-    }
-    if (to) {
-      i++;
-      sql += ` AND es.ends_at <= $${i}`;
-      params.push(to);
-    }
-    sql += ` ORDER BY es.starts_at ASC`;
+      if (from) {
+        i++;
+        sql += ` AND es.starts_at >= $${i}`;
+        params.push(from);
+      }
+      if (to) {
+        i++;
+        sql += ` AND es.ends_at <= $${i}`;
+        params.push(to);
+      }
+      sql += ` ORDER BY es.starts_at ASC`;
 
-    const shifts = await query<ShiftRow>(sql, params);
-    return reply.send(shifts.rows.map((shift) => ({
-      id: shift.id,
-      employeeId: shift.employee_id,
-      employeeName: shift.employee_name,
-      shiftCode: shift.shift_code,
-      scheduledStart: shift.starts_at.toISOString(),
-      scheduledEnd: shift.ends_at.toISOString(),
-      status: shift.status,
-      notes: shift.notes,
-    })));
-  });
+      const shifts = await query<ShiftRow>(sql, params);
+      return reply.send(
+        shifts.rows.map((shift) => ({
+          id: shift.id,
+          employeeId: shift.employee_id,
+          employeeName: shift.employee_name,
+          shiftCode: shift.shift_code,
+          scheduledStart: shift.starts_at.toISOString(),
+          scheduledEnd: shift.ends_at.toISOString(),
+          status: shift.status,
+          notes: shift.notes,
+        }))
+      );
+    }
+  );
 }
-
-
-
-

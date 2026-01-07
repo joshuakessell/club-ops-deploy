@@ -48,7 +48,7 @@ const API_BASE = '/api';
 function App() {
   // Session state - stored in memory only, not localStorage
   const [session, setSession] = useState<StaffSession | null>(null);
-  
+
   const deviceId = useState(() => {
     // Generate or retrieve device ID
     const storage = window.localStorage;
@@ -146,80 +146,85 @@ function App() {
     scannedItemsRef.current = scannedItems;
   }, [scannedItems]);
 
-  const handleScan = useCallback(async (tagCode: string) => {
-    if (!session?.sessionToken) {
-      return;
-    }
-
-    // Deduplicate: check if already scanned
-    if (scannedItemsRef.current.some((item) => item.tagCode === tagCode)) {
-      return;
-    }
-
-    setIsProcessing(true);
-
-    try {
-      const response = await fetch(`${API_BASE}/v1/keys/resolve`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({ token: tagCode }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || `Failed to resolve key: ${response.statusText}`);
+  const handleScan = useCallback(
+    async (tagCode: string) => {
+      if (!session?.sessionToken) {
+        return;
       }
 
-      const data: unknown = await response.json();
-      const roomId = isRecord(data) && typeof data.roomId === 'string' ? data.roomId : null;
-      const roomNumber = isRecord(data) && typeof data.roomNumber === 'string' ? data.roomNumber : null;
-      const status =
-        isRecord(data) &&
-        typeof data.status === 'string' &&
-        (Object.values(RoomStatus) as string[]).includes(data.status)
-          ? (data.status as RoomStatus)
-          : null;
+      // Deduplicate: check if already scanned
+      if (scannedItemsRef.current.some((item) => item.tagCode === tagCode)) {
+        return;
+      }
 
-      if (roomId && roomNumber && status) {
-        const roomType =
-          isRecord(data) && typeof data.roomType === 'string' ? data.roomType : 'STANDARD';
-        const floor = isRecord(data) && typeof data.floor === 'number' ? data.floor : 0;
-        const resolvedTagCode =
-          isRecord(data) && typeof data.tagCode === 'string' ? data.tagCode : tagCode;
-        const tagType =
-          isRecord(data) && typeof data.tagType === 'string' ? data.tagType : 'QR';
-        const overrideFlag =
-          isRecord(data) && typeof data.overrideFlag === 'boolean' ? data.overrideFlag : false;
+      setIsProcessing(true);
 
-        const room: ResolvedRoom = {
-          roomId,
-          roomNumber,
-          roomType,
-          status,
-          floor,
-          tagCode: resolvedTagCode,
-          tagType,
-          overrideFlag,
-        };
-        setScannedItems((prev) => [
-          ...prev,
-          {
-            tagCode,
-            room,
-            timestamp: Date.now(),
+      try {
+        const response = await fetch(`${API_BASE}/v1/keys/resolve`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
           },
-        ]);
+          body: JSON.stringify({ token: tagCode }),
+        });
+
+        if (!response.ok) {
+          const errorPayload: unknown = await response.json().catch(() => null);
+          throw new Error(
+            getErrorMessage(errorPayload) || `Failed to resolve key: ${response.statusText}`
+          );
+        }
+
+        const data: unknown = await response.json();
+        const roomId = isRecord(data) && typeof data.roomId === 'string' ? data.roomId : null;
+        const roomNumber =
+          isRecord(data) && typeof data.roomNumber === 'string' ? data.roomNumber : null;
+        const status =
+          isRecord(data) &&
+          typeof data.status === 'string' &&
+          (Object.values(RoomStatus) as string[]).includes(data.status)
+            ? (data.status as RoomStatus)
+            : null;
+
+        if (roomId && roomNumber && status) {
+          const roomType =
+            isRecord(data) && typeof data.roomType === 'string' ? data.roomType : 'STANDARD';
+          const floor = isRecord(data) && typeof data.floor === 'number' ? data.floor : 0;
+          const resolvedTagCode =
+            isRecord(data) && typeof data.tagCode === 'string' ? data.tagCode : tagCode;
+          const tagType = isRecord(data) && typeof data.tagType === 'string' ? data.tagType : 'QR';
+          const overrideFlag =
+            isRecord(data) && typeof data.overrideFlag === 'boolean' ? data.overrideFlag : false;
+
+          const room: ResolvedRoom = {
+            roomId,
+            roomNumber,
+            roomType,
+            status,
+            floor,
+            tagCode: resolvedTagCode,
+            tagType,
+            overrideFlag,
+          };
+          setScannedItems((prev) => [
+            ...prev,
+            {
+              tagCode,
+              room,
+              timestamp: Date.now(),
+            },
+          ]);
+        }
+      } catch (error) {
+        console.error('Failed to resolve key:', error);
+        // Could show error toast here
+      } finally {
+        setIsProcessing(false);
       }
-    } catch (error) {
-      console.error('Failed to resolve key:', error);
-      // Could show error toast here
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [session]);
+    },
+    [session]
+  );
 
   // Initialize camera (only when authenticated + scanning view)
   useEffect(() => {
@@ -319,7 +324,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           deviceId,
@@ -335,7 +340,9 @@ function App() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || `Failed to update rooms: ${response.statusText}`);
+        throw new Error(
+          getErrorMessage(errorPayload) || `Failed to update rooms: ${response.statusText}`
+        );
       }
 
       clearAll();
@@ -358,7 +365,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           deviceId,
@@ -374,7 +381,9 @@ function App() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || `Failed to update rooms: ${response.statusText}`);
+        throw new Error(
+          getErrorMessage(errorPayload) || `Failed to update rooms: ${response.statusText}`
+        );
       }
 
       clearAll();
@@ -475,7 +484,7 @@ function App() {
           fromStatus: currentStatus,
           toStatus: targetStatus,
           override: needsOverride,
-          overrideReason: needsOverride ? (reason || 'Override required') : undefined,
+          overrideReason: needsOverride ? reason || 'Override required' : undefined,
         });
       });
 
@@ -490,7 +499,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           deviceId,
@@ -504,7 +513,7 @@ function App() {
       }
 
       const result: unknown = await response.json();
-      
+
       // Check if any rooms failed
       const failed =
         isRecord(result) &&
@@ -529,13 +538,7 @@ function App() {
 
   // Show lock screen if not authenticated
   if (!session) {
-    return (
-      <LockScreen
-        onLogin={handleLogin}
-        deviceType="kiosk"
-        deviceId={deviceId}
-      />
-    );
+    return <LockScreen onLogin={handleLogin} deviceType="kiosk" deviceId={deviceId} />;
   }
 
   if (viewMode === 'resolve') {
@@ -623,21 +626,22 @@ function App() {
         </div>
 
         {overrideModal && (
-          <div className="modal-overlay" onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setOverrideModal(null);
-              setOverrideReason('');
-            }
-          }}>
+          <div
+            className="modal-overlay"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setOverrideModal(null);
+                setOverrideReason('');
+              }
+            }}
+          >
             <div className="modal-content">
               <h2>Override Required</h2>
               <p>
                 Room {overrideModal.roomNumber}: {overrideModal.fromStatus} →{' '}
                 {overrideModal.toStatus}
               </p>
-              <p className="modal-warning">
-                This transition skips a step and requires a reason.
-              </p>
+              <p className="modal-warning">This transition skips a step and requires a reason.</p>
               <textarea
                 className="modal-textarea"
                 placeholder="Enter reason for override..."
@@ -681,9 +685,7 @@ function App() {
             <button
               className="button-secondary"
               onClick={() => {
-                setCameraFacingMode(
-                  cameraFacingMode === 'user' ? 'environment' : 'user'
-                );
+                setCameraFacingMode(cameraFacingMode === 'user' ? 'environment' : 'user');
               }}
             >
               Switch Camera
@@ -694,9 +696,7 @@ function App() {
           <button
             className="camera-switch-button"
             onClick={() => {
-              setCameraFacingMode(
-                cameraFacingMode === 'user' ? 'environment' : 'user'
-              );
+              setCameraFacingMode(cameraFacingMode === 'user' ? 'environment' : 'user');
             }}
             title="Switch Camera"
           >
@@ -787,4 +787,3 @@ function App() {
 }
 
 export default App;
-

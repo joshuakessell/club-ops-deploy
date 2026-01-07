@@ -68,29 +68,34 @@ And reflected in `db/schema.sql` + `services/api/migrations/`.
 Timeclock sessions are automatically created and closed based on employee sign-ins/sign-outs to terminals:
 
 **Register Sign-In** (`/v1/registers/confirm`):
+
 - When an employee signs into a register (Register 1 or 2), a timeclock session is automatically created
 - Source: `EMPLOYEE_REGISTER`
 - If employee already has an open timeclock session, it is reused (shift may be attached if not already)
 - Nearest scheduled shift is automatically attached if within shift window or 60-minute pre-start window
 
 **Register Sign-Out** (`/v1/registers/signout`):
+
 - When an employee signs out of a register, the timeclock session is closed IF:
   - Employee is not signed into any other register, AND
   - Employee is not signed into cleaning station (no active staff_sessions)
 - Sets `clock_out_at = NOW()` for the open timeclock session
 
 **Cleaning Station Sign-In** (`/v1/auth/login-pin` or WebAuthn):
+
 - When an employee signs into cleaning station (and not already signed into a register), a timeclock session is created
 - Source: `OFFICE_DASHBOARD` (represents cleaning station/office terminal)
 - Nearest scheduled shift is automatically attached if applicable
 
 **Cleaning Station Sign-Out** (`/v1/auth/logout`):
+
 - When an employee signs out of cleaning station, the timeclock session is closed IF:
   - Employee is not signed into any register, AND
   - Employee has no other active staff_sessions
 - Sets `clock_out_at = NOW()` for the open timeclock session
 
 **Shift Attachment Logic**:
+
 - When creating a timeclock session, the system finds the nearest scheduled shift where:
   - `NOW()` is within the shift window (starts_at to ends_at), OR
   - `NOW()` is within 60 minutes before starts_at (pre-start grace window)
@@ -105,7 +110,7 @@ For each scheduled shift, compute:
 
 1. **workedMinutesInWindow**: Minutes worked that overlap with the scheduled shift window
 2. **scheduledMinutes**: Total scheduled minutes (ends_at - starts_at)
-3. **compliancePercent**: (workedMinutesInWindow / scheduledMinutes) * 100
+3. **compliancePercent**: (workedMinutesInWindow / scheduledMinutes) \* 100
 
 ### Flags
 
@@ -164,12 +169,14 @@ And reflected in `db/schema.sql` + `services/api/migrations/`.
 ### Storage Implementation
 
 **POC (Proof of Concept)**:
+
 - Store files in `services/api/uploads/` directory
 - Create subdirectories by employee_id for organization
 - Store actual files with storage_key referencing the path
 - Ensure uploads directory exists and is writable
 
 **Future (Production)**:
+
 - Interface designed to support S3 replacement
 - Storage key format remains stable
 - Migration path: update storage backend without changing API
@@ -179,12 +186,14 @@ And reflected in `db/schema.sql` + `services/api/migrations/`.
 ### Seeding Window
 
 Generate shifts for a 28-day window:
+
 - Past 14 days
 - Next 14 days (including today)
 
 ### Seeding Rules
 
 **Shifts**:
+
 - Each day: Schedule enough employees across A/B/C shifts to appear staffed
 - Rotate employees so coverage varies by day
 - Use exact shift windows:
@@ -193,6 +202,7 @@ Generate shifts for a 28-day window:
   - Shift C: 3:45 PM to 12:00 AM
 
 **Timeclock Sessions** (for past days only):
+
 - Most sessions match scheduled shifts (realistic compliance)
 - Include realistic anomalies:
   - Late clock-in (after shift start + 5 minutes)
@@ -200,10 +210,12 @@ Generate shifts for a 28-day window:
   - Missing clock-out (clock_out_at NULL for at least one past day, then manager closes it)
 
 **Today (America/Chicago timezone)**:
+
 - Ensure at least 2 employees are currently clocked in
 - Ensure at least 1 scheduled shift is currently active
 
 **Employee Documents**:
+
 - Seed 1-2 employee document records per employee with realistic filenames and doc types (storage schema is TBD; see canonical DB docs if/when implemented)
 - Optionally create stub files in uploads folder so downloads work in demo
 
@@ -226,11 +238,13 @@ Generate shifts for a 28-day window:
 #### GET /v1/admin/shifts
 
 Query parameters:
+
 - `from` (ISO date string, optional)
 - `to` (ISO date string, optional)
 - `employeeId` (UUID, optional)
 
 Returns array of shifts with computed compliance fields:
+
 ```typescript
 {
   id: string;
@@ -249,7 +263,7 @@ Returns array of shifts with computed compliance fields:
     earlyClockOut: boolean;
     missingClockOut: boolean;
     noShow: boolean;
-  };
+  }
   status: 'SCHEDULED' | 'UPDATED' | 'CANCELED';
   notes: string | null;
 }
@@ -258,6 +272,7 @@ Returns array of shifts with computed compliance fields:
 #### PATCH /v1/admin/shifts/:shiftId
 
 Request body:
+
 ```typescript
 {
   starts_at?: string; // ISO
@@ -276,6 +291,7 @@ Request body:
 #### GET /v1/admin/timeclock
 
 Query parameters:
+
 - `from` (ISO date string, optional)
 - `to` (ISO date string, optional)
 - `employeeId` (UUID, optional)
@@ -285,6 +301,7 @@ Returns array of timeclock sessions for reporting and drilldown.
 #### PATCH /v1/admin/timeclock/:sessionId
 
 Request body:
+
 ```typescript
 {
   clock_in_at?: string; // ISO
@@ -313,6 +330,7 @@ Request body:
 #### POST /v1/timeclock/clock-in
 
 Request body:
+
 ```typescript
 {
   source: 'EMPLOYEE_REGISTER' | 'OFFICE_DASHBOARD';
@@ -333,6 +351,7 @@ Request body:
 ## Audit Logging
 
 All management actions are logged with:
+
 - `action`: SHIFT_UPDATED | TIMECLOCK_ADJUSTED | TIMECLOCK_CLOSED | DOCUMENT_UPLOADED
 - `entity_type`: employee_shift | timeclock_session | employee_document
 - `entity_id`: UUID of affected entity
@@ -343,6 +362,7 @@ All management actions are logged with:
 ### Navigation
 
 Add to office-dashboard:
+
 - "Shifts" navigation item
 - "Timeclock" navigation item
 - "Employees" → Documents tab (within employee profile)
@@ -378,4 +398,3 @@ Add to office-dashboard:
 - Log important changes with actor attribution
 - Handle timezone conversions correctly (America/Chicago)
 - Gracefully handle missing data (null checks)
-

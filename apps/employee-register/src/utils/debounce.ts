@@ -1,4 +1,7 @@
-export function debounce<T extends (...args: Parameters<T>) => void>(fn: T, wait: number): (...args: Parameters<T>) => void {
+export function debounce<T extends (...args: Parameters<T>) => void>(
+  fn: T,
+  wait: number
+): (...args: Parameters<T>) => void {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   return (...args: Parameters<T>) => {
     if (timeout) clearTimeout(timeout);
@@ -7,4 +10,3 @@ export function debounce<T extends (...args: Parameters<T>) => void>(fn: T, wait
     }, wait);
   };
 }
-

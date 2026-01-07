@@ -1,11 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
-import {
-  verifyPin,
-  generateSessionToken,
-  getSessionExpiry,
-} from '../auth/utils.js';
+import { verifyPin, generateSessionToken, getSessionExpiry } from '../auth/utils.js';
 import { requireAuth } from '../auth/middleware.js';
 
 /**
@@ -35,14 +31,11 @@ interface StaffRow {
 export async function authRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/auth/staff - Get list of active staff for login selection
-   * 
+   *
    * Public endpoint that returns active staff members (name, id, role only).
    * Used by login screens to show available staff for selection.
    */
-  fastify.get('/v1/auth/staff', async (
-    request,
-    reply
-  ) => {
+  fastify.get('/v1/auth/staff', async (request, reply) => {
     try {
       const result = await query<{
         id: string;
@@ -57,7 +50,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       );
 
       return reply.send({
-        staff: result.rows.map(row => ({
+        staff: result.rows.map((row) => ({
           id: row.id,
           name: row.name,
           role: row.role,
@@ -74,14 +67,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /v1/auth/login-pin - Staff login with PIN
-   * 
+   *
    * Accepts staff ID or name and PIN for authentication.
    * Creates a session and returns session token.
    */
-  fastify.post('/v1/auth/login-pin', async (
-    request,
-    reply
-  ) => {
+  fastify.post('/v1/auth/login-pin', async (request, reply) => {
     let body: LoginPinInput;
 
     try {
@@ -129,7 +119,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
         // Use provided device type or default to 'tablet'
         const deviceType = body.deviceType || 'tablet';
-        
+
         // Create session and get the session ID
         const sessionResult = await client.query<{ id: string }>(
           `INSERT INTO staff_sessions (staff_id, device_id, device_type, session_token, expires_at)
@@ -161,7 +151,7 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
             // Check if timeclock_sessions table exists by trying a simple query
             try {
               const now = new Date();
-              
+
               // Check if employee already has an open timeclock session
               const existingTimeclock = await client.query<{ id: string }>(
                 `SELECT id FROM timeclock_sessions
@@ -266,114 +256,116 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /v1/auth/logout - Staff logout
-   * 
+   *
    * Revokes the current session token.
    */
-  fastify.post('/v1/auth/logout', {
-    preHandler: [requireAuth],
-  }, async (
-    request,
-    reply
-  ) => {
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-      });
-    }
+  fastify.post(
+    '/v1/auth/logout',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return reply.status(401).send({
+          error: 'Unauthorized',
+        });
+      }
 
-    const token = authHeader.substring(7);
+      const token = authHeader.substring(7);
 
-    try {
-      // Get staff ID and session ID before revoking
-      const sessionResult = await query<{ staff_id: string; id: string }>(
-        `SELECT staff_id, id FROM staff_sessions WHERE session_token = $1 AND revoked_at IS NULL`,
-        [token]
-      );
-
-      if (sessionResult.rows.length > 0) {
-        const staffId = sessionResult.rows[0]!.staff_id;
-        const sessionId = sessionResult.rows[0]!.id;
-
-        await query(
-          `UPDATE staff_sessions
-           SET revoked_at = NOW()
-           WHERE session_token = $1
-           AND revoked_at IS NULL`,
+      try {
+        // Get staff ID and session ID before revoking
+        const sessionResult = await query<{ staff_id: string; id: string }>(
+          `SELECT staff_id, id FROM staff_sessions WHERE session_token = $1 AND revoked_at IS NULL`,
           [token]
         );
 
-        // Log audit action (use session UUID id, not the token string)
-        await query(
-          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'STAFF_LOGOUT', 'staff_session', $2)`,
-          [staffId, sessionId]
-        );
+        if (sessionResult.rows.length > 0) {
+          const staffId = sessionResult.rows[0]!.staff_id;
+          const sessionId = sessionResult.rows[0]!.id;
 
-        // Close timeclock session if employee is no longer signed into any register or cleaning station
-        const otherRegisterSession = await query<{ count: string }>(
-          `SELECT COUNT(*) as count FROM register_sessions
-           WHERE employee_id = $1 AND signed_out_at IS NULL`,
-          [staffId]
-        );
-
-        const otherStaffSession = await query<{ count: string }>(
-          `SELECT COUNT(*) as count FROM staff_sessions
-           WHERE staff_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
-          [staffId]
-        );
-
-        // Only close timeclock if no other active sessions
-        if (
-          parseInt(otherRegisterSession.rows[0]?.count || '0', 10) === 0 &&
-          parseInt(otherStaffSession.rows[0]?.count || '0', 10) === 0
-        ) {
           await query(
-            `UPDATE timeclock_sessions
-             SET clock_out_at = NOW()
-             WHERE employee_id = $1 AND clock_out_at IS NULL`,
+            `UPDATE staff_sessions
+           SET revoked_at = NOW()
+           WHERE session_token = $1
+           AND revoked_at IS NULL`,
+            [token]
+          );
+
+          // Log audit action (use session UUID id, not the token string)
+          await query(
+            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
+           VALUES ($1, 'STAFF_LOGOUT', 'staff_session', $2)`,
+            [staffId, sessionId]
+          );
+
+          // Close timeclock session if employee is no longer signed into any register or cleaning station
+          const otherRegisterSession = await query<{ count: string }>(
+            `SELECT COUNT(*) as count FROM register_sessions
+           WHERE employee_id = $1 AND signed_out_at IS NULL`,
             [staffId]
           );
-        }
-      }
 
-      return reply.send({ success: true });
-    } catch (error) {
-      request.log.error(error, 'Logout error');
-      return reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to logout',
-      });
+          const otherStaffSession = await query<{ count: string }>(
+            `SELECT COUNT(*) as count FROM staff_sessions
+           WHERE staff_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
+            [staffId]
+          );
+
+          // Only close timeclock if no other active sessions
+          if (
+            parseInt(otherRegisterSession.rows[0]?.count || '0', 10) === 0 &&
+            parseInt(otherStaffSession.rows[0]?.count || '0', 10) === 0
+          ) {
+            await query(
+              `UPDATE timeclock_sessions
+             SET clock_out_at = NOW()
+             WHERE employee_id = $1 AND clock_out_at IS NULL`,
+              [staffId]
+            );
+          }
+        }
+
+        return reply.send({ success: true });
+      } catch (error) {
+        request.log.error(error, 'Logout error');
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to logout',
+        });
+      }
     }
-  });
+  );
 
   /**
    * GET /v1/auth/me - Get current staff identity
-   * 
+   *
    * Returns the authenticated staff member's information.
    */
-  fastify.get('/v1/auth/me', {
-    preHandler: [requireAuth],
-  }, async (
-    request,
-    reply
-  ) => {
-    if (!request.staff) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
+  fastify.get(
+    '/v1/auth/me',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) {
+        return reply.status(401).send({
+          error: 'Unauthorized',
+        });
+      }
+
+      return reply.send({
+        staffId: request.staff.staffId,
+        name: request.staff.name,
+        role: request.staff.role,
       });
     }
-
-    return reply.send({
-      staffId: request.staff.staffId,
-      name: request.staff.name,
-      role: request.staff.role,
-    });
-  });
+  );
 
   /**
    * POST /v1/auth/reauth-pin - Re-authenticate with PIN for sensitive admin actions
-   * 
+   *
    * Requires existing session. Verifies PIN and sets reauth_ok_until timestamp
    * (valid for 5 minutes).
    */
@@ -383,311 +375,314 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.post<{
     Body: z.infer<typeof ReauthPinSchema>;
-  }>('/v1/auth/reauth-pin', {
-    preHandler: [requireAuth],
-  }, async (request, reply) => {
-    if (!request.staff) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-      });
-    }
-
-    let body: z.infer<typeof ReauthPinSchema>;
-    try {
-      body = ReauthPinSchema.parse(request.body);
-    } catch (error) {
-      return reply.status(400).send({
-        error: 'Validation failed',
-        details: error instanceof z.ZodError ? error.errors : 'Invalid input',
-      });
-    }
-
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-      });
-    }
-
-    const token = authHeader.substring(7);
-
-    try {
-      // Get staff PIN hash
-      const staffResult = await query<{ pin_hash: string | null }>(
-        `SELECT pin_hash FROM staff WHERE id = $1 AND active = true`,
-        [request.staff.staffId]
-      );
-
-      if (staffResult.rows.length === 0 || !staffResult.rows[0]!.pin_hash) {
+  }>(
+    '/v1/auth/reauth-pin',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) {
         return reply.status(401).send({
           error: 'Unauthorized',
-          message: 'Invalid credentials',
         });
       }
 
-      // Verify PIN
-      if (!(await verifyPin(body.pin, staffResult.rows[0]!.pin_hash))) {
-        return reply.status(401).send({
-          error: 'Unauthorized',
-          message: 'Invalid PIN',
+      let body: z.infer<typeof ReauthPinSchema>;
+      try {
+        body = ReauthPinSchema.parse(request.body);
+      } catch (error) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
         });
       }
 
-      // Get session ID first
-      const sessionResult = await query<{ id: string }>(
-        `SELECT id FROM staff_sessions WHERE session_token = $1 AND revoked_at IS NULL`,
-        [token]
-      );
-
-      if (sessionResult.rows.length === 0) {
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return reply.status(401).send({
           error: 'Unauthorized',
-          message: 'Session not found',
         });
       }
 
-      const sessionId = sessionResult.rows[0]!.id;
+      const token = authHeader.substring(7);
 
-      // Set reauth_ok_until to 5 minutes from now
-      const reauthOkUntil = new Date(Date.now() + 5 * 60 * 1000);
+      try {
+        // Get staff PIN hash
+        const staffResult = await query<{ pin_hash: string | null }>(
+          `SELECT pin_hash FROM staff WHERE id = $1 AND active = true`,
+          [request.staff.staffId]
+        );
 
-      await query(
-        `UPDATE staff_sessions
+        if (staffResult.rows.length === 0 || !staffResult.rows[0]!.pin_hash) {
+          return reply.status(401).send({
+            error: 'Unauthorized',
+            message: 'Invalid credentials',
+          });
+        }
+
+        // Verify PIN
+        if (!(await verifyPin(body.pin, staffResult.rows[0]!.pin_hash))) {
+          return reply.status(401).send({
+            error: 'Unauthorized',
+            message: 'Invalid PIN',
+          });
+        }
+
+        // Get session ID first
+        const sessionResult = await query<{ id: string }>(
+          `SELECT id FROM staff_sessions WHERE session_token = $1 AND revoked_at IS NULL`,
+          [token]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          return reply.status(401).send({
+            error: 'Unauthorized',
+            message: 'Session not found',
+          });
+        }
+
+        const sessionId = sessionResult.rows[0]!.id;
+
+        // Set reauth_ok_until to 5 minutes from now
+        const reauthOkUntil = new Date(Date.now() + 5 * 60 * 1000);
+
+        await query(
+          `UPDATE staff_sessions
          SET reauth_ok_until = $1
          WHERE session_token = $2
          AND revoked_at IS NULL`,
-        [reauthOkUntil, token]
-      );
+          [reauthOkUntil, token]
+        );
 
-      // Log audit action (use session UUID id, not the token string)
-      await query(
-        `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
+        // Log audit action (use session UUID id, not the token string)
+        await query(
+          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
          VALUES ($1, 'STAFF_REAUTH_PIN', 'staff_session', $2)`,
-        [request.staff.staffId, sessionId]
-      );
+          [request.staff.staffId, sessionId]
+        );
 
-      return reply.send({
-        success: true,
-        reauthOkUntil: reauthOkUntil.toISOString(),
-      });
-    } catch (error) {
-      request.log.error(error, 'Re-auth error');
-      return reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to process re-authentication',
-      });
+        return reply.send({
+          success: true,
+          reauthOkUntil: reauthOkUntil.toISOString(),
+        });
+      } catch (error) {
+        request.log.error(error, 'Re-auth error');
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to process re-authentication',
+        });
+      }
     }
-  });
+  );
 
   /**
    * POST /v1/auth/reauth/webauthn/options - Get WebAuthn options for re-authentication
-   * 
+   *
    * Requires existing session. Returns WebAuthn authentication options for the current staff.
    */
-  fastify.post('/v1/auth/reauth/webauthn/options', {
-    preHandler: [requireAuth],
-  }, async (
-    request,
-    reply
-  ) => {
-    if (!request.staff) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-      });
-    }
-
-    try {
-      // Import WebAuthn utilities
-      const { generateAuthenticationOptions } = await import('@simplewebauthn/server');
-      const {
-        getRpId,
-        generateChallenge,
-        storeChallenge,
-        getStaffCredentials,
-      } = await import('../auth/webauthn.js');
-
-      const rpId = getRpId();
-      const deviceId = request.headers['x-device-id'] as string || 'reauth-device';
-
-      // Get credentials for this staff member
-      const credentials = await getStaffCredentials(request.staff.staffId);
-
-      if (credentials.length === 0) {
-        return reply.status(400).send({
-          error: 'No passkeys registered for this staff member',
+  fastify.post(
+    '/v1/auth/reauth/webauthn/options',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) {
+        return reply.status(401).send({
+          error: 'Unauthorized',
         });
       }
 
-      // Generate challenge
-      const challenge = generateChallenge();
+      try {
+        // Import WebAuthn utilities
+        const { generateAuthenticationOptions } = await import('@simplewebauthn/server');
+        const { getRpId, generateChallenge, storeChallenge, getStaffCredentials } =
+          await import('../auth/webauthn.js');
 
-      // Store challenge with reauth type
-      await storeChallenge(challenge, request.staff.staffId, deviceId, 'reauth');
+        const rpId = getRpId();
+        const deviceId = (request.headers['x-device-id'] as string) || 'reauth-device';
 
-      // Generate authentication options
-      const options = await generateAuthenticationOptions({
-        rpID: rpId,
-        timeout: 120000, // 2 minutes
-        allowCredentials: credentials.map((cred) => ({
-          id: cred.credentialID,
-          type: 'public-key',
-          transports: cred.transports,
-        })),
-        userVerification: 'required',
-      });
+        // Get credentials for this staff member
+        const credentials = await getStaffCredentials(request.staff.staffId);
 
-      return reply.send(options);
-    } catch (error) {
-      request.log.error(error, 'Failed to generate reauth WebAuthn options');
-      return reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to generate re-authentication options',
-      });
+        if (credentials.length === 0) {
+          return reply.status(400).send({
+            error: 'No passkeys registered for this staff member',
+          });
+        }
+
+        // Generate challenge
+        const challenge = generateChallenge();
+
+        // Store challenge with reauth type
+        await storeChallenge(challenge, request.staff.staffId, deviceId, 'reauth');
+
+        // Generate authentication options
+        const options = await generateAuthenticationOptions({
+          rpID: rpId,
+          timeout: 120000, // 2 minutes
+          allowCredentials: credentials.map((cred) => ({
+            id: cred.credentialID,
+            type: 'public-key',
+            transports: cred.transports,
+          })),
+          userVerification: 'required',
+        });
+
+        return reply.send(options);
+      } catch (error) {
+        request.log.error(error, 'Failed to generate reauth WebAuthn options');
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to generate re-authentication options',
+        });
+      }
     }
-  });
+  );
 
   /**
    * POST /v1/auth/reauth/webauthn/verify - Verify WebAuthn re-authentication
-   * 
+   *
    * Requires existing session. Verifies WebAuthn response and sets reauth_ok_until.
    */
   fastify.post<{
     Body: { credentialResponse: unknown; deviceId?: string };
-  }>('/v1/auth/reauth/webauthn/verify', {
-    preHandler: [requireAuth],
-  }, async (request, reply) => {
-    if (!request.staff) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-      });
-    }
+  }>(
+    '/v1/auth/reauth/webauthn/verify',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) {
+        return reply.status(401).send({
+          error: 'Unauthorized',
+        });
+      }
 
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return reply.status(401).send({
-        error: 'Unauthorized',
-      });
-    }
+      const authHeader = request.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return reply.status(401).send({
+          error: 'Unauthorized',
+        });
+      }
 
-    const token = authHeader.substring(7);
-    const deviceId = request.body.deviceId || 'reauth-device';
-    const origin = request.headers.origin || request.headers.host || '';
+      const token = authHeader.substring(7);
+      const deviceId = request.body.deviceId || 'reauth-device';
+      const origin = request.headers.origin || request.headers.host || '';
 
-    try {
-      // Import WebAuthn utilities
-      const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
-      const {
-        getRpId,
-        getRpOrigin,
-        consumeChallenge,
-        getCredentialByCredentialId,
-        updateCredentialSignCount,
-      } = await import('../auth/webauthn.js');
+      try {
+        // Import WebAuthn utilities
+        const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
+        const {
+          getRpId,
+          getRpOrigin,
+          consumeChallenge,
+          getCredentialByCredentialId,
+          updateCredentialSignCount,
+        } = await import('../auth/webauthn.js');
 
-      const rpId = getRpId();
-      const rpOrigin = getRpOrigin(origin);
+        const rpId = getRpId();
+        const rpOrigin = getRpOrigin(origin);
 
-      // Get and consume challenge
-      const challengeResult = await query<{ challenge: string }>(
-        `SELECT challenge FROM webauthn_challenges
+        // Get and consume challenge
+        const challengeResult = await query<{ challenge: string }>(
+          `SELECT challenge FROM webauthn_challenges
          WHERE staff_id = $1
            AND device_id = $2
            AND type = 'reauth'
            AND expires_at > NOW()
          ORDER BY created_at DESC
          LIMIT 1`,
-        [request.staff.staffId, deviceId]
-      );
-
-      if (challengeResult.rows.length === 0) {
-        return reply.status(400).send({
-          error: 'Invalid or expired challenge',
-        });
-      }
-
-      const expectedChallenge = challengeResult.rows[0]!.challenge;
-      await consumeChallenge(expectedChallenge);
-
-      // Get credential
-      const credentialResponse = request.body.credentialResponse as { id: string; rawId?: string };
-      const credentialId = credentialResponse.id || credentialResponse.rawId || '';
-      const credentialData = await getCredentialByCredentialId(credentialId);
-
-      if (!credentialData) {
-        return reply.status(400).send({
-          error: 'Credential not found',
-        });
-      }
-
-      // Verify authentication response
-      const verification = await verifyAuthenticationResponse({
-        response: request.body.credentialResponse as any,
-        expectedChallenge,
-        expectedOrigin: rpOrigin,
-        expectedRPID: rpId,
-        authenticator: credentialData.credential,
-        requireUserVerification: true,
-      });
-
-      if (!verification.verified) {
-        return reply.status(400).send({
-          error: 'Authentication verification failed',
-        });
-      }
-
-      // Update credential sign count
-      if (verification.authenticationInfo) {
-        await updateCredentialSignCount(
-          credentialId,
-          verification.authenticationInfo.newCounter
+          [request.staff.staffId, deviceId]
         );
-      }
 
-      // Get session ID first
-      const sessionResult = await query<{ id: string }>(
-        `SELECT id FROM staff_sessions WHERE session_token = $1 AND revoked_at IS NULL`,
-        [token]
-      );
+        if (challengeResult.rows.length === 0) {
+          return reply.status(400).send({
+            error: 'Invalid or expired challenge',
+          });
+        }
 
-      if (sessionResult.rows.length === 0) {
-        return reply.status(401).send({
-          error: 'Unauthorized',
-          message: 'Session not found',
+        const expectedChallenge = challengeResult.rows[0]!.challenge;
+        await consumeChallenge(expectedChallenge);
+
+        // Get credential
+        const credentialResponse = request.body.credentialResponse as {
+          id: string;
+          rawId?: string;
+        };
+        const credentialId = credentialResponse.id || credentialResponse.rawId || '';
+        const credentialData = await getCredentialByCredentialId(credentialId);
+
+        if (!credentialData) {
+          return reply.status(400).send({
+            error: 'Credential not found',
+          });
+        }
+
+        // Verify authentication response
+        const verification = await verifyAuthenticationResponse({
+          response: request.body.credentialResponse as any,
+          expectedChallenge,
+          expectedOrigin: rpOrigin,
+          expectedRPID: rpId,
+          authenticator: credentialData.credential,
+          requireUserVerification: true,
         });
-      }
 
-      const sessionId = sessionResult.rows[0]!.id;
+        if (!verification.verified) {
+          return reply.status(400).send({
+            error: 'Authentication verification failed',
+          });
+        }
 
-      // Set reauth_ok_until to 5 minutes from now
-      const reauthOkUntil = new Date(Date.now() + 5 * 60 * 1000);
+        // Update credential sign count
+        if (verification.authenticationInfo) {
+          await updateCredentialSignCount(credentialId, verification.authenticationInfo.newCounter);
+        }
 
-      await query(
-        `UPDATE staff_sessions
+        // Get session ID first
+        const sessionResult = await query<{ id: string }>(
+          `SELECT id FROM staff_sessions WHERE session_token = $1 AND revoked_at IS NULL`,
+          [token]
+        );
+
+        if (sessionResult.rows.length === 0) {
+          return reply.status(401).send({
+            error: 'Unauthorized',
+            message: 'Session not found',
+          });
+        }
+
+        const sessionId = sessionResult.rows[0]!.id;
+
+        // Set reauth_ok_until to 5 minutes from now
+        const reauthOkUntil = new Date(Date.now() + 5 * 60 * 1000);
+
+        await query(
+          `UPDATE staff_sessions
          SET reauth_ok_until = $1
          WHERE session_token = $2
          AND revoked_at IS NULL`,
-        [reauthOkUntil, token]
-      );
+          [reauthOkUntil, token]
+        );
 
-      // Log audit action (use session UUID id, not the token string)
-      await query(
-        `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
+        // Log audit action (use session UUID id, not the token string)
+        await query(
+          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
          VALUES ($1, 'STAFF_REAUTH_WEBAUTHN', 'staff_session', $2)`,
-        [request.staff.staffId, sessionId]
-      );
+          [request.staff.staffId, sessionId]
+        );
 
-      return reply.send({
-        success: true,
-        reauthOkUntil: reauthOkUntil.toISOString(),
-      });
-    } catch (error) {
-      request.log.error(error, 'Re-auth WebAuthn error');
-      return reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to process re-authentication',
-      });
+        return reply.send({
+          success: true,
+          reauthOkUntil: reauthOkUntil.toISOString(),
+        });
+      } catch (error) {
+        request.log.error(error, 'Re-auth WebAuthn error');
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to process re-authentication',
+        });
+      }
     }
-  });
+  );
 }
-
-

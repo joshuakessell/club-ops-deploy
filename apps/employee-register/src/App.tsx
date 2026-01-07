@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { type ActiveVisit, type CheckoutRequestSummary, type CheckoutChecklist, type WebSocketEvent, type CheckoutRequestedPayload, type CheckoutClaimedPayload, type CheckoutUpdatedPayload, type SessionUpdatedPayload, type AssignmentCreatedPayload, type AssignmentFailedPayload, type CustomerConfirmedPayload, type CustomerDeclinedPayload, type SelectionProposedPayload, type SelectionLockedPayload, type SelectionAcknowledgedPayload, type SelectionForcedPayload } from '@club-ops/shared';
+import {
+  type ActiveVisit,
+  type CheckoutRequestSummary,
+  type CheckoutChecklist,
+  type WebSocketEvent,
+  type CheckoutRequestedPayload,
+  type CheckoutClaimedPayload,
+  type CheckoutUpdatedPayload,
+  type SessionUpdatedPayload,
+  type AssignmentCreatedPayload,
+  type AssignmentFailedPayload,
+  type CustomerConfirmedPayload,
+  type CustomerDeclinedPayload,
+  type SelectionProposedPayload,
+  type SelectionLockedPayload,
+  type SelectionAcknowledgedPayload,
+  type SelectionForcedPayload,
+} from '@club-ops/shared';
 import { RegisterSignIn } from './RegisterSignIn';
 import { InventorySelector } from './InventorySelector';
 import type { IdScanPayload } from '@club-ops/shared';
@@ -113,7 +130,9 @@ function App() {
   const [agreementSigned, setAgreementSigned] = useState(false);
   // Check-in mode is now auto-detected server-side based on active visits/assignments.
   const [selectedRentalType, setSelectedRentalType] = useState<string | null>(null);
-  const [checkoutRequests, setCheckoutRequests] = useState<Map<string, CheckoutRequestSummary>>(new Map());
+  const [checkoutRequests, setCheckoutRequests] = useState<Map<string, CheckoutRequestSummary>>(
+    new Map()
+  );
   const [selectedCheckoutRequest, setSelectedCheckoutRequest] = useState<string | null>(null);
   const [, setCheckoutChecklist] = useState<CheckoutChecklist>({});
   const [checkoutItemsConfirmed, setCheckoutItemsConfirmed] = useState(false);
@@ -121,46 +140,65 @@ function App() {
   const [customerSelectedType, setCustomerSelectedType] = useState<string | null>(null);
   const [waitlistDesiredTier, setWaitlistDesiredTier] = useState<string | null>(null);
   const [waitlistBackupType, setWaitlistBackupType] = useState<string | null>(null);
-  const [selectedInventoryItem, setSelectedInventoryItem] = useState<{ type: 'room' | 'locker'; id: string; number: string; tier: string } | null>(null);
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState<{
+    type: 'room' | 'locker';
+    id: string;
+    number: string;
+    tier: string;
+  } | null>(null);
   const [proposedRentalType, setProposedRentalType] = useState<string | null>(null);
   const [proposedBy, setProposedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
-  const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
+  const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(
+    null
+  );
   const [selectionAcknowledged, setSelectionAcknowledged] = useState(true);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [showCustomerConfirmationPending, setShowCustomerConfirmationPending] = useState(false);
-  const [customerConfirmationType, setCustomerConfirmationType] = useState<{ requested: string; selected: string; number: string } | null>(null);
+  const [customerConfirmationType, setCustomerConfirmationType] = useState<{
+    requested: string;
+    selected: string;
+    number: string;
+  } | null>(null);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
-  const [paymentQuote, setPaymentQuote] = useState<{ total: number; lineItems: Array<{ description: string; amount: number }>; messages: string[] } | null>(null);
+  const [paymentQuote, setPaymentQuote] = useState<{
+    total: number;
+    lineItems: Array<{ description: string; amount: number }>;
+    messages: string[];
+  } | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'DUE' | 'PAID' | null>(null);
   const [pastDueBlocked, setPastDueBlocked] = useState(false);
-  const [waitlistEntries, setWaitlistEntries] = useState<Array<{
-    id: string;
-    visitId: string;
-    checkinBlockId: string;
-    desiredTier: string;
-    backupTier: string;
-    status: string;
-    createdAt: string;
-    offeredAt?: string;
-    displayIdentifier: string;
-    currentRentalType: string;
-    customerName?: string;
-  }>>([]);
+  const [waitlistEntries, setWaitlistEntries] = useState<
+    Array<{
+      id: string;
+      visitId: string;
+      checkinBlockId: string;
+      desiredTier: string;
+      backupTier: string;
+      status: string;
+      createdAt: string;
+      offeredAt?: string;
+      displayIdentifier: string;
+      currentRentalType: string;
+      customerName?: string;
+    }>
+  >([]);
   const [showUpgradesPanel, setShowUpgradesPanel] = useState(false);
   const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<string | null>(null);
   const [upgradePaymentIntentId, setUpgradePaymentIntentId] = useState<string | null>(null);
   const [upgradeFee, setUpgradeFee] = useState<number | null>(null);
   const [waitlistWidgetOpen, setWaitlistWidgetOpen] = useState(false);
-  
+
   // Customer info state
-  const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(undefined);
+  const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(
+    undefined
+  );
   const [customerDobMonthDay, setCustomerDobMonthDay] = useState<string | undefined>(undefined);
   const [customerLastVisitAt, setCustomerLastVisitAt] = useState<string | undefined>(undefined);
   const [customerNotes, setCustomerNotes] = useState<string | undefined>(undefined);
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
-  
+
   // Past due state
   const [showPastDueModal, setShowPastDueModal] = useState(false);
   const [showManagerBypassModal, setShowManagerBypassModal] = useState(false);
@@ -172,19 +210,21 @@ function App() {
   const fetchWaitlistRef = useRef<(() => Promise<void>) | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
-  const [customerSuggestions, setCustomerSuggestions] = useState<Array<{
-    id: string;
-    name: string;
-    firstName: string;
-    lastName: string;
-    dobMonthDay?: string;
-    membershipNumber?: string;
-    disambiguator: string;
-  }>>([]);
+  const [customerSuggestions, setCustomerSuggestions] = useState<
+    Array<{
+      id: string;
+      name: string;
+      firstName: string;
+      lastName: string;
+      dobMonthDay?: string;
+      membershipNumber?: string;
+      disambiguator: string;
+    }>
+  >([]);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedCustomerLabel, setSelectedCustomerLabel] = useState<string | null>(null);
-  
+
   // Assignment completion state
   const [assignedResourceType, setAssignedResourceType] = useState<'room' | 'locker' | null>(null);
   const [assignedResourceNumber, setAssignedResourceNumber] = useState<string | null>(null);
@@ -201,14 +241,14 @@ function App() {
       if (typeof envDeviceId === 'string' && envDeviceId.trim()) {
         return envDeviceId;
       }
-      
+
       let baseId: string | null = null;
       try {
         baseId = localStorage.getItem('device_id');
       } catch {
         // localStorage might not be available (e.g., private browsing)
       }
-      
+
       if (!baseId) {
         baseId = `device-${generateUUID()}`;
         try {
@@ -224,7 +264,7 @@ function App() {
       } catch {
         // sessionStorage might not be available
       }
-      
+
       if (!instanceId) {
         instanceId = generateUUID();
         try {
@@ -248,7 +288,7 @@ function App() {
     registerNumber: number;
     deviceId: string;
   } | null>(null);
-  
+
   // Derive lane from register number
   const lane = registerSession ? `lane-${registerSession.registerNumber}` : 'lane-1';
 
@@ -262,7 +302,7 @@ function App() {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.sessionToken}`,
+              Authorization: `Bearer ${session.sessionToken}`,
             },
             body: JSON.stringify({ deviceId }),
           });
@@ -273,7 +313,7 @@ function App() {
         await fetch(`${API_BASE}/v1/auth/logout`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${session.sessionToken}`,
+            Authorization: `Bearer ${session.sessionToken}`,
           },
         });
       }
@@ -302,16 +342,19 @@ function App() {
 
       setCustomerSearchLoading(true);
       try {
-        const response = await fetch(`/api/v1/customers/search?q=${encodeURIComponent(query)}&limit=10`, {
-          headers: {
-            'Authorization': `Bearer ${session.sessionToken}`,
-          },
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          `/api/v1/customers/search?q=${encodeURIComponent(query)}&limit=10`,
+          {
+            headers: {
+              Authorization: `Bearer ${session.sessionToken}`,
+            },
+            signal: controller.signal,
+          }
+        );
         if (!response.ok) {
           throw new Error('Search failed');
         }
-        const data = await response.json() as { suggestions?: typeof customerSuggestions };
+        const data = (await response.json()) as { suggestions?: typeof customerSuggestions };
         setCustomerSuggestions(data.suggestions || []);
       } catch (error) {
         if (!(error instanceof DOMException && error.name === 'AbortError')) {
@@ -348,7 +391,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           customerId: selectedCustomerId,
@@ -360,7 +403,7 @@ function App() {
         throw new Error(getErrorMessage(payload) || 'Failed to start session');
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         sessionId?: string;
         customerName?: string;
         membershipNumber?: string;
@@ -380,7 +423,6 @@ function App() {
     }
   };
 
-
   // Load staff session from localStorage (created after register sign-in)
   useEffect(() => {
     const stored = localStorage.getItem('staff_session');
@@ -394,27 +436,30 @@ function App() {
     }
   }, []);
 
-  const handleRegisterSignIn = useCallback((session: {
-    employeeId: string;
-    employeeName: string;
-    registerNumber: number;
-    deviceId: string;
-  }) => {
-    setRegisterSession(session);
-    // Refresh staff session from localStorage after register sign-in
-    const stored = localStorage.getItem('staff_session');
-    if (stored) {
-      try {
-        const parsed: unknown = JSON.parse(stored) as unknown;
-        const staffSession = parseStaffSession(parsed);
-        if (staffSession) {
-          setSession(staffSession);
+  const handleRegisterSignIn = useCallback(
+    (session: {
+      employeeId: string;
+      employeeName: string;
+      registerNumber: number;
+      deviceId: string;
+    }) => {
+      setRegisterSession(session);
+      // Refresh staff session from localStorage after register sign-in
+      const stored = localStorage.getItem('staff_session');
+      if (stored) {
+        try {
+          const parsed: unknown = JSON.parse(stored) as unknown;
+          const staffSession = parseStaffSession(parsed);
+          if (staffSession) {
+            setSession(staffSession);
+          }
+        } catch {
+          setSession(null);
         }
-      } catch {
-        setSession(null);
       }
-    }
-  }, [setRegisterSession, setSession]);
+    },
+    [setRegisterSession, setSession]
+  );
 
   const handleIdScan = async (
     payload: IdScanPayload,
@@ -432,7 +477,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify(payload),
       });
@@ -495,7 +540,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           idScanValue,
@@ -516,12 +561,12 @@ function App() {
         sessionId?: string;
       }>(response);
       console.log('Session started:', data);
-      
+
       // Update local state
       if (data.customerName) setCustomerName(data.customerName);
       if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
       if (data.sessionId) setCurrentSessionId(data.sessionId);
-      
+
       // Clear manual entry mode if active
       if (manualEntry) {
         setManualEntry(false);
@@ -553,7 +598,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({ customerId }),
       });
@@ -607,7 +652,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           laneId: lane,
@@ -666,7 +711,11 @@ function App() {
             jurisdiction: extracted.jurisdiction,
           },
         });
-        return { outcome: 'no_match', message: 'No match found. Create new account?', canCreate: true };
+        return {
+          outcome: 'no_match',
+          message: 'No match found. Create new account?',
+          canCreate: true,
+        };
       }
 
       // Membership/general barcode no-match: do not create implicitly.
@@ -704,7 +753,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           idScanValue,
@@ -736,7 +785,10 @@ function App() {
       return await startLaneSessionByCustomerId(customerId, { suppressAlerts: true });
     } catch (error) {
       console.error('Failed to create customer from scan:', error);
-      return { outcome: 'error', message: error instanceof Error ? error.message : 'Failed to create customer' };
+      return {
+        outcome: 'error',
+        message: error instanceof Error ? error.message : 'Failed to create customer',
+      };
     }
   };
 
@@ -750,7 +802,7 @@ function App() {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/reset`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
 
@@ -793,7 +845,7 @@ function App() {
       const response = await fetch(`${API_BASE}/v1/checkout/${requestId}/claim`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
 
@@ -804,7 +856,7 @@ function App() {
 
       await response.json().catch(() => null);
       setSelectedCheckoutRequest(requestId);
-      
+
       // Fetch the checkout request details to get checklist
       // For now, we'll get it from the request summary
       const request = checkoutRequests.get(requestId);
@@ -831,7 +883,7 @@ function App() {
       const response = await fetch(`${API_BASE}/v1/checkout/${requestId}/confirm-items`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
 
@@ -858,7 +910,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({}),
       });
@@ -897,7 +949,7 @@ function App() {
       const response = await fetch(`${API_BASE}/v1/checkout/${requestId}/complete`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
 
@@ -928,23 +980,23 @@ function App() {
       const [activeResponse, offeredResponse] = await Promise.all([
         fetch(`${API_BASE}/v1/waitlist?status=ACTIVE`, {
           headers: {
-            'Authorization': `Bearer ${session.sessionToken}`,
+            Authorization: `Bearer ${session.sessionToken}`,
           },
         }),
         fetch(`${API_BASE}/v1/waitlist?status=OFFERED`, {
           headers: {
-            'Authorization': `Bearer ${session.sessionToken}`,
+            Authorization: `Bearer ${session.sessionToken}`,
           },
         }),
       ]);
 
       const allEntries: typeof waitlistEntries = [];
-      
+
       if (activeResponse.ok) {
         const activeData = await readJson<{ entries?: typeof waitlistEntries }>(activeResponse);
         allEntries.push(...(activeData.entries || []));
       }
-      
+
       if (offeredResponse.ok) {
         const offeredData = await readJson<{ entries?: typeof waitlistEntries }>(offeredResponse);
         allEntries.push(...(offeredData.entries || []));
@@ -965,7 +1017,9 @@ function App() {
     }
   }, [session?.sessionToken]);
 
-  const topWaitlistEntry = waitlistEntries.find(e => e.status === 'ACTIVE' || e.status === 'OFFERED');
+  const topWaitlistEntry = waitlistEntries.find(
+    (e) => e.status === 'ACTIVE' || e.status === 'OFFERED'
+  );
   const waitlistDisplayNumber = topWaitlistEntry?.displayIdentifier || '...';
   const waitlistInteractive = !!topWaitlistEntry;
   const sessionActive = !!currentSessionId;
@@ -994,7 +1048,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           waitlistId,
@@ -1042,33 +1096,37 @@ function App() {
 
     // Connect to WebSocket (use Vite proxy)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`);
+    const ws = new WebSocket(
+      `${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`
+    );
 
     ws.onopen = () => {
       console.log('WebSocket connected');
       setWsConnected(true);
-      
+
       // Subscribe to events
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        events: [
-          'CHECKOUT_REQUESTED', 
-          'CHECKOUT_CLAIMED', 
-          'CHECKOUT_UPDATED', 
-          'CHECKOUT_COMPLETED',
-          'SESSION_UPDATED',
-          'ROOM_STATUS_CHANGED',
-          'INVENTORY_UPDATED',
-          'ASSIGNMENT_CREATED',
-          'ASSIGNMENT_FAILED',
-          'CUSTOMER_CONFIRMED',
-          'CUSTOMER_DECLINED',
-          'WAITLIST_UPDATED',
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'SELECTION_ACKNOWLEDGED',
-        ],
-      }));
+      ws.send(
+        JSON.stringify({
+          type: 'subscribe',
+          events: [
+            'CHECKOUT_REQUESTED',
+            'CHECKOUT_CLAIMED',
+            'CHECKOUT_UPDATED',
+            'CHECKOUT_COMPLETED',
+            'SESSION_UPDATED',
+            'ROOM_STATUS_CHANGED',
+            'INVENTORY_UPDATED',
+            'ASSIGNMENT_CREATED',
+            'ASSIGNMENT_FAILED',
+            'CUSTOMER_CONFIRMED',
+            'CUSTOMER_DECLINED',
+            'WAITLIST_UPDATED',
+            'SELECTION_PROPOSED',
+            'SELECTION_LOCKED',
+            'SELECTION_ACKNOWLEDGED',
+          ],
+        })
+      );
     };
 
     ws.onclose = () => {
@@ -1085,14 +1143,14 @@ function App() {
 
         if (message.type === 'CHECKOUT_REQUESTED') {
           const payload = message.payload as CheckoutRequestedPayload;
-          setCheckoutRequests(prev => {
+          setCheckoutRequests((prev) => {
             const next = new Map(prev);
             next.set(payload.request.requestId, payload.request);
             return next;
           });
         } else if (message.type === 'CHECKOUT_CLAIMED') {
           const payload = message.payload as CheckoutClaimedPayload;
-          setCheckoutRequests(prev => {
+          setCheckoutRequests((prev) => {
             const next = new Map(prev);
             next.delete(payload.requestId);
             return next;
@@ -1105,7 +1163,7 @@ function App() {
           }
         } else if (message.type === 'CHECKOUT_COMPLETED') {
           const payload = message.payload as { requestId: string };
-          setCheckoutRequests(prev => {
+          setCheckoutRequests((prev) => {
             const next = new Map(prev);
             next.delete(payload.requestId);
             return next;
@@ -1185,7 +1243,10 @@ function App() {
           }
 
           // If server cleared the lane session (COMPLETED with empty customer name), reset local UI.
-          if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
+          if (
+            payload.status === 'COMPLETED' &&
+            (!payload.customerName || payload.customerName === '')
+          ) {
             setCurrentSessionId(null);
             setCustomerName('');
             setMembershipNumber('');
@@ -1270,7 +1331,12 @@ function App() {
     return () => ws.close();
   }, [selectedCheckoutRequest, lane]);
 
-  const handleInventorySelect = (type: 'room' | 'locker', id: string, number: string, tier: string) => {
+  const handleInventorySelect = (
+    type: 'room' | 'locker',
+    id: string,
+    number: string,
+    tier: string
+  ) => {
     // Check if employee selected different type than customer requested
     if (customerSelectedType && tier !== customerSelectedType) {
       // Require customer confirmation
@@ -1280,12 +1346,12 @@ function App() {
         number,
       });
       setShowCustomerConfirmationPending(true);
-      
+
       // Send confirmation request to customer kiosk via WebSocket
       // This would be handled by the API/WebSocket broadcaster
       // For now, we'll show a modal
     }
-    
+
     setSelectedInventoryItem({ type, id, number, tier });
   };
 
@@ -1306,7 +1372,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           rentalType,
@@ -1323,7 +1389,9 @@ function App() {
       setProposedBy('EMPLOYEE');
     } catch (error) {
       console.error('Failed to propose selection:', error);
-      alert(error instanceof Error ? error.message : 'Failed to propose selection. Please try again.');
+      alert(
+        error instanceof Error ? error.message : 'Failed to propose selection. Please try again.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1340,7 +1408,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           confirmedBy: 'EMPLOYEE',
@@ -1358,7 +1426,9 @@ function App() {
       setCustomerSelectedType(proposedRentalType);
     } catch (error) {
       console.error('Failed to confirm selection:', error);
-      alert(error instanceof Error ? error.message : 'Failed to confirm selection. Please try again.');
+      alert(
+        error instanceof Error ? error.message : 'Failed to confirm selection. Please try again.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1390,24 +1460,27 @@ function App() {
     }
 
     if (!agreementSigned) {
-      alert('Agreement must be signed before assignment. Please wait for customer to sign the agreement.');
+      alert(
+        'Agreement must be signed before assignment. Please wait for customer to sign the agreement.'
+      );
       return;
     }
 
     if (paymentStatus !== 'PAID') {
-      alert('Payment must be marked as paid before assignment. Please mark payment as paid in Square first.');
+      alert(
+        'Payment must be marked as paid before assignment. Please mark payment as paid in Square first.'
+      );
       return;
     }
 
     setIsSubmitting(true);
     try {
-
       // Use new check-in assign endpoint
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/assign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           resourceType: selectedInventoryItem.type,
@@ -1418,7 +1491,11 @@ function App() {
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
         const msg = getErrorMessage(errorPayload);
-        if (isRecord(errorPayload) && (errorPayload.raceLost === true || (typeof msg === 'string' && msg.includes('already assigned')))) {
+        if (
+          isRecord(errorPayload) &&
+          (errorPayload.raceLost === true ||
+            (typeof msg === 'string' && msg.includes('already assigned')))
+        ) {
           // Race condition - refresh inventory and re-select
           alert('Item no longer available. Refreshing inventory...');
           setSelectedInventoryItem(null);
@@ -1429,7 +1506,7 @@ function App() {
       } else {
         const data = await readJson<{ needsConfirmation?: boolean }>(response);
         console.log('Assignment successful:', data);
-        
+
         // If cross-type assignment, wait for customer confirmation
         if (data.needsConfirmation === true) {
           setShowCustomerConfirmationPending(true);
@@ -1456,7 +1533,7 @@ function App() {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/create-payment-intent`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
 
@@ -1467,7 +1544,11 @@ function App() {
 
       const data = await readJson<{
         paymentIntentId?: string;
-        quote?: { total: number; lineItems: Array<{ description: string; amount: number }>; messages: string[] };
+        quote?: {
+          total: number;
+          lineItems: Array<{ description: string; amount: number }>;
+          messages: string[];
+        };
       }>(response);
       if (typeof data.paymentIntentId === 'string') {
         setPaymentIntentId(data.paymentIntentId);
@@ -1491,7 +1572,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({
           squareTransactionId: undefined, // Would come from Square POS integration
@@ -1525,20 +1606,25 @@ function App() {
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/manual-signature-override`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          sessionId: currentSessionId,
-        }),
-      });
+      const response = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/manual-signature-override`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({
+            sessionId: currentSessionId,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to process manual signature override');
+        throw new Error(
+          getErrorMessage(errorPayload) || 'Failed to process manual signature override'
+        );
       }
 
       // Success - WebSocket will update the UI
@@ -1552,7 +1638,10 @@ function App() {
   };
 
   // Past-due payment handlers
-  const handlePastDuePayment = async (outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE', declineReason?: string) => {
+  const handlePastDuePayment = async (
+    outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE',
+    declineReason?: string
+  ) => {
     if (!session?.sessionToken || !currentSessionId) {
       alert('Not authenticated');
       return;
@@ -1564,7 +1653,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({ outcome, declineReason }),
       });
@@ -1600,7 +1689,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({ managerId, managerPin }),
       });
@@ -1634,7 +1723,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({ note: newNoteText.trim() }),
       });
@@ -1655,7 +1744,10 @@ function App() {
   };
 
   // Pay-first demo handlers
-  const handleDemoPayment = async (outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE', declineReason?: string) => {
+  const handleDemoPayment = async (
+    outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE',
+    declineReason?: string
+  ) => {
     if (!session?.sessionToken || !currentSessionId) {
       alert('Not authenticated');
       return;
@@ -1667,10 +1759,10 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
-        body: JSON.stringify({ 
-          outcome, 
+        body: JSON.stringify({
+          outcome,
           declineReason,
           registerNumber: registerSession?.registerNumber,
         }),
@@ -1706,7 +1798,7 @@ function App() {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/reset`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
 
@@ -1747,7 +1839,7 @@ function App() {
     if (showManagerBypassModal && session?.sessionToken) {
       fetch(`${API_BASE}/v1/employees/available`, {
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       })
         .then((res) => res.json())
@@ -1757,7 +1849,10 @@ function App() {
             return;
           }
           const managers = data.employees
-            .filter((e): e is { id: string; name: string; role: string } => isRecord(e) && typeof e.role === 'string')
+            .filter(
+              (e): e is { id: string; name: string; role: string } =>
+                isRecord(e) && typeof e.role === 'string'
+            )
             .filter((e) => e.role === 'ADMIN')
             .map((e) => ({ id: String(e.id), name: String(e.name) }));
           setManagerList(managers);
@@ -1774,326 +1869,378 @@ function App() {
         <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading...</div>
       ) : (
         <div className="container" style={{ marginTop: '60px', padding: '1.5rem' }}>
-      {/* Checkout Request Notifications */}
-      {checkoutRequests.size > 0 && !selectedCheckoutRequest && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          background: '#1e293b',
-          borderBottom: '2px solid #3b82f6',
-          zIndex: 1000,
-          padding: '1rem',
-          maxHeight: '200px',
-          overflowY: 'auto',
-        }}>
-          {Array.from(checkoutRequests.values()).map((request) => {
-            const lateMinutes = request.lateMinutes;
-            const feeAmount = request.lateFeeAmount;
-            const banApplied = request.banApplied;
-            
-            return (
-              <div
-                key={request.requestId}
-                onClick={() => void handleClaimCheckout(request.requestId)}
-                style={{
-                  padding: '1rem',
-                  marginBottom: '0.5rem',
-                  background: '#0f172a',
-                  border: '2px solid #3b82f6',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#1e293b';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = '#0f172a';
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}>
-                      {request.customerName}
-                      {request.membershipNumber && ` (${request.membershipNumber})`}
+          {/* Checkout Request Notifications */}
+          {checkoutRequests.size > 0 && !selectedCheckoutRequest && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                background: '#1e293b',
+                borderBottom: '2px solid #3b82f6',
+                zIndex: 1000,
+                padding: '1rem',
+                maxHeight: '200px',
+                overflowY: 'auto',
+              }}
+            >
+              {Array.from(checkoutRequests.values()).map((request) => {
+                const lateMinutes = request.lateMinutes;
+                const feeAmount = request.lateFeeAmount;
+                const banApplied = request.banApplied;
+
+                return (
+                  <div
+                    key={request.requestId}
+                    onClick={() => void handleClaimCheckout(request.requestId)}
+                    style={{
+                      padding: '1rem',
+                      marginBottom: '0.5rem',
+                      background: '#0f172a',
+                      border: '2px solid #3b82f6',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#1e293b';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#0f172a';
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}
+                        >
+                          {request.customerName}
+                          {request.membershipNumber && ` (${request.membershipNumber})`}
+                        </div>
+                        <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                          {request.rentalType} •{' '}
+                          {request.roomNumber || request.lockerNumber || 'N/A'}
+                        </div>
+                        <div
+                          style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}
+                        >
+                          Scheduled: {new Date(request.scheduledCheckoutAt).toLocaleString()} •
+                          Current: {new Date(request.currentTime).toLocaleString()} •
+                          {lateMinutes > 0 ? (
+                            <span style={{ color: '#f59e0b' }}>{lateMinutes} min late</span>
+                          ) : (
+                            <span>On time</span>
+                          )}
+                        </div>
+                        {feeAmount > 0 && (
+                          <div
+                            style={{
+                              fontSize: '0.875rem',
+                              color: '#f59e0b',
+                              marginTop: '0.25rem',
+                              fontWeight: 600,
+                            }}
+                          >
+                            Late fee: ${feeAmount.toFixed(2)}
+                            {banApplied && ' • 30-day ban applied'}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleClaimCheckout(request.requestId);
+                        }}
+                        style={{
+                          padding: '0.5rem 1rem',
+                          background: '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                        }}
+                      >
+                        Claim
+                      </button>
                     </div>
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                      {request.rentalType} • {request.roomNumber || request.lockerNumber || 'N/A'}
-                    </div>
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                      Scheduled: {new Date(request.scheduledCheckoutAt).toLocaleString()} • 
-                      Current: {new Date(request.currentTime).toLocaleString()} • 
-                      {lateMinutes > 0 ? (
-                        <span style={{ color: '#f59e0b' }}>{lateMinutes} min late</span>
-                      ) : (
-                        <span>On time</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Checkout Verification Screen */}
+          {selectedCheckoutRequest &&
+            (() => {
+              const request = checkoutRequests.get(selectedCheckoutRequest);
+              if (!request) return null;
+
+              return (
+                <div
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0, 0, 0, 0.8)',
+                    zIndex: 2000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '2rem',
+                  }}
+                >
+                  <div
+                    style={{
+                      background: '#1e293b',
+                      border: '2px solid #3b82f6',
+                      borderRadius: '12px',
+                      padding: '2rem',
+                      maxWidth: '600px',
+                      width: '100%',
+                      maxHeight: '90vh',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>
+                      Checkout Verification
+                    </h2>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <strong>Customer:</strong> {request.customerName}
+                        {request.membershipNumber && ` (${request.membershipNumber})`}
+                      </div>
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <strong>Rental:</strong> {request.rentalType} •{' '}
+                        {request.roomNumber || request.lockerNumber || 'N/A'}
+                      </div>
+                      <div style={{ marginBottom: '0.5rem' }}>
+                        <strong>Scheduled Checkout:</strong>{' '}
+                        {new Date(request.scheduledCheckoutAt).toLocaleString()}
+                      </div>
+                      {request.lateMinutes > 0 && (
+                        <div style={{ marginBottom: '0.5rem', color: '#f59e0b' }}>
+                          <strong>Late:</strong> {request.lateMinutes} minutes
+                        </div>
+                      )}
+                      {request.lateFeeAmount > 0 && (
+                        <div style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
+                          <strong>Late Fee:</strong> ${request.lateFeeAmount.toFixed(2)}
+                          {request.banApplied && ' • 30-day ban applied'}
+                        </div>
                       )}
                     </div>
-                    {feeAmount > 0 && (
-                      <div style={{ fontSize: '0.875rem', color: '#f59e0b', marginTop: '0.25rem', fontWeight: 600 }}>
-                        Late fee: ${feeAmount.toFixed(2)}
-                        {banApplied && ' • 30-day ban applied'}
+
+                    <div
+                      style={{
+                        marginBottom: '1.5rem',
+                        padding: '1rem',
+                        background: '#0f172a',
+                        borderRadius: '8px',
+                      }}
+                    >
+                      <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>
+                        Customer Checklist:
                       </div>
-                    )}
+                      <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                        (Items customer marked as returned)
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1rem',
+                        marginBottom: '1.5rem',
+                      }}
+                    >
+                      <button
+                        onClick={() => void handleConfirmItems(selectedCheckoutRequest)}
+                        disabled={checkoutItemsConfirmed}
+                        style={{
+                          padding: '0.75rem',
+                          background: checkoutItemsConfirmed ? '#10b981' : '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: checkoutItemsConfirmed ? 'default' : 'pointer',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {checkoutItemsConfirmed ? '✓ Items Confirmed' : 'Confirm Items Returned'}
+                      </button>
+
+                      {request.lateFeeAmount > 0 && (
+                        <button
+                          onClick={() => void handleMarkFeePaid(selectedCheckoutRequest)}
+                          disabled={checkoutFeePaid}
+                          style={{
+                            padding: '0.75rem',
+                            background: checkoutFeePaid ? '#10b981' : '#f59e0b',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: checkoutFeePaid ? 'default' : 'pointer',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {checkoutFeePaid ? '✓ Fee Marked Paid' : 'Mark Late Fee Paid'}
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => void handleCompleteCheckout(selectedCheckoutRequest)}
+                        disabled={
+                          !checkoutItemsConfirmed ||
+                          (request.lateFeeAmount > 0 && !checkoutFeePaid) ||
+                          isSubmitting
+                        }
+                        style={{
+                          padding: '0.75rem',
+                          background:
+                            !checkoutItemsConfirmed ||
+                            (request.lateFeeAmount > 0 && !checkoutFeePaid)
+                              ? '#475569'
+                              : '#10b981',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor:
+                            !checkoutItemsConfirmed ||
+                            (request.lateFeeAmount > 0 && !checkoutFeePaid)
+                              ? 'not-allowed'
+                              : 'pointer',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {isSubmitting ? 'Processing...' : 'Complete Checkout'}
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setSelectedCheckoutRequest(null);
+                        setCheckoutChecklist({});
+                        setCheckoutItemsConfirmed(false);
+                        setCheckoutFeePaid(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: 'transparent',
+                        color: '#94a3b8',
+                        border: '1px solid #475569',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handleClaimCheckout(request.requestId);
-                    }}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      background: '#3b82f6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Claim
-                  </button>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })()}
 
-      {/* Checkout Verification Screen */}
-      {selectedCheckoutRequest && (() => {
-        const request = checkoutRequests.get(selectedCheckoutRequest);
-        if (!request) return null;
-        
-        return (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.8)',
-            zIndex: 2000,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '2rem',
-          }}>
-            <div style={{
-              background: '#1e293b',
-              border: '2px solid #3b82f6',
-              borderRadius: '12px',
-              padding: '2rem',
-              maxWidth: '600px',
-              width: '100%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            }}>
-              <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>
-                Checkout Verification
-              </h2>
-              
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <strong>Customer:</strong> {request.customerName}
-                  {request.membershipNumber && ` (${request.membershipNumber})`}
-                </div>
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <strong>Rental:</strong> {request.rentalType} • {request.roomNumber || request.lockerNumber || 'N/A'}
-                </div>
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <strong>Scheduled Checkout:</strong> {new Date(request.scheduledCheckoutAt).toLocaleString()}
-                </div>
-                {request.lateMinutes > 0 && (
-                  <div style={{ marginBottom: '0.5rem', color: '#f59e0b' }}>
-                    <strong>Late:</strong> {request.lateMinutes} minutes
-                  </div>
-                )}
-                {request.lateFeeAmount > 0 && (
-                  <div style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
-                    <strong>Late Fee:</strong> ${request.lateFeeAmount.toFixed(2)}
-                    {request.banApplied && ' • 30-day ban applied'}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#0f172a', borderRadius: '8px' }}>
-                <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>Customer Checklist:</div>
-                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                  (Items customer marked as returned)
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-                <button
-                  onClick={() => void handleConfirmItems(selectedCheckoutRequest)}
-                  disabled={checkoutItemsConfirmed}
-                  style={{
-                    padding: '0.75rem',
-                    background: checkoutItemsConfirmed ? '#10b981' : '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: checkoutItemsConfirmed ? 'default' : 'pointer',
-                    fontWeight: 600,
-                  }}
-                >
-                  {checkoutItemsConfirmed ? '✓ Items Confirmed' : 'Confirm Items Returned'}
-                </button>
-
-                {request.lateFeeAmount > 0 && (
-                  <button
-                    onClick={() => void handleMarkFeePaid(selectedCheckoutRequest)}
-                    disabled={checkoutFeePaid}
-                    style={{
-                      padding: '0.75rem',
-                      background: checkoutFeePaid ? '#10b981' : '#f59e0b',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: checkoutFeePaid ? 'default' : 'pointer',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {checkoutFeePaid ? '✓ Fee Marked Paid' : 'Mark Late Fee Paid'}
-                  </button>
-                )}
-
-                <button
-                  onClick={() => void handleCompleteCheckout(selectedCheckoutRequest)}
-                  disabled={!checkoutItemsConfirmed || (request.lateFeeAmount > 0 && !checkoutFeePaid) || isSubmitting}
-                  style={{
-                    padding: '0.75rem',
-                    background: (!checkoutItemsConfirmed || (request.lateFeeAmount > 0 && !checkoutFeePaid)) ? '#475569' : '#10b981',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: (!checkoutItemsConfirmed || (request.lateFeeAmount > 0 && !checkoutFeePaid)) ? 'not-allowed' : 'pointer',
-                    fontWeight: 600,
-                  }}
-                >
-                  {isSubmitting ? 'Processing...' : 'Complete Checkout'}
-                </button>
-              </div>
-
-              <button
-                onClick={() => {
-                  setSelectedCheckoutRequest(null);
-                  setCheckoutChecklist({});
-                  setCheckoutItemsConfirmed(false);
-                  setCheckoutFeePaid(false);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  background: 'transparent',
-                  color: '#94a3b8',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        );
-      })()}
-
-      <header className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <h1 style={{ margin: 0 }}>Employee Register</h1>
-          <div className="status-badges" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span className={`badge ${health?.status === 'ok' ? 'badge-success' : 'badge-error'}`}>
-              API: {health?.status ?? '...'}
-            </span>
-            <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
-              WS: {wsConnected ? 'Live' : 'Offline'}
-            </span>
-            <span className="badge badge-info">Lane: {lane}</span>
-            <span className="badge badge-info">{session.name} ({session.role})</span>
-          </div>
-          <button
-            onClick={() => void handleLogout()}
-            style={{
-              padding: '0.375rem 0.75rem',
-              background: 'rgba(239, 68, 68, 0.2)',
-              border: '1px solid var(--error)',
-              borderRadius: '9999px',
-              color: 'var(--error)',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            Sign Out
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <button
-            onClick={() => setWaitlistWidgetOpen(!waitlistWidgetOpen)}
-            disabled={!waitlistInteractive}
-            aria-label="Waitlist widget"
+          <header
+            className="header"
             style={{
               display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '0.4rem',
-              padding: '0.45rem 0.75rem',
-              background: waitlistInteractive ? '#fef3c7' : '#1f2937',
-              border: `1px solid ${waitlistInteractive ? '#f59e0b' : '#334155'}`,
-              borderRadius: '9999px',
-              color: waitlistInteractive ? '#92400e' : '#94a3b8',
-              fontWeight: 700,
-              cursor: waitlistInteractive ? 'pointer' : 'not-allowed',
-              minWidth: '110px',
-              justifyContent: 'center',
+              gap: '1rem',
+              flexWrap: 'wrap',
             }}
           >
-            <span role="img" aria-label="waitlist clock">⏰</span>
-            <span>{waitlistDisplayNumber}</span>
-          </button>
-        </div>
-      </header>
-
-      {waitlistWidgetOpen && (
-        <div style={{ position: 'relative', marginTop: '0.5rem' }}>
-          <div
-            style={{
-              position: 'absolute',
-              right: 0,
-              zIndex: 1500,
-              background: '#0b1220',
-              border: '1px solid #1f2937',
-              borderRadius: '8px',
-              width: '320px',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
-            }}
-          >
-            <div style={{ padding: '0.75rem', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: 700, color: '#f59e0b' }}>Waitlist</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <h1 style={{ margin: 0 }}>Employee Register</h1>
+              <div
+                className="status-badges"
+                style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
+              >
+                <span
+                  className={`badge ${health?.status === 'ok' ? 'badge-success' : 'badge-error'}`}
+                >
+                  API: {health?.status ?? '...'}
+                </span>
+                <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
+                  WS: {wsConnected ? 'Live' : 'Offline'}
+                </span>
+                <span className="badge badge-info">Lane: {lane}</span>
+                <span className="badge badge-info">
+                  {session.name} ({session.role})
+                </span>
+              </div>
               <button
-                onClick={() => setWaitlistWidgetOpen(false)}
+                onClick={() => void handleLogout()}
                 style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#94a3b8',
+                  padding: '0.375rem 0.75rem',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  border: '1px solid var(--error)',
+                  borderRadius: '9999px',
+                  color: 'var(--error)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
                   cursor: 'pointer',
-                  fontSize: '0.9rem',
                 }}
               >
-                Close
+                Sign Out
               </button>
             </div>
-            <div style={{ maxHeight: '260px', overflowY: 'auto', opacity: sessionActive ? 0.65 : 1, pointerEvents: sessionActive ? 'none' : 'auto' }}>
-              {waitlistEntries.length === 0 && (
-                <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No waitlist entries</div>
-              )}
-              {waitlistEntries.slice(0, 6).map(entry => (
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <button
+                onClick={() => setWaitlistWidgetOpen(!waitlistWidgetOpen)}
+                disabled={!waitlistInteractive}
+                aria-label="Waitlist widget"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.45rem 0.75rem',
+                  background: waitlistInteractive ? '#fef3c7' : '#1f2937',
+                  border: `1px solid ${waitlistInteractive ? '#f59e0b' : '#334155'}`,
+                  borderRadius: '9999px',
+                  color: waitlistInteractive ? '#92400e' : '#94a3b8',
+                  fontWeight: 700,
+                  cursor: waitlistInteractive ? 'pointer' : 'not-allowed',
+                  minWidth: '110px',
+                  justifyContent: 'center',
+                }}
+              >
+                <span role="img" aria-label="waitlist clock">
+                  ⏰
+                </span>
+                <span>{waitlistDisplayNumber}</span>
+              </button>
+            </div>
+          </header>
+
+          {waitlistWidgetOpen && (
+            <div style={{ position: 'relative', marginTop: '0.5rem' }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  zIndex: 1500,
+                  background: '#0b1220',
+                  border: '1px solid #1f2937',
+                  borderRadius: '8px',
+                  width: '320px',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
+                }}
+              >
                 <div
-                  key={entry.id}
                   style={{
                     padding: '0.75rem',
                     borderBottom: '1px solid #1f2937',
@@ -2102,440 +2249,1108 @@ function App() {
                     alignItems: 'center',
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{entry.customerName || entry.displayIdentifier}</div>
-                    <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-                      {entry.displayIdentifier} → {entry.desiredTier}
-                    </div>
-                  </div>
+                  <div style={{ fontWeight: 700, color: '#f59e0b' }}>Waitlist</div>
                   <button
-                    aria-label={`Begin upgrade for ${entry.customerName || entry.displayIdentifier}`}
-                    onClick={() => handleWaitlistEntryAction(entry.id, entry.customerName)}
+                    onClick={() => setWaitlistWidgetOpen(false)}
                     style={{
-                      background: '#f59e0b',
-                      color: '#1f2937',
+                      background: 'transparent',
                       border: 'none',
-                      borderRadius: '9999px',
-                      padding: '0.4rem 0.55rem',
-                      fontWeight: 700,
-                      cursor: sessionActive ? 'not-allowed' : 'pointer',
+                      color: '#94a3b8',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
                     }}
-                    disabled={sessionActive}
                   >
-                    🔑
+                    Close
                   </button>
                 </div>
-              ))}
-              {waitlistEntries.length > 6 && (
                 <div
-                  onClick={() => {
-                    setShowUpgradesPanel(true);
-                    setWaitlistWidgetOpen(false);
-                  }}
                   style={{
-                    padding: '0.75rem',
-                    borderTop: '1px solid #1f2937',
-                    color: '#f59e0b',
-                    fontWeight: 700,
-                    cursor: 'pointer',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    opacity: sessionActive ? 0.65 : 1,
+                    pointerEvents: sessionActive ? 'none' : 'auto',
                   }}
                 >
-                  More..
+                  {waitlistEntries.length === 0 && (
+                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No waitlist entries</div>
+                  )}
+                  {waitlistEntries.slice(0, 6).map((entry) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        padding: '0.75rem',
+                        borderBottom: '1px solid #1f2937',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 600 }}>
+                          {entry.customerName || entry.displayIdentifier}
+                        </div>
+                        <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                          {entry.displayIdentifier} → {entry.desiredTier}
+                        </div>
+                      </div>
+                      <button
+                        aria-label={`Begin upgrade for ${entry.customerName || entry.displayIdentifier}`}
+                        onClick={() => handleWaitlistEntryAction(entry.id, entry.customerName)}
+                        style={{
+                          background: '#f59e0b',
+                          color: '#1f2937',
+                          border: 'none',
+                          borderRadius: '9999px',
+                          padding: '0.4rem 0.55rem',
+                          fontWeight: 700,
+                          cursor: sessionActive ? 'not-allowed' : 'pointer',
+                        }}
+                        disabled={sessionActive}
+                      >
+                        🔑
+                      </button>
+                    </div>
+                  ))}
+                  {waitlistEntries.length > 6 && (
+                    <div
+                      onClick={() => {
+                        setShowUpgradesPanel(true);
+                        setWaitlistWidgetOpen(false);
+                      }}
+                      style={{
+                        padding: '0.75rem',
+                        borderTop: '1px solid #1f2937',
+                        color: '#f59e0b',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      More..
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            {sessionActive && (
-              <div style={{ padding: '0.65rem 0.75rem', color: '#f59e0b', fontSize: '0.85rem', borderTop: '1px solid #1f2937' }}>
-                Active session present — actions disabled
+                {sessionActive && (
+                  <div
+                    style={{
+                      padding: '0.65rem 0.75rem',
+                      color: '#f59e0b',
+                      fontSize: '0.85rem',
+                      borderTop: '1px solid #1f2937',
+                    }}
+                  >
+                    Active session present — actions disabled
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      )}
+            </div>
+          )}
 
-      <main className="main">
-        {/* Customer Info Panel */}
-        {currentSessionId && customerName && (
-          <section style={{ 
-            marginBottom: '1rem', 
-            padding: '1rem', 
-            background: '#1e293b', 
-            border: '1px solid #475569', 
-            borderRadius: '8px' 
-          }}>
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
-              Customer Information
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-              <div>
-                <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Name</div>
-                <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerName}</div>
-              </div>
-              {customerPrimaryLanguage && (
-                <div>
-                  <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Primary Language</div>
-                  <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerPrimaryLanguage}</div>
-                </div>
-              )}
-              {customerDobMonthDay && (
-                <div>
-                  <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Date of Birth</div>
-                  <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerDobMonthDay}</div>
-                </div>
-              )}
-              {customerLastVisitAt && (
-                <div>
-                  <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Last Visit</div>
-                  <div style={{ fontWeight: 600, fontSize: '1rem' }}>
-                    {new Date(customerLastVisitAt).toLocaleDateString()}
-                  </div>
-                </div>
-              )}
-              {paymentQuote && paymentQuote.total > 0 && (
-                <div>
-                  <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Past Due Balance</div>
-                  <div style={{ fontWeight: 600, fontSize: '1rem', color: paymentQuote.total > 0 ? '#f59e0b' : 'inherit' }}>
-                    ${paymentQuote.total.toFixed(2)}
-                  </div>
-                </div>
-              )}
-            </div>
-            {customerNotes && (
-              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #475569' }}>
-                <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>Notes</div>
-                <div style={{ 
-                  padding: '0.75rem', 
-                  background: '#0f172a', 
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
-                  whiteSpace: 'pre-wrap',
-                  maxHeight: '150px',
-                  overflowY: 'auto'
-                }}>
-                  {customerNotes}
-                </div>
-              </div>
-            )}
-            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-              <button
-                onClick={() => setShowAddNoteModal(true)}
+          <main className="main">
+            {/* Customer Info Panel */}
+            {currentSessionId && customerName && (
+              <section
                 style={{
-                  padding: '0.5rem 1rem',
-                  background: '#3b82f6',
+                  marginBottom: '1rem',
+                  padding: '1rem',
+                  background: '#1e293b',
+                  border: '1px solid #475569',
+                  borderRadius: '8px',
+                }}
+              >
+                <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
+                  Customer Information
+                </h2>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '1rem',
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                    >
+                      Name
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerName}</div>
+                  </div>
+                  {customerPrimaryLanguage && (
+                    <div>
+                      <div
+                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                      >
+                        Primary Language
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+                        {customerPrimaryLanguage}
+                      </div>
+                    </div>
+                  )}
+                  {customerDobMonthDay && (
+                    <div>
+                      <div
+                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                      >
+                        Date of Birth
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerDobMonthDay}</div>
+                    </div>
+                  )}
+                  {customerLastVisitAt && (
+                    <div>
+                      <div
+                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                      >
+                        Last Visit
+                      </div>
+                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+                        {new Date(customerLastVisitAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  )}
+                  {paymentQuote && paymentQuote.total > 0 && (
+                    <div>
+                      <div
+                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                      >
+                        Past Due Balance
+                      </div>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          fontSize: '1rem',
+                          color: paymentQuote.total > 0 ? '#f59e0b' : 'inherit',
+                        }}
+                      >
+                        ${paymentQuote.total.toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {customerNotes && (
+                  <div
+                    style={{
+                      marginTop: '1rem',
+                      paddingTop: '1rem',
+                      borderTop: '1px solid #475569',
+                    }}
+                  >
+                    <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>
+                      Notes
+                    </div>
+                    <div
+                      style={{
+                        padding: '0.75rem',
+                        background: '#0f172a',
+                        borderRadius: '6px',
+                        fontSize: '0.875rem',
+                        whiteSpace: 'pre-wrap',
+                        maxHeight: '150px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {customerNotes}
+                    </div>
+                  </div>
+                )}
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => setShowAddNoteModal(true)}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '0.875rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Add Note
+                  </button>
+                </div>
+              </section>
+            )}
+
+            {/* Waitlist/Upgrades Panel Toggle */}
+            <section style={{ marginBottom: '1rem' }}>
+              <button
+                onClick={() => setShowUpgradesPanel(!showUpgradesPanel)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  background: showUpgradesPanel ? '#3b82f6' : '#475569',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
-                  fontSize: '0.875rem',
+                  fontSize: '1rem',
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
               >
-                Add Note
+                {showUpgradesPanel ? '▼' : '▶'} Upgrades / Waitlist (
+                {
+                  waitlistEntries.filter((e) => e.status === 'ACTIVE' || e.status === 'OFFERED')
+                    .length
+                }
+                )
               </button>
-            </div>
-          </section>
-        )}
+            </section>
 
-        {/* Waitlist/Upgrades Panel Toggle */}
-        <section style={{ marginBottom: '1rem' }}>
-          <button
-            onClick={() => setShowUpgradesPanel(!showUpgradesPanel)}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              background: showUpgradesPanel ? '#3b82f6' : '#475569',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '1rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            {showUpgradesPanel ? '▼' : '▶'} Upgrades / Waitlist ({waitlistEntries.filter(e => e.status === 'ACTIVE' || e.status === 'OFFERED').length})
-          </button>
-        </section>
+            {/* Waitlist/Upgrades Panel */}
+            {showUpgradesPanel && (
+              <section
+                style={{
+                  marginBottom: '1rem',
+                  padding: '1rem',
+                  background: '#1e293b',
+                  border: '1px solid #475569',
+                  borderRadius: '8px',
+                }}
+              >
+                <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
+                  Waitlist & Upgrades
+                </h2>
 
-        {/* Waitlist/Upgrades Panel */}
-        {showUpgradesPanel && (
-          <section style={{ marginBottom: '1rem', padding: '1rem', background: '#1e293b', border: '1px solid #475569', borderRadius: '8px' }}>
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>Waitlist & Upgrades</h2>
-            
-            {waitlistEntries.length === 0 ? (
-              <p style={{ color: '#94a3b8' }}>No active waitlist entries</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {['ACTIVE', 'OFFERED'].map(status => {
-                  const entries = waitlistEntries.filter(e => e.status === status);
-                  if (entries.length === 0) return null;
-                  
-                  return (
-                    <div key={status} style={{ marginBottom: '1rem' }}>
-                      <h3 style={{ marginBottom: '0.5rem', fontSize: '1rem', fontWeight: 600, color: status === 'OFFERED' ? '#f59e0b' : '#94a3b8' }}>
-                        {status === 'OFFERED' ? '⚠️ Offered' : '⏳ Active'} ({entries.length})
-                      </h3>
-                      {entries.map(entry => (
-                        <div
-                          key={entry.id}
-                          style={{
-                            padding: '1rem',
-                            background: '#0f172a',
-                            border: '1px solid #475569',
-                            borderRadius: '6px',
-                            marginBottom: '0.5rem',
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.5rem' }}>
-                            <div>
-                              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
-                                {entry.displayIdentifier} → {entry.desiredTier}
-                              </div>
-                              <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                                Current: {entry.currentRentalType} • Created: {new Date(entry.createdAt).toLocaleTimeString()}
-                              </div>
-                            </div>
-                            {status === 'OFFERED' && upgradePaymentIntentId && entry.id === selectedWaitlistEntry && (
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '0.875rem', color: '#f59e0b', marginBottom: '0.25rem' }}>
-                                  Fee: ${upgradeFee?.toFixed(2)}
+                {waitlistEntries.length === 0 ? (
+                  <p style={{ color: '#94a3b8' }}>No active waitlist entries</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {['ACTIVE', 'OFFERED'].map((status) => {
+                      const entries = waitlistEntries.filter((e) => e.status === status);
+                      if (entries.length === 0) return null;
+
+                      return (
+                        <div key={status} style={{ marginBottom: '1rem' }}>
+                          <h3
+                            style={{
+                              marginBottom: '0.5rem',
+                              fontSize: '1rem',
+                              fontWeight: 600,
+                              color: status === 'OFFERED' ? '#f59e0b' : '#94a3b8',
+                            }}
+                          >
+                            {status === 'OFFERED' ? '⚠️ Offered' : '⏳ Active'} ({entries.length})
+                          </h3>
+                          {entries.map((entry) => (
+                            <div
+                              key={entry.id}
+                              style={{
+                                padding: '1rem',
+                                background: '#0f172a',
+                                border: '1px solid #475569',
+                                borderRadius: '6px',
+                                marginBottom: '0.5rem',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'start',
+                                  marginBottom: '0.5rem',
+                                }}
+                              >
+                                <div>
+                                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+                                    {entry.displayIdentifier} → {entry.desiredTier}
+                                  </div>
+                                  <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                                    Current: {entry.currentRentalType} • Created:{' '}
+                                    {new Date(entry.createdAt).toLocaleTimeString()}
+                                  </div>
                                 </div>
+                                {status === 'OFFERED' &&
+                                  upgradePaymentIntentId &&
+                                  entry.id === selectedWaitlistEntry && (
+                                    <div style={{ textAlign: 'right' }}>
+                                      <div
+                                        style={{
+                                          fontSize: '0.875rem',
+                                          color: '#f59e0b',
+                                          marginBottom: '0.25rem',
+                                        }}
+                                      >
+                                        Fee: ${upgradeFee?.toFixed(2)}
+                                      </div>
+                                      <button
+                                        onClick={() => {
+                                          if (paymentStatus === 'PAID') {
+                                            void handleCompleteUpgrade(
+                                              entry.id,
+                                              upgradePaymentIntentId
+                                            );
+                                          } else {
+                                            alert('Please mark payment as paid in Square first');
+                                          }
+                                        }}
+                                        disabled={paymentStatus !== 'PAID' || isSubmitting}
+                                        style={{
+                                          padding: '0.5rem 1rem',
+                                          background:
+                                            paymentStatus === 'PAID' ? '#10b981' : '#475569',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          fontSize: '0.875rem',
+                                          fontWeight: 600,
+                                          cursor:
+                                            paymentStatus === 'PAID' ? 'pointer' : 'not-allowed',
+                                        }}
+                                      >
+                                        {paymentStatus === 'PAID'
+                                          ? 'Complete Upgrade'
+                                          : 'Mark Paid First'}
+                                      </button>
+                                    </div>
+                                  )}
+                              </div>
+                              {status === 'ACTIVE' && (
                                 <button
                                   onClick={() => {
-                                    if (paymentStatus === 'PAID') {
-                                      void handleCompleteUpgrade(entry.id, upgradePaymentIntentId);
-                                    } else {
-                                      alert('Please mark payment as paid in Square first');
-                                    }
+                                    // For now, show alert - in production, would show room selector
+                                    alert('Select a room to offer. This will open room selector.');
+                                    // handleOfferUpgrade(entry.id, roomId);
                                   }}
-                                  disabled={paymentStatus !== 'PAID' || isSubmitting}
                                   style={{
                                     padding: '0.5rem 1rem',
-                                    background: paymentStatus === 'PAID' ? '#10b981' : '#475569',
+                                    background: '#3b82f6',
                                     color: 'white',
                                     border: 'none',
                                     borderRadius: '6px',
                                     fontSize: '0.875rem',
                                     fontWeight: 600,
-                                    cursor: paymentStatus === 'PAID' ? 'pointer' : 'not-allowed',
+                                    cursor: 'pointer',
                                   }}
                                 >
-                                  {paymentStatus === 'PAID' ? 'Complete Upgrade' : 'Mark Paid First'}
+                                  Offer Upgrade
                                 </button>
-                              </div>
-                            )}
-                          </div>
-                          {status === 'ACTIVE' && (
-                            <button
-                              onClick={() => {
-                                // For now, show alert - in production, would show room selector
-                                alert('Select a room to offer. This will open room selector.');
-                                // handleOfferUpgrade(entry.id, roomId);
-                              }}
-                              style={{
-                                padding: '0.5rem 1rem',
-                                background: '#3b82f6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '6px',
-                                fontSize: '0.875rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                              }}
-                            >
-                              Offer Upgrade
-                            </button>
-                          )}
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* Waitlist Banner */}
+            {waitlistDesiredTier && waitlistBackupType && (
+              <div
+                style={{
+                  padding: '1rem',
+                  background: '#fef3c7',
+                  border: '2px solid #f59e0b',
+                  borderRadius: '8px',
+                  marginBottom: '1rem',
+                  color: '#92400e',
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.5rem' }}>
+                  ⚠️ Customer Waitlisted
+                </div>
+                <div style={{ fontSize: '0.875rem' }}>
+                  Customer requested <strong>{waitlistDesiredTier}</strong> but it's unavailable.
+                  Assigning <strong>{waitlistBackupType}</strong> as backup. If{' '}
+                  {waitlistDesiredTier} becomes available, customer can upgrade.
+                </div>
+              </div>
+            )}
+
+            {/* Selection State Display */}
+            {currentSessionId && customerName && (proposedRentalType || selectionConfirmed) && (
+              <div
+                style={{
+                  padding: '1rem',
+                  marginBottom: '1rem',
+                  background: selectionConfirmed ? '#10b981' : '#3b82f6',
+                  borderRadius: '8px',
+                  color: 'white',
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                  {selectionConfirmed
+                    ? `✓ Selection Locked: ${proposedRentalType} (by ${selectionConfirmedBy === 'CUSTOMER' ? 'Customer' : 'You'})`
+                    : `Proposed: ${proposedRentalType} (by ${proposedBy === 'CUSTOMER' ? 'Customer' : 'You'})`}
+                </div>
+                {!selectionConfirmed && proposedBy === 'EMPLOYEE' && (
+                  <button
+                    onClick={() => void handleConfirmSelection()}
+                    disabled={isSubmitting}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: 'white',
+                      color: '#3b82f6',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isSubmitting ? 'Confirming...' : 'Confirm Selection'}
+                  </button>
+                )}
+                {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
+                  <button
+                    onClick={() => void handleConfirmSelection()}
+                    disabled={isSubmitting}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: 'white',
+                      color: '#3b82f6',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isSubmitting ? 'Confirming...' : 'Confirm Customer Selection'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Quick Selection Buttons */}
+            {currentSessionId && customerName && !selectionConfirmed && !pastDueBlocked && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '0.5rem',
+                  marginBottom: '1rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                {['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'].map((rental) => (
+                  <button
+                    key={rental}
+                    onClick={() => void handleProposeSelection(rental)}
+                    disabled={isSubmitting}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: proposedRentalType === rental ? '#3b82f6' : '#475569',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Propose {rental}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Inventory Selector */}
+            {currentSessionId && customerName && !pastDueBlocked && (
+              <InventorySelector
+                customerSelectedType={customerSelectedType}
+                waitlistDesiredTier={waitlistDesiredTier}
+                waitlistBackupType={waitlistBackupType}
+                onSelect={handleInventorySelect}
+                selectedItem={selectedInventoryItem}
+                sessionId={currentSessionId}
+                lane={lane}
+                sessionToken={session.sessionToken}
+              />
+            )}
+
+            {/* Assignment Bar */}
+            {selectedInventoryItem && (
+              <div
+                style={{
+                  position: 'sticky',
+                  bottom: 0,
+                  background: '#1e293b',
+                  borderTop: '2px solid #3b82f6',
+                  padding: '1rem',
+                  zIndex: 100,
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    marginBottom: paymentQuote ? '1rem' : 0,
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}>
+                      Selected: {selectedInventoryItem.type === 'room' ? 'Room' : 'Locker'}{' '}
+                      {selectedInventoryItem.number}
+                    </div>
+                    {customerSelectedType &&
+                      selectedInventoryItem.tier !== customerSelectedType && (
+                        <div style={{ fontSize: '0.875rem', color: '#f59e0b' }}>
+                          Waiting for customer confirmation...
+                        </div>
+                      )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => void handleAssign()}
+                      disabled={
+                        isSubmitting ||
+                        showCustomerConfirmationPending ||
+                        !agreementSigned ||
+                        paymentStatus !== 'PAID'
+                      }
+                      style={{
+                        padding: '0.75rem 1.5rem',
+                        background:
+                          isSubmitting ||
+                          showCustomerConfirmationPending ||
+                          !agreementSigned ||
+                          paymentStatus !== 'PAID'
+                            ? '#475569'
+                            : '#3b82f6',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        cursor:
+                          isSubmitting ||
+                          showCustomerConfirmationPending ||
+                          !agreementSigned ||
+                          paymentStatus !== 'PAID'
+                            ? 'not-allowed'
+                            : 'pointer',
+                      }}
+                      title={
+                        showCustomerConfirmationPending
+                          ? 'Waiting for customer confirmation'
+                          : paymentStatus !== 'PAID'
+                            ? 'Payment must be successful before assignment'
+                            : !agreementSigned
+                              ? 'Waiting for customer to sign agreement'
+                              : 'Assign resource'
+                      }
+                    >
+                      {isSubmitting
+                        ? 'Assigning...'
+                        : showCustomerConfirmationPending
+                          ? 'Waiting for Confirmation'
+                          : paymentStatus !== 'PAID'
+                            ? 'Awaiting Payment'
+                            : !agreementSigned
+                              ? 'Awaiting Signature'
+                              : 'Assign'}
+                    </button>
+                    {!agreementSigned && paymentStatus === 'PAID' ? (
+                      <button
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              'Override customer signature? This will complete the agreement signing process without a customer signature.'
+                            )
+                          ) {
+                            void handleManualSignatureOverride();
+                          }
+                        }}
+                        disabled={isSubmitting}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          background: '#ef4444',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '1rem',
+                          fontWeight: 600,
+                          cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        Manual Signature
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleClearSelection}
+                        disabled={isSubmitting}
+                        style={{
+                          padding: '0.75rem 1.5rem',
+                          background: 'transparent',
+                          color: '#94a3b8',
+                          border: '1px solid #475569',
+                          borderRadius: '6px',
+                          fontSize: '1rem',
+                          fontWeight: 600,
+                          cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Payment Quote and Mark Paid */}
+                {paymentQuote && (
+                  <div
+                    style={{
+                      padding: '1rem',
+                      background: '#0f172a',
+                      borderRadius: '6px',
+                      border: '1px solid #475569',
+                    }}
+                  >
+                    <div style={{ marginBottom: '0.75rem', fontWeight: 600, fontSize: '1rem' }}>
+                      Payment Quote
+                    </div>
+                    <div style={{ marginBottom: '0.5rem' }}>
+                      {paymentQuote.lineItems.map((item, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            marginBottom: '0.25rem',
+                            fontSize: '0.875rem',
+                          }}
+                        >
+                          <span>{item.description}</span>
+                          <span>${item.amount.toFixed(2)}</span>
                         </div>
                       ))}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Waitlist Banner */}
-        {waitlistDesiredTier && waitlistBackupType && (
-          <div style={{
-            padding: '1rem',
-            background: '#fef3c7',
-            border: '2px solid #f59e0b',
-            borderRadius: '8px',
-            marginBottom: '1rem',
-            color: '#92400e',
-          }}>
-            <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.5rem' }}>
-              ⚠️ Customer Waitlisted
-            </div>
-            <div style={{ fontSize: '0.875rem' }}>
-              Customer requested <strong>{waitlistDesiredTier}</strong> but it's unavailable.
-              Assigning <strong>{waitlistBackupType}</strong> as backup. If {waitlistDesiredTier} becomes available, customer can upgrade.
-            </div>
-          </div>
-        )}
-
-        {/* Selection State Display */}
-        {currentSessionId && customerName && (proposedRentalType || selectionConfirmed) && (
-          <div style={{ 
-            padding: '1rem', 
-            marginBottom: '1rem', 
-            background: selectionConfirmed ? '#10b981' : '#3b82f6', 
-            borderRadius: '8px',
-            color: 'white',
-          }}>
-            <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-              {selectionConfirmed 
-                ? `✓ Selection Locked: ${proposedRentalType} (by ${selectionConfirmedBy === 'CUSTOMER' ? 'Customer' : 'You'})`
-                : `Proposed: ${proposedRentalType} (by ${proposedBy === 'CUSTOMER' ? 'Customer' : 'You'})`}
-            </div>
-            {!selectionConfirmed && proposedBy === 'EMPLOYEE' && (
-              <button
-                onClick={() => void handleConfirmSelection()}
-                disabled={isSubmitting}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: 'white',
-                  color: '#3b82f6',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {isSubmitting ? 'Confirming...' : 'Confirm Selection'}
-              </button>
-            )}
-            {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
-              <button
-                onClick={() => void handleConfirmSelection()}
-                disabled={isSubmitting}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: 'white',
-                  color: '#3b82f6',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {isSubmitting ? 'Confirming...' : 'Confirm Customer Selection'}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Quick Selection Buttons */}
-        {currentSessionId && customerName && !selectionConfirmed && !pastDueBlocked && (
-          <div style={{ 
-            display: 'flex', 
-            gap: '0.5rem', 
-            marginBottom: '1rem',
-            flexWrap: 'wrap',
-          }}>
-            {['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'].map(rental => (
-              <button
-                key={rental}
-                onClick={() => void handleProposeSelection(rental)}
-                disabled={isSubmitting}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: proposedRentalType === rental ? '#3b82f6' : '#475569',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Propose {rental}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Inventory Selector */}
-        {currentSessionId && customerName && !pastDueBlocked && (
-          <InventorySelector
-            customerSelectedType={customerSelectedType}
-            waitlistDesiredTier={waitlistDesiredTier}
-            waitlistBackupType={waitlistBackupType}
-            onSelect={handleInventorySelect}
-            selectedItem={selectedInventoryItem}
-            sessionId={currentSessionId}
-            lane={lane}
-            sessionToken={session.sessionToken}
-          />
-        )}
-
-        {/* Assignment Bar */}
-        {selectedInventoryItem && (
-          <div style={{
-            position: 'sticky',
-            bottom: 0,
-            background: '#1e293b',
-            borderTop: '2px solid #3b82f6',
-            padding: '1rem',
-            zIndex: 100,
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: paymentQuote ? '1rem' : 0 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}>
-                  Selected: {selectedInventoryItem.type === 'room' ? 'Room' : 'Locker'} {selectedInventoryItem.number}
-                </div>
-                {customerSelectedType && selectedInventoryItem.tier !== customerSelectedType && (
-                  <div style={{ fontSize: '0.875rem', color: '#f59e0b' }}>
-                    Waiting for customer confirmation...
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        fontWeight: 600,
+                        fontSize: '1.125rem',
+                        paddingTop: '0.5rem',
+                        borderTop: '1px solid #475569',
+                        marginBottom: '0.75rem',
+                      }}
+                    >
+                      <span>Total Due:</span>
+                      <span>${paymentQuote.total.toFixed(2)}</span>
+                    </div>
+                    {paymentQuote.messages && paymentQuote.messages.length > 0 && (
+                      <div
+                        style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.75rem' }}
+                      >
+                        {paymentQuote.messages.map((msg, idx) => (
+                          <div key={idx}>{msg}</div>
+                        ))}
+                      </div>
+                    )}
+                    <button
+                      onClick={() => void handleMarkPaid()}
+                      disabled={isSubmitting || paymentStatus === 'PAID'}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: paymentStatus === 'PAID' ? '#10b981' : '#f59e0b',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        cursor: paymentStatus === 'PAID' ? 'default' : 'pointer',
+                      }}
+                    >
+                      {paymentStatus === 'PAID' ? '✓ Paid in Square' : 'Mark Paid in Square'}
+                    </button>
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+            )}
+
+            <section className="actions-panel">
+              <h2>Lane Session</h2>
+              <div className="action-buttons">
                 <button
-                  onClick={() => void handleAssign()}
-                  disabled={isSubmitting || showCustomerConfirmationPending || !agreementSigned || paymentStatus !== 'PAID'}
+                  className={`action-btn ${scanModeOpen ? 'active' : ''}`}
+                  onClick={() => {
+                    setManualEntry(false);
+                    setScanModeOpen(true);
+                  }}
+                >
+                  <span className="btn-icon">📡</span>
+                  Scan
+                </button>
+                <button
+                  className={`action-btn ${manualEntry ? 'active' : ''}`}
+                  onClick={() => {
+                    setManualEntry(!manualEntry);
+                  }}
+                >
+                  <span className="btn-icon">✏️</span>
+                  Manual Entry
+                </button>
+                <button
+                  className="action-btn"
+                  onClick={() => void handleClearSession()}
+                  disabled={isSubmitting}
+                >
+                  <span className="btn-icon">🗑️</span>
+                  Clear Session
+                </button>
+              </div>
+
+              {manualEntry && (
+                <form className="manual-entry-form" onSubmit={(e) => void handleManualSubmit(e)}>
+                  <div className="form-group">
+                    <label htmlFor="customerName">Customer Name *</label>
+                    <input
+                      id="customerName"
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Enter customer name"
+                      disabled={isSubmitting}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="membershipNumber">Membership Number (optional)</label>
+                    <input
+                      id="membershipNumber"
+                      type="text"
+                      value={membershipNumber}
+                      onChange={(e) => setMembershipNumber(e.target.value)}
+                      placeholder="Enter membership number"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button
+                      type="submit"
+                      className="submit-btn"
+                      disabled={isSubmitting || !customerName.trim()}
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Update Session'}
+                    </button>
+                    <button
+                      type="button"
+                      className="cancel-btn"
+                      onClick={() => {
+                        setManualEntry(false);
+                        setCustomerName('');
+                        setMembershipNumber('');
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {(customerName || membershipNumber) && !manualEntry && (
+                <div className="current-session">
+                  <p>
+                    <strong>Current Session:</strong>
+                  </p>
+                  <p>Name: {customerName || 'Not set'}</p>
+                  {membershipNumber && <p>Membership: {membershipNumber}</p>}
+                  {currentSessionId && (
+                    <p
+                      className={
+                        agreementSigned ? 'agreement-status signed' : 'agreement-status unsigned'
+                      }
+                    >
+                      {agreementSigned ? 'Agreement signed ✓' : 'Agreement pending'}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Customer lookup (typeahead) */}
+              <div
+                className="typeahead-section"
+                style={{
+                  marginTop: '1rem',
+                  background: '#0f172a',
+                  padding: '1rem',
+                  borderRadius: '8px',
+                  border: '1px solid #1e293b',
+                }}
+              >
+                <div
                   style={{
-                    padding: '0.75rem 1.5rem',
-                    background: (isSubmitting || showCustomerConfirmationPending || !agreementSigned || paymentStatus !== 'PAID') ? '#475569' : '#3b82f6',
+                    display: 'flex',
+                    gap: '0.5rem',
+                    alignItems: 'center',
+                    marginBottom: '0.5rem',
+                  }}
+                >
+                  <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
+                    Search Customer
+                  </label>
+                  <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                    (type at least 3 letters)
+                  </span>
+                </div>
+                <input
+                  id="customer-search"
+                  type="text"
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  placeholder="Start typing name..."
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    borderRadius: '6px',
+                    border: '1px solid #1f2937',
+                    background: '#0b1220',
+                    color: '#e2e8f0',
+                  }}
+                  disabled={isSubmitting}
+                />
+                {customerSearchLoading && (
+                  <div style={{ marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.875rem' }}>
+                    Searching...
+                  </div>
+                )}
+                {customerSuggestions.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: '0.5rem',
+                      background: '#0b1220',
+                      border: '1px solid #1f2937',
+                      borderRadius: '6px',
+                      maxHeight: '180px',
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {customerSuggestions.map((s) => {
+                      const label = `${s.lastName}, ${s.firstName}`;
+                      const active = selectedCustomerId === s.id;
+                      return (
+                        <div
+                          key={s.id}
+                          onClick={() => {
+                            setSelectedCustomerId(s.id);
+                            setSelectedCustomerLabel(label);
+                          }}
+                          style={{
+                            padding: '0.5rem 0.75rem',
+                            cursor: 'pointer',
+                            background: active ? '#1e293b' : 'transparent',
+                            borderBottom: '1px solid #1f2937',
+                          }}
+                        >
+                          <div style={{ fontWeight: 600 }}>{label}</div>
+                          <div
+                            style={{
+                              fontSize: '0.8rem',
+                              color: '#94a3b8',
+                              display: 'flex',
+                              gap: '0.75rem',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
+                            {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <button
+                  onClick={() => void handleConfirmCustomerSelection()}
+                  disabled={!selectedCustomerId || isSubmitting}
+                  style={{
+                    marginTop: '0.75rem',
+                    width: '100%',
+                    padding: '0.65rem',
+                    background: selectedCustomerId ? '#3b82f6' : '#1f2937',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    cursor: !selectedCustomerId || isSubmitting ? 'not-allowed' : 'pointer',
+                    opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
+                  }}
+                >
+                  {selectedCustomerLabel ? `Confirm ${selectedCustomerLabel}` : 'Confirm'}
+                </button>
+              </div>
+            </section>
+          </main>
+
+          <footer className="footer">
+            <p>Employee-facing tablet • Runs alongside Square POS</p>
+          </footer>
+
+          {/* Waitlist Modal */}
+          {showWaitlistModal && waitlistDesiredTier && waitlistBackupType && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000,
+              }}
+              onClick={() => setShowWaitlistModal(false)}
+            >
+              <div
+                style={{
+                  background: '#1e293b',
+                  padding: '2rem',
+                  borderRadius: '12px',
+                  maxWidth: '500px',
+                  width: '90%',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
+                  Waitlist Notice
+                </h2>
+                <p style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
+                  Customer requested waitlist for {waitlistDesiredTier}. Assigning a{' '}
+                  {waitlistBackupType} in the meantime.
+                </p>
+                <button
+                  onClick={() => setShowWaitlistModal(false)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#3b82f6',
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
                     fontSize: '1rem',
                     fontWeight: 600,
-                    cursor: (isSubmitting || showCustomerConfirmationPending || !agreementSigned || paymentStatus !== 'PAID') ? 'not-allowed' : 'pointer',
+                    cursor: 'pointer',
                   }}
-                  title={
-                    showCustomerConfirmationPending
-                      ? 'Waiting for customer confirmation'
-                      : paymentStatus !== 'PAID'
-                        ? 'Payment must be successful before assignment'
-                        : !agreementSigned
-                          ? 'Waiting for customer to sign agreement'
-                          : 'Assign resource'
-                  }
                 >
-                  {isSubmitting
-                    ? 'Assigning...'
-                    : showCustomerConfirmationPending
-                      ? 'Waiting for Confirmation'
-                      : paymentStatus !== 'PAID'
-                        ? 'Awaiting Payment'
-                        : !agreementSigned
-                          ? 'Awaiting Signature'
-                          : 'Assign'}
+                  OK
                 </button>
-                {!agreementSigned && paymentStatus === 'PAID' ? (
+              </div>
+            </div>
+          )}
+
+          {/* Customer Confirmation Pending Modal */}
+          {showCustomerConfirmationPending && customerConfirmationType && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000,
+              }}
+            >
+              <div
+                style={{
+                  background: '#1e293b',
+                  padding: '2rem',
+                  borderRadius: '12px',
+                  maxWidth: '500px',
+                  width: '90%',
+                }}
+              >
+                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
+                  Waiting for Customer Confirmation
+                </h2>
+                <p style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
+                  Staff selected a different option: {customerConfirmationType.selected}{' '}
+                  {customerConfirmationType.number}. Waiting for customer to accept or decline on
+                  their device.
+                </p>
+                <button
+                  onClick={() => {
+                    setShowCustomerConfirmationPending(false);
+                    setCustomerConfirmationType(null);
+                    // Revert selection
+                    setSelectedInventoryItem(null);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#475569',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Full-screen Scan Mode (keyboard-wedge scanner; no iPad camera) */}
+          <ScanMode
+            isOpen={scanModeOpen}
+            onCancel={() => {
+              setScanModeOpen(false);
+              setPendingCreateFromScan(null);
+            }}
+            onBarcodeCaptured={onBarcodeCaptured}
+            onCreateFromNoMatch={handleCreateFromNoMatch}
+          />
+
+          {/* Past-Due Payment Modal */}
+          {showPastDueModal && paymentQuote && paymentQuote.total > 0 && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000,
+              }}
+            >
+              <div
+                style={{
+                  background: '#1e293b',
+                  padding: '2rem',
+                  borderRadius: '12px',
+                  maxWidth: '500px',
+                  width: '90%',
+                }}
+              >
+                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
+                  Past Due Balance: ${paymentQuote.total.toFixed(2)}
+                </h2>
+                <p style={{ marginBottom: '1.5rem', color: '#94a3b8' }}>
+                  Customer has a past due balance. Please process payment or bypass.
+                </p>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem',
+                    marginBottom: '1rem',
+                  }}
+                >
                   <button
-                    onClick={() => {
-                      if (window.confirm('Override customer signature? This will complete the agreement signing process without a customer signature.')) {
-                        void handleManualSignatureOverride();
-                      }
-                    }}
+                    onClick={() => void handlePastDuePayment('CREDIT_SUCCESS')}
                     disabled={isSubmitting}
                     style={{
-                      padding: '0.75rem 1.5rem',
-                      background: '#ef4444',
-                      color: '#ffffff',
+                      padding: '0.75rem',
+                      background: '#3b82f6',
+                      color: 'white',
                       border: 'none',
                       borderRadius: '6px',
                       fontSize: '1rem',
@@ -2543,14 +3358,48 @@ function App() {
                       cursor: isSubmitting ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    Manual Signature
+                    Credit Success
                   </button>
-                ) : (
                   <button
-                    onClick={handleClearSelection}
+                    onClick={() => void handlePastDuePayment('CASH_SUCCESS')}
                     disabled={isSubmitting}
                     style={{
-                      padding: '0.75rem 1.5rem',
+                      padding: '0.75rem',
+                      background: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Cash Success
+                  </button>
+                  <button
+                    onClick={() => void handlePastDuePayment('CREDIT_DECLINE', 'Card declined')}
+                    disabled={isSubmitting}
+                    style={{
+                      padding: '0.75rem',
+                      background: '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Credit Decline
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPastDueModal(false);
+                      setShowManagerBypassModal(true);
+                    }}
+                    disabled={isSubmitting}
+                    style={{
+                      padding: '0.75rem',
                       background: 'transparent',
                       color: '#94a3b8',
                       border: '1px solid #475569',
@@ -2560,850 +3409,427 @@ function App() {
                       cursor: isSubmitting ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    Clear
+                    Manager Bypass
                   </button>
-                )}
-              </div>
-            </div>
-
-            {/* Payment Quote and Mark Paid */}
-            {paymentQuote && (
-              <div style={{
-                padding: '1rem',
-                background: '#0f172a',
-                borderRadius: '6px',
-                border: '1px solid #475569',
-              }}>
-                <div style={{ marginBottom: '0.75rem', fontWeight: 600, fontSize: '1rem' }}>Payment Quote</div>
-                <div style={{ marginBottom: '0.5rem' }}>
-                  {paymentQuote.lineItems.map((item, idx) => (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', fontSize: '0.875rem' }}>
-                      <span>{item.description}</span>
-                      <span>${item.amount.toFixed(2)}</span>
-                    </div>
-                  ))}
                 </div>
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  fontWeight: 600, 
-                  fontSize: '1.125rem',
-                  paddingTop: '0.5rem',
-                  borderTop: '1px solid #475569',
-                  marginBottom: '0.75rem',
-                }}>
-                  <span>Total Due:</span>
-                  <span>${paymentQuote.total.toFixed(2)}</span>
-                </div>
-                {paymentQuote.messages && paymentQuote.messages.length > 0 && (
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.75rem' }}>
-                    {paymentQuote.messages.map((msg, idx) => (
-                      <div key={idx}>{msg}</div>
-                    ))}
-                  </div>
-                )}
                 <button
-                  onClick={() => void handleMarkPaid()}
-                  disabled={isSubmitting || paymentStatus === 'PAID'}
+                  onClick={() => setShowPastDueModal(false)}
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    background: paymentStatus === 'PAID' ? '#10b981' : '#f59e0b',
+                    background: 'transparent',
+                    color: '#94a3b8',
+                    border: '1px solid #475569',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Manager Bypass Modal */}
+          {showManagerBypassModal && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000,
+              }}
+            >
+              <div
+                style={{
+                  background: '#1e293b',
+                  padding: '2rem',
+                  borderRadius: '12px',
+                  maxWidth: '500px',
+                  width: '90%',
+                }}
+              >
+                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
+                  Manager Bypass
+                </h2>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                    Select Manager
+                  </label>
+                  <select
+                    value={managerId}
+                    onChange={(e) => setManagerId(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #475569',
+                      borderRadius: '6px',
+                      color: 'white',
+                      fontSize: '1rem',
+                    }}
+                  >
+                    <option value="">Select a manager...</option>
+                    {managerList.map((manager) => (
+                      <option key={manager.id} value={manager.id}>
+                        {manager.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                    PIN
+                  </label>
+                  <input
+                    type="password"
+                    value={managerPin}
+                    onChange={(e) => setManagerPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Enter 6-digit PIN"
+                    maxLength={6}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      background: '#0f172a',
+                      border: '1px solid #475569',
+                      borderRadius: '6px',
+                      color: 'white',
+                      fontSize: '1rem',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => void handleManagerBypass()}
+                    disabled={isSubmitting || !managerId || managerPin.trim().length !== 6}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background:
+                        managerId && managerPin.trim().length === 6 ? '#3b82f6' : '#475569',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor:
+                        managerId && managerPin.trim().length === 6 && !isSubmitting
+                          ? 'pointer'
+                          : 'not-allowed',
+                    }}
+                  >
+                    {isSubmitting ? 'Processing...' : 'Bypass'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowManagerBypassModal(false);
+                      setManagerId('');
+                      setManagerPin('');
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: 'transparent',
+                      color: '#94a3b8',
+                      border: '1px solid #475569',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Add Note Modal */}
+          {showAddNoteModal && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0, 0, 0, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 2000,
+              }}
+            >
+              <div
+                style={{
+                  background: '#1e293b',
+                  padding: '2rem',
+                  borderRadius: '12px',
+                  maxWidth: '500px',
+                  width: '90%',
+                }}
+              >
+                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
+                  Add Note
+                </h2>
+                <textarea
+                  value={newNoteText}
+                  onChange={(e) => setNewNoteText(e.target.value)}
+                  placeholder="Enter note..."
+                  rows={4}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#0f172a',
+                    border: '1px solid #475569',
+                    borderRadius: '6px',
+                    color: 'white',
+                    fontSize: '1rem',
+                    marginBottom: '1rem',
+                    resize: 'vertical',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => void handleAddNote()}
+                    disabled={isSubmitting || !newNoteText.trim()}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: newNoteText.trim() ? '#3b82f6' : '#475569',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: newNoteText.trim() && !isSubmitting ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    {isSubmitting ? 'Adding...' : 'Add Note'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddNoteModal(false);
+                      setNewNoteText('');
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: 'transparent',
+                      color: '#94a3b8',
+                      border: '1px solid #475569',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Payment Decline Error (dismissible) */}
+          {paymentDeclineError && (
+            <div
+              style={{
+                position: 'fixed',
+                top: '1rem',
+                right: '1rem',
+                background: '#ef4444',
+                color: 'white',
+                padding: '1rem',
+                borderRadius: '8px',
+                zIndex: 2000,
+                maxWidth: '400px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'start',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                <div style={{ fontWeight: 600 }}>Payment Declined</div>
+                <button
+                  onClick={() => setPaymentDeclineError(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '1.25rem',
+                    cursor: 'pointer',
+                    padding: 0,
+                    marginLeft: '1rem',
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              <div style={{ fontSize: '0.875rem' }}>{paymentDeclineError}</div>
+            </div>
+          )}
+
+          {/* Agreement + Assignment Display */}
+          {currentSessionId && customerName && (agreementSigned || assignedResourceType) && (
+            <div
+              style={{
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                background: '#1e293b',
+                borderTop: '2px solid #3b82f6',
+                padding: '1.5rem',
+                zIndex: 100,
+              }}
+            >
+              {!agreementSigned && (
+                <div
+                  style={{
+                    marginBottom: '1rem',
+                    padding: '1rem',
+                    background: '#0f172a',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
+                    Agreement Pending
+                  </div>
+                  <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                    Waiting for customer to sign the agreement on their device.
+                  </div>
+                </div>
+              )}
+              {assignedResourceType && assignedResourceNumber && (
+                <div
+                  style={{
+                    marginBottom: '1rem',
+                    padding: '1rem',
+                    background: '#0f172a',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
+                    Assigned: {assignedResourceType === 'room' ? 'Room' : 'Locker'}{' '}
+                    {assignedResourceNumber}
+                  </div>
+                  {checkoutAt && (
+                    <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                      Checkout: {new Date(checkoutAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              )}
+              {agreementSigned && assignedResourceType && (
+                <button
+                  onClick={() => void handleCompleteTransaction()}
+                  disabled={isSubmitting}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: '#10b981',
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
                     fontSize: '1rem',
                     fontWeight: 600,
-                    cursor: paymentStatus === 'PAID' ? 'default' : 'pointer',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {paymentStatus === 'PAID' ? '✓ Paid in Square' : 'Mark Paid in Square'}
+                  {isSubmitting ? 'Processing...' : 'Complete Transaction'}
                 </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        <section className="actions-panel">
-          <h2>Lane Session</h2>
-          <div className="action-buttons">
-            <button 
-              className={`action-btn ${scanModeOpen ? 'active' : ''}`}
-              onClick={() => {
-                setManualEntry(false);
-                setScanModeOpen(true);
-              }}
-            >
-              <span className="btn-icon">📡</span>
-              Scan
-            </button>
-            <button 
-              className={`action-btn ${manualEntry ? 'active' : ''}`}
-              onClick={() => {
-                setManualEntry(!manualEntry);
-              }}
-            >
-              <span className="btn-icon">✏️</span>
-              Manual Entry
-            </button>
-            <button 
-              className="action-btn"
-              onClick={() => void handleClearSession()}
-              disabled={isSubmitting}
-            >
-              <span className="btn-icon">🗑️</span>
-              Clear Session
-            </button>
-          </div>
-
-          {manualEntry && (
-            <form className="manual-entry-form" onSubmit={(e) => void handleManualSubmit(e)}>
-              <div className="form-group">
-                <label htmlFor="customerName">Customer Name *</label>
-                <input
-                  id="customerName"
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Enter customer name"
-                  disabled={isSubmitting}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="membershipNumber">Membership Number (optional)</label>
-                <input
-                  id="membershipNumber"
-                  type="text"
-                  value={membershipNumber}
-                  onChange={(e) => setMembershipNumber(e.target.value)}
-                  placeholder="Enter membership number"
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div className="form-actions">
-                <button
-                  type="submit"
-                  className="submit-btn"
-                  disabled={isSubmitting || !customerName.trim()}
-                >
-                  {isSubmitting ? 'Submitting...' : 'Update Session'}
-                </button>
-                <button
-                  type="button"
-                  className="cancel-btn"
-                  onClick={() => {
-                    setManualEntry(false);
-                    setCustomerName('');
-                    setMembershipNumber('');
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          )}
-
-          {(customerName || membershipNumber) && !manualEntry && (
-            <div className="current-session">
-              <p><strong>Current Session:</strong></p>
-              <p>Name: {customerName || 'Not set'}</p>
-              {membershipNumber && <p>Membership: {membershipNumber}</p>}
-              {currentSessionId && (
-                <p className={agreementSigned ? 'agreement-status signed' : 'agreement-status unsigned'}>
-                  {agreementSigned ? 'Agreement signed ✓' : 'Agreement pending'}
-                </p>
               )}
             </div>
           )}
 
-          {/* Customer lookup (typeahead) */}
-          <div className="typeahead-section" style={{ marginTop: '1rem', background: '#0f172a', padding: '1rem', borderRadius: '8px', border: '1px solid #1e293b' }}>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
-              <label htmlFor="customer-search" style={{ fontWeight: 600 }}>Search Customer</label>
-              <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>(type at least 3 letters)</span>
-            </div>
-            <input
-              id="customer-search"
-              type="text"
-              value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              placeholder="Start typing name..."
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                borderRadius: '6px',
-                border: '1px solid #1f2937',
-                background: '#0b1220',
-                color: '#e2e8f0',
-              }}
-              disabled={isSubmitting}
-            />
-            {customerSearchLoading && (
-              <div style={{ marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.875rem' }}>Searching...</div>
-            )}
-            {customerSuggestions.length > 0 && (
-              <div style={{ marginTop: '0.5rem', background: '#0b1220', border: '1px solid #1f2937', borderRadius: '6px', maxHeight: '180px', overflowY: 'auto' }}>
-                {customerSuggestions.map((s) => {
-                  const label = `${s.lastName}, ${s.firstName}`;
-                  const active = selectedCustomerId === s.id;
-                  return (
-                    <div
-                      key={s.id}
-                      onClick={() => {
-                        setSelectedCustomerId(s.id);
-                        setSelectedCustomerLabel(label);
-                      }}
-                      style={{
-                        padding: '0.5rem 0.75rem',
-                        cursor: 'pointer',
-                        background: active ? '#1e293b' : 'transparent',
-                        borderBottom: '1px solid #1f2937',
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{label}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
-                        {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <button
-              onClick={() => void handleConfirmCustomerSelection()}
-              disabled={!selectedCustomerId || isSubmitting}
-              style={{
-                marginTop: '0.75rem',
-                width: '100%',
-                padding: '0.65rem',
-                background: selectedCustomerId ? '#3b82f6' : '#1f2937',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontWeight: 600,
-                cursor: !selectedCustomerId || isSubmitting ? 'not-allowed' : 'pointer',
-                opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
-              }}
-            >
-              {selectedCustomerLabel ? `Confirm ${selectedCustomerLabel}` : 'Confirm'}
-            </button>
-          </div>
-        </section>
-      </main>
-
-      <footer className="footer">
-        <p>Employee-facing tablet • Runs alongside Square POS</p>
-      </footer>
-
-      {/* Waitlist Modal */}
-      {showWaitlistModal && waitlistDesiredTier && waitlistBackupType && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-          }}
-          onClick={() => setShowWaitlistModal(false)}
-        >
-          <div
-            style={{
-              background: '#1e293b',
-              padding: '2rem',
-              borderRadius: '12px',
-              maxWidth: '500px',
-              width: '90%',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-              Waitlist Notice
-            </h2>
-            <p style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
-              Customer requested waitlist for {waitlistDesiredTier}. Assigning a {waitlistBackupType} in the meantime.
-            </p>
-            <button
-              onClick={() => setShowWaitlistModal(false)}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                background: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Customer Confirmation Pending Modal */}
-      {showCustomerConfirmationPending && customerConfirmationType && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              background: '#1e293b',
-              padding: '2rem',
-              borderRadius: '12px',
-              maxWidth: '500px',
-              width: '90%',
-            }}
-          >
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-              Waiting for Customer Confirmation
-            </h2>
-            <p style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
-              Staff selected a different option: {customerConfirmationType.selected} {customerConfirmationType.number}. 
-              Waiting for customer to accept or decline on their device.
-            </p>
-            <button
-              onClick={() => {
-                setShowCustomerConfirmationPending(false);
-                setCustomerConfirmationType(null);
-                // Revert selection
-                setSelectedInventoryItem(null);
-              }}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                background: '#475569',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Full-screen Scan Mode (keyboard-wedge scanner; no iPad camera) */}
-      <ScanMode
-        isOpen={scanModeOpen}
-        onCancel={() => {
-          setScanModeOpen(false);
-          setPendingCreateFromScan(null);
-        }}
-        onBarcodeCaptured={onBarcodeCaptured}
-        onCreateFromNoMatch={handleCreateFromNoMatch}
-      />
-
-      {/* Past-Due Payment Modal */}
-      {showPastDueModal && paymentQuote && paymentQuote.total > 0 && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              background: '#1e293b',
-              padding: '2rem',
-              borderRadius: '12px',
-              maxWidth: '500px',
-              width: '90%',
-            }}
-          >
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-              Past Due Balance: ${paymentQuote.total.toFixed(2)}
-            </h2>
-            <p style={{ marginBottom: '1.5rem', color: '#94a3b8' }}>
-              Customer has a past due balance. Please process payment or bypass.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
-              <button
-                onClick={() => void handlePastDuePayment('CREDIT_SUCCESS')}
-                disabled={isSubmitting}
+          {/* Pay-First Demo Buttons (after selection confirmed) */}
+          {currentSessionId &&
+            customerName &&
+            selectionConfirmed &&
+            paymentQuote &&
+            paymentStatus === 'DUE' &&
+            !pastDueBlocked && (
+              <div
                 style={{
-                  padding: '0.75rem',
-                  background: '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                  position: 'fixed',
+                  bottom: assignedResourceType ? '200px' : '0',
+                  left: 0,
+                  right: 0,
+                  background: '#1e293b',
+                  borderTop: '2px solid #3b82f6',
+                  padding: '1.5rem',
+                  zIndex: 100,
                 }}
               >
-                Credit Success
-              </button>
-              <button
-                onClick={() => void handlePastDuePayment('CASH_SUCCESS')}
-                disabled={isSubmitting}
-                style={{
-                  padding: '0.75rem',
-                  background: '#10b981',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Cash Success
-              </button>
-              <button
-                onClick={() => void handlePastDuePayment('CREDIT_DECLINE', 'Card declined')}
-                disabled={isSubmitting}
-                style={{
-                  padding: '0.75rem',
-                  background: '#ef4444',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Credit Decline
-              </button>
-              <button
-                onClick={() => {
-                  setShowPastDueModal(false);
-                  setShowManagerBypassModal(true);
-                }}
-                disabled={isSubmitting}
-                style={{
-                  padding: '0.75rem',
-                  background: 'transparent',
-                  color: '#94a3b8',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                }}
-              >
-                Manager Bypass
-              </button>
-            </div>
-            <button
-              onClick={() => setShowPastDueModal(false)}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                background: 'transparent',
-                color: '#94a3b8',
-                border: '1px solid #475569',
-                borderRadius: '6px',
-                cursor: 'pointer',
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Manager Bypass Modal */}
-      {showManagerBypassModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              background: '#1e293b',
-              padding: '2rem',
-              borderRadius: '12px',
-              maxWidth: '500px',
-              width: '90%',
-            }}
-          >
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-              Manager Bypass
-            </h2>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                Select Manager
-              </label>
-              <select
-                value={managerId}
-                onChange={(e) => setManagerId(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  background: '#0f172a',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  color: 'white',
-                  fontSize: '1rem',
-                }}
-              >
-                <option value="">Select a manager...</option>
-                {managerList.map(manager => (
-                  <option key={manager.id} value={manager.id}>{manager.name}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                PIN
-              </label>
-              <input
-                type="password"
-                value={managerPin}
-                onChange={(e) => setManagerPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="Enter 6-digit PIN"
-                maxLength={6}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  background: '#0f172a',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  color: 'white',
-                  fontSize: '1rem',
-                }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                onClick={() => void handleManagerBypass()}
-                disabled={isSubmitting || !managerId || managerPin.trim().length !== 6}
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  background: managerId && managerPin.trim().length === 6 ? '#3b82f6' : '#475569',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: (managerId && managerPin.trim().length === 6 && !isSubmitting) ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {isSubmitting ? 'Processing...' : 'Bypass'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowManagerBypassModal(false);
-                  setManagerId('');
-                  setManagerPin('');
-                }}
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  background: 'transparent',
-                  color: '#94a3b8',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Note Modal */}
-      {showAddNoteModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2000,
-          }}
-        >
-          <div
-            style={{
-              background: '#1e293b',
-              padding: '2rem',
-              borderRadius: '12px',
-              maxWidth: '500px',
-              width: '90%',
-            }}
-          >
-            <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-              Add Note
-            </h2>
-            <textarea
-              value={newNoteText}
-              onChange={(e) => setNewNoteText(e.target.value)}
-              placeholder="Enter note..."
-              rows={4}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                background: '#0f172a',
-                border: '1px solid #475569',
-                borderRadius: '6px',
-                color: 'white',
-                fontSize: '1rem',
-                marginBottom: '1rem',
-                resize: 'vertical',
-              }}
-            />
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                onClick={() => void handleAddNote()}
-                disabled={isSubmitting || !newNoteText.trim()}
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  background: newNoteText.trim() ? '#3b82f6' : '#475569',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: (newNoteText.trim() && !isSubmitting) ? 'pointer' : 'not-allowed',
-                }}
-              >
-                {isSubmitting ? 'Adding...' : 'Add Note'}
-              </button>
-              <button
-                onClick={() => {
-                  setShowAddNoteModal(false);
-                  setNewNoteText('');
-                }}
-                style={{
-                  flex: 1,
-                  padding: '0.75rem',
-                  background: 'transparent',
-                  color: '#94a3b8',
-                  border: '1px solid #475569',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Payment Decline Error (dismissible) */}
-      {paymentDeclineError && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '1rem',
-            right: '1rem',
-            background: '#ef4444',
-            color: 'white',
-            padding: '1rem',
-            borderRadius: '8px',
-            zIndex: 2000,
-            maxWidth: '400px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.5rem' }}>
-            <div style={{ fontWeight: 600 }}>Payment Declined</div>
-            <button
-              onClick={() => setPaymentDeclineError(null)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'white',
-                fontSize: '1.25rem',
-                cursor: 'pointer',
-                padding: 0,
-                marginLeft: '1rem',
-              }}
-            >
-              ×
-            </button>
-          </div>
-          <div style={{ fontSize: '0.875rem' }}>{paymentDeclineError}</div>
-        </div>
-      )}
-
-      {/* Agreement + Assignment Display */}
-      {currentSessionId && customerName && (agreementSigned || assignedResourceType) && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: '#1e293b',
-            borderTop: '2px solid #3b82f6',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
-        >
-          {!agreementSigned && (
-            <div style={{ marginBottom: '1rem', padding: '1rem', background: '#0f172a', borderRadius: '6px' }}>
-              <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
-                Agreement Pending
-              </div>
-              <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                Waiting for customer to sign the agreement on their device.
-              </div>
-            </div>
-          )}
-          {assignedResourceType && assignedResourceNumber && (
-            <div style={{ marginBottom: '1rem', padding: '1rem', background: '#0f172a', borderRadius: '6px' }}>
-              <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
-                Assigned: {assignedResourceType === 'room' ? 'Room' : 'Locker'} {assignedResourceNumber}
-              </div>
-              {checkoutAt && (
-                <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                  Checkout: {new Date(checkoutAt).toLocaleString()}
+                <div style={{ marginBottom: '1rem', fontWeight: 600, fontSize: '1.125rem' }}>
+                  Total: ${paymentQuote.total.toFixed(2)}
                 </div>
-              )}
-            </div>
-          )}
-          {agreementSigned && assignedResourceType && (
-            <button
-              onClick={() => void handleCompleteTransaction()}
-              disabled={isSubmitting}
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                background: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {isSubmitting ? 'Processing...' : 'Complete Transaction'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Pay-First Demo Buttons (after selection confirmed) */}
-      {currentSessionId && customerName && selectionConfirmed && paymentQuote && paymentStatus === 'DUE' && !pastDueBlocked && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: assignedResourceType ? '200px' : '0',
-            left: 0,
-            right: 0,
-            background: '#1e293b',
-            borderTop: '2px solid #3b82f6',
-            padding: '1.5rem',
-            zIndex: 100,
-          }}
-        >
-          <div style={{ marginBottom: '1rem', fontWeight: 600, fontSize: '1.125rem' }}>
-            Total: ${paymentQuote.total.toFixed(2)}
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              onClick={() => void handleDemoPayment('CREDIT_SUCCESS')}
-              disabled={isSubmitting}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                background: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              }}
-            >
-              Credit Success
-            </button>
-            <button
-              onClick={() => void handleDemoPayment('CASH_SUCCESS')}
-              disabled={isSubmitting}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                background: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              }}
-            >
-              Cash Success
-            </button>
-            <button
-              onClick={() => void handleDemoPayment('CREDIT_DECLINE', 'Card declined')}
-              disabled={isSubmitting}
-              style={{
-                flex: 1,
-                padding: '0.75rem',
-                background: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                fontWeight: 600,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              }}
-            >
-              Credit Decline
-            </button>
-          </div>
-        </div>
-      )}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    onClick={() => void handleDemoPayment('CREDIT_SUCCESS')}
+                    disabled={isSubmitting}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Credit Success
+                  </button>
+                  <button
+                    onClick={() => void handleDemoPayment('CASH_SUCCESS')}
+                    disabled={isSubmitting}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: '#10b981',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Cash Success
+                  </button>
+                  <button
+                    onClick={() => void handleDemoPayment('CREDIT_DECLINE', 'Card declined')}
+                    disabled={isSubmitting}
+                    style={{
+                      flex: 1,
+                      padding: '0.75rem',
+                      background: '#ef4444',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    Credit Decline
+                  </button>
+                </div>
+              </div>
+            )}
         </div>
       )}
     </RegisterSignIn>
@@ -3411,4 +3837,3 @@ function App() {
 }
 
 export default App;
-

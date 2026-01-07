@@ -80,5 +80,3 @@ Test each match type using known fixtures:
   - Employee-register updates to show **Agreement signed** within seconds (via `SESSION_UPDATED`).
   - No manual refresh required.
   - Kiosk returns to **idle** (logo-only), ready for next customer.
-
-

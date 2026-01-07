@@ -69,7 +69,7 @@ describe('Transition Validation (shared package)', () => {
 /**
  * Integration tests for /v1/cleaning/batch endpoint.
  * These tests require a PostgreSQL database connection.
- * 
+ *
  * To run these tests:
  * 1. Start the database: cd services/api && docker compose up -d
  * 2. Run migrations: pnpm db:migrate
@@ -154,13 +154,16 @@ describe('Cleaning Batch Endpoint', () => {
     );
 
     // Insert test rooms with known statuses
-    await pool.query(`
+    await pool.query(
+      `
       INSERT INTO rooms (id, number, type, status, floor)
       VALUES 
         ($1, 'TEST-101', 'STANDARD', 'DIRTY', 1),
         ($2, 'TEST-102', 'STANDARD', 'CLEANING', 1),
         ($3, 'TEST-103', 'STANDARD', 'CLEAN', 1)
-    `, [testRoomIds.dirty, testRoomIds.cleaning, testRoomIds.clean]);
+    `,
+      [testRoomIds.dirty, testRoomIds.cleaning, testRoomIds.clean]
+    );
   });
 
   // Helper to skip tests when DB is unavailable
@@ -173,279 +176,331 @@ describe('Cleaning Batch Endpoint', () => {
   };
 
   describe('Valid transitions', () => {
-    it('should transition DIRTY → CLEANING', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.dirty],
-          targetStatus: 'CLEANING',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should transition DIRTY → CLEANING',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.dirty],
+            targetStatus: 'CLEANING',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.summary.success).toBe(1);
-      expect(body.summary.failed).toBe(0);
-      expect(body.rooms[0].success).toBe(true);
-      expect(body.rooms[0].previousStatus).toBe('DIRTY');
-      expect(body.rooms[0].newStatus).toBe('CLEANING');
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.summary.success).toBe(1);
+        expect(body.summary.failed).toBe(0);
+        expect(body.rooms[0].success).toBe(true);
+        expect(body.rooms[0].previousStatus).toBe('DIRTY');
+        expect(body.rooms[0].newStatus).toBe('CLEANING');
 
-      // Verify database state
-      const result = await pool.query('SELECT status FROM rooms WHERE id = $1', [testRoomIds.dirty]);
-      expect(result.rows[0].status).toBe('CLEANING');
-    }));
+        // Verify database state
+        const result = await pool.query('SELECT status FROM rooms WHERE id = $1', [
+          testRoomIds.dirty,
+        ]);
+        expect(result.rows[0].status).toBe('CLEANING');
+      })
+    );
 
-    it('should transition CLEANING → CLEAN', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.cleaning],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should transition CLEANING → CLEAN',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.cleaning],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.summary.success).toBe(1);
-      expect(body.rooms[0].previousStatus).toBe('CLEANING');
-      expect(body.rooms[0].newStatus).toBe('CLEAN');
-    }));
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.summary.success).toBe(1);
+        expect(body.rooms[0].previousStatus).toBe('CLEANING');
+        expect(body.rooms[0].newStatus).toBe('CLEAN');
+      })
+    );
 
-    it('should handle batch operations with multiple rooms', runIfDbAvailable(async () => {
-      // First update dirty room to cleaning
-      await pool.query('UPDATE rooms SET status = $1 WHERE id = $2', ['CLEANING', testRoomIds.dirty]);
+    it(
+      'should handle batch operations with multiple rooms',
+      runIfDbAvailable(async () => {
+        // First update dirty room to cleaning
+        await pool.query('UPDATE rooms SET status = $1 WHERE id = $2', [
+          'CLEANING',
+          testRoomIds.dirty,
+        ]);
 
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.dirty, testRoomIds.cleaning],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-        },
-      });
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.dirty, testRoomIds.cleaning],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.summary.success).toBe(2);
-      expect(body.summary.total).toBe(2);
-    }));
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.summary.success).toBe(2);
+        expect(body.summary.total).toBe(2);
+      })
+    );
   });
 
   describe('Invalid transitions (without override)', () => {
-    it('should reject DIRTY → CLEAN without override', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.dirty],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should reject DIRTY → CLEAN without override',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.dirty],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body);
-      expect(body.summary.success).toBe(0);
-      expect(body.summary.failed).toBe(1);
-      expect(body.rooms[0].success).toBe(false);
-      expect(body.rooms[0].requiresOverride).toBe(true);
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.summary.success).toBe(0);
+        expect(body.summary.failed).toBe(1);
+        expect(body.rooms[0].success).toBe(false);
+        expect(body.rooms[0].requiresOverride).toBe(true);
 
-      // Verify room status unchanged
-      const result = await pool.query('SELECT status FROM rooms WHERE id = $1', [testRoomIds.dirty]);
-      expect(result.rows[0].status).toBe('DIRTY');
-    }));
+        // Verify room status unchanged
+        const result = await pool.query('SELECT status FROM rooms WHERE id = $1', [
+          testRoomIds.dirty,
+        ]);
+        expect(result.rows[0].status).toBe('DIRTY');
+      })
+    );
   });
 
   describe('Override transitions', () => {
-    it('should allow DIRTY → CLEAN with override and reason', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.dirty],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-          override: true,
-          overrideReason: 'Manager inspection confirmed room is clean',
-        },
-      });
+    it(
+      'should allow DIRTY → CLEAN with override and reason',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.dirty],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+            override: true,
+            overrideReason: 'Manager inspection confirmed room is clean',
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.summary.success).toBe(1);
-      expect(body.rooms[0].success).toBe(true);
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.summary.success).toBe(1);
+        expect(body.rooms[0].success).toBe(true);
 
-      // Verify database state and override flag
-      const result = await pool.query('SELECT status, override_flag FROM rooms WHERE id = $1', [
-        testRoomIds.dirty,
-      ]);
-      expect(result.rows[0].status).toBe('CLEAN');
-      expect(result.rows[0].override_flag).toBe(true);
+        // Verify database state and override flag
+        const result = await pool.query('SELECT status, override_flag FROM rooms WHERE id = $1', [
+          testRoomIds.dirty,
+        ]);
+        expect(result.rows[0].status).toBe('CLEAN');
+        expect(result.rows[0].override_flag).toBe(true);
 
-      // Verify audit log entry
-      const auditResult = await pool.query(
-        `SELECT action, override_reason FROM audit_log 
+        // Verify audit log entry
+        const auditResult = await pool.query(
+          `SELECT action, override_reason FROM audit_log 
          WHERE entity_id = $1 AND action = 'OVERRIDE'`,
-        [testRoomIds.dirty]
-      );
-      expect(auditResult.rows.length).toBe(1);
-      expect(auditResult.rows[0].override_reason).toBe('Manager inspection confirmed room is clean');
-    }));
+          [testRoomIds.dirty]
+        );
+        expect(auditResult.rows.length).toBe(1);
+        expect(auditResult.rows[0].override_reason).toBe(
+          'Manager inspection confirmed room is clean'
+        );
+      })
+    );
 
-    it('should reject override without reason', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.dirty],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-          override: true,
-        },
-      });
+    it(
+      'should reject override without reason',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.dirty],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+            override: true,
+          },
+        });
 
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body);
-      expect(body.error).toBe('Override requires a reason');
-    }));
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.error).toBe('Override requires a reason');
+      })
+    );
   });
 
   describe('Mixed status batch operations', () => {
-    it('should handle partial failures in batch', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.dirty, testRoomIds.cleaning, testRoomIds.clean],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should handle partial failures in batch',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.dirty, testRoomIds.cleaning, testRoomIds.clean],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(200);
-      const body = JSON.parse(response.body);
-      expect(body.summary.success).toBe(2);
-      expect(body.summary.failed).toBe(1);
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.body);
+        expect(body.summary.success).toBe(2);
+        expect(body.summary.failed).toBe(1);
 
-      const dirtyRoom = body.rooms.find((r: { roomId: string }) => r.roomId === testRoomIds.dirty);
-      const cleaningRoom = body.rooms.find((r: { roomId: string }) => r.roomId === testRoomIds.cleaning);
-      const cleanRoom = body.rooms.find((r: { roomId: string }) => r.roomId === testRoomIds.clean);
+        const dirtyRoom = body.rooms.find(
+          (r: { roomId: string }) => r.roomId === testRoomIds.dirty
+        );
+        const cleaningRoom = body.rooms.find(
+          (r: { roomId: string }) => r.roomId === testRoomIds.cleaning
+        );
+        const cleanRoom = body.rooms.find(
+          (r: { roomId: string }) => r.roomId === testRoomIds.clean
+        );
 
-      expect(dirtyRoom.success).toBe(false);
-      expect(dirtyRoom.requiresOverride).toBe(true);
-      expect(cleaningRoom.success).toBe(true);
-      expect(cleanRoom.success).toBe(true);
-    }));
+        expect(dirtyRoom.success).toBe(false);
+        expect(dirtyRoom.requiresOverride).toBe(true);
+        expect(cleaningRoom.success).toBe(true);
+        expect(cleanRoom.success).toBe(true);
+      })
+    );
   });
 
   describe('Validation errors', () => {
-    it('should reject empty roomIds array', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should reject empty roomIds array',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(400);
-    }));
+        expect(response.statusCode).toBe(400);
+      })
+    );
 
-    it('should reject invalid room UUIDs', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: ['not-a-uuid'],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should reject invalid room UUIDs',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: ['not-a-uuid'],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(400);
-    }));
+        expect(response.statusCode).toBe(400);
+      })
+    );
 
-    it('should reject invalid target status', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.dirty],
-          targetStatus: 'INVALID_STATUS',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should reject invalid target status',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.dirty],
+            targetStatus: 'INVALID_STATUS',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(400);
-    }));
+        expect(response.statusCode).toBe(400);
+      })
+    );
 
-    it('should handle non-existent rooms', runIfDbAvailable(async () => {
-      const nonExistentId = '99999999-9999-9999-9999-999999999999';
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [nonExistentId],
-          targetStatus: 'CLEANING',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should handle non-existent rooms',
+      runIfDbAvailable(async () => {
+        const nonExistentId = '99999999-9999-9999-9999-999999999999';
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [nonExistentId],
+            targetStatus: 'CLEANING',
+            staffId: testStaffId,
+          },
+        });
 
-      expect(response.statusCode).toBe(400);
-      const body = JSON.parse(response.body);
-      expect(body.rooms[0].success).toBe(false);
-      expect(body.rooms[0].error).toBe('Room not found');
-    }));
+        expect(response.statusCode).toBe(400);
+        const body = JSON.parse(response.body);
+        expect(body.rooms[0].success).toBe(false);
+        expect(body.rooms[0].error).toBe('Room not found');
+      })
+    );
   });
 
   describe('Cleaning batch records', () => {
-    it('should create cleaning batch record', runIfDbAvailable(async () => {
-      await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.cleaning],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should create cleaning batch record',
+      runIfDbAvailable(async () => {
+        await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.cleaning],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+          },
+        });
 
-      const result = await pool.query(
-        'SELECT * FROM cleaning_batches WHERE staff_id = $1',
-        [testStaffId]
-      );
-      expect(result.rows.length).toBe(1);
-      expect(result.rows[0].room_count).toBe(1);
-    }));
+        const result = await pool.query('SELECT * FROM cleaning_batches WHERE staff_id = $1', [
+          testStaffId,
+        ]);
+        expect(result.rows.length).toBe(1);
+        expect(result.rows[0].room_count).toBe(1);
+      })
+    );
 
-    it('should create cleaning_batch_rooms records', runIfDbAvailable(async () => {
-      const response = await fastify.inject({
-        method: 'POST',
-        url: '/v1/cleaning/batch',
-        payload: {
-          roomIds: [testRoomIds.cleaning],
-          targetStatus: 'CLEAN',
-          staffId: testStaffId,
-        },
-      });
+    it(
+      'should create cleaning_batch_rooms records',
+      runIfDbAvailable(async () => {
+        const response = await fastify.inject({
+          method: 'POST',
+          url: '/v1/cleaning/batch',
+          payload: {
+            roomIds: [testRoomIds.cleaning],
+            targetStatus: 'CLEAN',
+            staffId: testStaffId,
+          },
+        });
 
-      const body = JSON.parse(response.body);
-      const batchId = body.batchId;
+        const body = JSON.parse(response.body);
+        const batchId = body.batchId;
 
-      const result = await pool.query(
-        'SELECT * FROM cleaning_batch_rooms WHERE batch_id = $1',
-        [batchId]
-      );
-      expect(result.rows.length).toBe(1);
-      expect(result.rows[0].status_from).toBe('CLEANING');
-      expect(result.rows[0].status_to).toBe('CLEAN');
-    }));
+        const result = await pool.query('SELECT * FROM cleaning_batch_rooms WHERE batch_id = $1', [
+          batchId,
+        ]);
+        expect(result.rows.length).toBe(1);
+        expect(result.rows[0].status_from).toBe('CLEANING');
+        expect(result.rows[0].status_to).toBe('CLEAN');
+      })
+    );
   });
 });

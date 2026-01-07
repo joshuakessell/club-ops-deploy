@@ -5,10 +5,10 @@ info:
   description: |
     Server-authoritative REST API for managing club check-ins, room/locker assignments,
     cleaning workflows, checkout verification, and operational reporting.
-    
+
     All endpoints are versioned under `/v1`.
     Request bodies are validated with Zod schemas.
-    
+
     Authentication:
     - Staff endpoints require Bearer token (session token from PIN or WebAuthn login)
     - Admin endpoints require ADMIN role in addition to authentication
@@ -1399,6 +1399,3 @@ components:
         createdAt:
           type: string
           format: date-time
-
-
-

@@ -28,7 +28,7 @@ export function DevicesView({ session }: DevicesViewProps) {
     try {
       const response = await fetch(`${API_BASE}/v1/admin/devices`, {
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
       if (response.ok) {
@@ -46,7 +46,7 @@ export function DevicesView({ session }: DevicesViewProps) {
     fetchDevices();
   }, []);
 
-  const enabledCount = devices.filter(d => d.enabled).length;
+  const enabledCount = devices.filter((d) => d.enabled).length;
   const canAddMore = enabledCount < 2;
 
   const handleAddDevice = async () => {
@@ -60,7 +60,7 @@ export function DevicesView({ session }: DevicesViewProps) {
       const response = await fetch(`${API_BASE}/v1/admin/devices`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -97,7 +97,7 @@ export function DevicesView({ session }: DevicesViewProps) {
       const response = await fetch(`${API_BASE}/v1/admin/devices/${deviceId}`, {
         method: 'PATCH',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -129,9 +129,18 @@ export function DevicesView({ session }: DevicesViewProps) {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1600px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem',
+        }}
+      >
         <div>
-          <h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>Device Allowlist</h1>
+          <h1 style={{ fontSize: '2rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+            Device Allowlist
+          </h1>
           <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
             {enabledCount} of 2 devices enabled
           </p>
@@ -153,8 +162,8 @@ export function DevicesView({ session }: DevicesViewProps) {
           >
             Add Device
           </button>
-          <button 
-            onClick={() => navigate('/')} 
+          <button
+            onClick={() => navigate('/')}
             style={{
               padding: '0.75rem 1.5rem',
               background: '#374151',
@@ -196,9 +205,7 @@ export function DevicesView({ session }: DevicesViewProps) {
                 <div style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem' }}>
                   {device.displayName}
                 </div>
-                <div style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
-                  ID: {device.deviceId}
-                </div>
+                <div style={{ fontSize: '0.875rem', color: '#9ca3af' }}>ID: {device.deviceId}</div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <span
@@ -222,16 +229,15 @@ export function DevicesView({ session }: DevicesViewProps) {
                     border: 'none',
                     borderRadius: '6px',
                     color: '#fff',
-                    cursor: toggling === device.deviceId || (!device.enabled && enabledCount >= 2) ? 'not-allowed' : 'pointer',
+                    cursor:
+                      toggling === device.deviceId || (!device.enabled && enabledCount >= 2)
+                        ? 'not-allowed'
+                        : 'pointer',
                     fontSize: '0.875rem',
                     fontWeight: 600,
                   }}
                 >
-                  {toggling === device.deviceId
-                    ? '...'
-                    : device.enabled
-                    ? 'Disable'
-                    : 'Enable'}
+                  {toggling === device.deviceId ? '...' : device.enabled ? 'Disable' : 'Enable'}
                 </button>
               </div>
             </div>
@@ -270,7 +276,14 @@ export function DevicesView({ session }: DevicesViewProps) {
               Add Device
             </h2>
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                }}
+              >
                 Device ID
               </label>
               <input
@@ -290,7 +303,14 @@ export function DevicesView({ session }: DevicesViewProps) {
               />
             </div>
             <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '0.5rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                }}
+              >
                 Display Name
               </label>
               <input
@@ -334,11 +354,15 @@ export function DevicesView({ session }: DevicesViewProps) {
                 disabled={adding || !newDeviceId.trim() || !newDeviceName.trim()}
                 style={{
                   padding: '0.75rem 1.5rem',
-                  background: adding || !newDeviceId.trim() || !newDeviceName.trim() ? '#6b7280' : '#10b981',
+                  background:
+                    adding || !newDeviceId.trim() || !newDeviceName.trim() ? '#6b7280' : '#10b981',
                   border: 'none',
                   borderRadius: '6px',
                   color: '#fff',
-                  cursor: adding || !newDeviceId.trim() || !newDeviceName.trim() ? 'not-allowed' : 'pointer',
+                  cursor:
+                    adding || !newDeviceId.trim() || !newDeviceName.trim()
+                      ? 'not-allowed'
+                      : 'pointer',
                   fontSize: '1rem',
                   fontWeight: 600,
                 }}
@@ -352,9 +376,3 @@ export function DevicesView({ session }: DevicesViewProps) {
     </div>
   );
 }
-
-
-
-
-
-

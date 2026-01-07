@@ -18,7 +18,9 @@ function useBeep() {
 
   const prime = useCallback(() => {
     if (ctxRef.current) return;
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     try {
       ctxRef.current = new AudioCtx();
@@ -54,7 +56,9 @@ function useBeep() {
 }
 
 export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMatch }: Props) {
-  const [status, setStatus] = useState<'scanning' | 'processing' | 'no_match' | 'error'>('scanning');
+  const [status, setStatus] = useState<'scanning' | 'processing' | 'no_match' | 'error'>(
+    'scanning'
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [canCreate, setCanCreate] = useState(false);
   const { prime, beep } = useBeep();
@@ -70,32 +74,35 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
     onCancel();
   }, [onCancel, resetUi]);
 
-  const handleCapture = useCallback(async (rawScanText: string) => {
-    const raw = rawScanText;
-    if (!raw.trim()) return;
-    beep();
-    setStatus('processing');
-    setMessage(null);
-    try {
-      const result = await onBarcodeCaptured(raw);
-      if (result.outcome === 'matched') {
-        resetUi();
-        onCancel();
-        return;
-      }
-      if (result.outcome === 'no_match') {
-        setStatus('no_match');
+  const handleCapture = useCallback(
+    async (rawScanText: string) => {
+      const raw = rawScanText;
+      if (!raw.trim()) return;
+      beep();
+      setStatus('processing');
+      setMessage(null);
+      try {
+        const result = await onBarcodeCaptured(raw);
+        if (result.outcome === 'matched') {
+          resetUi();
+          onCancel();
+          return;
+        }
+        if (result.outcome === 'no_match') {
+          setStatus('no_match');
+          setMessage(result.message);
+          setCanCreate(Boolean(result.canCreate));
+          return;
+        }
+        setStatus('error');
         setMessage(result.message);
-        setCanCreate(Boolean(result.canCreate));
-        return;
+      } catch (err) {
+        setStatus('error');
+        setMessage(err instanceof Error ? err.message : 'Failed to process scan');
       }
-      setStatus('error');
-      setMessage(result.message);
-    } catch (err) {
-      setStatus('error');
-      setMessage(err instanceof Error ? err.message : 'Failed to process scan');
-    }
-  }, [beep, onBarcodeCaptured, onCancel, resetUi]);
+    },
+    [beep, onBarcodeCaptured, onCancel, resetUi]
+  );
 
   const { inputRef, handleBlur, reset, focusInput } = useScannerInput({
     enabled: isOpen && status === 'scanning',
@@ -154,9 +161,7 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
             message && <div className="scan-mode-message">{message}</div>
           )}
           {status === 'scanning' && (
-            <div className="scan-mode-subhint">
-              Aim the scanner and scan the barcode.
-            </div>
+            <div className="scan-mode-subhint">Aim the scanner and scan the barcode.</div>
           )}
         </div>
 
@@ -177,39 +182,40 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
 
             {status === 'no_match' && (
               <>
-                <button
-                  className="scan-mode-primary"
-                  onClick={handleCancel}
-                >
+                <button className="scan-mode-primary" onClick={handleCancel}>
                   Cancel
                 </button>
                 {canCreate && onCreateFromNoMatch && (
                   <button
                     className="scan-mode-primary"
                     style={{ marginLeft: '0.75rem' }}
-                    onClick={() => void (async () => {
-                      setStatus('processing');
-                      setMessage(null);
-                      try {
-                        const r = await onCreateFromNoMatch();
-                        if (r.outcome === 'matched') {
-                          resetUi();
-                          onCancel();
-                          return;
-                        }
-                        if (r.outcome === 'no_match') {
-                          setStatus('no_match');
+                    onClick={() =>
+                      void (async () => {
+                        setStatus('processing');
+                        setMessage(null);
+                        try {
+                          const r = await onCreateFromNoMatch();
+                          if (r.outcome === 'matched') {
+                            resetUi();
+                            onCancel();
+                            return;
+                          }
+                          if (r.outcome === 'no_match') {
+                            setStatus('no_match');
+                            setMessage(r.message);
+                            setCanCreate(Boolean(r.canCreate));
+                            return;
+                          }
+                          setStatus('error');
                           setMessage(r.message);
-                          setCanCreate(Boolean(r.canCreate));
-                          return;
+                        } catch (err) {
+                          setStatus('error');
+                          setMessage(
+                            err instanceof Error ? err.message : 'Failed to create customer'
+                          );
                         }
-                        setStatus('error');
-                        setMessage(r.message);
-                      } catch (err) {
-                        setStatus('error');
-                        setMessage(err instanceof Error ? err.message : 'Failed to create customer');
-                      }
-                    })()}
+                      })()
+                    }
                   >
                     Yes / Create
                   </button>
@@ -241,5 +247,3 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
     </div>
   );
 }
-
-

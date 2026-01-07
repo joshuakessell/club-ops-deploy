@@ -42,13 +42,3 @@ export function getSessionExpiry(): Date {
   expiry.setHours(expiry.getHours() + SESSION_EXPIRY_HOURS);
   return expiry;
 }
-
-
-
-
-
-
-
-
-
-

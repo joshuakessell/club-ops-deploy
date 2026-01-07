@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { useScannerInput } from './useScannerInput';
 
-function Harness(props: { enabled: boolean; onCapture: (raw: string) => void; onCancel?: () => void }) {
+function Harness(props: {
+  enabled: boolean;
+  onCapture: (raw: string) => void;
+  onCancel?: () => void;
+}) {
   const { inputRef, handleBlur } = useScannerInput({
     enabled: props.enabled,
     onCapture: ({ raw }) => props.onCapture(raw),
@@ -12,9 +16,7 @@ function Harness(props: { enabled: boolean; onCapture: (raw: string) => void; on
     enterGraceMs: 35,
   });
 
-  return (
-    <textarea ref={inputRef} onBlur={handleBlur} aria-label="hidden-scan-input" />
-  );
+  return <textarea ref={inputRef} onBlur={handleBlur} aria-label="hidden-scan-input" />;
 }
 
 function key(key: string) {
@@ -90,7 +92,9 @@ describe('useScannerInput', () => {
     const onCapture = vi.fn();
     render(<Harness enabled={true} onCapture={onCapture} />);
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'X', ctrlKey: true, cancelable: true }));
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'X', ctrlKey: true, cancelable: true })
+    );
     key('Y');
     await vi.advanceTimersByTimeAsync(80);
 
@@ -125,5 +129,3 @@ describe('useScannerInput', () => {
     focusSpy.mockRestore();
   });
 });
-
-

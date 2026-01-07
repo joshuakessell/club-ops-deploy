@@ -50,4 +50,3 @@ export enum RentalType {
   SPECIAL = 'SPECIAL',
   GYM_LOCKER = 'GYM_LOCKER',
 }
-

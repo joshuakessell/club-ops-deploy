@@ -8,8 +8,8 @@ interface ScreenShellProps {
   watermarkLayer?: 'over' | 'under';
 }
 
-export function ScreenShell({ 
-  children, 
+export function ScreenShell({
+  children,
   backgroundVariant = 'steamroom1',
   showLogoWatermark = true,
   watermarkLayer = 'under',
@@ -24,10 +24,7 @@ export function ScreenShell({
           <img src={whiteLogo} alt="Club Dallas" className="cs-kiosk-watermark__img" />
         </div>
       )}
-      <div className="cs-kiosk-stage">
-        {children}
-      </div>
+      <div className="cs-kiosk-stage">{children}</div>
     </div>
   );
 }
-

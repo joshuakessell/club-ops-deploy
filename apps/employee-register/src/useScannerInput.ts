@@ -85,12 +85,15 @@ export function useScannerInput({
 
   const scheduleFinalizeAfterEnter = useCallback(() => {
     clearTimer();
-    timerRef.current = window.setTimeout(() => {
-      // If no additional content arrived after Enter, treat it as terminator.
-      if (lastWasEnterRef.current) {
-        finalize();
-      }
-    }, Math.max(0, Math.min(idleTimeoutMs, enterGraceMs)));
+    timerRef.current = window.setTimeout(
+      () => {
+        // If no additional content arrived after Enter, treat it as terminator.
+        if (lastWasEnterRef.current) {
+          finalize();
+        }
+      },
+      Math.max(0, Math.min(idleTimeoutMs, enterGraceMs))
+    );
   }, [clearTimer, enterGraceMs, finalize, idleTimeoutMs]);
 
   const focusInput = useCallback(() => {
@@ -186,5 +189,3 @@ export function useScannerInput({
     reset,
   };
 }
-
-

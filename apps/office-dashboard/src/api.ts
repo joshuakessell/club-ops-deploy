@@ -59,5 +59,3 @@ export async function apiJson<T>(
 export function wsBaseUrl(): string {
   return `ws://${window.location.hostname}:3001/ws`;
 }
-
-

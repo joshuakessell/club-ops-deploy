@@ -84,7 +84,7 @@ export function AdminView({ session }: AdminViewProps) {
     if (!session.sessionToken) return;
 
     const headers = {
-      'Authorization': `Bearer ${session.sessionToken}`,
+      Authorization: `Bearer ${session.sessionToken}`,
     };
 
     // Load KPI
@@ -108,7 +108,7 @@ export function AdminView({ session }: AdminViewProps) {
     setIsLoading(true);
     try {
       const headers = {
-        'Authorization': `Bearer ${session.sessionToken}`,
+        Authorization: `Bearer ${session.sessionToken}`,
       };
 
       // Load staff members (needed for both tabs)
@@ -143,10 +143,12 @@ export function AdminView({ session }: AdminViewProps) {
 
     ws.onopen = () => {
       setWsConnected(true);
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        events: ['INVENTORY_UPDATED', 'ROOM_STATUS_CHANGED', 'SESSION_UPDATED'],
-      }));
+      ws.send(
+        JSON.stringify({
+          type: 'subscribe',
+          events: ['INVENTORY_UPDATED', 'ROOM_STATUS_CHANGED', 'SESSION_UPDATED'],
+        })
+      );
     };
 
     ws.onclose = () => {
@@ -156,7 +158,11 @@ export function AdminView({ session }: AdminViewProps) {
     ws.onmessage = (event) => {
       try {
         const message: WebSocketEvent = JSON.parse(event.data);
-        if (message.type === 'INVENTORY_UPDATED' || message.type === 'ROOM_STATUS_CHANGED' || message.type === 'SESSION_UPDATED') {
+        if (
+          message.type === 'INVENTORY_UPDATED' ||
+          message.type === 'ROOM_STATUS_CHANGED' ||
+          message.type === 'SESSION_UPDATED'
+        ) {
           // Refresh operations data when inventory or sessions change
           if (activeTab === 'operations') {
             loadOperationsData().catch(console.error);
@@ -180,7 +186,7 @@ export function AdminView({ session }: AdminViewProps) {
       const params = new URLSearchParams({ from, to });
 
       const headers = {
-        'Authorization': `Bearer ${session.sessionToken}`,
+        Authorization: `Bearer ${session.sessionToken}`,
       };
 
       // Load overall summary
@@ -194,7 +200,9 @@ export function AdminView({ session }: AdminViewProps) {
       const perStaffData: MetricsByStaff[] = [];
       for (const staff of staffMembers) {
         const byStaffParams = new URLSearchParams({ from, to, staffId: staff.id });
-        const byStaffRes = await fetch(`${API_BASE}/v1/admin/metrics/by-staff?${byStaffParams}`, { headers });
+        const byStaffRes = await fetch(`${API_BASE}/v1/admin/metrics/by-staff?${byStaffParams}`, {
+          headers,
+        });
         if (byStaffRes.ok) {
           const byStaffData = await byStaffRes.json();
           perStaffData.push({
@@ -215,7 +223,15 @@ export function AdminView({ session }: AdminViewProps) {
     if (session.role === 'ADMIN' && activeTab === 'metrics') {
       loadMetricsData();
     }
-  }, [dateFrom, dateTo, selectedStaffId, session.sessionToken, session.role, activeTab, staffMembers.length]);
+  }, [
+    dateFrom,
+    dateTo,
+    selectedStaffId,
+    session.sessionToken,
+    session.role,
+    activeTab,
+    staffMembers.length,
+  ]);
 
   if (session.role !== 'ADMIN') {
     return (
@@ -238,16 +254,38 @@ export function AdminView({ session }: AdminViewProps) {
   };
 
   return (
-    <div className="admin-container" style={{ padding: '2rem', maxWidth: '1600px', margin: '0 auto' }}>
-      <div className="admin-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+    <div
+      className="admin-container"
+      style={{ padding: '2rem', maxWidth: '1600px', margin: '0 auto' }}
+    >
+      <div
+        className="admin-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem',
+        }}
+      >
         <h1 style={{ fontSize: '2rem', fontWeight: 600 }}>Admin Console</h1>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', color: '#9ca3af' }}>
-            <span className={`dot ${wsConnected ? 'dot-live' : 'dot-offline'}`} style={{ width: '8px', height: '8px', borderRadius: '50%' }}></span>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.875rem',
+              color: '#9ca3af',
+            }}
+          >
+            <span
+              className={`dot ${wsConnected ? 'dot-live' : 'dot-offline'}`}
+              style={{ width: '8px', height: '8px', borderRadius: '50%' }}
+            ></span>
             <span>{wsConnected ? 'Live' : 'Offline'}</span>
           </div>
-          <button 
-            onClick={() => navigate('/admin/staff')} 
+          <button
+            onClick={() => navigate('/admin/staff')}
             style={{
               padding: '0.75rem 1.5rem',
               background: '#374151',
@@ -260,8 +298,8 @@ export function AdminView({ session }: AdminViewProps) {
           >
             Staff Management
           </button>
-          <button 
-            onClick={() => navigate('/')} 
+          <button
+            onClick={() => navigate('/')}
             style={{
               padding: '0.75rem 1.5rem',
               background: '#374151',
@@ -278,7 +316,14 @@ export function AdminView({ session }: AdminViewProps) {
       </div>
 
       {/* Tab Navigation */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '2rem', borderBottom: '1px solid #374151' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.5rem',
+          marginBottom: '2rem',
+          borderBottom: '1px solid #374151',
+        }}
+      >
         <button
           onClick={() => {
             setActiveTab('operations');
@@ -288,7 +333,8 @@ export function AdminView({ session }: AdminViewProps) {
             padding: '0.75rem 1.5rem',
             background: activeTab === 'operations' ? '#8b5cf6' : 'transparent',
             border: 'none',
-            borderBottom: activeTab === 'operations' ? '2px solid #8b5cf6' : '2px solid transparent',
+            borderBottom:
+              activeTab === 'operations' ? '2px solid #8b5cf6' : '2px solid transparent',
             color: '#f9fafb',
             cursor: 'pointer',
             fontSize: '1rem',
@@ -317,51 +363,86 @@ export function AdminView({ session }: AdminViewProps) {
         </button>
       </div>
 
-      {isLoading && <div style={{ padding: '1rem', textAlign: 'center', color: '#9ca3af' }}>Loading...</div>}
+      {isLoading && (
+        <div style={{ padding: '1rem', textAlign: 'center', color: '#9ca3af' }}>Loading...</div>
+      )}
 
       {activeTab === 'operations' && (
         <>
           {/* KPI Cards */}
           <section style={{ marginBottom: '2rem' }}>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>Key Performance Indicators</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>
+              Key Performance Indicators
+            </h2>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '1rem',
+              }}
+            >
               <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
-                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>{kpi?.roomsOccupied ?? 0}</div>
-                <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>Rooms Occupied</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
+                  {kpi?.roomsOccupied ?? 0}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+                  Rooms Occupied
+                </div>
               </div>
               <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
-                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>{kpi?.roomsUnoccupied ?? 0}</div>
-                <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>Rooms Unoccupied</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
+                  {kpi?.roomsUnoccupied ?? 0}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+                  Rooms Unoccupied
+                </div>
               </div>
               <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
-                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>{kpi?.lockersOccupied ?? 0}</div>
-                <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>Lockers Occupied</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
+                  {kpi?.lockersOccupied ?? 0}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+                  Lockers Occupied
+                </div>
               </div>
               <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
-                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>{kpi?.lockersAvailable ?? 0}</div>
-                <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>Lockers Available</div>
+                <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
+                  {kpi?.lockersAvailable ?? 0}
+                </div>
+                <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
+                  Lockers Available
+                </div>
               </div>
             </div>
           </section>
 
           {/* Rooms Nearing or Past Expiration */}
           <section>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>Room Expirations</h2>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>
+              Room Expirations
+            </h2>
             <div style={{ background: '#1f2937', borderRadius: '8px', overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: '#111827', borderBottom: '1px solid #374151' }}>
                     <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Room</th>
                     <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Tier</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Customer / Member</th>
-                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Checkout At</th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>
+                      Customer / Member
+                    </th>
+                    <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>
+                      Checkout At
+                    </th>
                     <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {expirations.length === 0 ? (
                     <tr>
-                      <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>
+                      <td
+                        colSpan={5}
+                        style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}
+                      >
                         No active room sessions
                       </td>
                     </tr>
@@ -371,7 +452,11 @@ export function AdminView({ session }: AdminViewProps) {
                         key={exp.sessionId}
                         style={{
                           borderBottom: '1px solid #374151',
-                          background: exp.isExpired ? 'rgba(239, 68, 68, 0.1)' : exp.isExpiringSoon ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
+                          background: exp.isExpired
+                            ? 'rgba(239, 68, 68, 0.1)'
+                            : exp.isExpiringSoon
+                              ? 'rgba(245, 158, 11, 0.1)'
+                              : 'transparent',
                         }}
                       >
                         <td style={{ padding: '1rem', fontWeight: 600 }}>{exp.roomNumber}</td>
@@ -385,8 +470,8 @@ export function AdminView({ session }: AdminViewProps) {
                                 exp.roomTier === 'SPECIAL'
                                   ? '#7c3aed'
                                   : exp.roomTier === 'DOUBLE'
-                                  ? '#3b82f6'
-                                  : '#374151',
+                                    ? '#3b82f6'
+                                    : '#374151',
                               color: '#f9fafb',
                             }}
                           >
@@ -404,14 +489,32 @@ export function AdminView({ session }: AdminViewProps) {
                             {exp.sessionId.slice(0, 8)}...
                           </div>
                         </td>
-                        <td style={{ padding: '1rem', color: '#9ca3af' }}>{new Date(exp.checkoutAt).toLocaleString()}</td>
+                        <td style={{ padding: '1rem', color: '#9ca3af' }}>
+                          {new Date(exp.checkoutAt).toLocaleString()}
+                        </td>
                         <td style={{ padding: '1rem' }}>
                           {exp.isExpired ? (
-                            <span style={{ padding: '0.25rem 0.75rem', borderRadius: '4px', fontSize: '0.875rem', background: '#ef4444', color: '#f9fafb' }}>
+                            <span
+                              style={{
+                                padding: '0.25rem 0.75rem',
+                                borderRadius: '4px',
+                                fontSize: '0.875rem',
+                                background: '#ef4444',
+                                color: '#f9fafb',
+                              }}
+                            >
                               {formatMinutes(exp.minutesPast)} past
                             </span>
                           ) : (
-                            <span style={{ padding: '0.25rem 0.75rem', borderRadius: '4px', fontSize: '0.875rem', background: '#f59e0b', color: '#f9fafb' }}>
+                            <span
+                              style={{
+                                padding: '0.25rem 0.75rem',
+                                borderRadius: '4px',
+                                fontSize: '0.875rem',
+                                background: '#f59e0b',
+                                color: '#f9fafb',
+                              }}
+                            >
                               {formatMinutes(exp.minutesRemaining)} remaining
                             </span>
                           )}
@@ -428,11 +531,18 @@ export function AdminView({ session }: AdminViewProps) {
 
       {activeTab === 'metrics' && (
         <section>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>Cleaning Performance Metrics</h2>
-          
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1rem' }}>
+            Cleaning Performance Metrics
+          </h2>
+
           <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
             <div>
-              <label htmlFor="dateFrom" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>From:</label>
+              <label
+                htmlFor="dateFrom"
+                style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}
+              >
+                From:
+              </label>
               <input
                 id="dateFrom"
                 type="datetime-local"
@@ -449,7 +559,12 @@ export function AdminView({ session }: AdminViewProps) {
               />
             </div>
             <div>
-              <label htmlFor="dateTo" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>To:</label>
+              <label
+                htmlFor="dateTo"
+                style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}
+              >
+                To:
+              </label>
               <input
                 id="dateTo"
                 type="datetime-local"
@@ -466,7 +581,12 @@ export function AdminView({ session }: AdminViewProps) {
               />
             </div>
             <div>
-              <label htmlFor="staffSelect" style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Staff Member:</label>
+              <label
+                htmlFor="staffSelect"
+                style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}
+              >
+                Staff Member:
+              </label>
               <select
                 id="staffSelect"
                 value={selectedStaffId}
@@ -492,11 +612,35 @@ export function AdminView({ session }: AdminViewProps) {
           </div>
 
           {/* Overall Metrics Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '1rem',
+              marginBottom: '2rem',
+            }}
+          >
             <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem', color: '#9ca3af' }}>Average Dirty Duration</h3>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb', marginBottom: '0.5rem' }}>
-                {metricsSummary?.averageDirtyTimeMinutes !== null && metricsSummary?.averageDirtyTimeMinutes !== undefined
+              <h3
+                style={{
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  marginBottom: '0.5rem',
+                  color: '#9ca3af',
+                }}
+              >
+                Average Dirty Duration
+              </h3>
+              <div
+                style={{
+                  fontSize: '2rem',
+                  fontWeight: 700,
+                  color: '#f9fafb',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                {metricsSummary?.averageDirtyTimeMinutes !== null &&
+                metricsSummary?.averageDirtyTimeMinutes !== undefined
                   ? `${Math.round(metricsSummary.averageDirtyTimeMinutes)} min`
                   : 'N/A'}
               </div>
@@ -506,9 +650,26 @@ export function AdminView({ session }: AdminViewProps) {
             </div>
 
             <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem', color: '#9ca3af' }}>Average Cleaning Duration</h3>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb', marginBottom: '0.5rem' }}>
-                {metricsSummary?.averageCleaningDurationMinutes !== null && metricsSummary?.averageCleaningDurationMinutes !== undefined
+              <h3
+                style={{
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  marginBottom: '0.5rem',
+                  color: '#9ca3af',
+                }}
+              >
+                Average Cleaning Duration
+              </h3>
+              <div
+                style={{
+                  fontSize: '2rem',
+                  fontWeight: 700,
+                  color: '#f9fafb',
+                  marginBottom: '0.5rem',
+                }}
+              >
+                {metricsSummary?.averageCleaningDurationMinutes !== null &&
+                metricsSummary?.averageCleaningDurationMinutes !== undefined
                   ? `${Math.round(metricsSummary.averageCleaningDurationMinutes)} min`
                   : 'N/A'}
               </div>
@@ -518,49 +679,85 @@ export function AdminView({ session }: AdminViewProps) {
             </div>
 
             <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
-              <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.5rem', color: '#9ca3af' }}>Total Rooms Cleaned</h3>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb', marginBottom: '0.5rem' }}>
+              <h3
+                style={{
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  marginBottom: '0.5rem',
+                  color: '#9ca3af',
+                }}
+              >
+                Total Rooms Cleaned
+              </h3>
+              <div
+                style={{
+                  fontSize: '2rem',
+                  fontWeight: 700,
+                  color: '#f9fafb',
+                  marginBottom: '0.5rem',
+                }}
+              >
                 {metricsSummary?.totalRoomsCleaned ?? 0}
               </div>
-              <div style={{ fontSize: '0.875rem', color: '#9ca3af' }}>
-                In selected time range
-              </div>
+              <div style={{ fontSize: '0.875rem', color: '#9ca3af' }}>In selected time range</div>
             </div>
           </div>
 
           {/* Per-Staff Breakdown Table */}
           <div style={{ background: '#1f2937', borderRadius: '8px', overflow: 'hidden' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, padding: '1.5rem', borderBottom: '1px solid #374151' }}>Per-Staff Breakdown</h3>
+            <h3
+              style={{
+                fontSize: '1.25rem',
+                fontWeight: 600,
+                padding: '1.5rem',
+                borderBottom: '1px solid #374151',
+              }}
+            >
+              Per-Staff Breakdown
+            </h3>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#111827', borderBottom: '1px solid #374151' }}>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Staff Member</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Rooms Cleaned</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Avg Dirty Duration</th>
-                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>Avg Cleaning Duration</th>
+                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>
+                    Staff Member
+                  </th>
+                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>
+                    Rooms Cleaned
+                  </th>
+                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>
+                    Avg Dirty Duration
+                  </th>
+                  <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600 }}>
+                    Avg Cleaning Duration
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {metricsByStaff.length === 0 ? (
                   <tr>
-                    <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>
+                    <td
+                      colSpan={4}
+                      style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}
+                    >
                       No metrics data available for selected time range
                     </td>
                   </tr>
                 ) : (
                   metricsByStaff
-                    .filter(staff => !selectedStaffId || staff.staffId === selectedStaffId)
+                    .filter((staff) => !selectedStaffId || staff.staffId === selectedStaffId)
                     .map((staff) => (
                       <tr key={staff.staffId} style={{ borderBottom: '1px solid #374151' }}>
                         <td style={{ padding: '1rem', fontWeight: 600 }}>{staff.staffName}</td>
                         <td style={{ padding: '1rem' }}>{staff.totalRoomsCleaned ?? 0}</td>
                         <td style={{ padding: '1rem' }}>
-                          {staff.averageDirtyTimeMinutes !== null && staff.averageDirtyTimeMinutes !== undefined
+                          {staff.averageDirtyTimeMinutes !== null &&
+                          staff.averageDirtyTimeMinutes !== undefined
                             ? `${Math.round(staff.averageDirtyTimeMinutes)} min (n=${staff.dirtyTimeSampleCount})`
                             : 'N/A'}
                         </td>
                         <td style={{ padding: '1rem' }}>
-                          {staff.averageCleaningDurationMinutes !== null && staff.averageCleaningDurationMinutes !== undefined
+                          {staff.averageCleaningDurationMinutes !== null &&
+                          staff.averageCleaningDurationMinutes !== undefined
                             ? `${Math.round(staff.averageCleaningDurationMinutes)} min (n=${staff.cleaningDurationSampleCount})`
                             : 'N/A'}
                         </td>
@@ -575,5 +772,3 @@ export function AdminView({ session }: AdminViewProps) {
     </div>
   );
 }
-
-

@@ -1,5 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
-import type { WebSocketEvent, ResolvedCheckoutKey, CheckoutChecklist, CheckoutCompletedPayload } from '@club-ops/shared';
+import type {
+  WebSocketEvent,
+  ResolvedCheckoutKey,
+  CheckoutChecklist,
+  CheckoutCompletedPayload,
+} from '@club-ops/shared';
 import { Html5Qrcode } from 'html5-qrcode';
 import logoImage from './assets/the-clubs-logo.png';
 
@@ -35,7 +40,12 @@ function assertResolvedCheckoutKey(v: unknown): ResolvedCheckoutKey {
 
 type CheckoutRequestResponse = { requestId: string };
 function isCheckoutRequestResponse(v: unknown): v is CheckoutRequestResponse {
-  return typeof v === 'object' && v !== null && 'requestId' in v && typeof (v as { requestId: unknown }).requestId === 'string';
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'requestId' in v &&
+    typeof (v as { requestId: unknown }).requestId === 'string'
+  );
 }
 
 function isWebSocketEvent(v: unknown): v is WebSocketEvent {
@@ -76,12 +86,14 @@ function App() {
 
     ws.onopen = () => {
       console.log('WebSocket connected');
-      
+
       // Subscribe to checkout events
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        events: ['CHECKOUT_COMPLETED'],
-      }));
+      ws.send(
+        JSON.stringify({
+          type: 'subscribe',
+          events: ['CHECKOUT_COMPLETED'],
+        })
+      );
     };
 
     ws.onclose = () => {
@@ -104,7 +116,7 @@ function App() {
           if (payload.kioskDeviceId === kioskDeviceId && payload.requestId === requestId) {
             // Checkout completed
             setView('complete');
-            
+
             // Reset after 10 seconds
             setTimeout(() => {
               setView('idle');
@@ -126,7 +138,7 @@ function App() {
   // Start QR scanning
   const handleStartCheckout = async () => {
     setView('scanning');
-    
+
     // Initialize QR scanner
     try {
       const qrCode = new Html5Qrcode('qr-reader');
@@ -148,11 +160,11 @@ function App() {
           // Ignore errors (scanner will keep trying)
         }
       );
-      } catch (err: unknown) {
-        console.error('Failed to start QR scanner:', err);
-        alert('Failed to start camera. Please check permissions.');
-        setView('idle');
-      }
+    } catch (err: unknown) {
+      console.error('Failed to start QR scanner:', err);
+      alert('Failed to start camera. Please check permissions.');
+      setView('idle');
+    }
   };
 
   // Handle QR code scan
@@ -182,7 +194,7 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json() as unknown;
+        const errorData = (await response.json()) as unknown;
         const errorMessage = isApiErrorShape(errorData) ? errorData.error : 'Failed to resolve key';
         throw new Error(errorMessage);
       }
@@ -191,7 +203,10 @@ function App() {
       // Type assertion is safe because assertResolvedCheckoutKey validates and narrows the type
       const data: ResolvedKeyData = assertResolvedCheckoutKey(responseData);
       setResolvedKey(data);
-      const feeAmount: number = typeof data.lateFeeAmount === 'number' && Number.isFinite(data.lateFeeAmount) ? data.lateFeeAmount : 0;
+      const feeAmount: number =
+        typeof data.lateFeeAmount === 'number' && Number.isFinite(data.lateFeeAmount)
+          ? data.lateFeeAmount
+          : 0;
       setLateFeeAmount(feeAmount);
 
       // Initialize checklist based on rental type
@@ -211,7 +226,8 @@ function App() {
       setView('checklist');
     } catch (err: unknown) {
       console.error('Failed to resolve key:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to resolve key. Please try again.';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to resolve key. Please try again.';
       alert(errorMessage);
       setView('idle');
     }
@@ -243,12 +259,14 @@ function App() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json() as unknown;
-        const errorMessage = isApiErrorShape(errorData) ? errorData.error : 'Failed to create checkout request';
+        const errorData = (await response.json()) as unknown;
+        const errorMessage = isApiErrorShape(errorData)
+          ? errorData.error
+          : 'Failed to create checkout request';
         throw new Error(errorMessage);
       }
 
-      const responseData = await response.json() as unknown;
+      const responseData = (await response.json()) as unknown;
       if (!isCheckoutRequestResponse(responseData)) {
         throw new Error('Invalid response format');
       }
@@ -256,7 +274,8 @@ function App() {
       setView('waiting');
     } catch (err: unknown) {
       console.error('Failed to submit checkout:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to submit checkout. Please try again.';
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to submit checkout. Please try again.';
       alert(errorMessage);
     }
   };
@@ -264,7 +283,7 @@ function App() {
   // Check if all required checklist items are checked
   const isChecklistComplete = () => {
     if (!resolvedKey) return false;
-    
+
     const baseKeyOk = checklist.key === true;
     if (resolvedKey.rentalType === 'LOCKER' || resolvedKey.rentalType === 'GYM_LOCKER') {
       return baseKeyOk && checklist.towel === true;
@@ -294,9 +313,7 @@ function App() {
         <img src={logoImageSrc} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="scan-container">
-            <p className="scan-instructions">
-              Scan the QR code on your locker key or room key
-            </p>
+            <p className="scan-instructions">Scan the QR code on your locker key or room key</p>
             <div id="qr-reader" ref={scannerContainerRef}></div>
           </div>
         </main>
@@ -307,14 +324,14 @@ function App() {
   // Checklist view
   if (view === 'checklist' && resolvedKey) {
     const isLocker = resolvedKey.rentalType === 'LOCKER' || resolvedKey.rentalType === 'GYM_LOCKER';
-    
+
     return (
       <div className="active-container">
         <img src={logoImageSrc} alt="Club Dallas" className="logo-header" />
         <main className="main-content">
           <div className="checklist-container">
             <h1 className="checklist-title">Please verify items returned</h1>
-            
+
             <div className="checklist-items">
               {isLocker ? (
                 <>
@@ -421,7 +438,9 @@ function App() {
         <main className="main-content">
           <div className="complete-container">
             <h1 className="complete-title">
-              {lateFeeAmount > 0 ? 'Late fee paid. We look forward to seeing you again.' : 'Checkout complete. Thank you.'}
+              {lateFeeAmount > 0
+                ? 'Late fee paid. We look forward to seeing you again.'
+                : 'Checkout complete. Thank you.'}
             </h1>
           </div>
         </main>
@@ -433,9 +452,3 @@ function App() {
 }
 
 export default App;
-
-
-
-
-
-

@@ -1,6 +1,7 @@
 # Club Dallas POS Upgrade: Employee Register Layout + Unified Scan Flow + Kiosk Agreement Sync
 
 This checklist is the implementation plan derived from:
+
 - `SPEC.md` (Counter Check-in Flow v1 + Employee Register Standard View)
 - `openapi.yaml` (API contract targets for check-in + agreement)
 - `docs/database/DATABASE_SOURCE_OF_TRUTH.md` + `docs/database/DATABASE_ENTITY_DETAILS.md` + `db/schema.sql` (canonical DB meaning/contracts)
@@ -115,5 +116,3 @@ This checklist is the implementation plan derived from:
 - **ID scan sources**: Employee Register currently supports both wedge scans and camera PDF417 parsing; confirm whether camera scanning is required in production or just a fallback.
 - **Agreement body**: The spec allows placeholder text for now; confirm whether we need versioning (agreement revision IDs) or audit metadata beyond the stored signature payload.
 - **Event contract**: `SPEC.md` lists several WebSocket event names; confirm which are canonical in `packages/shared` and whether agreement status should be part of `SESSION_UPDATED` vs a dedicated event.
-
-

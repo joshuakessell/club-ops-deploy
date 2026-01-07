@@ -15,6 +15,7 @@ This system manages club operations including customer check-ins, room assignmen
 **Purpose**: Tablet-based self-service kiosk for customer check-ins.
 
 **Features**:
+
 - Logo-only idle screen until session is created
 - ID scan to display customer name
 - Membership card scanning (QR/NFC) to display membership number
@@ -24,12 +25,14 @@ This system manages club operations including customer check-ins, room assignmen
 - Locker assignment confirmation
 
 **Flow**:
+
 1. **Idle State**: Displays logo only, waiting for employee register to create session
 2. **After ID Scan**: Customer name appears (via SESSION_UPDATED WebSocket event)
 3. **After Membership Scan**: Membership number appears (via SESSION_UPDATED WebSocket event)
 4. **Rental Options**: Displays available rental options including Gym Locker if eligible
 
 **Technical Requirements**:
+
 - Locked single-app experience (no browser navigation)
 - WebSocket connection for live inventory updates and session events
 - Listens for SESSION_UPDATED events to update UI state
@@ -41,12 +44,13 @@ This system manages club operations including customer check-ins, room assignmen
 **Purpose**: Staff-facing tablet application for register sign-in and check-in session management.
 
 **Register Sign-In Flow**:
+
 - Maximum of two active register sessions (Register 1 and Register 2)
 - Each tablet has a manually assigned `deviceId` (constant or environment variable, fallback in localStorage)
 - Sign-in flow:
   1. **Select Employee**: Modal lists all available employees (excludes employees already signed into any register)
   2. **Enter PIN**: 4-digit numeric PIN input, server-only verification
-  3. **Register Assignment**: 
+  3. **Register Assignment**:
      - If no registers occupied: Show "Register 1" and "Register 2" buttons
      - If one register occupied: Automatically assign remaining register, show confirmation
   4. **Confirm**: Server locks employeeId + deviceId + registerNumber
@@ -55,6 +59,7 @@ This system manages club operations including customer check-ins, room assignmen
 - Sign out releases register session on server
 
 **Check-in Features** (see "Counter Check-in Flow v1" below):
+
 - Barcode scanner input capture for ID and membership scans
 - Customer lookup and check-in processing
 - Room assignment with real-time availability
@@ -63,6 +68,7 @@ This system manages club operations including customer check-ins, room assignmen
 - Integration with Square POS (external)
 
 **Technical Requirements**:
+
 - Landscape-only layout optimized for Android tablets
 - Material UI Dark theme (black-and-white)
 - Modal-based sign-in flow with shake animation on PIN failure
@@ -232,6 +238,7 @@ The employee register displays organized inventory lists:
 ### WebSocket Events
 
 **Server → Client**:
+
 - `SESSION_UPDATED` - Lane session created/updated (customer name, membership, allowed rentals, selection state)
 - `SELECTION_PROPOSED` - Rental type proposed by customer or employee
 - `SELECTION_LOCKED` - Selection confirmed and locked (first-confirm-wins)
@@ -258,6 +265,7 @@ The employee register displays organized inventory lists:
 **Purpose**: Administrative web application for oversight and management.
 
 **Features**:
+
 - Global view of all rooms and lockers
 - Staff activity monitoring
 - Waitlist management
@@ -266,6 +274,7 @@ The employee register displays organized inventory lists:
 - Cleaning workflow management
 
 **Technical Requirements**:
+
 - Desktop-optimized responsive design
 - Role-based access control
 - Audit trail for all override actions
@@ -277,23 +286,24 @@ The employee register displays organized inventory lists:
 
 ### REST Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/rooms` | List all rooms |
-| GET | `/rooms/:id` | Get room details |
-| PATCH | `/rooms/:id/status` | Update room status |
-| POST | `/rooms/batch-status` | Batch status update |
-| GET | `/inventory` | Get inventory summary |
-| GET | `/lockers` | List all lockers |
-| POST | `/sessions` | Create check-in session |
-| POST | `/sessions/scan-id` | Scan ID to create/update session with customer name |
-| POST | `/sessions/scan-membership` | Scan membership to update session with membership number |
-| GET | `/sessions/active` | List active sessions |
+| Method | Endpoint                    | Description                                              |
+| ------ | --------------------------- | -------------------------------------------------------- |
+| GET    | `/health`                   | Health check                                             |
+| GET    | `/rooms`                    | List all rooms                                           |
+| GET    | `/rooms/:id`                | Get room details                                         |
+| PATCH  | `/rooms/:id/status`         | Update room status                                       |
+| POST   | `/rooms/batch-status`       | Batch status update                                      |
+| GET    | `/inventory`                | Get inventory summary                                    |
+| GET    | `/lockers`                  | List all lockers                                         |
+| POST   | `/sessions`                 | Create check-in session                                  |
+| POST   | `/sessions/scan-id`         | Scan ID to create/update session with customer name      |
+| POST   | `/sessions/scan-membership` | Scan membership to update session with membership number |
+| GET    | `/sessions/active`          | List active sessions                                     |
 
 ### WebSocket Events
 
 **Server → Client**:
+
 - `ROOM_STATUS_CHANGED` - Room status transition
 - `INVENTORY_UPDATED` - Inventory counts changed
 - `ROOM_ASSIGNED` - Room assigned to customer
@@ -301,6 +311,7 @@ The employee register displays organized inventory lists:
 - `SESSION_UPDATED` - Session created or updated (contains customer_name, membership_number, allowed_rentals)
 
 **Client → Server**:
+
 - `subscribe` - Subscribe to specific event types
 - `unsubscribe` - Unsubscribe from events
 
@@ -344,16 +355,17 @@ When mixed statuses are scanned:
 
 ### Tracked Metrics
 
-| Metric | Description |
-|--------|-------------|
-| Response Time | DIRTY → CLEANING transition time |
+| Metric            | Description                      |
+| ----------------- | -------------------------------- |
+| Response Time     | DIRTY → CLEANING transition time |
 | Cleaning Duration | CLEANING → CLEAN transition time |
-| Rooms Per Shift | Count by staff member |
-| Batch Efficiency | Rooms cleaned per batch |
+| Rooms Per Shift   | Count by staff member            |
+| Batch Efficiency  | Rooms cleaned per batch          |
 
 ### Exclusions
 
 Records excluded from metrics:
+
 - Rooms with `overrideFlag: true`
 - Transitions with anomalous timestamps (<30s or >4h)
 - Test/training accounts
@@ -370,16 +382,17 @@ Records excluded from metrics:
 
 ### Authorization
 
-| Role | Capabilities |
-|------|--------------|
-| Kiosk | Read-only room availability |
-| Staff | Check-in/out, room/locker assignment |
+| Role    | Capabilities                            |
+| ------- | --------------------------------------- |
+| Kiosk   | Read-only room availability             |
+| Staff   | Check-in/out, room/locker assignment    |
 | Manager | Override capabilities, staff management |
-| Admin | Full system access, audit logs |
+| Admin   | Full system access, audit logs          |
 
 ### Audit Logging
 
 All state-changing operations logged:
+
 - Timestamp
 - User ID and role
 - Action type
@@ -393,10 +406,12 @@ All state-changing operations logged:
 **Deprecated / superseded**: This spec is not a database schema reference.
 
 For canonical database meaning/contracts, see:
+
 - `docs/database/DATABASE_SOURCE_OF_TRUTH.md`
 - `docs/database/DATABASE_ENTITY_DETAILS.md`
 
 For the current schema snapshot and history, see:
+
 - `db/schema.sql`
 - `services/api/migrations/`
 
@@ -405,6 +420,7 @@ For the current schema snapshot and history, see:
 ## Development Roadmap
 
 ### Phase 1 (Current)
+
 - [x] Monorepo scaffold
 - [x] Shared types and validation
 - [x] API skeleton with health check
@@ -412,17 +428,20 @@ For the current schema snapshot and history, see:
 - [x] App scaffolds with placeholder UIs
 
 ### Phase 2
+
 - [ ] Database integration
 - [ ] Room CRUD operations
 - [ ] Basic check-in flow
 - [ ] Real-time inventory updates
 
 ### Phase 3
+
 - [ ] Cleaning station workflow
 - [ ] Batch operations
 - [ ] Override system with audit
 
 ### Phase 4
+
 - [ ] Metrics dashboard
 - [ ] Staff management
 - [ ] Reporting and exports

@@ -33,7 +33,7 @@ function isWeekdayDiscountWindow(date: Date): boolean {
   const day = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 5 = Friday
   const hour = date.getHours();
   const minute = date.getMinutes();
-  
+
   // Monday (1) through Friday (5)
   if (day >= 1 && day <= 5) {
     // 8am (8) to 4pm (16)
@@ -45,7 +45,7 @@ function isWeekdayDiscountWindow(date: Date): boolean {
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -69,11 +69,11 @@ function hasValidSixMonthMembership(
   if (membershipCardType !== 'SIX_MONTH') {
     return false;
   }
-  
+
   if (!membershipValidUntil) {
     return false;
   }
-  
+
   // Valid if membership hasn't expired
   return new Date() <= membershipValidUntil;
 }
@@ -118,53 +118,49 @@ function getYouthRoomPrice(rentalType: RentalType): number {
 /**
  * Calculate locker price.
  */
-function getLockerPrice(
-  rentalType: RentalType,
-  checkInTime: Date,
-  isYouth: boolean
-): number {
+function getLockerPrice(rentalType: RentalType, checkInTime: Date, isYouth: boolean): number {
   if (rentalType !== 'LOCKER' && rentalType !== 'GYM_LOCKER') {
     return 0;
   }
-  
+
   // Gym locker is always free
   if (rentalType === 'GYM_LOCKER') {
     return 0;
   }
-  
+
   // Youth lockers
   if (isYouth) {
     const isWeekdayDiscount = isWeekdayDiscountWindow(checkInTime);
     return isWeekdayDiscount ? 0 : 7; // Free during weekday window, $7 otherwise
   }
-  
+
   // Non-youth lockers
   const day = checkInTime.getDay();
   const hour = checkInTime.getHours();
   const isWeekdayDiscount = isWeekdayDiscountWindow(checkInTime);
-  
+
   if (isWeekdayDiscount) {
     // Monday 8am to Friday 4pm
     return 16;
   }
-  
+
   // Check if weekend (Saturday = 6, Sunday = 0)
   if (day === 0 || day === 6) {
     return 24;
   }
-  
+
   // Weekday 4pm to 8am Monday-Thursday
   // Friday 4pm to Monday 8am counts as weekend pricing
   if (day === 5 && hour >= 16) {
     // Friday after 4pm
     return 24;
   }
-  
+
   if (day === 0 || (day === 1 && hour < 8)) {
     // Sunday or Monday before 8am
     return 24;
   }
-  
+
   // Monday-Thursday 4pm to 8am next day
   return 19;
 }
@@ -182,12 +178,12 @@ function getMembershipFee(
   if (customerAge !== undefined && customerAge < 25) {
     return 0;
   }
-  
+
   // No fee if valid 6-month membership
   if (hasValidSixMonthMembership(membershipCardType, membershipValidUntil)) {
     return 0;
   }
-  
+
   // $13 for 25+ without valid membership
   return 13;
 }
@@ -198,10 +194,10 @@ function getMembershipFee(
 export function calculatePriceQuote(input: PricingInput): PriceQuote {
   const isWeekdayDiscount = isWeekdayDiscountWindow(input.checkInTime);
   const youth = isYouth(input.customerAge);
-  
+
   const lineItems: Array<{ description: string; amount: number }> = [];
   let rentalFee = 0;
-  
+
   // Calculate rental fee
   if (input.rentalType === 'LOCKER' || input.rentalType === 'GYM_LOCKER') {
     rentalFee = getLockerPrice(input.rentalType, input.checkInTime, youth);
@@ -223,33 +219,36 @@ export function calculatePriceQuote(input: PricingInput): PriceQuote {
     } else {
       rentalFee = getBaseRoomPrice(input.rentalType, isWeekdayDiscount);
     }
-    const roomTypeName = input.rentalType === 'STANDARD' ? 'Standard Room' :
-                         input.rentalType === 'DOUBLE' ? 'Double Room' :
-                         'Special Room';
+    const roomTypeName =
+      input.rentalType === 'STANDARD'
+        ? 'Standard Room'
+        : input.rentalType === 'DOUBLE'
+          ? 'Double Room'
+          : 'Special Room';
     lineItems.push({
       description: roomTypeName,
       amount: rentalFee,
     });
   }
-  
+
   // Calculate membership fee
   const membershipFee = getMembershipFee(
     input.customerAge,
     input.membershipCardType,
     input.membershipValidUntil
   );
-  
+
   if (membershipFee > 0) {
     lineItems.push({
       description: 'Membership Fee',
       amount: membershipFee,
     });
   }
-  
+
   const total = rentalFee + membershipFee;
-  
+
   const messages: string[] = ['No refunds'];
-  
+
   return {
     rentalFee,
     membershipFee,
@@ -264,20 +263,19 @@ export function calculatePriceQuote(input: PricingInput): PriceQuote {
  */
 export function getUpgradeFee(from: RentalType, to: RentalType): number | null {
   const upgradeFees: Record<string, Record<string, number>> = {
-    'LOCKER': {
-      'STANDARD': 8,
-      'DOUBLE': 17,
-      'SPECIAL': 27,
+    LOCKER: {
+      STANDARD: 8,
+      DOUBLE: 17,
+      SPECIAL: 27,
     },
-    'STANDARD': {
-      'DOUBLE': 9,
-      'SPECIAL': 19,
+    STANDARD: {
+      DOUBLE: 9,
+      SPECIAL: 19,
     },
-    'DOUBLE': {
-      'SPECIAL': 9,
+    DOUBLE: {
+      SPECIAL: 9,
     },
   };
-  
+
   return upgradeFees[from]?.[to] ?? null;
 }
-

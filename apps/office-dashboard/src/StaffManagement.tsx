@@ -61,7 +61,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
 
       const response = await fetch(`${API_BASE}/v1/admin/staff?${params}`, {
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
 
@@ -83,7 +83,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
     try {
       const response = await fetch(`${API_BASE}/v1/auth/webauthn/credentials/${staffId}`, {
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
 
@@ -115,7 +115,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify(formData),
       });
@@ -141,7 +141,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({ active: !currentActive }),
       });
@@ -174,12 +174,15 @@ export function StaffManagement({ session }: StaffManagementProps) {
     if (!session.sessionToken) return;
 
     try {
-      const response = await fetch(`${API_BASE}/v1/auth/webauthn/credentials/${credentialId}/revoke`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-      });
+      const response = await fetch(
+        `${API_BASE}/v1/auth/webauthn/credentials/${credentialId}/revoke`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+        }
+      );
 
       if (response.ok) {
         showToast('Passkey revoked', 'success');
@@ -224,7 +227,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
         body: JSON.stringify({ newPin }),
       });
@@ -257,12 +260,23 @@ export function StaffManagement({ session }: StaffManagementProps) {
   };
 
   return (
-    <div className="staff-management" style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}>
-      <div className="staff-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+    <div
+      className="staff-management"
+      style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto' }}
+    >
+      <div
+        className="staff-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem',
+        }}
+      >
         <h1 style={{ fontSize: '2rem', fontWeight: 600 }}>Staff Management</h1>
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button
-            onClick={() => window.location.href = '/admin'}
+            onClick={() => (window.location.href = '/admin')}
             style={{
               padding: '0.75rem 1.5rem',
               background: '#374151',
@@ -294,7 +308,10 @@ export function StaffManagement({ session }: StaffManagementProps) {
       </div>
 
       {/* Filters */}
-      <div className="staff-filters" style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+      <div
+        className="staff-filters"
+        style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}
+      >
         <input
           type="text"
           placeholder="Search by name or ID..."
@@ -346,7 +363,10 @@ export function StaffManagement({ session }: StaffManagementProps) {
       </div>
 
       {/* Staff Table */}
-      <div className="staff-table-container" style={{ background: '#1f2937', borderRadius: '8px', overflow: 'hidden' }}>
+      <div
+        className="staff-table-container"
+        style={{ background: '#1f2937', borderRadius: '8px', overflow: 'hidden' }}
+      >
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#111827', borderBottom: '1px solid #374151' }}>
@@ -448,10 +468,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
 
       {/* Create Staff Modal */}
       {showCreateModal && (
-        <CreateStaffModal
-          onClose={() => setShowCreateModal(false)}
-          onCreate={handleCreateStaff}
-        />
+        <CreateStaffModal onClose={() => setShowCreateModal(false)} onCreate={handleCreateStaff} />
       )}
 
       {/* Staff Detail Modal */}
@@ -636,7 +653,9 @@ function CreateStaffModal({
             />
           </div>
           <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <label
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+            >
               <input
                 type="checkbox"
                 checked={active}
@@ -699,14 +718,16 @@ function StaffDetailModal({
   sessionToken: string;
 }) {
   const [activeTab, setActiveTab] = useState<'details' | 'passkeys' | 'documents'>('details');
-  const [documents, setDocuments] = useState<Array<{
-    id: string;
-    docType: string;
-    filename: string;
-    mimeType: string;
-    uploadedAt: string;
-    notes: string | null;
-  }>>([]);
+  const [documents, setDocuments] = useState<
+    Array<{
+      id: string;
+      docType: string;
+      filename: string;
+      mimeType: string;
+      uploadedAt: string;
+      notes: string | null;
+    }>
+  >([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
@@ -720,7 +741,7 @@ function StaffDetailModal({
     setLoadingDocs(true);
     try {
       const response = await fetch(`${API_BASE}/v1/admin/employees/${staff.id}/documents`, {
-        headers: { 'Authorization': `Bearer ${sessionToken}` },
+        headers: { Authorization: `Bearer ${sessionToken}` },
       });
       if (response.ok) {
         const data = await response.json();
@@ -742,7 +763,7 @@ function StaffDetailModal({
         const response = await fetch(`${API_BASE}/v1/admin/employees/${staff.id}/documents`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${sessionToken}`,
+            Authorization: `Bearer ${sessionToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -797,7 +818,14 @@ function StaffDetailModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1.5rem',
+          }}
+        >
           <h2 style={{ fontSize: '1.5rem' }}>{staff.name}</h2>
           <button
             onClick={onClose}
@@ -814,7 +842,14 @@ function StaffDetailModal({
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid #374151' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.5rem',
+            marginBottom: '1.5rem',
+            borderBottom: '1px solid #374151',
+          }}
+        >
           <button
             onClick={() => setActiveTab('details')}
             style={{
@@ -835,7 +870,8 @@ function StaffDetailModal({
               padding: '0.75rem 1.5rem',
               background: activeTab === 'passkeys' ? '#374151' : 'transparent',
               border: 'none',
-              borderBottom: activeTab === 'passkeys' ? '2px solid #10b981' : '2px solid transparent',
+              borderBottom:
+                activeTab === 'passkeys' ? '2px solid #10b981' : '2px solid transparent',
               color: '#f9fafb',
               cursor: 'pointer',
               fontSize: '1rem',
@@ -849,7 +885,8 @@ function StaffDetailModal({
               padding: '0.75rem 1.5rem',
               background: activeTab === 'documents' ? '#374151' : 'transparent',
               border: 'none',
-              borderBottom: activeTab === 'documents' ? '2px solid #10b981' : '2px solid transparent',
+              borderBottom:
+                activeTab === 'documents' ? '2px solid #10b981' : '2px solid transparent',
               color: '#f9fafb',
               cursor: 'pointer',
               fontSize: '1rem',
@@ -862,10 +899,19 @@ function StaffDetailModal({
         {activeTab === 'details' && (
           <>
             <div style={{ marginBottom: '2rem' }}>
-              <p><strong>Role:</strong> {staff.role}</p>
-              <p><strong>Status:</strong> {staff.active ? 'Active' : 'Inactive'}</p>
-              <p><strong>Created:</strong> {new Date(staff.createdAt).toLocaleString()}</p>
-              <p><strong>Last Login:</strong> {staff.lastLogin ? new Date(staff.lastLogin).toLocaleString() : 'Never'}</p>
+              <p>
+                <strong>Role:</strong> {staff.role}
+              </p>
+              <p>
+                <strong>Status:</strong> {staff.active ? 'Active' : 'Inactive'}
+              </p>
+              <p>
+                <strong>Created:</strong> {new Date(staff.createdAt).toLocaleString()}
+              </p>
+              <p>
+                <strong>Last Login:</strong>{' '}
+                {staff.lastLogin ? new Date(staff.lastLogin).toLocaleString() : 'Never'}
+              </p>
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
@@ -891,75 +937,88 @@ function StaffDetailModal({
         {activeTab === 'passkeys' && (
           <>
             <h3 style={{ marginBottom: '1rem', fontSize: '1.25rem' }}>Passkeys</h3>
-        {passkeys.length === 0 ? (
-          <p style={{ color: '#9ca3af' }}>No passkeys registered</p>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #374151' }}>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Credential ID</th>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Device</th>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Created</th>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Last Used</th>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Status</th>
-                <th style={{ padding: '0.75rem', textAlign: 'left' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {passkeys.map((pk) => (
-                <tr key={pk.id} style={{ borderBottom: '1px solid #374151' }}>
-                  <td style={{ padding: '0.75rem', fontFamily: 'monospace', fontSize: '0.875rem' }}>
-                    {pk.credentialId.slice(0, 16)}...
-                  </td>
-                  <td style={{ padding: '0.75rem' }}>{pk.deviceId}</td>
-                  <td style={{ padding: '0.75rem', color: '#9ca3af' }}>
-                    {new Date(pk.createdAt).toLocaleDateString()}
-                  </td>
-                  <td style={{ padding: '0.75rem', color: '#9ca3af' }}>
-                    {pk.lastUsedAt ? new Date(pk.lastUsedAt).toLocaleDateString() : 'Never'}
-                  </td>
-                  <td style={{ padding: '0.75rem' }}>
-                    <span
-                      style={{
-                        padding: '0.25rem 0.75rem',
-                        borderRadius: '4px',
-                        fontSize: '0.875rem',
-                        background: pk.isActive ? '#10b981' : '#ef4444',
-                        color: '#f9fafb',
-                      }}
-                    >
-                      {pk.isActive ? 'Active' : 'Revoked'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem' }}>
-                    {pk.isActive && (
-                      <button
-                        onClick={() => onRevokePasskey(pk.credentialId)}
+            {passkeys.length === 0 ? (
+              <p style={{ color: '#9ca3af' }}>No passkeys registered</p>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #374151' }}>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Credential ID</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Device</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Created</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Last Used</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Status</th>
+                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {passkeys.map((pk) => (
+                    <tr key={pk.id} style={{ borderBottom: '1px solid #374151' }}>
+                      <td
                         style={{
-                          padding: '0.5rem 1rem',
-                          background: '#ef4444',
-                          border: 'none',
-                          borderRadius: '4px',
-                          color: '#f9fafb',
-                          cursor: 'pointer',
+                          padding: '0.75rem',
+                          fontFamily: 'monospace',
                           fontSize: '0.875rem',
                         }}
                       >
-                        Revoke
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+                        {pk.credentialId.slice(0, 16)}...
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>{pk.deviceId}</td>
+                      <td style={{ padding: '0.75rem', color: '#9ca3af' }}>
+                        {new Date(pk.createdAt).toLocaleDateString()}
+                      </td>
+                      <td style={{ padding: '0.75rem', color: '#9ca3af' }}>
+                        {pk.lastUsedAt ? new Date(pk.lastUsedAt).toLocaleDateString() : 'Never'}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <span
+                          style={{
+                            padding: '0.25rem 0.75rem',
+                            borderRadius: '4px',
+                            fontSize: '0.875rem',
+                            background: pk.isActive ? '#10b981' : '#ef4444',
+                            color: '#f9fafb',
+                          }}
+                        >
+                          {pk.isActive ? 'Active' : 'Revoked'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        {pk.isActive && (
+                          <button
+                            onClick={() => onRevokePasskey(pk.credentialId)}
+                            style={{
+                              padding: '0.5rem 1rem',
+                              background: '#ef4444',
+                              border: 'none',
+                              borderRadius: '4px',
+                              color: '#f9fafb',
+                              cursor: 'pointer',
+                              fontSize: '0.875rem',
+                            }}
+                          >
+                            Revoke
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </>
         )}
 
         {activeTab === 'documents' && (
           <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '1rem',
+              }}
+            >
               <h3 style={{ fontSize: '1.25rem' }}>Documents</h3>
               <button
                 onClick={() => setShowUploadModal(true)}
@@ -992,7 +1051,7 @@ function StaffDetailModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {documents.map(doc => (
+                  {documents.map((doc) => (
                     <tr key={doc.id} style={{ borderBottom: '1px solid #374151' }}>
                       <td style={{ padding: '0.75rem' }}>{doc.docType}</td>
                       <td style={{ padding: '0.75rem' }}>{doc.filename}</td>
@@ -1027,10 +1086,7 @@ function StaffDetailModal({
 
       {/* Upload Document Modal */}
       {showUploadModal && (
-        <UploadDocumentModal
-          onClose={() => setShowUploadModal(false)}
-          onUpload={handleUpload}
-        />
+        <UploadDocumentModal onClose={() => setShowUploadModal(false)} onUpload={handleUpload} />
       )}
     </div>
   );
@@ -1092,7 +1148,14 @@ function UploadDocumentModal({
           Upload Document
         </h2>
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             Document Type
           </label>
           <select
@@ -1117,7 +1180,14 @@ function UploadDocumentModal({
           </select>
         </div>
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             File
           </label>
           <input
@@ -1135,7 +1205,14 @@ function UploadDocumentModal({
           />
         </div>
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             Notes (optional)
           </label>
           <textarea
@@ -1299,4 +1376,3 @@ function PinResetModal({
     </div>
   );
 }
-

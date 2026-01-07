@@ -17,12 +17,12 @@ const theme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#2B66B8',        // Accent blue
+      main: '#2B66B8', // Accent blue
       light: '#4F7FD0',
       dark: '#1E4F93',
     },
     secondary: {
-      main: '#A0A1A2',       // Muted
+      main: '#A0A1A2', // Muted
       light: '#C0C1C2',
       dark: '#808182',
     },
@@ -47,14 +47,14 @@ const theme = createTheme({
       dark: '#2563eb',
     },
     background: {
-      default: '#282828',     // Background
-      paper: '#2B2B2D',       // Cards/surfaces
+      default: '#282828', // Background
+      paper: '#2B2B2D', // Cards/surfaces
     },
     text: {
-      primary: '#EFF0F1',     // Primary text
-      secondary: '#A0A1A2',   // Secondary text
+      primary: '#EFF0F1', // Primary text
+      secondary: '#A0A1A2', // Secondary text
     },
-    divider: '#3F4042',       // Borders
+    divider: '#3F4042', // Borders
   },
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -111,7 +111,8 @@ const theme = createTheme({
         root: {
           backgroundColor: '#2B2B2D',
           border: '1px solid #3F4042',
-          backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%)',
+          backgroundImage:
+            'linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.10) 100%)',
           boxShadow: '0 10px 25px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.25)',
           overflow: 'hidden',
           position: 'relative',
@@ -133,7 +134,8 @@ const theme = createTheme({
             left: 0,
             width: '100%',
             height: '40%',
-            background: 'radial-gradient(ellipse at top left, rgba(43,102,184,0.14), transparent 70%)',
+            background:
+              'radial-gradient(ellipse at top left, rgba(43,102,184,0.14), transparent 70%)',
             pointerEvents: 'none',
             zIndex: 0,
           },
@@ -261,7 +263,7 @@ function App() {
         await fetch(`/api/v1/auth/logout`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${session.sessionToken}`,
+            Authorization: `Bearer ${session.sessionToken}`,
           },
         });
       } catch (error) {
@@ -277,11 +279,7 @@ function App() {
     return (
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <LockScreen
-          onLogin={handleLogin}
-          deviceType="desktop"
-          deviceId={deviceId}
-        />
+        <LockScreen onLogin={handleLogin} deviceType="desktop" deviceId={deviceId} />
       </ThemeProvider>
     );
   }
@@ -294,14 +292,53 @@ function App() {
       <Routes>
         <Route path="/" element={<Navigate to={isAdmin ? '/overview' : '/schedule'} replace />} />
         <Route element={<OfficeShell session={session} onLogout={handleLogout} />}>
-          <Route path="/overview" element={isAdmin ? <DemoOverview session={session} /> : <Navigate to="/schedule" replace />} />
-          <Route path="/monitor" element={isAdmin ? <LaneMonitorView session={session} /> : <Navigate to="/schedule" replace />} />
-          <Route path="/waitlist" element={isAdmin ? <WaitlistManagementView session={session} /> : <Navigate to="/schedule" replace />} />
-          <Route path="/reports" element={isAdmin ? <ReportsDemoView session={session} /> : <Navigate to="/schedule" replace />} />
-          <Route path="/customers" element={isAdmin ? <CustomerAdminToolsView session={session} /> : <Navigate to="/schedule" replace />} />
+          <Route
+            path="/overview"
+            element={
+              isAdmin ? <DemoOverview session={session} /> : <Navigate to="/schedule" replace />
+            }
+          />
+          <Route
+            path="/monitor"
+            element={
+              isAdmin ? <LaneMonitorView session={session} /> : <Navigate to="/schedule" replace />
+            }
+          />
+          <Route
+            path="/waitlist"
+            element={
+              isAdmin ? (
+                <WaitlistManagementView session={session} />
+              ) : (
+                <Navigate to="/schedule" replace />
+              )
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              isAdmin ? <ReportsDemoView session={session} /> : <Navigate to="/schedule" replace />
+            }
+          />
+          <Route
+            path="/customers"
+            element={
+              isAdmin ? (
+                <CustomerAdminToolsView session={session} />
+              ) : (
+                <Navigate to="/schedule" replace />
+              )
+            }
+          />
 
-          <Route path="/schedule" element={<ShiftsView session={session} limitedAccess={!isAdmin} />} />
-          <Route path="/messages" element={isAdmin ? <Navigate to="/overview" replace /> : <MessagesView />} />
+          <Route
+            path="/schedule"
+            element={<ShiftsView session={session} limitedAccess={!isAdmin} />}
+          />
+          <Route
+            path="/messages"
+            element={isAdmin ? <Navigate to="/overview" replace /> : <MessagesView />}
+          />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -310,4 +347,3 @@ function App() {
 }
 
 export default App;
-

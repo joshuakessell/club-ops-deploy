@@ -62,7 +62,9 @@ const SHIFT_BADGE_COLORS: Record<'A' | 'B' | 'C', string> = {
 export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
   const navigate = useNavigate();
   const isAdmin = session.role === 'ADMIN';
-  const [viewMode, setViewMode] = useState<'calendar' | 'list'>(() => (isAdmin ? 'calendar' : 'calendar'));
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>(() =>
+    isAdmin ? 'calendar' : 'calendar'
+  );
 
   // Calendar state (current month)
   const [monthShifts, setMonthShifts] = useState<Shift[]>([]);
@@ -100,7 +102,7 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
   useEffect(() => {
     // For limited access, auto-filter to current employee
     if (limitedAccess && employees.length > 0) {
-      const currentEmployee = employees.find(e => e.name === session.name);
+      const currentEmployee = employees.find((e) => e.name === session.name);
       if (currentEmployee && employeeFilter !== currentEmployee.id) {
         setEmployeeFilter(currentEmployee.id);
       }
@@ -143,14 +145,17 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
 
       const [shiftsRes, myReqRes, pendingRes] = await Promise.all([
         fetch(shiftsUrl, {
-          headers: { 'Authorization': `Bearer ${session.sessionToken}` },
+          headers: { Authorization: `Bearer ${session.sessionToken}` },
         }),
-        fetch(`${API_BASE}/v1/schedule/time-off-requests?from=${start.toISOString().slice(0, 10)}&to=${end.toISOString().slice(0, 10)}`, {
-          headers: { 'Authorization': `Bearer ${session.sessionToken}` },
-        }),
+        fetch(
+          `${API_BASE}/v1/schedule/time-off-requests?from=${start.toISOString().slice(0, 10)}&to=${end.toISOString().slice(0, 10)}`,
+          {
+            headers: { Authorization: `Bearer ${session.sessionToken}` },
+          }
+        ),
         isAdmin
           ? fetch(`${API_BASE}/v1/admin/time-off-requests?status=PENDING`, {
-              headers: { 'Authorization': `Bearer ${session.sessionToken}` },
+              headers: { Authorization: `Bearer ${session.sessionToken}` },
             })
           : Promise.resolve(null),
       ]);
@@ -185,7 +190,7 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
   const fetchEmployees = async () => {
     try {
       const response = await fetch(`${API_BASE}/v1/admin/staff`, {
-        headers: { 'Authorization': `Bearer ${session.sessionToken}` },
+        headers: { Authorization: `Bearer ${session.sessionToken}` },
       });
       if (response.ok) {
         const data = await response.json();
@@ -202,10 +207,10 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
       const params = new URLSearchParams();
       if (dateFrom) params.append('from', `${dateFrom}T00:00:00Z`);
       if (dateTo) params.append('to', `${dateTo}T23:59:59Z`);
-      
+
       // For limited access, filter to current employee only
       if (limitedAccess) {
-        const currentEmployee = employees.find(e => e.name === session.name);
+        const currentEmployee = employees.find((e) => e.name === session.name);
         if (currentEmployee) {
           params.append('employeeId', currentEmployee.id);
         }
@@ -214,7 +219,7 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
       }
 
       const response = await fetch(`${API_BASE}/v1/admin/shifts?${params}`, {
-        headers: { 'Authorization': `Bearer ${session.sessionToken}` },
+        headers: { Authorization: `Bearer ${session.sessionToken}` },
       });
       if (response.ok) {
         const data = await response.json();
@@ -229,11 +234,11 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
 
   const formatTime = (isoString: string): string => {
     const date = new Date(isoString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-      timeZone: 'America/Chicago'
+      timeZone: 'America/Chicago',
     });
   };
 
@@ -251,12 +256,17 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
   };
 
   // Group shifts by date
-  const groupedShifts = shifts.reduce((acc, shift) => {
-    const date = new Date(shift.scheduledStart).toLocaleDateString('en-US', { timeZone: 'America/Chicago' });
-    if (!acc[date]) acc[date] = [];
-    acc[date]!.push(shift);
-    return acc;
-  }, {} as Record<string, Shift[]>);
+  const groupedShifts = shifts.reduce(
+    (acc, shift) => {
+      const date = new Date(shift.scheduledStart).toLocaleDateString('en-US', {
+        timeZone: 'America/Chicago',
+      });
+      if (!acc[date]) acc[date] = [];
+      acc[date]!.push(shift);
+      return acc;
+    },
+    {} as Record<string, Shift[]>
+  );
 
   if (loading) {
     return (
@@ -272,35 +282,51 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
   const { start: monthStart } = getCurrentMonthRange();
   const monthTitle = monthStart.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-  const shiftsByDay = monthShifts.reduce((acc, shift) => {
-    const dayKey = new Date(shift.scheduledStart).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
-    if (!acc[dayKey]) acc[dayKey] = [];
-    acc[dayKey]!.push(shift);
-    return acc;
-  }, {} as Record<string, Shift[]>);
+  const shiftsByDay = monthShifts.reduce(
+    (acc, shift) => {
+      const dayKey = new Date(shift.scheduledStart).toLocaleDateString('en-CA', {
+        timeZone: 'America/Chicago',
+      });
+      if (!acc[dayKey]) acc[dayKey] = [];
+      acc[dayKey]!.push(shift);
+      return acc;
+    },
+    {} as Record<string, Shift[]>
+  );
 
-  const myRequestsByDay = myTimeOffRequests.reduce((acc, r) => {
-    acc[r.day] = r;
-    return acc;
-  }, {} as Record<string, TimeOffRequest>);
+  const myRequestsByDay = myTimeOffRequests.reduce(
+    (acc, r) => {
+      acc[r.day] = r;
+      return acc;
+    },
+    {} as Record<string, TimeOffRequest>
+  );
 
   const firstOfMonth = new Date(monthStart.getFullYear(), monthStart.getMonth(), 1);
   const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
   const startDow = firstOfMonth.getDay(); // 0=Sun
   const calendarCells: Array<Date | null> = [];
   for (let i = 0; i < startDow; i++) calendarCells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) calendarCells.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), d));
+  for (let d = 1; d <= daysInMonth; d++)
+    calendarCells.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), d));
   while (calendarCells.length < 42) calendarCells.push(null);
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1600px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem',
+        }}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           <h1 style={{ fontSize: '2rem', fontWeight: 600, margin: 0 }}>Schedule</h1>
           <div style={{ color: '#9ca3af' }}>{monthTitle}</div>
         </div>
-        <button 
-          onClick={() => navigate('/')} 
+        <button
+          onClick={() => navigate('/')}
           style={{
             padding: '0.75rem 1.5rem',
             background: '#374151',
@@ -351,23 +377,57 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
 
       {/* Calendar view */}
       {viewMode === 'calendar' && (
-        <div style={{ display: 'grid', gridTemplateColumns: isAdmin ? '1fr 420px' : '1fr', gap: '1.5rem', alignItems: 'start' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isAdmin ? '1fr 420px' : '1fr',
+            gap: '1.5rem',
+            alignItems: 'start',
+          }}
+        >
           <div style={{ border: '1px solid #374151', borderRadius: '12px', overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: '#111827', borderBottom: '1px solid #374151' }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(7, 1fr)',
+                background: '#111827',
+                borderBottom: '1px solid #374151',
+              }}
+            >
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-                <div key={d} style={{ padding: '0.75rem', fontWeight: 700, color: '#A0A1A2', fontSize: '0.85rem' }}>
+                <div
+                  key={d}
+                  style={{
+                    padding: '0.75rem',
+                    fontWeight: 700,
+                    color: '#A0A1A2',
+                    fontSize: '0.85rem',
+                  }}
+                >
                   {d}
                 </div>
               ))}
             </div>
 
             {monthLoading ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>Loading month…</div>
+              <div style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}>
+                Loading month…
+              </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
                 {calendarCells.map((date, idx) => {
                   if (!date) {
-                    return <div key={idx} style={{ minHeight: '140px', borderRight: (idx + 1) % 7 === 0 ? 'none' : '1px solid #374151', borderBottom: '1px solid #374151', background: '#0b1220' }} />;
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          minHeight: '140px',
+                          borderRight: (idx + 1) % 7 === 0 ? 'none' : '1px solid #374151',
+                          borderBottom: '1px solid #374151',
+                          background: '#0b1220',
+                        }}
+                      />
+                    );
                   }
 
                   const dayStr = date.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
@@ -396,10 +456,27 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
                         padding: '0.5rem',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'baseline',
+                          marginBottom: '0.25rem',
+                        }}
+                      >
                         <div style={{ fontWeight: 700 }}>{date.getDate()}</div>
                         {myReq && (
-                          <div style={{ fontSize: '0.75rem', color: myReq.status === 'APPROVED' ? '#22c55e' : myReq.status === 'DENIED' ? '#ef4444' : '#f59e0b' }}>
+                          <div
+                            style={{
+                              fontSize: '0.75rem',
+                              color:
+                                myReq.status === 'APPROVED'
+                                  ? '#22c55e'
+                                  : myReq.status === 'DENIED'
+                                    ? '#ef4444'
+                                    : '#f59e0b',
+                            }}
+                          >
                             {myReq.status}
                           </div>
                         )}
@@ -420,23 +497,35 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
                               textOverflow: 'ellipsis',
                             }}
                           >
-                            <span style={{
-                              padding: '0.1rem 0.4rem',
-                              borderRadius: '999px',
-                              background: SHIFT_BADGE_COLORS[s.shiftCode],
-                              color: '#fff',
-                              fontWeight: 800,
-                              flex: '0 0 auto',
-                            }}>
+                            <span
+                              style={{
+                                padding: '0.1rem 0.4rem',
+                                borderRadius: '999px',
+                                background: SHIFT_BADGE_COLORS[s.shiftCode],
+                                color: '#fff',
+                                fontWeight: 800,
+                                flex: '0 0 auto',
+                              }}
+                            >
                               {SHIFT_BADGE_LABELS[s.shiftCode]}
                             </span>
-                            <span style={{ color: '#e5e7eb', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {limitedAccess ? SHIFT_LABELS[s.shiftCode].split(' ')[1] : s.employeeName}
+                            <span
+                              style={{
+                                color: '#e5e7eb',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {limitedAccess
+                                ? SHIFT_LABELS[s.shiftCode].split(' ')[1]
+                                : s.employeeName}
                             </span>
                           </div>
                         ))}
                         {dayShifts.length > 6 && (
-                          <div style={{ color: '#9ca3af', fontSize: '0.75rem' }}>+{dayShifts.length - 6} more</div>
+                          <div style={{ color: '#9ca3af', fontSize: '0.75rem' }}>
+                            +{dayShifts.length - 6} more
+                          </div>
                         )}
                       </div>
                     </div>
@@ -449,7 +538,14 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
           {/* Admin pending requests */}
           {isAdmin && (
             <div style={{ border: '1px solid #374151', borderRadius: '12px', padding: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '0.75rem',
+                }}
+              >
                 <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>Pending requests</div>
                 <button
                   onClick={() => void fetchMonthData()}
@@ -472,19 +568,33 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {pendingTimeOffRequests.map((r) => (
-                    <div key={r.id} style={{ border: '1px solid #374151', borderRadius: '10px', padding: '0.75rem', background: '#111827' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+                    <div
+                      key={r.id}
+                      style={{
+                        border: '1px solid #374151',
+                        borderRadius: '10px',
+                        padding: '0.75rem',
+                        background: '#111827',
+                      }}
+                    >
+                      <div
+                        style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}
+                      >
                         <div style={{ fontWeight: 800 }}>{r.employeeName}</div>
                         <div style={{ color: '#93c5fd', fontWeight: 800 }}>{r.day}</div>
                       </div>
-                      {r.reason && <div style={{ color: '#d1d5db', marginTop: '0.25rem', fontSize: '0.9rem' }}>{r.reason}</div>}
+                      {r.reason && (
+                        <div style={{ color: '#d1d5db', marginTop: '0.25rem', fontSize: '0.9rem' }}>
+                          {r.reason}
+                        </div>
+                      )}
                       <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
                         <button
                           onClick={async () => {
                             await fetch(`${API_BASE}/v1/admin/time-off-requests/${r.id}`, {
                               method: 'PATCH',
                               headers: {
-                                'Authorization': `Bearer ${session.sessionToken}`,
+                                Authorization: `Bearer ${session.sessionToken}`,
                                 'Content-Type': 'application/json',
                               },
                               body: JSON.stringify({ status: 'APPROVED' }),
@@ -509,7 +619,7 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
                             await fetch(`${API_BASE}/v1/admin/time-off-requests/${r.id}`, {
                               method: 'PATCH',
                               headers: {
-                                'Authorization': `Bearer ${session.sessionToken}`,
+                                Authorization: `Bearer ${session.sessionToken}`,
                                 'Content-Type': 'application/json',
                               },
                               body: JSON.stringify({ status: 'DENIED' }),
@@ -572,12 +682,22 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
 
             {myRequestsByDay[selectedDay] ? (
               <div style={{ color: '#9ca3af' }}>
-                You already have a request for this day: <strong>{myRequestsByDay[selectedDay]!.status}</strong>
+                You already have a request for this day:{' '}
+                <strong>{myRequestsByDay[selectedDay]!.status}</strong>
               </div>
             ) : (
               <>
                 <div style={{ marginTop: '0.75rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 800, fontSize: '0.9rem' }}>Reason (optional)</label>
+                  <label
+                    style={{
+                      display: 'block',
+                      marginBottom: '0.35rem',
+                      fontWeight: 800,
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    Reason (optional)
+                  </label>
                   <textarea
                     value={requestReason}
                     onChange={(e) => setRequestReason(e.target.value)}
@@ -594,7 +714,14 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
                   />
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.75rem',
+                    justifyContent: 'flex-end',
+                    marginTop: '1rem',
+                  }}
+                >
                   <button
                     onClick={() => setSelectedDay(null)}
                     style={{
@@ -617,10 +744,13 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
                         const res = await fetch(`${API_BASE}/v1/schedule/time-off-requests`, {
                           method: 'POST',
                           headers: {
-                            'Authorization': `Bearer ${session.sessionToken}`,
+                            Authorization: `Bearer ${session.sessionToken}`,
                             'Content-Type': 'application/json',
                           },
-                          body: JSON.stringify({ day: selectedDay, reason: requestReason || undefined }),
+                          body: JSON.stringify({
+                            day: selectedDay,
+                            reason: requestReason || undefined,
+                          }),
                         });
                         if (!res.ok) {
                           const body = await res.json().catch(() => ({}));
@@ -654,171 +784,205 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
 
       {/* Filters */}
       {isAdmin && viewMode === 'list' && (
-      <div style={{
-        display: 'flex',
-        gap: '1rem',
-        marginBottom: '2rem',
-        padding: '1rem',
-        background: '#1f2937',
-        borderRadius: '8px',
-      }}>
-        <div>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>From</label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            style={{
-              padding: '0.5rem',
-              background: '#111827',
-              border: '1px solid #374151',
-              borderRadius: '6px',
-              color: '#f9fafb',
-            }}
-          />
-        </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>To</label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            style={{
-              padding: '0.5rem',
-              background: '#111827',
-              border: '1px solid #374151',
-              borderRadius: '6px',
-              color: '#f9fafb',
-            }}
-          />
-        </div>
-        {!limitedAccess && (
+        <div
+          style={{
+            display: 'flex',
+            gap: '1rem',
+            marginBottom: '2rem',
+            padding: '1rem',
+            background: '#1f2937',
+            borderRadius: '8px',
+          }}
+        >
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Employee</label>
-            <select
-              value={employeeFilter}
-              onChange={(e) => setEmployeeFilter(e.target.value)}
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+              From
+            </label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
               style={{
                 padding: '0.5rem',
                 background: '#111827',
                 border: '1px solid #374151',
                 borderRadius: '6px',
                 color: '#f9fafb',
-                minWidth: '200px',
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+              To
+            </label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{
+                padding: '0.5rem',
+                background: '#111827',
+                border: '1px solid #374151',
+                borderRadius: '6px',
+                color: '#f9fafb',
+              }}
+            />
+          </div>
+          {!limitedAccess && (
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                Employee
+              </label>
+              <select
+                value={employeeFilter}
+                onChange={(e) => setEmployeeFilter(e.target.value)}
+                style={{
+                  padding: '0.5rem',
+                  background: '#111827',
+                  border: '1px solid #374151',
+                  borderRadius: '6px',
+                  color: '#f9fafb',
+                  minWidth: '200px',
+                }}
+              >
+                <option value="">All Employees</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {limitedAccess && (
+            <div
+              style={{
+                padding: '0.5rem',
+                background: '#1e3a5f',
+                borderRadius: '6px',
+                color: '#93c5fd',
               }}
             >
-              <option value="">All Employees</option>
-              {employees.map(emp => (
-                <option key={emp.id} value={emp.id}>{emp.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
-        {limitedAccess && (
-          <div style={{ padding: '0.5rem', background: '#1e3a5f', borderRadius: '6px', color: '#93c5fd' }}>
-            <strong>View Only:</strong> You can view your schedule only
-          </div>
-        )}
-      </div>
+              <strong>View Only:</strong> You can view your schedule only
+            </div>
+          )}
+        </div>
       )}
 
       {/* Shifts grouped by date */}
       {isAdmin && viewMode === 'list' && (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {Object.entries(groupedShifts).map(([date, dateShifts]) => (
-          <div key={date} style={{ border: '1px solid #374151', borderRadius: '8px', overflow: 'hidden' }}>
-            <div style={{ 
-              padding: '1rem', 
-              background: '#374151', 
-              fontWeight: 600,
-              fontSize: '1.125rem',
-            }}>
-              {date}
-            </div>
-            <div style={{ padding: '1rem' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #374151' }}>
-                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Employee</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Shift</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Scheduled</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Actual</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Compliance</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Flags</th>
-                    <th style={{ padding: '0.75rem', textAlign: 'left' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dateShifts.map(shift => {
-                    const badge = getComplianceBadge(shift);
-                    return (
-                      <tr key={shift.id} style={{ borderBottom: '1px solid #374151' }}>
-                        <td style={{ padding: '0.75rem' }}>{shift.employeeName}</td>
-                        <td style={{ padding: '0.75rem' }}>{SHIFT_LABELS[shift.shiftCode]}</td>
-                        <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                          {formatTime(shift.scheduledStart)} – {formatTime(shift.scheduledEnd)}
-                        </td>
-                        <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                          {shift.actualClockIn ? (
-                            <>
-                              {formatTime(shift.actualClockIn)}
-                              {shift.actualClockOut && ` – ${formatTime(shift.actualClockOut)}`}
-                            </>
-                          ) : (
-                            <span style={{ color: '#9ca3af' }}>—</span>
-                          )}
-                        </td>
-                        <td style={{ padding: '0.75rem' }}>
-                          <span style={{
-                            padding: '0.25rem 0.75rem',
-                            borderRadius: '4px',
-                            background: badge.color,
-                            color: '#fff',
-                            fontSize: '0.875rem',
-                            fontWeight: 600,
-                          }}>
-                            {badge.text}
-                          </span>
-                        </td>
-                        <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
-                          {shift.flags?.lateClockIn && <span style={{ color: '#f59e0b' }}>⚠️ Late</span>}
-                          {shift.flags?.earlyClockOut && <span style={{ color: '#f59e0b' }}>⚠️ Early</span>}
-                          {shift.flags?.missingClockOut && <span style={{ color: '#ef4444' }}>⚠️ No Out</span>}
-                          {shift.flags?.noShow && <span style={{ color: '#ef4444' }}>❌ No Show</span>}
-                        </td>
-                        <td style={{ padding: '0.75rem' }}>
-                          {!limitedAccess && (
-                            <button
-                              onClick={() => {
-                                setSelectedShift(shift);
-                                setShowEditModal(true);
-                              }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {Object.entries(groupedShifts).map(([date, dateShifts]) => (
+            <div
+              key={date}
+              style={{ border: '1px solid #374151', borderRadius: '8px', overflow: 'hidden' }}
+            >
+              <div
+                style={{
+                  padding: '1rem',
+                  background: '#374151',
+                  fontWeight: 600,
+                  fontSize: '1.125rem',
+                }}
+              >
+                {date}
+              </div>
+              <div style={{ padding: '1rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #374151' }}>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Employee</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Shift</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Scheduled</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Actual</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Compliance</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Flags</th>
+                      <th style={{ padding: '0.75rem', textAlign: 'left' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dateShifts.map((shift) => {
+                      const badge = getComplianceBadge(shift);
+                      return (
+                        <tr key={shift.id} style={{ borderBottom: '1px solid #374151' }}>
+                          <td style={{ padding: '0.75rem' }}>{shift.employeeName}</td>
+                          <td style={{ padding: '0.75rem' }}>{SHIFT_LABELS[shift.shiftCode]}</td>
+                          <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                            {formatTime(shift.scheduledStart)} – {formatTime(shift.scheduledEnd)}
+                          </td>
+                          <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                            {shift.actualClockIn ? (
+                              <>
+                                {formatTime(shift.actualClockIn)}
+                                {shift.actualClockOut && ` – ${formatTime(shift.actualClockOut)}`}
+                              </>
+                            ) : (
+                              <span style={{ color: '#9ca3af' }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem' }}>
+                            <span
                               style={{
-                                padding: '0.5rem 1rem',
-                                background: '#374151',
-                                border: 'none',
-                                borderRadius: '6px',
-                                color: '#f9fafb',
-                                cursor: 'pointer',
+                                padding: '0.25rem 0.75rem',
+                                borderRadius: '4px',
+                                background: badge.color,
+                                color: '#fff',
                                 fontSize: '0.875rem',
+                                fontWeight: 600,
                               }}
                             >
-                              Edit
-                            </button>
-                          )}
-                          {limitedAccess && (
-                            <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>View Only</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                              {badge.text}
+                            </span>
+                          </td>
+                          <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
+                            {shift.flags?.lateClockIn && (
+                              <span style={{ color: '#f59e0b' }}>⚠️ Late</span>
+                            )}
+                            {shift.flags?.earlyClockOut && (
+                              <span style={{ color: '#f59e0b' }}>⚠️ Early</span>
+                            )}
+                            {shift.flags?.missingClockOut && (
+                              <span style={{ color: '#ef4444' }}>⚠️ No Out</span>
+                            )}
+                            {shift.flags?.noShow && (
+                              <span style={{ color: '#ef4444' }}>❌ No Show</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.75rem' }}>
+                            {!limitedAccess && (
+                              <button
+                                onClick={() => {
+                                  setSelectedShift(shift);
+                                  setShowEditModal(true);
+                                }}
+                                style={{
+                                  padding: '0.5rem 1rem',
+                                  background: '#374151',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  color: '#f9fafb',
+                                  cursor: 'pointer',
+                                  fontSize: '0.875rem',
+                                }}
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {limitedAccess && (
+                              <span style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                                View Only
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
       )}
 
       {shifts.length === 0 && !loading && (
@@ -840,7 +1004,7 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
               const response = await fetch(`${API_BASE}/v1/admin/shifts/${selectedShift.id}`, {
                 method: 'PATCH',
                 headers: {
-                  'Authorization': `Bearer ${session.sessionToken}`,
+                  Authorization: `Bearer ${session.sessionToken}`,
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(updates),
@@ -919,11 +1083,16 @@ function EditShiftModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1.5rem' }}>
-          Edit Shift
-        </h2>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 600, marginBottom: '1.5rem' }}>Edit Shift</h2>
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             Start Time
           </label>
           <input
@@ -942,7 +1111,14 @@ function EditShiftModal({
           />
         </div>
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             End Time
           </label>
           <input
@@ -961,7 +1137,14 @@ function EditShiftModal({
           />
         </div>
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             Status
           </label>
           <select
@@ -983,7 +1166,14 @@ function EditShiftModal({
           </select>
         </div>
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             Notes
           </label>
           <textarea
@@ -1038,4 +1228,3 @@ function EditShiftModal({
     </div>
   );
 }
-

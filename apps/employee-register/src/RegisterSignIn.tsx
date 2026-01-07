@@ -32,7 +32,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   const [registerSession, setRegisterSession] = useState<RegisterSession | null>(null);
   const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  
+
   const handleSessionInvalidated = useCallback(() => {
     // Clear heartbeat interval
     if (heartbeatInterval) {
@@ -57,15 +57,23 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
 
   const checkRegisterStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_BASE}/v1/registers/status?deviceId=${encodeURIComponent(deviceId)}`);
+      const response = await fetch(
+        `${API_BASE}/v1/registers/status?deviceId=${encodeURIComponent(deviceId)}`
+      );
       if (!response.ok) return false;
-      
+
       const data = await readJson<{
         signedIn?: boolean;
         employee?: { id?: string; name?: string };
         registerNumber?: number;
       }>(response);
-      if (data.signedIn && data.employee && typeof data.employee.id === 'string' && typeof data.employee.name === 'string' && typeof data.registerNumber === 'number') {
+      if (
+        data.signedIn &&
+        data.employee &&
+        typeof data.employee.id === 'string' &&
+        typeof data.employee.name === 'string' &&
+        typeof data.registerNumber === 'number'
+      ) {
         setRegisterSession({
           employeeId: data.employee.id,
           employeeName: data.employee.name,
@@ -103,10 +111,12 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        events: ['REGISTER_SESSION_UPDATED'],
-      }));
+      ws.send(
+        JSON.stringify({
+          type: 'subscribe',
+          events: ['REGISTER_SESSION_UPDATED'],
+        })
+      );
     };
 
     ws.onerror = (error) => {
@@ -153,31 +163,34 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     // Send heartbeat every 60 seconds (90 second TTL on server)
     const interval = setInterval(() => {
       void (async () => {
-      try {
-        const response = await fetch(`${API_BASE}/v1/registers/heartbeat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceId }),
-        });
+        try {
+          const response = await fetch(`${API_BASE}/v1/registers/heartbeat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId }),
+          });
 
-        if (!response.ok) {
-          const errorPayload: unknown = await response.json().catch(() => null);
-          // If 404 or DEVICE_DISABLED, session is invalid
-          if (response.status === 404 || (isRecord(errorPayload) && errorPayload.code === 'DEVICE_DISABLED')) {
-            handleSessionInvalidated();
-            return;
+          if (!response.ok) {
+            const errorPayload: unknown = await response.json().catch(() => null);
+            // If 404 or DEVICE_DISABLED, session is invalid
+            if (
+              response.status === 404 ||
+              (isRecord(errorPayload) && errorPayload.code === 'DEVICE_DISABLED')
+            ) {
+              handleSessionInvalidated();
+              return;
+            }
+            throw new Error('Heartbeat failed');
           }
-          throw new Error('Heartbeat failed');
+        } catch (error) {
+          console.error('Heartbeat failed:', error);
+          // If heartbeat fails, session may have been cleaned up
+          // Check status again
+          const stillActive = await checkRegisterStatus();
+          if (!stillActive) {
+            handleSessionInvalidated();
+          }
         }
-      } catch (error) {
-        console.error('Heartbeat failed:', error);
-        // If heartbeat fails, session may have been cleaned up
-        // Check status again
-        const stillActive = await checkRegisterStatus();
-        if (!stillActive) {
-          handleSessionInvalidated();
-        }
-      }
       })();
     }, 60000);
 
@@ -220,7 +233,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   // If not signed in, show initial state
   if (!registerSession) {
     return (
-      <div 
+      <div
         className="register-sign-in-container"
         style={{
           minHeight: '100vh',
@@ -231,7 +244,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
           position: 'relative',
         }}
       >
-        <div 
+        <div
           className="register-sign-in-logo"
           style={{
             position: 'absolute',
@@ -292,7 +305,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   return (
     <div className="register-sign-in-container">
       <div className="register-sign-in-logo">Club Dallas</div>
-      
+
       <div className="register-top-bar">
         <div style={{ width: '40px' }} />
         <div className="register-top-bar-center">
@@ -305,4 +318,3 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     </div>
   );
 }
-

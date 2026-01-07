@@ -75,10 +75,10 @@ export async function computeCompliance(
 
   // Find session that matches this shift (by shift_id or by time overlap)
   let matchingSession: TimeclockRow | null = null;
-  
+
   // First, try to find by shift_id
-  if (sessions.rows.some(s => s.shift_id === shift.id)) {
-    matchingSession = sessions.rows.find(s => s.shift_id === shift.id) || null;
+  if (sessions.rows.some((s) => s.shift_id === shift.id)) {
+    matchingSession = sessions.rows.find((s) => s.shift_id === shift.id) || null;
   } else {
     // Find session with best overlap
     let maxOverlap = 0;
@@ -120,15 +120,12 @@ export async function computeCompliance(
     matchingSession.clock_out_at || new Date()
   );
 
-  const compliancePercent = scheduledMinutes > 0
-    ? Math.round((workedMinutesInWindow / scheduledMinutes) * 100)
-    : 0;
+  const compliancePercent =
+    scheduledMinutes > 0 ? Math.round((workedMinutesInWindow / scheduledMinutes) * 100) : 0;
 
   // Determine flags
   const clockInTime = matchingSession.clock_in_at.getTime();
-  const clockOutTime = matchingSession.clock_out_at
-    ? matchingSession.clock_out_at.getTime()
-    : null;
+  const clockOutTime = matchingSession.clock_out_at ? matchingSession.clock_out_at.getTime() : null;
   const shiftStartTime = shift.starts_at.getTime();
   const shiftEndTime = shift.ends_at.getTime();
   const graceMs = GRACE_MINUTES * 60 * 1000;
@@ -163,11 +160,10 @@ function calculateOverlap(
 ): number {
   const start = Math.max(range1Start.getTime(), range2Start.getTime());
   const end = Math.min(range1End.getTime(), range2End.getTime());
-  
+
   if (end <= start) {
     return 0;
   }
-  
+
   return Math.floor((end - start) / (1000 * 60));
 }
-

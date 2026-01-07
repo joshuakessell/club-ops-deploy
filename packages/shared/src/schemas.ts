@@ -59,24 +59,27 @@ export const BatchStatusUpdateSchema = z.object({
  * Zod schema for ID scan payload (PDF417 barcode from driver's license/ID card).
  * Supports both raw barcode string and parsed fields.
  */
-export const IdScanPayloadSchema = z.object({
-  raw: z.string().optional(), // Raw PDF417 barcode string (recommended if available)
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  fullName: z.string().optional(), // Full name if first/last not available separately
-  dob: z.string().optional(), // Date of birth in ISO YYYY-MM-DD format
-  idNumber: z.string().optional(), // ID number/license number
-  issuer: z.string().optional(), // Issuing jurisdiction/state
-  jurisdiction: z.string().optional(), // Alternative field name for issuer
-}).refine(
-  (data) => {
-    // At least one identifier must be present
-    return !!(data.raw || data.fullName || (data.firstName && data.lastName) || data.idNumber);
-  },
-  {
-    message: 'At least one identifier (raw, fullName, firstName+lastName, or idNumber) must be provided',
-  }
-);
+export const IdScanPayloadSchema = z
+  .object({
+    raw: z.string().optional(), // Raw PDF417 barcode string (recommended if available)
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    fullName: z.string().optional(), // Full name if first/last not available separately
+    dob: z.string().optional(), // Date of birth in ISO YYYY-MM-DD format
+    idNumber: z.string().optional(), // ID number/license number
+    issuer: z.string().optional(), // Issuing jurisdiction/state
+    jurisdiction: z.string().optional(), // Alternative field name for issuer
+  })
+  .refine(
+    (data) => {
+      // At least one identifier must be present
+      return !!(data.raw || data.fullName || (data.firstName && data.lastName) || data.idNumber);
+    },
+    {
+      message:
+        'At least one identifier (raw, fullName, firstName+lastName, or idNumber) must be provided',
+    }
+  );
 
 // Type exports derived from schemas
 export type RoomInput = z.infer<typeof RoomSchema>;
@@ -84,4 +87,3 @@ export type RoomStatusUpdateInput = z.infer<typeof RoomStatusUpdateSchema>;
 export type InventorySummaryInput = z.infer<typeof InventorySummarySchema>;
 export type BatchStatusUpdateInput = z.infer<typeof BatchStatusUpdateSchema>;
 export type IdScanPayload = z.infer<typeof IdScanPayloadSchema>;
-

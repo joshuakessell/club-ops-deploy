@@ -4,14 +4,16 @@ This repository contains a multi-application system for managing club check-ins,
 
 **IMPORTANT**
 All agent work MUST adhere to:
+
 - `SPEC.md` (source of truth for business rules + product behavior)
 - `openapi.yaml` (API contract target)
 - `docs/database/DATABASE_SOURCE_OF_TRUTH.md` and `docs/database/DATABASE_ENTITY_DETAILS.md` (canonical DB meaning/contract)
 - `db/schema.sql` (schema snapshot; must match migrations and the canonical DB contract)
 
 If implementation conflicts with these files, the agent MUST either:
-1) fix the implementation to match the specs, or
-2) propose a spec change with a clear justification and explicit diffs, and receive approval before making changes.
+
+1. fix the implementation to match the specs, or
+2. propose a spec change with a clear justification and explicit diffs, and receive approval before making changes.
 
 ---
 
@@ -53,9 +55,9 @@ This keeps local dev behavior consistent with standard modern Node/pnpm workflow
     - Collapsible sections by tier: Special, Double, Standard
     - Lockers shown as a collapsible grid (001–108)
   - Auto-expands the customer-selected tier and sorts rooms by:
-    1) available/clean first
-    2) near-expiration next
-    3) newest occupied last
+    1. available/clean first
+    2. near-expiration next
+    3. newest occupied last
   - Must confirm assignment before committing (server-authoritative + transactional locks)
   - Supports checkout claim/verification notifications coming from checkout kiosks
   - Authentication required at shift start; remains signed in until user signs out

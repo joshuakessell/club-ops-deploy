@@ -102,13 +102,17 @@ body::before {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--cs-radius-xl);
   padding: 1.25rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
 }
 
 .inventory-card:hover {
   border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transform: translateY(-2px);
 }
 
@@ -140,9 +144,15 @@ body::before {
   opacity: 0.7;
 }
 
-.count-clean .count-value { color: var(--success); }
-.count-cleaning .count-value { color: var(--warning); }
-.count-dirty .count-value { color: var(--error); }
+.count-clean .count-value {
+  color: var(--success);
+}
+.count-cleaning .count-value {
+  color: var(--warning);
+}
+.count-dirty .count-value {
+  color: var(--error);
+}
 
 .action-buttons {
   display: grid;
@@ -166,13 +176,18 @@ body::before {
   font-weight: 600;
   cursor: pointer;
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .action-btn:hover {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
   border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4), 0 0 20px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
   transform: translateY(-1px);
 }
 
@@ -206,7 +221,9 @@ body::before {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--cs-radius-xl);
   padding: 2rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .lock-screen-header {
@@ -973,9 +990,23 @@ body::before {
 
 /* Shake Animation */
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-10px); }
-  20%, 40%, 60%, 80% { transform: translateX(10px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-10px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(10px);
+  }
 }
 
 .shake {
@@ -987,7 +1018,7 @@ body::before {
   .register-sign-in-container {
     display: none;
   }
-  
+
   .register-sign-in-container::before {
     content: 'Please rotate your device to landscape mode';
     position: fixed;
@@ -999,4 +1030,3 @@ body::before {
     z-index: 10000;
   }
 }
-

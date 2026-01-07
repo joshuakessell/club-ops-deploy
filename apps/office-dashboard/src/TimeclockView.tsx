@@ -48,9 +48,12 @@ export function TimeclockView({ session }: TimeclockViewProps) {
 
   const fetchCurrentlyClockedIn = async () => {
     try {
-      const response = await fetch(`${API_BASE}/v1/admin/timeclock?from=${new Date().toISOString().split('T')[0]}`, {
-        headers: { 'Authorization': `Bearer ${session.sessionToken}` },
-      });
+      const response = await fetch(
+        `${API_BASE}/v1/admin/timeclock?from=${new Date().toISOString().split('T')[0]}`,
+        {
+          headers: { Authorization: `Bearer ${session.sessionToken}` },
+        }
+      );
       if (response.ok) {
         const data = await response.json();
         setCurrentlyClockedIn(data.filter((s: TimeclockSession) => !s.clockOutAt));
@@ -68,7 +71,7 @@ export function TimeclockView({ session }: TimeclockViewProps) {
       if (dateTo) params.append('to', `${dateTo}T23:59:59Z`);
 
       const response = await fetch(`${API_BASE}/v1/admin/timeclock?${params}`, {
-        headers: { 'Authorization': `Bearer ${session.sessionToken}` },
+        headers: { Authorization: `Bearer ${session.sessionToken}` },
       });
       if (response.ok) {
         const data = await response.json();
@@ -87,7 +90,7 @@ export function TimeclockView({ session }: TimeclockViewProps) {
       const response = await fetch(`${API_BASE}/v1/admin/timeclock/${sessionId}/close`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ notes: 'Closed by manager' }),
@@ -105,21 +108,21 @@ export function TimeclockView({ session }: TimeclockViewProps) {
 
   const formatTime = (isoString: string): string => {
     const date = new Date(isoString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
+    return date.toLocaleTimeString('en-US', {
+      hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-      timeZone: 'America/Chicago'
+      timeZone: 'America/Chicago',
     });
   };
 
   const formatDate = (isoString: string): string => {
     const date = new Date(isoString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
       year: 'numeric',
-      timeZone: 'America/Chicago'
+      timeZone: 'America/Chicago',
     });
   };
 
@@ -132,17 +135,22 @@ export function TimeclockView({ session }: TimeclockViewProps) {
   };
 
   // Group by employee for hours summary
-  const hoursByEmployee = sessions.reduce((acc, session) => {
-    if (!acc[session.employeeId]) {
-      acc[session.employeeId] = { name: session.employeeName, totalHours: 0, sessions: 0 };
-    }
-    if (session.clockOutAt) {
-      const hours = (new Date(session.clockOutAt).getTime() - new Date(session.clockInAt).getTime()) / (1000 * 60 * 60);
-      acc[session.employeeId]!.totalHours += hours;
-      acc[session.employeeId]!.sessions += 1;
-    }
-    return acc;
-  }, {} as Record<string, { name: string; totalHours: number; sessions: number }>);
+  const hoursByEmployee = sessions.reduce(
+    (acc, session) => {
+      if (!acc[session.employeeId]) {
+        acc[session.employeeId] = { name: session.employeeName, totalHours: 0, sessions: 0 };
+      }
+      if (session.clockOutAt) {
+        const hours =
+          (new Date(session.clockOutAt).getTime() - new Date(session.clockInAt).getTime()) /
+          (1000 * 60 * 60);
+        acc[session.employeeId]!.totalHours += hours;
+        acc[session.employeeId]!.sessions += 1;
+      }
+      return acc;
+    },
+    {} as Record<string, { name: string; totalHours: number; sessions: number }>
+  );
 
   if (loading) {
     return (
@@ -154,10 +162,17 @@ export function TimeclockView({ session }: TimeclockViewProps) {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1600px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem',
+        }}
+      >
         <h1 style={{ fontSize: '2rem', fontWeight: 600 }}>Timeclock</h1>
-        <button 
-          onClick={() => navigate('/')} 
+        <button
+          onClick={() => navigate('/')}
           style={{
             padding: '0.75rem 1.5rem',
             background: '#374151',
@@ -174,18 +189,20 @@ export function TimeclockView({ session }: TimeclockViewProps) {
 
       {/* Currently Clocked In */}
       {currentlyClockedIn.length > 0 && (
-        <div style={{ 
-          marginBottom: '2rem', 
-          padding: '1.5rem', 
-          background: '#1f2937', 
-          borderRadius: '8px',
-          border: '1px solid #374151',
-        }}>
+        <div
+          style={{
+            marginBottom: '2rem',
+            padding: '1.5rem',
+            background: '#1f2937',
+            borderRadius: '8px',
+            border: '1px solid #374151',
+          }}
+        >
           <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>
             Currently Clocked In ({currentlyClockedIn.length})
           </h2>
           <div style={{ display: 'grid', gap: '1rem' }}>
-            {currentlyClockedIn.map(session => (
+            {currentlyClockedIn.map((session) => (
               <div
                 key={session.id}
                 style={{
@@ -225,16 +242,20 @@ export function TimeclockView({ session }: TimeclockViewProps) {
       )}
 
       {/* Filters */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '1rem', 
-        marginBottom: '2rem',
-        padding: '1rem',
-        background: '#1f2937',
-        borderRadius: '8px',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '1rem',
+          marginBottom: '2rem',
+          padding: '1rem',
+          background: '#1f2937',
+          borderRadius: '8px',
+        }}
+      >
         <div>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>From</label>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+            From
+          </label>
           <input
             type="date"
             value={dateFrom}
@@ -249,7 +270,9 @@ export function TimeclockView({ session }: TimeclockViewProps) {
           />
         </div>
         <div>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>To</label>
+          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+            To
+          </label>
           <input
             type="date"
             value={dateTo}
@@ -266,14 +289,18 @@ export function TimeclockView({ session }: TimeclockViewProps) {
       </div>
 
       {/* Hours by Employee */}
-      <div style={{ 
-        marginBottom: '2rem', 
-        padding: '1.5rem', 
-        background: '#1f2937', 
-        borderRadius: '8px',
-        border: '1px solid #374151',
-      }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>Hours by Employee</h2>
+      <div
+        style={{
+          marginBottom: '2rem',
+          padding: '1.5rem',
+          background: '#1f2937',
+          borderRadius: '8px',
+          border: '1px solid #374151',
+        }}
+      >
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>
+          Hours by Employee
+        </h2>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #374151' }}>
@@ -295,12 +322,14 @@ export function TimeclockView({ session }: TimeclockViewProps) {
       </div>
 
       {/* Session List */}
-      <div style={{ 
-        padding: '1.5rem', 
-        background: '#1f2937', 
-        borderRadius: '8px',
-        border: '1px solid #374151',
-      }}>
+      <div
+        style={{
+          padding: '1.5rem',
+          background: '#1f2937',
+          borderRadius: '8px',
+          border: '1px solid #374151',
+        }}
+      >
         <h2 style={{ fontSize: '1.25rem', fontWeight: 600, marginBottom: '1rem' }}>All Sessions</h2>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -314,7 +343,7 @@ export function TimeclockView({ session }: TimeclockViewProps) {
             </tr>
           </thead>
           <tbody>
-            {sessions.map(session => (
+            {sessions.map((session) => (
               <tr key={session.id} style={{ borderBottom: '1px solid #374151' }}>
                 <td style={{ padding: '0.75rem' }}>{session.employeeName}</td>
                 <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>
@@ -329,7 +358,9 @@ export function TimeclockView({ session }: TimeclockViewProps) {
                     <span style={{ color: '#f59e0b', fontWeight: 600 }}>Open</span>
                   )}
                 </td>
-                <td style={{ padding: '0.75rem' }}>{calculateHours(session.clockInAt, session.clockOutAt)}</td>
+                <td style={{ padding: '0.75rem' }}>
+                  {calculateHours(session.clockInAt, session.clockOutAt)}
+                </td>
                 <td style={{ padding: '0.75rem', fontSize: '0.875rem' }}>{session.source}</td>
                 <td style={{ padding: '0.75rem' }}>
                   {!session.clockOutAt && (
@@ -386,7 +417,7 @@ export function TimeclockView({ session }: TimeclockViewProps) {
               const response = await fetch(`${API_BASE}/v1/admin/timeclock/${selectedSession.id}`, {
                 method: 'PATCH',
                 headers: {
-                  'Authorization': `Bearer ${session.sessionToken}`,
+                  Authorization: `Bearer ${session.sessionToken}`,
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(updates),
@@ -467,7 +498,14 @@ function EditSessionModal({
           Edit Timeclock Session
         </h2>
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             Clock In
           </label>
           <input
@@ -486,7 +524,14 @@ function EditSessionModal({
           />
         </div>
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             Clock Out (leave empty if still open)
           </label>
           <input
@@ -505,7 +550,14 @@ function EditSessionModal({
           />
         </div>
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '0.5rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
             Notes
           </label>
           <textarea
@@ -560,8 +612,3 @@ function EditSessionModal({
     </div>
   );
 }
-
-
-
-
-

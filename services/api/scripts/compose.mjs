@@ -34,7 +34,9 @@ function getComposeRunner() {
 
 const compose = getComposeRunner();
 if (!compose) {
-  console.error("ERROR: Docker Compose not found. Install Docker Desktop (includes 'docker compose') or install 'docker-compose'.");
+  console.error(
+    "ERROR: Docker Compose not found. Install Docker Desktop (includes 'docker compose') or install 'docker-compose'."
+  );
   process.exit(1);
 }
 
@@ -52,5 +54,3 @@ if (command === 'reset') {
 }
 
 process.exit(compose([command, ...rest]));
-
-

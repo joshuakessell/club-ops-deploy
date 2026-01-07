@@ -21,7 +21,16 @@ type Room = { id: string; number: string; status: string; type: string };
 function getRoomTierFromNumber(roomNumber: string): 'STANDARD' | 'DOUBLE' | 'SPECIAL' {
   const num = parseInt(roomNumber, 10);
   if (num === 201 || num === 232 || num === 256) return 'SPECIAL';
-  if (num === 216 || num === 218 || num === 232 || num === 252 || num === 256 || num === 262 || num === 225) return 'DOUBLE';
+  if (
+    num === 216 ||
+    num === 218 ||
+    num === 232 ||
+    num === 252 ||
+    num === 256 ||
+    num === 262 ||
+    num === 225
+  )
+    return 'DOUBLE';
   return 'STANDARD';
 }
 
@@ -33,12 +42,20 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reauthFor, setReauthFor] = useState<null | { action: 'cancel' | 'complete'; entryId: string; paymentIntentId?: string }>(null);
+  const [reauthFor, setReauthFor] = useState<null | {
+    action: 'cancel' | 'complete';
+    entryId: string;
+    paymentIntentId?: string;
+  }>(null);
 
   const load = async () => {
     const [a, o, r] = await Promise.all([
-      apiJson<{ entries: WaitlistEntry[] }>('/v1/waitlist?status=ACTIVE', { sessionToken: session.sessionToken }),
-      apiJson<{ entries: WaitlistEntry[] }>('/v1/waitlist?status=OFFERED', { sessionToken: session.sessionToken }),
+      apiJson<{ entries: WaitlistEntry[] }>('/v1/waitlist?status=ACTIVE', {
+        sessionToken: session.sessionToken,
+      }),
+      apiJson<{ entries: WaitlistEntry[] }>('/v1/waitlist?status=OFFERED', {
+        sessionToken: session.sessionToken,
+      }),
       apiJson<{ rooms: Room[] }>('/v1/inventory/rooms'),
     ]);
     setActive(a.entries || []);
@@ -49,7 +66,10 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
   useEffect(() => {
     load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
     const ws = new WebSocket(wsBaseUrl());
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', events: ['WAITLIST_UPDATED', 'INVENTORY_UPDATED'] }));
+    ws.onopen = () =>
+      ws.send(
+        JSON.stringify({ type: 'subscribe', events: ['WAITLIST_UPDATED', 'INVENTORY_UPDATED'] })
+      );
     ws.onmessage = (event) => {
       try {
         const msg: WebSocketEvent = JSON.parse(event.data);
@@ -98,16 +118,21 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
       setBusy(entry.id);
       const roomId = selectedRoomId;
       if (!roomId) throw new Error('Select a room first');
-      const result = await apiJson<{ paymentIntentId: string; upgradeFee: number; newRoomNumber: string }>(
-        '/v1/upgrades/fulfill',
-        {
-          sessionToken: session.sessionToken,
-          method: 'POST',
-          body: { waitlistId: entry.id, roomId, acknowledgedDisclaimer: true },
-        }
-      );
+      const result = await apiJson<{
+        paymentIntentId: string;
+        upgradeFee: number;
+        newRoomNumber: string;
+      }>('/v1/upgrades/fulfill', {
+        sessionToken: session.sessionToken,
+        method: 'POST',
+        body: { waitlistId: entry.id, roomId, acknowledgedDisclaimer: true },
+      });
       // Demo: immediately mark paid via button in UI; keep the paymentIntentId in the reauth payload for completion.
-      setReauthFor({ action: 'complete', entryId: entry.id, paymentIntentId: result.paymentIntentId });
+      setReauthFor({
+        action: 'complete',
+        entryId: entry.id,
+        paymentIntentId: result.paymentIntentId,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start upgrade');
     } finally {
@@ -187,14 +212,30 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
         </div>
         <div className="panel-content" style={{ padding: '1.25rem' }}>
           {error && (
-            <div style={{ marginBottom: '1rem', padding: '0.75rem', border: '1px solid var(--error)', borderRadius: 8, color: 'var(--error)' }}>
+            <div
+              style={{
+                marginBottom: '1rem',
+                padding: '0.75rem',
+                border: '1px solid var(--error)',
+                borderRadius: 8,
+                color: 'var(--error)',
+              }}
+            >
               {error}
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: '1.5rem',
+            }}
+          >
             <div className="csRaisedCard" style={{ padding: '1rem' }}>
-              <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>ACTIVE ({active.length})</div>
+              <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>
+                ACTIVE ({active.length})
+              </div>
               {active.length === 0 ? (
                 <div style={{ color: 'var(--text-muted)' }}>No active entries.</div>
               ) : (
@@ -214,10 +255,18 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
                         <td>{e.desiredTier}</td>
                         <td>{e.currentRentalType}</td>
                         <td>
-                          <button className="btn-secondary" onClick={() => setSelectedEntry(e)} style={{ marginRight: 8 }}>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => setSelectedEntry(e)}
+                            style={{ marginRight: 8 }}
+                          >
                             Offer
                           </button>
-                          <button className="btn-secondary" onClick={() => cancelEntry(e)} disabled={busy === e.id}>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => cancelEntry(e)}
+                            disabled={busy === e.id}
+                          >
                             Cancel
                           </button>
                         </td>
@@ -229,7 +278,9 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
             </div>
 
             <div className="csRaisedCard" style={{ padding: '1rem' }}>
-              <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>OFFERED ({offered.length})</div>
+              <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>
+                OFFERED ({offered.length})
+              </div>
               {offered.length === 0 ? (
                 <div style={{ color: 'var(--text-muted)' }}>No offered entries.</div>
               ) : (
@@ -247,12 +298,22 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
                       <tr key={e.id}>
                         <td className="room-number">{e.displayIdentifier}</td>
                         <td>{e.desiredTier}</td>
-                        <td className="last-change">{e.offeredAt ? new Date(e.offeredAt).toLocaleString() : '—'}</td>
+                        <td className="last-change">
+                          {e.offeredAt ? new Date(e.offeredAt).toLocaleString() : '—'}
+                        </td>
                         <td>
-                          <button className="btn-secondary" onClick={() => setSelectedEntry(e)} style={{ marginRight: 8 }}>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => setSelectedEntry(e)}
+                            style={{ marginRight: 8 }}
+                          >
                             Complete
                           </button>
-                          <button className="btn-secondary" onClick={() => cancelEntry(e)} disabled={busy === e.id}>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => cancelEntry(e)}
+                            disabled={busy === e.id}
+                          >
                             Cancel
                           </button>
                         </td>
@@ -268,18 +329,24 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
 
       <section className="panel">
         <div className="panel-header">
-          <h2>{selectedEntry ? `Selected: ${selectedEntry.displayIdentifier}` : 'Select an entry to act'}</h2>
+          <h2>
+            {selectedEntry
+              ? `Selected: ${selectedEntry.displayIdentifier}`
+              : 'Select an entry to act'}
+          </h2>
         </div>
         <div className="panel-content" style={{ padding: '1.25rem' }}>
           {!selectedEntry ? (
             <div style={{ color: 'var(--text-muted)' }}>
-              Pick an entry from ACTIVE (Offer) or OFFERED (Complete). Then select a room in the desired tier.
+              Pick an entry from ACTIVE (Offer) or OFFERED (Complete). Then select a room in the
+              desired tier.
             </div>
           ) : (
             <>
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ color: 'var(--text-muted)' }}>
-                  Desired: <strong style={{ color: 'var(--text)' }}>{selectedEntry.desiredTier}</strong>
+                  Desired:{' '}
+                  <strong style={{ color: 'var(--text)' }}>{selectedEntry.desiredTier}</strong>
                 </div>
                 <select
                   value={selectedRoomId}
@@ -302,21 +369,36 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
                   ))}
                 </select>
                 {selectedEntry.status === 'ACTIVE' ? (
-                  <button className="btn-primary" onClick={() => offerUpgrade(selectedEntry)} disabled={busy === selectedEntry.id}>
+                  <button
+                    className="btn-primary"
+                    onClick={() => offerUpgrade(selectedEntry)}
+                    disabled={busy === selectedEntry.id}
+                  >
                     Offer Upgrade
                   </button>
                 ) : (
-                  <button className="btn-primary" onClick={() => startUpgrade(selectedEntry)} disabled={busy === selectedEntry.id}>
+                  <button
+                    className="btn-primary"
+                    onClick={() => startUpgrade(selectedEntry)}
+                    disabled={busy === selectedEntry.id}
+                  >
                     Complete Upgrade (demo)
                   </button>
                 )}
-                <button className="btn-secondary" onClick={() => { setSelectedEntry(null); setSelectedRoomId(''); }}>
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    setSelectedEntry(null);
+                    setSelectedRoomId('');
+                  }}
+                >
                   Clear Selection
                 </button>
               </div>
 
               <div style={{ marginTop: '1rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                Note: “Complete Upgrade” uses the demo flow: create upgrade payment intent → mark paid → finalize upgrade (requires re-auth).
+                Note: “Complete Upgrade” uses the demo flow: create upgrade payment intent → mark
+                paid → finalize upgrade (requires re-auth).
               </div>
             </>
           )}
@@ -325,5 +407,3 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
     </div>
   );
 }
-
-

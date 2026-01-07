@@ -25,7 +25,11 @@ export interface RegistrationOptions {
   pubKeyCredParams: PublicKeyCredentialParameters[];
   timeout: number;
   attestation: AttestationConveyancePreference;
-  excludeCredentials?: Array<{ id: string; type: 'public-key'; transports?: AuthenticatorTransport[] }>;
+  excludeCredentials?: Array<{
+    id: string;
+    type: 'public-key';
+    transports?: AuthenticatorTransport[];
+  }>;
   authenticatorSelection?: {
     authenticatorAttachment?: AuthenticatorAttachment;
     userVerification: UserVerificationRequirement;
@@ -36,7 +40,11 @@ export interface AuthenticationOptions {
   challenge: string;
   timeout: number;
   rpId: string;
-  allowCredentials?: Array<{ id: string; type: 'public-key'; transports?: AuthenticatorTransport[] }>;
+  allowCredentials?: Array<{
+    id: string;
+    type: 'public-key';
+    transports?: AuthenticatorTransport[];
+  }>;
   userVerification: UserVerificationRequirement;
 }
 
@@ -65,22 +73,25 @@ export async function requestRegistrationOptions(
 /**
  * Create a credential using WebAuthn API.
  */
-export async function createCredential(
-  options: RegistrationOptions
-): Promise<PublicKeyCredential> {
+export async function createCredential(options: RegistrationOptions): Promise<PublicKeyCredential> {
   // Convert base64url challenge to ArrayBuffer
-  const challengeBuffer = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const challengeBuffer = Uint8Array.from(
+    atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')),
+    (c) => c.charCodeAt(0)
+  );
 
   // Convert user ID to ArrayBuffer
-  const userIdBuffer = Uint8Array.from(atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const userIdBuffer = Uint8Array.from(
+    atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')),
+    (c) => c.charCodeAt(0)
+  );
 
   // Convert excludeCredentials IDs if present
   const excludeCredentials: PublicKeyCredentialDescriptor[] | undefined =
     options.excludeCredentials?.map((cred) => ({
       ...cred,
-      id: Uint8Array.from(
-        atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')),
-        (c) => c.charCodeAt(0)
+      id: Uint8Array.from(atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
+        c.charCodeAt(0)
       ),
     }));
 
@@ -99,9 +110,9 @@ export async function createCredential(
     authenticatorSelection: options.authenticatorSelection,
   };
 
-  const credential = await navigator.credentials.create({
+  const credential = (await navigator.credentials.create({
     publicKey: publicKeyCredentialCreationOptions,
-  }) as PublicKeyCredential | null;
+  })) as PublicKeyCredential | null;
 
   if (!credential) {
     throw new Error('Failed to create credential');
@@ -160,19 +171,19 @@ export async function requestAuthenticationOptions(
 /**
  * Get a credential using WebAuthn API.
  */
-export async function getCredential(
-  options: AuthenticationOptions
-): Promise<PublicKeyCredential> {
+export async function getCredential(options: AuthenticationOptions): Promise<PublicKeyCredential> {
   // Convert base64url challenge to ArrayBuffer
-  const challengeBuffer = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const challengeBuffer = Uint8Array.from(
+    atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')),
+    (c) => c.charCodeAt(0)
+  );
 
   // Convert allowCredentials IDs if present
   const allowCredentials: PublicKeyCredentialDescriptor[] | undefined =
     options.allowCredentials?.map((cred) => ({
       ...cred,
-      id: Uint8Array.from(
-        atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')),
-        (c) => c.charCodeAt(0)
+      id: Uint8Array.from(atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
+        c.charCodeAt(0)
       ),
     }));
 
@@ -184,9 +195,9 @@ export async function getCredential(
     userVerification: options.userVerification,
   };
 
-  const credential = await navigator.credentials.get({
+  const credential = (await navigator.credentials.get({
     publicKey: publicKeyCredentialRequestOptions,
-  }) as PublicKeyCredential | null;
+  })) as PublicKeyCredential | null;
 
   if (!credential) {
     throw new Error('Failed to get credential');
@@ -285,11 +296,13 @@ export async function verifyAuthentication(
  * Check if WebAuthn is supported in this browser.
  */
 export function isWebAuthnSupported(): boolean {
-  return typeof window !== 'undefined' &&
+  return (
+    typeof window !== 'undefined' &&
     typeof navigator !== 'undefined' &&
     typeof navigator.credentials !== 'undefined' &&
     typeof navigator.credentials.create !== 'undefined' &&
-    typeof navigator.credentials.get !== 'undefined';
+    typeof navigator.credentials.get !== 'undefined'
+  );
 }
 
 /**
@@ -301,17 +314,5 @@ function arrayBufferToBase64URL(buffer: ArrayBuffer): string {
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]!);
   }
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
-
-
-
-
-
-
-
-
-

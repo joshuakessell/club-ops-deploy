@@ -212,12 +212,11 @@ Other markdown files may describe workflows, but **must not redefine** these ent
 
 `members` exists only as a temporary legacy artifact. **All operational workflows must use `customers` as authoritative identity**.
 
-
 ---
 
 ## Staff scheduling / timeclock / HR support tables
 
-These tables support *internal staff operations* (office-dashboard scheduling, timeclock compliance reporting, and employee document storage). They are not part of customer-facing identity or inventory contracts, but they are still server-authoritative and audited.
+These tables support _internal staff operations_ (office-dashboard scheduling, timeclock compliance reporting, and employee document storage). They are not part of customer-facing identity or inventory contracts, but they are still server-authoritative and audited.
 
 ### `employee_shifts`
 
@@ -271,4 +270,3 @@ These tables support *internal staff operations* (office-dashboard scheduling, t
 - **Invariants**:
   - At most one request per employee per day (enforced by unique index on `(employee_id, day)`).
   - Approvals/denials must be audited with actor identity.
-

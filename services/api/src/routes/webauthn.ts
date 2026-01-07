@@ -72,13 +72,10 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /v1/auth/webauthn/registration/options
-   * 
+   *
    * Generate registration options for enrolling a new passkey.
    */
-  fastify.post('/v1/auth/webauthn/registration/options', async (
-    request,
-    reply
-  ) => {
+  fastify.post('/v1/auth/webauthn/registration/options', async (request, reply) => {
     let body: RegistrationOptionsInput;
 
     try {
@@ -147,13 +144,10 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /v1/auth/webauthn/registration/verify
-   * 
+   *
    * Verify and store a new passkey credential.
    */
-  fastify.post('/v1/auth/webauthn/registration/verify', async (
-    request,
-    reply
-  ) => {
+  fastify.post('/v1/auth/webauthn/registration/verify', async (request, reply) => {
     let body: RegistrationVerifyInput;
 
     try {
@@ -210,8 +204,10 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       // Store credential
-      const credentialId = Buffer.from(verification.registrationInfo!.credentialID).toString('base64url');
-      
+      const credentialId = Buffer.from(verification.registrationInfo!.credentialID).toString(
+        'base64url'
+      );
+
       await storeCredential(
         body.staffId,
         body.deviceId,
@@ -219,7 +215,9 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
         Buffer.from(verification.registrationInfo!.credentialPublicKey),
         verification.registrationInfo!.counter,
         // Transports are optional and may not be present depending on client/browser.
-        body.credentialResponse?.response?.transports as unknown as AuthenticatorTransportFuture[] | undefined
+        body.credentialResponse?.response?.transports as unknown as
+          | AuthenticatorTransportFuture[]
+          | undefined
       );
 
       // Log audit action
@@ -251,13 +249,10 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /v1/auth/webauthn/authentication/options
-   * 
+   *
    * Generate authentication options for signing in with a passkey.
    */
-  fastify.post('/v1/auth/webauthn/authentication/options', async (
-    request,
-    reply
-  ) => {
+  fastify.post('/v1/auth/webauthn/authentication/options', async (request, reply) => {
     let body: AuthenticationOptionsInput;
 
     try {
@@ -333,13 +328,10 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /v1/auth/webauthn/authentication/verify
-   * 
+   *
    * Verify authentication response and issue session token.
    */
-  fastify.post('/v1/auth/webauthn/authentication/verify', async (
-    request,
-    reply
-  ) => {
+  fastify.post('/v1/auth/webauthn/authentication/verify', async (request, reply) => {
     let body: AuthenticationVerifyInput;
 
     try {
@@ -517,107 +509,114 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * GET /v1/auth/webauthn/credentials/:staffId
-   * 
+   *
    * Get all passkeys for a staff member (admin only).
    */
-  fastify.get<{ Params: { staffId: string } }>('/v1/auth/webauthn/credentials/:staffId', {
-    preHandler: [requireAuth, requireAdmin],
-  }, async (request, reply) => {
-    try {
-      const { staffId } = request.params;
+  fastify.get<{ Params: { staffId: string } }>(
+    '/v1/auth/webauthn/credentials/:staffId',
+    {
+      preHandler: [requireAuth, requireAdmin],
+    },
+    async (request, reply) => {
+      try {
+        const { staffId } = request.params;
 
-      const result = await query<{
-        id: string;
-        device_id: string;
-        credential_id: string;
-        sign_count: number;
-        transports: string[] | null;
-        created_at: Date;
-        last_used_at: Date | null;
-        revoked_at: Date | null;
-      }>(
-        `SELECT id, device_id, credential_id, sign_count, transports, created_at, last_used_at, revoked_at
+        const result = await query<{
+          id: string;
+          device_id: string;
+          credential_id: string;
+          sign_count: number;
+          transports: string[] | null;
+          created_at: Date;
+          last_used_at: Date | null;
+          revoked_at: Date | null;
+        }>(
+          `SELECT id, device_id, credential_id, sign_count, transports, created_at, last_used_at, revoked_at
          FROM staff_webauthn_credentials
          WHERE staff_id = $1
          ORDER BY created_at DESC`,
-        [staffId]
-      );
+          [staffId]
+        );
 
-      const credentials = result.rows.map((row) => ({
-        id: row.id,
-        deviceId: row.device_id,
-        credentialId: row.credential_id,
-        signCount: Number(row.sign_count),
-        transports: (row.transports as string[]) || [],
-        createdAt: row.created_at.toISOString(),
-        lastUsedAt: row.last_used_at?.toISOString() || null,
-        revokedAt: row.revoked_at?.toISOString() || null,
-        isActive: row.revoked_at === null,
-      }));
+        const credentials = result.rows.map((row) => ({
+          id: row.id,
+          deviceId: row.device_id,
+          credentialId: row.credential_id,
+          signCount: Number(row.sign_count),
+          transports: (row.transports as string[]) || [],
+          createdAt: row.created_at.toISOString(),
+          lastUsedAt: row.last_used_at?.toISOString() || null,
+          revokedAt: row.revoked_at?.toISOString() || null,
+          isActive: row.revoked_at === null,
+        }));
 
-      return reply.send({ credentials });
-    } catch (error) {
-      request.log.error(error, 'Failed to fetch credentials');
-      return reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to fetch credentials',
-      });
+        return reply.send({ credentials });
+      } catch (error) {
+        request.log.error(error, 'Failed to fetch credentials');
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to fetch credentials',
+        });
+      }
     }
-  });
+  );
 
   /**
    * POST /v1/auth/webauthn/credentials/:credentialId/revoke
-   * 
+   *
    * Revoke a passkey credential (admin only).
    * Requires re-authentication for security.
    */
-  fastify.post<{ Params: { credentialId: string } }>('/v1/auth/webauthn/credentials/:credentialId/revoke', {
-    preHandler: [requireReauthForAdmin],
-  }, async (request, reply) => {
-    const staff = request.staff;
-    if (!staff) {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-
-    try {
-      const { credentialId } = request.params;
-
-      // Get credential info before revoking
-      const credentialResult = await query<{ id: string; staff_id: string }>(
-        `SELECT id, staff_id FROM staff_webauthn_credentials WHERE credential_id = $1`,
-        [credentialId]
-      );
-
-      if (credentialResult.rows.length === 0) {
-        return reply.status(404).send({
-          error: 'Credential not found',
-        });
+  fastify.post<{ Params: { credentialId: string } }>(
+    '/v1/auth/webauthn/credentials/:credentialId/revoke',
+    {
+      preHandler: [requireReauthForAdmin],
+    },
+    async (request, reply) => {
+      const staff = request.staff;
+      if (!staff) {
+        return reply.status(401).send({ error: 'Unauthorized' });
       }
 
-      // Revoke credential
-      await query(
-        `UPDATE staff_webauthn_credentials
+      try {
+        const { credentialId } = request.params;
+
+        // Get credential info before revoking
+        const credentialResult = await query<{ id: string; staff_id: string }>(
+          `SELECT id, staff_id FROM staff_webauthn_credentials WHERE credential_id = $1`,
+          [credentialId]
+        );
+
+        if (credentialResult.rows.length === 0) {
+          return reply.status(404).send({
+            error: 'Credential not found',
+          });
+        }
+
+        // Revoke credential
+        await query(
+          `UPDATE staff_webauthn_credentials
          SET revoked_at = NOW()
          WHERE credential_id = $1
          AND revoked_at IS NULL`,
-        [credentialId]
-      );
+          [credentialId]
+        );
 
-      // Log audit action
-      await query(
-        `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
+        // Log audit action
+        await query(
+          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
          VALUES ($1, 'STAFF_WEBAUTHN_REVOKED', 'staff_webauthn_credential', $2)`,
-        [staff.staffId, credentialResult.rows[0]!.id]
-      );
+          [staff.staffId, credentialResult.rows[0]!.id]
+        );
 
-      return reply.send({ success: true });
-    } catch (error) {
-      request.log.error(error, 'Failed to revoke credential');
-      return reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to revoke credential',
-      });
+        return reply.send({ success: true });
+      } catch (error) {
+        request.log.error(error, 'Failed to revoke credential');
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to revoke credential',
+        });
+      }
     }
-  });
+  );
 }
-

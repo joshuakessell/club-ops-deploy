@@ -76,6 +76,7 @@ pnpm dev
 ```
 
 This starts:
+
 - **API Server**: http://localhost:3001
   - Health check: http://localhost:3001/health
 - **Customer Kiosk**: http://localhost:5173
@@ -107,22 +108,22 @@ pnpm build
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `pnpm install` | Install all dependencies |
-| `pnpm dev` | Start all services in development mode |
-| `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check) |
-| `pnpm doctor` | Repo health scan (builds deps, runs typecheck/lint/tests/build) |
-| `pnpm db:start` | Start Postgres via `services/api/docker-compose.yml` |
-| `pnpm db:stop` | Stop Postgres |
-| `pnpm db:reset` | Recreate Postgres volume and restart |
-| `pnpm db:migrate` | Run DB migrations |
-| `pnpm db:seed` | Seed DB with sample data |
-| `pnpm build` | Build all packages and apps |
-| `pnpm test` | Run all tests |
-| `pnpm lint` | Lint all packages |
-| `pnpm typecheck` | TypeScript type checking |
-| `pnpm format` | Format code with Prettier |
+| Command           | Description                                                     |
+| ----------------- | --------------------------------------------------------------- |
+| `pnpm install`    | Install all dependencies                                        |
+| `pnpm dev`        | Start all services in development mode                          |
+| `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check)          |
+| `pnpm doctor`     | Repo health scan (builds deps, runs typecheck/lint/tests/build) |
+| `pnpm db:start`   | Start Postgres via `services/api/docker-compose.yml`            |
+| `pnpm db:stop`    | Stop Postgres                                                   |
+| `pnpm db:reset`   | Recreate Postgres volume and restart                            |
+| `pnpm db:migrate` | Run DB migrations                                               |
+| `pnpm db:seed`    | Seed DB with sample data                                        |
+| `pnpm build`      | Build all packages and apps                                     |
+| `pnpm test`       | Run all tests                                                   |
+| `pnpm lint`       | Lint all packages                                               |
+| `pnpm typecheck`  | TypeScript type checking                                        |
+| `pnpm format`     | Format code with Prettier                                       |
 
 ### Database Setup
 
@@ -152,12 +153,15 @@ pnpm db:seed
 ```
 
 ### Demo seed (rich customers/visits)
+
 - After a reset/migrate (`pnpm db:reset && pnpm db:migrate`), start the API with `DEMO_MODE=true` to auto-seed 100–200 demo customers, historical visits (6-hour blocks, ≤3 starts/week, no overlaps), a handful of active assignments, and a waitlist list long enough to exercise the UI. Shift/timeclock/demo documents still seed when shift data is absent.
 
 ### One-step demo test run
+
 - `pnpm demo:test` will reset the DB, migrate, seed (with `DEMO_MODE=true`), and run the demo seed test (`services/api/tests/demo-seed.test.ts`). (Runs from the API package, so the test path is `tests/demo-seed.test.ts`.)
 
 **Database Configuration:**
+
 - Host: `localhost`
 - Port: `5433`
 - Database: `club_operations`
@@ -257,6 +261,7 @@ pnpm spec:check
 ```
 
 This validates:
+
 - Room tier enums match SPEC.md (STANDARD, DOUBLE, SPECIAL)
 - Runtime/UI source code does not depend on deprecated tier strings (VIP, DELUXE, etc.) for new assignments
 - Legacy strings are allowed in canonical DB docs and historical artifacts (`docs/database/**`, `services/api/migrations/**`, `db/**` schema snapshots)
@@ -288,4 +293,3 @@ To snapshot and reuse the environment, use Cursor’s **Cloud Agent Setup** work
 ## 📝 License
 
 Private - Internal use only.
-

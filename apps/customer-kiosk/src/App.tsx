@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
-import type { 
-  SessionUpdatedPayload, 
+import type {
+  SessionUpdatedPayload,
   WebSocketEvent,
   CustomerConfirmationRequiredPayload,
   AssignmentCreatedPayload,
@@ -104,8 +104,12 @@ function App() {
   const [checkinMode, setCheckinMode] = useState<'INITIAL' | 'RENEWAL' | null>(null);
   const [showRenewalDisclaimer, setShowRenewalDisclaimer] = useState(false);
   const [showCustomerConfirmation, setShowCustomerConfirmation] = useState(false);
-  const [customerConfirmationData, setCustomerConfirmationData] = useState<CustomerConfirmationRequiredPayload | null>(null);
-  const [inventory, setInventory] = useState<{ rooms: Record<string, number>; lockers: number } | null>(null);
+  const [customerConfirmationData, setCustomerConfirmationData] =
+    useState<CustomerConfirmationRequiredPayload | null>(null);
+  const [inventory, setInventory] = useState<{
+    rooms: Record<string, number>;
+    lockers: number;
+  } | null>(null);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [waitlistDesiredType, setWaitlistDesiredType] = useState<string | null>(null);
   const [waitlistBackupType, setWaitlistBackupType] = useState<string | null>(null);
@@ -115,7 +119,9 @@ function App() {
   const [proposedRentalType, setProposedRentalType] = useState<string | null>(null);
   const [proposedBy, setProposedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
   const [selectionConfirmed, setSelectionConfirmed] = useState(false);
-  const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
+  const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(
+    null
+  );
   // Selection acknowledgement is tracked for gating/coordination (currently no direct UI).
   const [, setSelectionAcknowledged] = useState(true);
   const [, setUpgradeDisclaimerAcknowledged] = useState(false);
@@ -165,14 +171,14 @@ function App() {
     if (pathMatch) {
       return `lane-${pathMatch[1]}`;
     }
-    
+
     // Check query param
     const params = new URLSearchParams(window.location.search);
     const queryLane = params.get('lane');
     if (queryLane) {
       return queryLane;
     }
-    
+
     // Check sessionStorage fallback (per-tab, not shared)
     try {
       const stored = sessionStorage.getItem('lane');
@@ -182,11 +188,11 @@ function App() {
     } catch {
       // sessionStorage might not be available
     }
-    
+
     // Default
     return 'lane-1';
   }, []); // Empty deps - lane should only be computed once on mount
-  
+
   // Store in sessionStorage for persistence within this tab
   useEffect(() => {
     try {
@@ -247,26 +253,30 @@ function App() {
       .catch(console.error);
 
     // Connect to WebSocket with lane parameter
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001/ws?lane=${encodeURIComponent(lane)}`);
+    const ws = new WebSocket(
+      `ws://${window.location.hostname}:3001/ws?lane=${encodeURIComponent(lane)}`
+    );
 
     ws.onopen = () => {
       console.log('WebSocket connected to lane:', lane);
       setWsConnected(true);
-      
+
       // Subscribe to relevant events
-      ws.send(JSON.stringify({
-        type: 'subscribe',
-        events: [
-          'SESSION_UPDATED', 
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'SELECTION_ACKNOWLEDGED',
-          'CUSTOMER_CONFIRMATION_REQUIRED', 
-          'ASSIGNMENT_CREATED', 
-          'INVENTORY_UPDATED',
-          'WAITLIST_CREATED',
-        ],
-      }));
+      ws.send(
+        JSON.stringify({
+          type: 'subscribe',
+          events: [
+            'SESSION_UPDATED',
+            'SELECTION_PROPOSED',
+            'SELECTION_LOCKED',
+            'SELECTION_ACKNOWLEDGED',
+            'CUSTOMER_CONFIRMATION_REQUIRED',
+            'ASSIGNMENT_CREATED',
+            'INVENTORY_UPDATED',
+            'WAITLIST_CREATED',
+          ],
+        })
+      );
     };
 
     ws.onclose = () => {
@@ -283,9 +293,9 @@ function App() {
 
         if (message.type === 'SESSION_UPDATED') {
           const payload = message.payload as SessionUpdatedPayload;
-          
+
           // Update session state with all fields
-          setSession(prev => ({
+          setSession((prev) => ({
             ...prev,
             sessionId: payload.sessionId || null,
             customerName: payload.customerName,
@@ -306,15 +316,18 @@ function App() {
             assignedResourceNumber: payload.assignedResourceNumber,
             checkoutAt: payload.checkoutAt,
           }));
-          
+
           // Set check-in mode from payload
           if (payload.mode) {
             setCheckinMode(payload.mode);
           }
-          
+
           // Handle view transitions based on session state
           // First check: Reset to idle if session is completed and cleared
-          if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
+          if (
+            payload.status === 'COMPLETED' &&
+            (!payload.customerName || payload.customerName === '')
+          ) {
             // Reset to idle
             setView('idle');
             setSession({
@@ -343,43 +356,46 @@ function App() {
             setHasScrolledAgreement(false);
             return;
           }
-          
+
           // If we have assignment, show complete view (highest priority after reset)
           if (payload.assignedResourceType && payload.assignedResourceNumber) {
             setView('complete');
             return;
           }
-          
+
           // Language selection (first visit, before past-due check)
           if (payload.customerName && !payload.customerPrimaryLanguage && !payload.pastDueBlocked) {
             setView('language');
             return;
           }
-          
+
           // Past-due block screen (shows selection but disabled)
           if (payload.pastDueBlocked) {
             setView('selection');
             return;
           }
-          
+
           // Agreement screen (after payment is PAID, before assignment)
-          if (payload.paymentStatus === 'PAID' && !payload.agreementSigned && 
-              (payload.mode === 'INITIAL' || payload.mode === 'RENEWAL')) {
+          if (
+            payload.paymentStatus === 'PAID' &&
+            !payload.agreementSigned &&
+            (payload.mode === 'INITIAL' || payload.mode === 'RENEWAL')
+          ) {
             setView('agreement');
             return;
           }
-          
+
           // Payment pending screen (after selection confirmed, before payment)
           if (payload.selectionConfirmed && payload.paymentStatus === 'DUE') {
             setView('payment');
             return;
           }
-          
+
           // Selection view (default active session state)
           if (payload.customerName) {
             setView('selection');
           }
-          
+
           // Update selection state
           if (payload.proposedRentalType) {
             setProposedRentalType(payload.proposedRentalType);
@@ -520,19 +536,26 @@ function App() {
       return;
     }
 
-    const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
-    
+    const availableCount =
+      inventory?.rooms[rental] ||
+      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
+      0;
+
     // If unavailable, show waitlist modal
     if (availableCount === 0) {
       setWaitlistDesiredType(rental);
       // Fetch waitlist info (position, ETA, upgrade fee)
       try {
-        const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/waitlist-info?desiredTier=${rental}&currentTier=${selectedRental || 'LOCKER'}`);
+        const response = await fetch(
+          `${API_BASE}/v1/checkin/lane/${lane}/waitlist-info?desiredTier=${rental}&currentTier=${selectedRental || 'LOCKER'}`
+        );
         if (response.ok) {
           const data: unknown = await response.json();
           if (isRecord(data)) {
             setWaitlistPosition(typeof data.position === 'number' ? data.position : null);
-            setWaitlistETA(typeof data.estimatedReadyAt === 'string' ? data.estimatedReadyAt : null);
+            setWaitlistETA(
+              typeof data.estimatedReadyAt === 'string' ? data.estimatedReadyAt : null
+            );
             setWaitlistUpgradeFee(typeof data.upgradeFee === 'number' ? data.upgradeFee : null);
           }
         }
@@ -569,7 +592,9 @@ function App() {
       setIsSubmitting(false);
     } catch (error) {
       console.error('Failed to propose selection:', error);
-      alert(error instanceof Error ? error.message : 'Failed to process selection. Please try again.');
+      alert(
+        error instanceof Error ? error.message : 'Failed to process selection. Please try again.'
+      );
       setIsSubmitting(false);
     }
   };
@@ -586,7 +611,7 @@ function App() {
     // Store acknowledgement and propose backup selection
     try {
       const backupType = waitlistBackupType || selectedRental || 'LOCKER';
-      
+
       // Propose the backup rental type with waitlist info
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
         method: 'POST',
@@ -611,7 +636,7 @@ function App() {
       setUpgradeAction(null);
       setProposedRentalType(backupType);
       setProposedBy('CUSTOMER');
-      
+
       // After acknowledging upgrade disclaimer, customer should confirm the backup selection
       // Then proceed to agreement if INITIAL/RENEWAL
     } catch (error) {
@@ -625,7 +650,10 @@ function App() {
       return;
     }
 
-    const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
+    const availableCount =
+      inventory?.rooms[rental] ||
+      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
+      0;
     if (availableCount === 0) {
       alert('This rental type is not available. Please select an available option.');
       return;
@@ -633,7 +661,7 @@ function App() {
 
     setWaitlistBackupType(rental);
     setShowWaitlistModal(false);
-    
+
     // Show upgrade disclaimer modal
     setUpgradeAction('waitlist');
     setShowUpgradeDisclaimer(true);
@@ -667,7 +695,9 @@ function App() {
     }
   }, [view]);
 
-  const handleSignatureStart = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const handleSignatureStart = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
     isDrawingRef.current = true;
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
@@ -683,7 +713,9 @@ function App() {
     }
   };
 
-  const handleSignatureMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const handleSignatureMove = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
     if (!isDrawingRef.current) return;
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
@@ -770,7 +802,11 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ language, sessionId: session.sessionId, customerName: session.customerName || undefined }),
+        body: JSON.stringify({
+          language,
+          sessionId: session.sessionId,
+          customerName: session.customerName || undefined,
+        }),
       });
 
       if (!response.ok) {
@@ -831,8 +867,7 @@ function App() {
     return (
       <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
         {orientationOverlay}
-        <div className="idle-content">
-        </div>
+        <div className="idle-content"></div>
       </ScreenShell>
     );
   }
@@ -882,7 +917,9 @@ function App() {
               <h1>{t(session.customerPrimaryLanguage, 'paymentPending')}</h1>
               {session.paymentLineItems && session.paymentLineItems.length > 0 && (
                 <div className="payment-breakdown">
-                  <p className="breakdown-title">{t(session.customerPrimaryLanguage, 'charges') ?? 'Charges'}</p>
+                  <p className="breakdown-title">
+                    {t(session.customerPrimaryLanguage, 'charges') ?? 'Charges'}
+                  </p>
                   <div className="breakdown-items">
                     {session.paymentLineItems.map((li, idx) => (
                       <div key={`${li.description}-${idx}`} className="breakdown-row">
@@ -932,19 +969,19 @@ function App() {
           <div className="agreement-logo-header">
             <img src={blackLogo} alt="Club Dallas" className="agreement-logo-img" />
           </div>
-          
+
           {/* White paper panel */}
           <div className="agreement-paper-panel">
             <h1 className="agreement-title">
               {agreement?.title || t(session.customerPrimaryLanguage, 'agreementTitle')}
             </h1>
-            
-            <div 
-              ref={agreementScrollRef}
-              className="agreement-scroll-area"
-            >
+
+            <div ref={agreementScrollRef} className="agreement-scroll-area">
               {agreement?.bodyText ? (
-                <div className="agreement-body" dangerouslySetInnerHTML={{ __html: agreement.bodyText }} />
+                <div
+                  className="agreement-body"
+                  dangerouslySetInnerHTML={{ __html: agreement.bodyText }}
+                />
               ) : (
                 <p className="agreement-placeholder">
                   {t(session.customerPrimaryLanguage, 'agreementPlaceholder')}
@@ -1000,7 +1037,9 @@ function App() {
                   onClick={() => void handleSubmitAgreement()}
                   disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
                 >
-                  {isSubmitting ? t(session.customerPrimaryLanguage, 'submitting') : t(session.customerPrimaryLanguage, 'submit')}
+                  {isSubmitting
+                    ? t(session.customerPrimaryLanguage, 'submitting')
+                    : t(session.customerPrimaryLanguage, 'submit')}
                 </button>
               </div>
             </div>
@@ -1013,7 +1052,7 @@ function App() {
   // Complete view
   if (view === 'complete') {
     const lang = session.customerPrimaryLanguage;
-    
+
     return (
       <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true}>
         {orientationOverlay}
@@ -1042,47 +1081,49 @@ function App() {
               <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center' }}>
                 <button
                   className="btn-liquid-glass modal-ok-btn"
-                  onClick={() => void (async () => {
-                    setIsSubmitting(true);
-                    try {
-                      // Kiosk acknowledgement: clears lane session UI state so this kiosk resets for the next customer.
-                      await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                      });
-                    } catch (error) {
-                      console.error('Failed to kiosk-ack completion:', error);
-                      // Continue to local reset even if server call fails; WS will reconcile when possible.
-                    } finally {
-                      // Local reset (immediate UX), server broadcast will also clear deterministically.
-                      setView('idle');
-                      setSession({
-                        sessionId: null,
-                        customerName: null,
-                        membershipNumber: null,
-                        allowedRentals: [],
-                        blockEndsAt: undefined,
-                      });
-                      setSelectedRental(null);
-                      setAgreed(false);
-                      setSignatureData(null);
-                      setShowUpgradeDisclaimer(false);
-                      setUpgradeAction(null);
-                      setShowRenewalDisclaimer(false);
-                      setCheckinMode(null);
-                      setShowWaitlistModal(false);
-                      setWaitlistDesiredType(null);
-                      setWaitlistBackupType(null);
-                      setProposedRentalType(null);
-                      setProposedBy(null);
-                      setSelectionConfirmed(false);
-                      setSelectionConfirmedBy(null);
-                      setSelectionAcknowledged(false);
-                      setUpgradeDisclaimerAcknowledged(false);
-                      setHasScrolledAgreement(false);
-                      setIsSubmitting(false);
-                    }
-                  })()}
+                  onClick={() =>
+                    void (async () => {
+                      setIsSubmitting(true);
+                      try {
+                        // Kiosk acknowledgement: clears lane session UI state so this kiosk resets for the next customer.
+                        await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                        });
+                      } catch (error) {
+                        console.error('Failed to kiosk-ack completion:', error);
+                        // Continue to local reset even if server call fails; WS will reconcile when possible.
+                      } finally {
+                        // Local reset (immediate UX), server broadcast will also clear deterministically.
+                        setView('idle');
+                        setSession({
+                          sessionId: null,
+                          customerName: null,
+                          membershipNumber: null,
+                          allowedRentals: [],
+                          blockEndsAt: undefined,
+                        });
+                        setSelectedRental(null);
+                        setAgreed(false);
+                        setSignatureData(null);
+                        setShowUpgradeDisclaimer(false);
+                        setUpgradeAction(null);
+                        setShowRenewalDisclaimer(false);
+                        setCheckinMode(null);
+                        setShowWaitlistModal(false);
+                        setWaitlistDesiredType(null);
+                        setWaitlistBackupType(null);
+                        setProposedRentalType(null);
+                        setProposedBy(null);
+                        setSelectionConfirmed(false);
+                        setSelectionConfirmedBy(null);
+                        setSelectionAcknowledged(false);
+                        setUpgradeDisclaimerAcknowledged(false);
+                        setHasScrolledAgreement(false);
+                        setIsSubmitting(false);
+                      }
+                    })()
+                  }
                   disabled={isSubmitting}
                 >
                   OK
@@ -1102,290 +1143,364 @@ function App() {
       <WelcomeOverlay />
       <div className="active-content">
         <main className="main-content">
-        <div className="customer-info">
-          <h1 className="customer-name">Welcome, {session.customerName}</h1>
-        </div>
-
-        {/* Membership Level - locked buttons */}
-        <div className="membership-level-section">
-          <p className="section-label">Membership Level:</p>
-          <div className="membership-buttons">
-            <button className="btn-liquid-glass btn-liquid-glass--selected btn-liquid-glass--disabled" disabled>
-              {session.membershipNumber ? 'Member' : 'Non-Member'}
-            </button>
-            <button className="btn-liquid-glass btn-liquid-glass--disabled" disabled>
-              {session.membershipNumber ? 'Non-Member' : 'Member'}
-            </button>
+          <div className="customer-info">
+            <h1 className="customer-name">Welcome, {session.customerName}</h1>
           </div>
-        </div>
 
-        {/* Past-due block message */}
-        {session.pastDueBlocked && (
-          <div className="past-due-block-message">
-            <p>{t(session.customerPrimaryLanguage, 'pastDueBlocked')}</p>
-          </div>
-        )}
-
-        {/* Selection State Display */}
-        {proposedRentalType && (
-          <div style={{ 
-            padding: '1rem', 
-            marginBottom: '1rem', 
-            background: selectionConfirmed ? '#10b981' : (proposedBy === 'EMPLOYEE' ? '#2563eb' : '#334155'),
-            borderRadius: '8px',
-            color: 'white',
-          }}>
-            <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-              {selectionConfirmed 
-                ? `✓ ${t(session.customerPrimaryLanguage, 'selected')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${selectionConfirmedBy === 'CUSTOMER' ? 'You' : 'Staff'})`
-                : proposedBy === 'EMPLOYEE'
-                  ? `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (Staff suggestion — tap the highlighted option to accept)`
-                  : `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (Your selection — waiting for staff to confirm)`}
+          {/* Membership Level - locked buttons */}
+          <div className="membership-level-section">
+            <p className="section-label">Membership Level:</p>
+            <div className="membership-buttons">
+              <button
+                className="btn-liquid-glass btn-liquid-glass--selected btn-liquid-glass--disabled"
+                disabled
+              >
+                {session.membershipNumber ? 'Member' : 'Non-Member'}
+              </button>
+              <button className="btn-liquid-glass btn-liquid-glass--disabled" disabled>
+                {session.membershipNumber ? 'Non-Member' : 'Member'}
+              </button>
             </div>
           </div>
-        )}
 
-        {/* Choose your experience */}
-        <div className="experience-section">
-          <p className="section-label">Choose your experience:</p>
-          <div className="experience-options">
-            {session.allowedRentals.length > 0 ? (
-              session.allowedRentals.map((rental) => {
-                const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
-                const showWarning = availableCount > 0 && availableCount <= 5;
-                const isUnavailable = availableCount === 0;
-                const isDisabled = session.pastDueBlocked;
-                const isSelected = proposedRentalType === rental && selectionConfirmed;
-                const isStaffProposed = proposedBy === 'EMPLOYEE' && proposedRentalType === rental && !selectionConfirmed;
-                const isPulsing = isStaffProposed;
-                const isForced = selectedRental === rental && selectionConfirmed && selectionConfirmedBy === 'EMPLOYEE';
-                const lang = session.customerPrimaryLanguage;
-                
-                // Map rental types to display names
-                let displayName = getRentalDisplayName(rental, lang);
-                if (rental === 'STANDARD') displayName = 'Private Dressing Room';
-                else if (rental === 'DOUBLE') displayName = 'Deluxe Dressing Room';
-                else if (rental === 'SPECIAL') displayName = 'Special Dressing Room';
-                else if (rental === 'LOCKER') displayName = 'Locker';
-                
-                return (
-                  <button
-                    key={rental}
-                    className={`btn-liquid-glass ${isSelected ? 'btn-liquid-glass--selected' : ''} ${isStaffProposed ? 'btn-liquid-glass--staff-proposed' : ''} ${isDisabled ? 'btn-liquid-glass--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
-                    data-forced={isForced}
-                    onClick={() => {
-                      if (!isDisabled) {
-                        void handleRentalSelection(rental);
-                      }
-                    }}
-                    disabled={isDisabled}
-                  >
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center' }}>
-                      <span>{displayName}</span>
-                      {showWarning && !isUnavailable && (
-                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
-                          Only {availableCount} available
-                        </span>
-                      )}
-                      {isUnavailable && (
-                        <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
-                          Unavailable
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="btn-liquid-glass btn-liquid-glass--disabled">
-                {t(session.customerPrimaryLanguage, 'noOptionsAvailable')}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Waitlist button (shown when higher tier available) */}
-        {session.allowedRentals.includes('STANDARD') && (
-          <button
-            className="btn-liquid-glass waitlist-btn"
-            onClick={handleJoinWaitlist}
-          >
-            Join Waitlist for Upgrade
-          </button>
-        )}
-      </main>
-
-      {/* Upgrade Disclaimer Modal */}
-      {showUpgradeDisclaimer && (
-        <div className="modal-overlay" onClick={() => setShowUpgradeDisclaimer(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Upgrade Disclaimer</h2>
-            <div className="disclaimer-text">
-              <p><strong>Upgrade Disclaimer</strong></p>
-              <ul style={{ listStyle: 'disc', paddingLeft: '1.5rem', textAlign: 'left', marginTop: '1rem' }}>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  Upgrade fees apply only to remaining time in your current stay.
-                </li>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  Upgrades do not extend your stay. Your checkout time remains the same.
-                </li>
-                <li style={{ marginBottom: '0.5rem', fontWeight: 600, color: '#ef4444' }}>
-                  No refunds under any circumstances.
-                </li>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  Upgrade fees are charged only when an upgrade becomes available and you choose to accept it.
-                </li>
-              </ul>
+          {/* Past-due block message */}
+          {session.pastDueBlocked && (
+            <div className="past-due-block-message">
+              <p>{t(session.customerPrimaryLanguage, 'pastDueBlocked')}</p>
             </div>
-            <button
-              className="btn-liquid-glass modal-ok-btn"
-              onClick={() => void handleDisclaimerAcknowledge()}
-              disabled={isSubmitting}
+          )}
+
+          {/* Selection State Display */}
+          {proposedRentalType && (
+            <div
+              style={{
+                padding: '1rem',
+                marginBottom: '1rem',
+                background: selectionConfirmed
+                  ? '#10b981'
+                  : proposedBy === 'EMPLOYEE'
+                    ? '#2563eb'
+                    : '#334155',
+                borderRadius: '8px',
+                color: 'white',
+              }}
             >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
+              <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                {selectionConfirmed
+                  ? `✓ ${t(session.customerPrimaryLanguage, 'selected')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${selectionConfirmedBy === 'CUSTOMER' ? 'You' : 'Staff'})`
+                  : proposedBy === 'EMPLOYEE'
+                    ? `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (Staff suggestion — tap the highlighted option to accept)`
+                    : `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (Your selection — waiting for staff to confirm)`}
+              </div>
+            </div>
+          )}
 
-      {/* Customer Confirmation Modal */}
-      {showCustomerConfirmation && customerConfirmationData && (
-        <div className="modal-overlay" onClick={() => {}}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Staff Selected Different Option</h2>
-            <div className="disclaimer-text">
-              <p>You requested: <strong>{getRentalDisplayName(customerConfirmationData.requestedType, session.customerPrimaryLanguage)}</strong></p>
-              <p>Staff selected: <strong>{getRentalDisplayName(customerConfirmationData.selectedType, session.customerPrimaryLanguage)} {customerConfirmationData.selectedNumber}</strong></p>
-              <p>Do you accept this selection?</p>
-            </div>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-              <button
-                  className="btn-liquid-glass modal-ok-btn"
-                onClick={() => void handleCustomerConfirmSelection(true)}
-                disabled={isSubmitting}
-              >
-                Accept
-              </button>
-              <button
-                  className="btn-liquid-glass modal-ok-btn"
-                style={{ backgroundColor: '#ef4444' }}
-                onClick={() => void handleCustomerConfirmSelection(false)}
-                disabled={isSubmitting}
-              >
-                Decline
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          {/* Choose your experience */}
+          <div className="experience-section">
+            <p className="section-label">Choose your experience:</p>
+            <div className="experience-options">
+              {session.allowedRentals.length > 0 ? (
+                session.allowedRentals.map((rental) => {
+                  const availableCount =
+                    inventory?.rooms[rental] ||
+                    (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
+                    0;
+                  const showWarning = availableCount > 0 && availableCount <= 5;
+                  const isUnavailable = availableCount === 0;
+                  const isDisabled = session.pastDueBlocked;
+                  const isSelected = proposedRentalType === rental && selectionConfirmed;
+                  const isStaffProposed =
+                    proposedBy === 'EMPLOYEE' &&
+                    proposedRentalType === rental &&
+                    !selectionConfirmed;
+                  const isPulsing = isStaffProposed;
+                  const isForced =
+                    selectedRental === rental &&
+                    selectionConfirmed &&
+                    selectionConfirmedBy === 'EMPLOYEE';
+                  const lang = session.customerPrimaryLanguage;
 
-      {/* Waitlist Modal */}
-      {showWaitlistModal && waitlistDesiredType && (
-        <div className="modal-overlay" onClick={() => setShowWaitlistModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>None Available - Join Waiting List?</h2>
-            <div className="disclaimer-text">
-              <p>
-                <strong>{getRentalDisplayName(waitlistDesiredType, session.customerPrimaryLanguage)}</strong> is currently unavailable.
-              </p>
-              {waitlistPosition !== null && (
-                <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#1e293b', borderRadius: '6px' }}>
-                  <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Waitlist Information:</p>
-                  <p>Position: <strong>#{waitlistPosition}</strong></p>
-                  {waitlistETA ? (
-                    <p>Estimated Ready: <strong>{new Date(waitlistETA).toLocaleString()}</strong></p>
-                  ) : (
-                    <p>Estimated Ready: <strong>Unknown</strong></p>
-                  )}
-                  {waitlistUpgradeFee !== null && waitlistUpgradeFee > 0 && (
-                    <p style={{ color: '#f59e0b', marginTop: '0.5rem' }}>
-                      Upgrade Fee: <strong>${waitlistUpgradeFee.toFixed(2)}</strong>
-                    </p>
-                  )}
-                </div>
-              )}
-              <p style={{ marginTop: '1rem' }}>To join the waitlist, please select a backup rental that is available now.</p>
-              <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-                You will be charged for the backup rental. If an upgrade becomes available, you may accept it (upgrade fees apply).
-              </p>
-            </div>
-            <div style={{ marginTop: '1.5rem' }}>
-              <p style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Select backup rental:</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {session.allowedRentals
-                  .filter(rental => rental !== waitlistDesiredType)
-                  .map(rental => {
-                    const availableCount = inventory?.rooms[rental] || (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) || 0;
-                    const isAvailable = availableCount > 0;
-                    
-                    return (
-                      <button
-                        key={rental}
-                        className="btn-liquid-glass modal-ok-btn"
-                        onClick={() => handleWaitlistBackupSelection(rental)}
-                        disabled={!isAvailable || isSubmitting}
+                  // Map rental types to display names
+                  let displayName = getRentalDisplayName(rental, lang);
+                  if (rental === 'STANDARD') displayName = 'Private Dressing Room';
+                  else if (rental === 'DOUBLE') displayName = 'Deluxe Dressing Room';
+                  else if (rental === 'SPECIAL') displayName = 'Special Dressing Room';
+                  else if (rental === 'LOCKER') displayName = 'Locker';
+
+                  return (
+                    <button
+                      key={rental}
+                      className={`btn-liquid-glass ${isSelected ? 'btn-liquid-glass--selected' : ''} ${isStaffProposed ? 'btn-liquid-glass--staff-proposed' : ''} ${isDisabled ? 'btn-liquid-glass--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
+                      data-forced={isForced}
+                      onClick={() => {
+                        if (!isDisabled) {
+                          void handleRentalSelection(rental);
+                        }
+                      }}
+                      disabled={isDisabled}
+                    >
+                      <div
                         style={{
-                          opacity: isAvailable ? 1 : 0.5,
-                          cursor: isAvailable && !isSubmitting ? 'pointer' : 'not-allowed',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.5rem',
+                          alignItems: 'center',
                         }}
                       >
-                        {getRentalDisplayName(rental, session.customerPrimaryLanguage)}
-                        {!isAvailable && ' (Unavailable)'}
-                      </button>
-                    );
-                  })}
+                        <span>{displayName}</span>
+                        {showWarning && !isUnavailable && (
+                          <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                            Only {availableCount} available
+                          </span>
+                        )}
+                        {isUnavailable && (
+                          <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Unavailable</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="btn-liquid-glass btn-liquid-glass--disabled">
+                  {t(session.customerPrimaryLanguage, 'noOptionsAvailable')}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Waitlist button (shown when higher tier available) */}
+          {session.allowedRentals.includes('STANDARD') && (
+            <button className="btn-liquid-glass waitlist-btn" onClick={handleJoinWaitlist}>
+              Join Waitlist for Upgrade
+            </button>
+          )}
+        </main>
+
+        {/* Upgrade Disclaimer Modal */}
+        {showUpgradeDisclaimer && (
+          <div className="modal-overlay" onClick={() => setShowUpgradeDisclaimer(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2>Upgrade Disclaimer</h2>
+              <div className="disclaimer-text">
+                <p>
+                  <strong>Upgrade Disclaimer</strong>
+                </p>
+                <ul
+                  style={{
+                    listStyle: 'disc',
+                    paddingLeft: '1.5rem',
+                    textAlign: 'left',
+                    marginTop: '1rem',
+                  }}
+                >
+                  <li style={{ marginBottom: '0.5rem' }}>
+                    Upgrade fees apply only to remaining time in your current stay.
+                  </li>
+                  <li style={{ marginBottom: '0.5rem' }}>
+                    Upgrades do not extend your stay. Your checkout time remains the same.
+                  </li>
+                  <li style={{ marginBottom: '0.5rem', fontWeight: 600, color: '#ef4444' }}>
+                    No refunds under any circumstances.
+                  </li>
+                  <li style={{ marginBottom: '0.5rem' }}>
+                    Upgrade fees are charged only when an upgrade becomes available and you choose
+                    to accept it.
+                  </li>
+                </ul>
+              </div>
+              <button
+                className="btn-liquid-glass modal-ok-btn"
+                onClick={() => void handleDisclaimerAcknowledge()}
+                disabled={isSubmitting}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Customer Confirmation Modal */}
+        {showCustomerConfirmation && customerConfirmationData && (
+          <div className="modal-overlay" onClick={() => {}}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2>Staff Selected Different Option</h2>
+              <div className="disclaimer-text">
+                <p>
+                  You requested:{' '}
+                  <strong>
+                    {getRentalDisplayName(
+                      customerConfirmationData.requestedType,
+                      session.customerPrimaryLanguage
+                    )}
+                  </strong>
+                </p>
+                <p>
+                  Staff selected:{' '}
+                  <strong>
+                    {getRentalDisplayName(
+                      customerConfirmationData.selectedType,
+                      session.customerPrimaryLanguage
+                    )}{' '}
+                    {customerConfirmationData.selectedNumber}
+                  </strong>
+                </p>
+                <p>Do you accept this selection?</p>
+              </div>
+              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                <button
+                  className="btn-liquid-glass modal-ok-btn"
+                  onClick={() => void handleCustomerConfirmSelection(true)}
+                  disabled={isSubmitting}
+                >
+                  Accept
+                </button>
+                <button
+                  className="btn-liquid-glass modal-ok-btn"
+                  style={{ backgroundColor: '#ef4444' }}
+                  onClick={() => void handleCustomerConfirmSelection(false)}
+                  disabled={isSubmitting}
+                >
+                  Decline
+                </button>
               </div>
             </div>
-            <button
-              className="btn-liquid-glass modal-ok-btn"
-              onClick={() => setShowWaitlistModal(false)}
-              disabled={isSubmitting}
-              style={{ marginTop: '1rem', backgroundColor: '#64748b' }}
-            >
-              Cancel
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Renewal Disclaimer Modal */}
-      {showRenewalDisclaimer && (
-        <div className="modal-overlay" onClick={() => setShowRenewalDisclaimer(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Renewal Notice</h2>
-            <div className="disclaimer-text">
-              <ul style={{ listStyle: 'disc', paddingLeft: '1.5rem', textAlign: 'left' }}>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  This renewal extends your stay for 6 hours from your current checkout time.
-                  {session.blockEndsAt && (
-                    <span> (Current checkout: {new Date(session.blockEndsAt).toLocaleString()})</span>
-                  )}
-                </li>
-                <li style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
-                  ⚠️ You are approaching the 14-hour maximum stay for a single visit.
-                </li>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  At the end of this 6-hour renewal, you may extend one final time for 2 additional hours for a flat $20 fee (same for lockers or any room type).
-                </li>
-                <li style={{ marginBottom: '0.5rem' }}>
-                  The $20 fee is not charged now; it applies only if you choose the final 2-hour extension later.
-                </li>
-              </ul>
+        {/* Waitlist Modal */}
+        {showWaitlistModal && waitlistDesiredType && (
+          <div className="modal-overlay" onClick={() => setShowWaitlistModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2>None Available - Join Waiting List?</h2>
+              <div className="disclaimer-text">
+                <p>
+                  <strong>
+                    {getRentalDisplayName(waitlistDesiredType, session.customerPrimaryLanguage)}
+                  </strong>{' '}
+                  is currently unavailable.
+                </p>
+                {waitlistPosition !== null && (
+                  <div
+                    style={{
+                      marginTop: '1rem',
+                      padding: '0.75rem',
+                      background: '#1e293b',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Waitlist Information:</p>
+                    <p>
+                      Position: <strong>#{waitlistPosition}</strong>
+                    </p>
+                    {waitlistETA ? (
+                      <p>
+                        Estimated Ready: <strong>{new Date(waitlistETA).toLocaleString()}</strong>
+                      </p>
+                    ) : (
+                      <p>
+                        Estimated Ready: <strong>Unknown</strong>
+                      </p>
+                    )}
+                    {waitlistUpgradeFee !== null && waitlistUpgradeFee > 0 && (
+                      <p style={{ color: '#f59e0b', marginTop: '0.5rem' }}>
+                        Upgrade Fee: <strong>${waitlistUpgradeFee.toFixed(2)}</strong>
+                      </p>
+                    )}
+                  </div>
+                )}
+                <p style={{ marginTop: '1rem' }}>
+                  To join the waitlist, please select a backup rental that is available now.
+                </p>
+                <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+                  You will be charged for the backup rental. If an upgrade becomes available, you
+                  may accept it (upgrade fees apply).
+                </p>
+              </div>
+              <div style={{ marginTop: '1.5rem' }}>
+                <p style={{ fontWeight: 600, marginBottom: '0.75rem' }}>Select backup rental:</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {session.allowedRentals
+                    .filter((rental) => rental !== waitlistDesiredType)
+                    .map((rental) => {
+                      const availableCount =
+                        inventory?.rooms[rental] ||
+                        (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
+                        0;
+                      const isAvailable = availableCount > 0;
+
+                      return (
+                        <button
+                          key={rental}
+                          className="btn-liquid-glass modal-ok-btn"
+                          onClick={() => handleWaitlistBackupSelection(rental)}
+                          disabled={!isAvailable || isSubmitting}
+                          style={{
+                            opacity: isAvailable ? 1 : 0.5,
+                            cursor: isAvailable && !isSubmitting ? 'pointer' : 'not-allowed',
+                          }}
+                        >
+                          {getRentalDisplayName(rental, session.customerPrimaryLanguage)}
+                          {!isAvailable && ' (Unavailable)'}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+              <button
+                className="btn-liquid-glass modal-ok-btn"
+                onClick={() => setShowWaitlistModal(false)}
+                disabled={isSubmitting}
+                style={{ marginTop: '1rem', backgroundColor: '#64748b' }}
+              >
+                Cancel
+              </button>
             </div>
-            <button
-              className="btn-liquid-glass modal-ok-btn"
-              onClick={() => {
-                setShowRenewalDisclaimer(false);
-                // Proceed to agreement screen
-                setView('agreement');
-              }}
-              disabled={isSubmitting}
-            >
-              OK
-            </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Renewal Disclaimer Modal */}
+        {showRenewalDisclaimer && (
+          <div className="modal-overlay" onClick={() => setShowRenewalDisclaimer(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h2>Renewal Notice</h2>
+              <div className="disclaimer-text">
+                <ul style={{ listStyle: 'disc', paddingLeft: '1.5rem', textAlign: 'left' }}>
+                  <li style={{ marginBottom: '0.5rem' }}>
+                    This renewal extends your stay for 6 hours from your current checkout time.
+                    {session.blockEndsAt && (
+                      <span>
+                        {' '}
+                        (Current checkout: {new Date(session.blockEndsAt).toLocaleString()})
+                      </span>
+                    )}
+                  </li>
+                  <li style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
+                    ⚠️ You are approaching the 14-hour maximum stay for a single visit.
+                  </li>
+                  <li style={{ marginBottom: '0.5rem' }}>
+                    At the end of this 6-hour renewal, you may extend one final time for 2
+                    additional hours for a flat $20 fee (same for lockers or any room type).
+                  </li>
+                  <li style={{ marginBottom: '0.5rem' }}>
+                    The $20 fee is not charged now; it applies only if you choose the final 2-hour
+                    extension later.
+                  </li>
+                </ul>
+              </div>
+              <button
+                className="btn-liquid-glass modal-ok-btn"
+                onClick={() => {
+                  setShowRenewalDisclaimer(false);
+                  // Proceed to agreement screen
+                  setView('agreement');
+                }}
+                disabled={isSubmitting}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </ScreenShell>
   );

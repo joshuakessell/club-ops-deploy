@@ -77,7 +77,10 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
       const data = await readJson<{ employees?: unknown[] }>(response);
       const employees = (Array.isArray(data.employees) ? data.employees : [])
         .filter(isRecord)
-        .filter((e) => typeof e.id === 'string' && typeof e.name === 'string' && typeof e.role === 'string')
+        .filter(
+          (e) =>
+            typeof e.id === 'string' && typeof e.name === 'string' && typeof e.role === 'string'
+        )
         .map((e) => ({ id: e.id as string, name: e.name as string, role: e.role as string }));
       setEmployees(employees);
     } catch (error) {
@@ -259,7 +262,9 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
   return (
     <div className="sign-in-modal-overlay" onClick={onClose}>
       <div className="sign-in-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="sign-in-modal-close" onClick={onClose}>×</button>
+        <button className="sign-in-modal-close" onClick={onClose}>
+          ×
+        </button>
 
         {step === 'select-employee' && (
           <div className="sign-in-step">
@@ -329,7 +334,9 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                 {([1, 2] as const).map((num) => {
                   const reg = registers.find((r) => r.registerNumber === num);
                   const occupied = reg?.occupied ?? false;
-                  const occupiedLabel = reg?.employee?.name ? ` (In use: ${reg.employee.name})` : ' (In use)';
+                  const occupiedLabel = reg?.employee?.name
+                    ? ` (In use: ${reg.employee.name})`
+                    : ' (In use)';
 
                   return (
                     <button
@@ -339,7 +346,8 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                       disabled={isLoading || occupied}
                       title={occupied ? `Register ${num} is occupied` : `Use Register ${num}`}
                     >
-                      Register {num}{occupied ? occupiedLabel : ''}
+                      Register {num}
+                      {occupied ? occupiedLabel : ''}
                     </button>
                   );
                 })}
@@ -379,4 +387,3 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     </div>
   );
 }
-

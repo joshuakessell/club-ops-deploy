@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
-import type { 
-  WebSocketEventType, 
+import type {
+  WebSocketEventType,
   WebSocketEvent,
   RoomStatusChangedPayload,
   InventoryUpdatedPayload,
@@ -90,10 +90,13 @@ export interface Broadcaster {
   broadcastRoomAssigned(payload: RoomAssignedPayload): void;
   broadcastRoomReleased(payload: RoomReleasedPayload): void;
   broadcastSessionUpdated(payload: SessionUpdatedPayload, lane: string): void;
-  broadcastCustomerConfirmationRequired(payload: CustomerConfirmationRequiredPayload, lane: string): void;
+  broadcastCustomerConfirmationRequired(
+    payload: CustomerConfirmationRequiredPayload,
+    lane: string
+  ): void;
   broadcastCustomerConfirmed(payload: CustomerConfirmedPayload, lane: string): void;
   broadcastCustomerDeclined(payload: CustomerDeclinedPayload, lane: string): void;
-    broadcastSelectionForced(payload: SelectionForcedPayload, lane: string): void;
+  broadcastSelectionForced(payload: SelectionForcedPayload, lane: string): void;
   broadcastAssignmentCreated(payload: AssignmentCreatedPayload, lane: string): void;
   broadcastAssignmentFailed(payload: AssignmentFailedPayload, lane: string): void;
   broadcastRegisterSessionUpdated(payload: RegisterSessionUpdatedPayload): void;
@@ -241,7 +244,10 @@ export function createBroadcaster(): Broadcaster {
      * Broadcast a customer confirmation required event to a specific lane.
      * Called when employee selects different type than customer requested.
      */
-    broadcastCustomerConfirmationRequired(payload: CustomerConfirmationRequiredPayload, lane: string) {
+    broadcastCustomerConfirmationRequired(
+      payload: CustomerConfirmationRequiredPayload,
+      lane: string
+    ) {
       broadcastToLane(createEvent('CUSTOMER_CONFIRMATION_REQUIRED', payload), lane);
     },
 

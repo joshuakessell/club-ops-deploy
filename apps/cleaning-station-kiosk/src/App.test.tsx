@@ -61,14 +61,15 @@ describe('App', () => {
 
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({
-        rooms: [],
-        statusCounts: { DIRTY: 0, CLEANING: 0, CLEAN: 0 },
-        isMixedStatus: false,
-        primaryAction: null,
-        totalResolved: 0,
-        totalRequested: 0,
-      }),
+      json: () =>
+        Promise.resolve({
+          rooms: [],
+          statusCounts: { DIRTY: 0, CLEANING: 0, CLEAN: 0 },
+          isMixedStatus: false,
+          primaryAction: null,
+          totalResolved: 0,
+          totalRequested: 0,
+        }),
     });
   });
 
@@ -88,4 +89,3 @@ describe('App', () => {
     expect(screen.getByPlaceholderText('Enter PIN')).toBeDefined();
   });
 });
-

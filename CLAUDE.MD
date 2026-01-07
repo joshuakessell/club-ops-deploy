@@ -5,6 +5,7 @@ A multi-application system for managing club check-ins, room inventory, cleaning
 ## Project Overview
 
 This system manages the complete lifecycle of room and locker rentals at a club:
+
 - **Customer check-in** via dual-screen kiosks (customer + employee)
 - **Inventory management** (rooms and lockers)
 - **Cleaning workflow** tracking (DIRTY → CLEANING → CLEAN)
@@ -33,6 +34,7 @@ club-operations-pos/
 ## Key Files & Documentation
 
 **Primary source of truth files (READ THESE FIRST):**
+
 - `SPEC.md` - Business rules and product behavior (canonical)
 - `AGENTS.md` - Coding guidelines and architecture rules
 - `docs/database/DATABASE_SOURCE_OF_TRUTH.md` - Database schema contract
@@ -44,6 +46,7 @@ club-operations-pos/
 ## Development Workflow
 
 ### Setup
+
 ```bash
 pnpm install              # Install all dependencies
 pnpm db:start            # Start PostgreSQL (Docker, port 5433)
@@ -52,12 +55,14 @@ pnpm db:seed             # Seed sample data
 ```
 
 ### Daily Development
+
 ```bash
 pnpm dev                 # Start all services
 pnpm kill-ports          # Free stuck ports if needed
 ```
 
 ### Quality Checks
+
 ```bash
 pnpm doctor              # Full health check
 pnpm typecheck           # TypeScript validation
@@ -68,6 +73,7 @@ pnpm spec:check          # Validate SPEC.md compliance
 ```
 
 ### Application URLs (when running)
+
 - API Server: http://localhost:3001
 - Customer Kiosk: http://localhost:5173
 - Cleaning Station: http://localhost:5174
@@ -97,6 +103,7 @@ pnpm spec:check          # Validate SPEC.md compliance
 ## Common Tasks
 
 ### Working with Database
+
 ```bash
 pnpm db:start            # Start Postgres
 pnpm db:stop             # Stop Postgres
@@ -106,6 +113,7 @@ pnpm db:seed             # Add sample data
 ```
 
 **Database connection:**
+
 - Host: localhost
 - Port: 5433
 - Database: club_operations
@@ -115,6 +123,7 @@ pnpm db:seed             # Add sample data
 ### Adding New Features
 
 Before making changes, check:
+
 1. Does this affect pricing rules or membership logic?
 2. Does this affect room tier mapping (Standard/Double/Special)?
 3. Does this affect checkout late fee/ban logic?
@@ -135,21 +144,26 @@ Before making changes, check:
 ## Shared Package Usage
 
 ### @club-ops/shared
+
 Import shared types, enums, and validators:
+
 ```typescript
-import { RoomStatus, RoomType } from '@club-ops/shared'
-import { isAdjacentTransition, validateTransition } from '@club-ops/shared'
+import { RoomStatus, RoomType } from '@club-ops/shared';
+import { isAdjacentTransition, validateTransition } from '@club-ops/shared';
 ```
 
 ### @club-ops/ui
+
 Import shared UI components:
+
 ```typescript
-import { Button, Card } from '@club-ops/ui'
+import { Button, Card } from '@club-ops/ui';
 ```
 
 ## WebSocket Integration
 
 Apps connect to WebSocket server for real-time updates:
+
 - Endpoint: `ws://localhost:3001/ws`
 - Lane-specific: `ws://localhost:3001/ws?lane=LANE_1`
 - Events: inventory updates, lane sessions, checkout notifications

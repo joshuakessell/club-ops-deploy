@@ -7,11 +7,11 @@ export function MessagesView() {
       <div className="panel-content">
         <div className="placeholder">
           <span className="placeholder-icon">💬</span>
-          <p>Messaging is a stub in this demo. (Planned: staff broadcast + manager announcements.)</p>
+          <p>
+            Messaging is a stub in this demo. (Planned: staff broadcast + manager announcements.)
+          </p>
         </div>
       </div>
     </section>
   );
 }
-
-

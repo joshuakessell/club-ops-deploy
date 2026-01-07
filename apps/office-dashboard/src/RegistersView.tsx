@@ -34,7 +34,7 @@ export function RegistersView({ session }: RegistersViewProps) {
     try {
       const response = await fetch(`${API_BASE}/v1/admin/register-sessions`, {
         headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
+          Authorization: `Bearer ${session.sessionToken}`,
         },
       });
       if (response.ok) {
@@ -55,16 +55,17 @@ export function RegistersView({ session }: RegistersViewProps) {
   // Set up WebSocket connection and subscribe to events
   useEffect(() => {
     const wsConnection = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
-    
+
     wsConnection.onopen = () => {
-      wsConnection.send(JSON.stringify({
-        type: 'subscribe',
-        events: ['REGISTER_SESSION_UPDATED'],
-      }));
+      wsConnection.send(
+        JSON.stringify({
+          type: 'subscribe',
+          events: ['REGISTER_SESSION_UPDATED'],
+        })
+      );
     };
 
-    wsConnection.onclose = () => {
-    };
+    wsConnection.onclose = () => {};
 
     wsConnection.onmessage = (event) => {
       try {
@@ -72,28 +73,32 @@ export function RegistersView({ session }: RegistersViewProps) {
         if (message.type === 'REGISTER_SESSION_UPDATED') {
           const payload = message.payload as RegisterSessionUpdatedPayload;
           // Update the specific register in state
-          setRegisters(prev => prev.map(reg => 
-            reg.registerNumber === payload.registerNumber
-              ? {
-                  registerNumber: payload.registerNumber,
-                  active: payload.active,
-                  sessionId: payload.sessionId,
-                  employee: payload.employee,
-                  deviceId: payload.deviceId,
-                  createdAt: payload.createdAt,
-                  lastHeartbeatAt: payload.lastHeartbeatAt,
-                  secondsSinceHeartbeat: payload.lastHeartbeatAt 
-                    ? Math.floor((Date.now() - new Date(payload.lastHeartbeatAt).getTime()) / 1000)
-                    : null,
-                }
-              : reg
-          ));
+          setRegisters((prev) =>
+            prev.map((reg) =>
+              reg.registerNumber === payload.registerNumber
+                ? {
+                    registerNumber: payload.registerNumber,
+                    active: payload.active,
+                    sessionId: payload.sessionId,
+                    employee: payload.employee,
+                    deviceId: payload.deviceId,
+                    createdAt: payload.createdAt,
+                    lastHeartbeatAt: payload.lastHeartbeatAt,
+                    secondsSinceHeartbeat: payload.lastHeartbeatAt
+                      ? Math.floor(
+                          (Date.now() - new Date(payload.lastHeartbeatAt).getTime()) / 1000
+                        )
+                      : null,
+                  }
+                : reg
+            )
+          );
         }
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);
       }
     };
-    
+
     return () => {
       wsConnection.close();
     };
@@ -102,12 +107,15 @@ export function RegistersView({ session }: RegistersViewProps) {
   const handleForceSignOut = async (registerNumber: number) => {
     setForceSignOutLoading(registerNumber);
     try {
-      const response = await fetch(`${API_BASE}/v1/admin/register-sessions/${registerNumber}/force-signout`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.sessionToken}`,
-        },
-      });
+      const response = await fetch(
+        `${API_BASE}/v1/admin/register-sessions/${registerNumber}/force-signout`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+        }
+      );
       if (response.ok) {
         await fetchRegisters();
       } else {
@@ -140,10 +148,17 @@ export function RegistersView({ session }: RegistersViewProps) {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1600px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '2rem',
+        }}
+      >
         <h1 style={{ fontSize: '2rem', fontWeight: 600 }}>Register Monitoring</h1>
-        <button 
-          onClick={() => navigate('/')} 
+        <button
+          onClick={() => navigate('/')}
           style={{
             padding: '0.75rem 1.5rem',
             background: '#374151',
@@ -169,7 +184,14 @@ export function RegistersView({ session }: RegistersViewProps) {
               background: register.active ? '#1f2937' : '#111827',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '1rem',
+              }}
+            >
               <h2 style={{ fontSize: '1.5rem', fontWeight: 600 }}>
                 Register {register.registerNumber}
               </h2>
@@ -214,16 +236,20 @@ export function RegistersView({ session }: RegistersViewProps) {
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    background: forceSignOutLoading === register.registerNumber ? '#6b7280' : '#ef4444',
+                    background:
+                      forceSignOutLoading === register.registerNumber ? '#6b7280' : '#ef4444',
                     border: 'none',
                     borderRadius: '6px',
                     color: '#fff',
-                    cursor: forceSignOutLoading === register.registerNumber ? 'not-allowed' : 'pointer',
+                    cursor:
+                      forceSignOutLoading === register.registerNumber ? 'not-allowed' : 'pointer',
                     fontSize: '1rem',
                     fontWeight: 600,
                   }}
                 >
-                  {forceSignOutLoading === register.registerNumber ? 'Signing Out...' : 'Force Sign Out'}
+                  {forceSignOutLoading === register.registerNumber
+                    ? 'Signing Out...'
+                    : 'Force Sign Out'}
                 </button>
               </>
             ) : (
@@ -237,4 +263,3 @@ export function RegistersView({ session }: RegistersViewProps) {
     </div>
   );
 }
-

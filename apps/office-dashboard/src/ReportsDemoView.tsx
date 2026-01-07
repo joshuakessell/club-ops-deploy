@@ -59,7 +59,15 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
       {error && (
-        <div style={{ marginBottom: '1rem', padding: '0.75rem', border: '1px solid var(--error)', borderRadius: 8, color: 'var(--error)' }}>
+        <div
+          style={{
+            marginBottom: '1rem',
+            padding: '0.75rem',
+            border: '1px solid var(--error)',
+            borderRadius: 8,
+            color: 'var(--error)',
+          }}
+        >
           {error}
         </div>
       )}
@@ -69,7 +77,10 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
           <h2>Inventory Summary</h2>
         </div>
         <div className="panel-content" style={{ padding: '1.25rem' }}>
-          <section className="stats-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 0 }}>
+          <section
+            className="stats-grid"
+            style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 0 }}
+          >
             <div className="stat-card">
               <span className="stat-value">{inventory?.overall.total ?? '—'}</span>
               <span className="stat-label">Total Rooms</span>
@@ -127,7 +138,9 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
             <div style={{ color: 'var(--text-muted)' }}>Loading…</div>
           ) : (
             <>
-              <div style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>Date: {cash.date}</div>
+              <div style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                Date: {cash.date}
+              </div>
               <section className="stats-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
                 <div className="stat-card">
                   <span className="stat-value">${cash.total.toFixed(2)}</span>
@@ -138,12 +151,21 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
                   <span className="stat-label">Cash</span>
                 </div>
                 <div className="stat-card stat-cleaning">
-                  <span className="stat-value">${(cash.byPaymentMethod.CREDIT || 0).toFixed(2)}</span>
+                  <span className="stat-value">
+                    ${(cash.byPaymentMethod.CREDIT || 0).toFixed(2)}
+                  </span>
                   <span className="stat-label">Credit</span>
                 </div>
               </section>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  gap: '1.5rem',
+                  marginTop: '1.5rem',
+                }}
+              >
                 <div className="csRaisedCard" style={{ padding: '1rem' }}>
                   <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>By Payment Method</div>
                   <table className="rooms-table">
@@ -179,5 +201,3 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
     </div>
   );
 }
-
-
