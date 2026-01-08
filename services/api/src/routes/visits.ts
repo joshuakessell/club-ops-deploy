@@ -4,6 +4,7 @@ import { serializableTransaction, query } from '../db/index.js';
 import { requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
+import { roundUpToQuarterHour } from '../time/rounding.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -225,7 +226,9 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
         // 5. Create the visit
         const now = new Date();
-        const initialBlockEndsAt = new Date(now.getTime() + 6 * 60 * 60 * 1000); // 6 hours from now
+        const initialBlockEndsAt = roundUpToQuarterHour(
+          new Date(now.getTime() + 6 * 60 * 60 * 1000)
+        ); // 6 hours from now, rounded up to next 15m boundary
 
         const visitResult = await client.query<VisitRow>(
           `INSERT INTO visits (customer_id, started_at)
@@ -447,7 +450,9 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
           // 5. Renewal extends from previous checkout time, not from now
           const renewalStartsAt = latestBlockEnd;
-          const renewalEndsAt = new Date(renewalStartsAt.getTime() + 6 * 60 * 60 * 1000); // 6 hours from previous checkout
+          const renewalEndsAt = roundUpToQuarterHour(
+            new Date(renewalStartsAt.getTime() + 6 * 60 * 60 * 1000)
+          ); // 6 hours from previous checkout, rounded up to next 15m boundary
 
           // 6. Handle room assignment if requested
           let assignedRoomId: string | null = null;

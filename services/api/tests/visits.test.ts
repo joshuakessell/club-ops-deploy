@@ -6,6 +6,9 @@ import { agreementRoutes } from '../src/routes/agreements.js';
 import { createBroadcaster } from '../src/websocket/broadcaster.js';
 import { truncateAllTables } from './testDb.js';
 
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+
 // Mock auth middleware to allow test requests
 const testStaffId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 vi.mock('../src/auth/middleware.js', () => ({
@@ -138,8 +141,10 @@ describe('Visit and Renewal Flows', () => {
       // Verify block duration is 6 hours
       const startsAt = new Date(data.block.startsAt);
       const endsAt = new Date(data.block.endsAt);
-      const durationHours = (endsAt.getTime() - startsAt.getTime()) / (1000 * 60 * 60);
-      expect(durationHours).toBe(6);
+      const durationMs = endsAt.getTime() - startsAt.getTime();
+      // Checkout time is 6 hours after check-in, rounded UP to the next 15-minute boundary.
+      expect(durationMs).toBeGreaterThanOrEqual(SIX_HOURS_MS);
+      expect(durationMs).toBeLessThanOrEqual(SIX_HOURS_MS + FIFTEEN_MIN_MS);
     })
   );
 
@@ -185,9 +190,9 @@ describe('Visit and Renewal Flows', () => {
       expect(Math.abs(renewalStartsAt.getTime() - initialBlockEndsAt.getTime())).toBeLessThan(1000);
 
       // Renewal should end 6 hours after it starts
-      const renewalDurationHours =
-        (renewalEndsAt.getTime() - renewalStartsAt.getTime()) / (1000 * 60 * 60);
-      expect(renewalDurationHours).toBe(6);
+      const renewalDurationMs = renewalEndsAt.getTime() - renewalStartsAt.getTime();
+      expect(renewalDurationMs).toBeGreaterThanOrEqual(SIX_HOURS_MS);
+      expect(renewalDurationMs).toBeLessThanOrEqual(SIX_HOURS_MS + FIFTEEN_MIN_MS);
 
       // Renewal should NOT start from "now" - verify it's close to initial checkout time
       const now = new Date();
@@ -380,8 +385,12 @@ describe('Visit and Renewal Flows', () => {
       expect(data.visits.length).toBeGreaterThan(0);
       expect(data.visits[0]?.customerId).toBe(testCustomerId);
       expect(data.visits[0]?.currentCheckoutAt).toBeDefined();
-      expect(data.visits[0]?.totalHoursIfRenewed).toBe(12); // 6 + 6
-      expect(data.visits[0]?.canFinalExtend).toBe(true); // Can extend if total would be <= 14
+      // Current block may include up to 15 minutes of rounding; renewal adds 6 hours.
+      expect(data.visits[0]?.totalHoursIfRenewed).toBeGreaterThanOrEqual(12);
+      expect(data.visits[0]?.totalHoursIfRenewed).toBeLessThanOrEqual(12 + 15 / 60);
+      // canFinalExtend is true only if renewal + final2h would be <= 14 hours.
+      // With rounding, totalHoursIfRenewed can exceed 12 slightly, making final2h ineligible.
+      expect(data.visits[0]?.canFinalExtend).toBe(data.visits[0]?.totalHoursIfRenewed <= 12);
     })
   );
 });

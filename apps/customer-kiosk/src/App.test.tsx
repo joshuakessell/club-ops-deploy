@@ -52,7 +52,14 @@ describe('App', () => {
       }
       if (u.includes('/v1/inventory/available')) {
         return Promise.resolve({
-          json: () => Promise.resolve({ rooms: {}, lockers: 0 }),
+          json: () =>
+            Promise.resolve({
+              rooms: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              rawRooms: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              waitlistDemand: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              lockers: 0,
+              total: 0,
+            }),
         } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/membership-purchase-intent')) {
@@ -142,7 +149,14 @@ describe('App', () => {
       if (u.includes('/v1/inventory/available')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ rooms: {}, lockers: 0 }),
+          json: () =>
+            Promise.resolve({
+              rooms: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              rawRooms: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              waitlistDemand: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              lockers: 0,
+              total: 0,
+            }),
         } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/set-language')) {

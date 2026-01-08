@@ -132,6 +132,18 @@ interface CheckoutRequestRow {
   completed_at: Date | null;
 }
 
+interface WaitlistStatusRow {
+  id: string;
+  status: 'ACTIVE' | 'OFFERED';
+}
+
+function looksLikeUuid(value: string): boolean {
+  // Good enough for deciding whether to write staff_id; DB will still enforce UUID shape.
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
 /**
  * Checkout routes for customer-operated checkout kiosk and employee verification.
  */
@@ -846,6 +858,44 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
 
           const block = blockResult.rows[0]!;
 
+          // 2b. Cancel any active waitlist entries for this visit (system cancel on checkout)
+          const waitlistResult = await client.query<WaitlistStatusRow>(
+            `SELECT id, status
+             FROM waitlist
+             WHERE visit_id = $1 AND status IN ('ACTIVE','OFFERED')
+             FOR UPDATE`,
+            [block.visit_id]
+          );
+
+          if (waitlistResult.rows.length > 0) {
+            const waitlistIds = waitlistResult.rows.map((r) => r.id);
+
+            await client.query(
+              `UPDATE waitlist
+               SET status = 'CANCELLED',
+                   cancelled_at = NOW(),
+                   cancelled_by_staff_id = NULL,
+                   updated_at = NOW()
+               WHERE id = ANY($1::uuid[])`,
+              [waitlistIds]
+            );
+
+            const auditStaffId = looksLikeUuid(staffId) ? staffId : null;
+            for (const row of waitlistResult.rows) {
+              await client.query(
+                `INSERT INTO audit_log
+                 (staff_id, action, entity_type, entity_id, old_value, new_value)
+                 VALUES ($1, 'WAITLIST_CANCELLED', 'waitlist', $2, $3, $4)`,
+                [
+                  auditStaffId,
+                  row.id,
+                  JSON.stringify({ status: row.status }),
+                  JSON.stringify({ status: 'CANCELLED', reason: 'CHECKED_OUT' }),
+                ]
+              );
+            }
+          }
+
           // 3. Update room to DIRTY or locker to AVAILABLE
           if (block.room_id) {
             await client.query(
@@ -915,6 +965,8 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
             kioskDeviceId: checkoutRequest.kiosk_device_id,
             roomId: block.room_id,
             lockerId: block.locker_id,
+            visitId: block.visit_id,
+            cancelledWaitlistIds: waitlistResult.rows.map((r) => r.id),
           };
         });
 
@@ -932,6 +984,21 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
               newStatus: RoomStatus.DIRTY,
               changedBy: staffId,
               override: false,
+            });
+          }
+        }
+
+        // 9b. Broadcast WAITLIST_UPDATED for system-cancelled waitlist entries (after commit)
+        if (fastify.broadcaster && result.cancelledWaitlistIds.length > 0) {
+          for (const waitlistId of result.cancelledWaitlistIds) {
+            fastify.broadcaster.broadcast({
+              type: 'WAITLIST_UPDATED',
+              payload: {
+                waitlistId,
+                status: 'CANCELLED',
+                visitId: result.visitId,
+              },
+              timestamp: new Date().toISOString(),
             });
           }
         }

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query, transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
+import { expireWaitlistEntries } from '../waitlist/expireWaitlist.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -14,7 +15,6 @@ declare module 'fastify' {
  * Schema for offering upgrade.
  */
 const OfferUpgradeSchema = z.object({
-  waitlistId: z.string().uuid(),
   roomId: z.string().uuid(),
 });
 
@@ -77,6 +77,13 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
     async (request, reply) => {
       if (!request.staff) {
         return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      // Best-effort: ensure stale waitlist rows are expired before we surface results.
+      try {
+        await expireWaitlistEntries(fastify);
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to expire waitlist entries (best-effort)');
       }
 
       const { status } = request.query;
@@ -184,9 +191,16 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
 
       try {
         const result = await serializableTransaction(async (client) => {
-          // Get waitlist entry with lock
-          const waitlistResult = await client.query<WaitlistRow>(
-            `SELECT * FROM waitlist WHERE id = $1 FOR UPDATE`,
+          // Get waitlist entry + validate it is still within its scheduled stay
+          const waitlistResult = await client.query<
+            WaitlistRow & { visit_ended_at: Date | null; block_ends_at: Date }
+          >(
+            `SELECT w.*, v.ended_at as visit_ended_at, cb.ends_at as block_ends_at
+             FROM waitlist w
+             JOIN visits v ON v.id = w.visit_id
+             JOIN checkin_blocks cb ON cb.id = w.checkin_block_id
+             WHERE w.id = $1
+             FOR UPDATE`,
             [id]
           );
 
@@ -198,9 +212,16 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
 
           if (waitlist.status !== 'ACTIVE') {
             throw {
-              statusCode: 400,
+              statusCode: 409,
               message: `Waitlist entry is not ACTIVE (current status: ${waitlist.status})`,
             };
+          }
+
+          if (waitlist.visit_ended_at) {
+            throw { statusCode: 409, message: 'Waitlist entry is no longer valid (visit ended)' };
+          }
+          if (new Date(waitlist.block_ends_at).getTime() <= Date.now()) {
+            throw { statusCode: 409, message: 'Waitlist entry is no longer valid (block ended)' };
           }
 
           // Verify room is available and matches desired tier
@@ -217,7 +238,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
 
           if (room.status !== 'CLEAN') {
             throw {
-              statusCode: 400,
+              statusCode: 409,
               message: `Room ${room.number} is not available (status: ${room.status})`,
             };
           }
@@ -226,8 +247,31 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 409, message: `Room ${room.number} is already assigned` };
           }
 
-          // Verify tier matches (simplified - would need getRoomTier function)
-          // For now, assume room type matches desired tier
+          // Verify tier matches desired tier
+          if (String(room.type) !== String(waitlist.desired_tier)) {
+            throw {
+              statusCode: 409,
+              message: `Room ${room.number} is ${room.type}, but waitlist is for ${waitlist.desired_tier}`,
+            };
+          }
+
+          // Ensure the room isn't reserved by another OFFERED entry (still valid)
+          const reserved = await client.query<{ id: string }>(
+            `SELECT w.id
+             FROM waitlist w
+             JOIN visits v ON v.id = w.visit_id
+             JOIN checkin_blocks cb ON cb.id = w.checkin_block_id
+             WHERE w.status = 'OFFERED'
+               AND w.room_id = $1
+               AND w.id <> $2
+               AND v.ended_at IS NULL
+               AND cb.ends_at > NOW()
+             LIMIT 1`,
+            [body.roomId, id]
+          );
+          if (reserved.rows.length > 0) {
+            throw { statusCode: 409, message: `Room ${room.number} is reserved for another offer` };
+          }
 
           // Update waitlist entry to OFFERED and store room_id
           await client.query(

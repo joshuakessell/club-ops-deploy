@@ -11,6 +11,7 @@ import {
   sessionRoutes,
   laneRoutes,
   inventoryRoutes,
+  roomsRoutes,
   keysRoutes,
   cleaningRoutes,
   adminRoutes,
@@ -33,6 +34,7 @@ import { initializeDatabase, closeDatabase } from './db/index.js';
 import { cleanupAbandonedRegisterSessions } from './routes/registers.js';
 import { seedDemoData } from './db/seed-demo.js';
 import type { WebSocketEventType } from '@club-ops/shared';
+import { expireWaitlistEntries } from './waitlist/expireWaitlist.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -118,6 +120,20 @@ async function main() {
     })();
   }, 30000); // 30 seconds
 
+  // Periodic waitlist expiry (every 60 seconds)
+  const waitlistExpiryInterval = setInterval(() => {
+    void (async () => {
+      try {
+        const expired = await expireWaitlistEntries(fastify);
+        if (expired > 0) {
+          fastify.log.info(`Expired ${expired} waitlist entr${expired === 1 ? 'y' : 'ies'}`);
+        }
+      } catch (error) {
+        fastify.log.error(error, 'Error during waitlist expiry');
+      }
+    })();
+  }, 60000);
+
   // Initialize database connection (unless skipped for testing)
   if (!SKIP_DB) {
     try {
@@ -143,6 +159,7 @@ async function main() {
   await fastify.register(sessionRoutes);
   await fastify.register(laneRoutes);
   await fastify.register(inventoryRoutes);
+  await fastify.register(roomsRoutes);
   await fastify.register(keysRoutes);
   await fastify.register(cleaningRoutes);
   await fastify.register(adminRoutes);
@@ -233,6 +250,7 @@ async function main() {
   const shutdown = async () => {
     fastify.log.info('Shutting down...');
     clearInterval(cleanupInterval);
+    clearInterval(waitlistExpiryInterval);
     await fastify.close();
     if (!SKIP_DB) {
       await closeDatabase();

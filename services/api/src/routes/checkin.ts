@@ -4,6 +4,7 @@ import { query, transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, optionalAuth } from '../auth/middleware.js';
 import { verifyPin } from '../auth/utils.js';
 import { generateAgreementPdf } from '../utils/pdf-generator.js';
+import { roundUpToQuarterHour } from '../time/rounding.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type {
   SessionUpdatedPayload,
@@ -104,6 +105,62 @@ interface PaymentIntentRow {
 }
 
 type PoolClient = Parameters<Parameters<typeof transaction>[0]>[0];
+
+type RoomRentalType = 'STANDARD' | 'DOUBLE' | 'SPECIAL';
+
+async function selectRoomForNewCheckin(
+  client: PoolClient,
+  rentalType: RoomRentalType
+): Promise<{ id: string; number: string } | null> {
+  // 1) ACTIVE waitlist demand count for this tier (still within scheduled stay)
+  const demandRes = await client.query<{ count: string }>(
+    `SELECT COUNT(*) as count
+     FROM waitlist w
+     JOIN checkin_blocks cb ON cb.id = w.checkin_block_id
+     JOIN visits v ON v.id = w.visit_id
+     WHERE w.status = 'ACTIVE'
+       AND w.desired_tier::text = $1
+       AND v.ended_at IS NULL
+       AND cb.ends_at > NOW()`,
+    [rentalType]
+  );
+  const activeDemandCount = parseInt(demandRes.rows[0]?.count ?? '0', 10) || 0;
+
+  // 2) OFFERED waitlist rooms are explicitly reserved (do not assign them)
+  const offeredRes = await client.query<{ room_id: string }>(
+    `SELECT w.room_id
+     FROM waitlist w
+     JOIN checkin_blocks cb ON cb.id = w.checkin_block_id
+     JOIN visits v ON v.id = w.visit_id
+     WHERE w.status = 'OFFERED'
+       AND w.desired_tier::text = $1
+       AND w.room_id IS NOT NULL
+       AND v.ended_at IS NULL
+       AND cb.ends_at > NOW()`,
+    [rentalType]
+  );
+  const offeredRoomIds = offeredRes.rows.map((r) => r.room_id).filter(Boolean);
+
+  // 3) Select the (activeDemandCount+1)th clean, unassigned room by number, excluding offered rooms.
+  // Concurrency-safe: FOR UPDATE SKIP LOCKED
+  const room = (
+    await client.query<{ id: string; number: string }>(
+      `SELECT id, number
+       FROM rooms
+       WHERE status = 'CLEAN'
+         AND assigned_to_customer_id IS NULL
+         AND type = $1
+         AND id <> ALL($2::uuid[])
+       ORDER BY number ASC
+       OFFSET $3
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`,
+      [rentalType, offeredRoomIds, activeDemandCount]
+    )
+  ).rows[0];
+
+  return room ?? null;
+}
 
 function toNumber(value: unknown): number | undefined {
   if (value === null || value === undefined) return undefined;
@@ -2670,19 +2727,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               assignedResourceType = 'locker';
               assignedResourceNumber = locker.number;
             } else {
-              const room = (
-                await client.query<RoomRow>(
-                  `SELECT id, number, type, status, assigned_to_customer_id
-                 FROM rooms
-                 WHERE status = 'CLEAN'
-                   AND assigned_to_customer_id IS NULL
-                   AND type = $1
-                 ORDER BY number
-                 LIMIT 1
-                 FOR UPDATE SKIP LOCKED`,
-                  [rentalType]
-                )
-              ).rows[0];
+              const room = await selectRoomForNewCheckin(client, rentalType as RoomRentalType);
               if (!room) throw { statusCode: 409, message: 'No available rooms' };
               assignedResourceId = room.id;
               assignedResourceType = 'room';
@@ -2752,7 +2797,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           const startsAt = new Date(); // demo: now (UTC)
-          const endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000);
+          const endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
 
           // Create checkin_block with PDF
           const blockResult = await client.query<{ id: string }>(
@@ -3031,19 +3076,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               assignedResourceType = 'locker';
               assignedResourceNumber = locker.number;
             } else {
-              const room = (
-                await client.query<RoomRow>(
-                  `SELECT id, number, type, status, assigned_to_customer_id
-                 FROM rooms
-                 WHERE status = 'CLEAN'
-                   AND assigned_to_customer_id IS NULL
-                   AND type = $1
-                 ORDER BY number
-                 LIMIT 1
-                 FOR UPDATE SKIP LOCKED`,
-                  [rentalType]
-                )
-              ).rows[0];
+              const room = await selectRoomForNewCheckin(client, rentalType as RoomRentalType);
               if (!room) throw { statusCode: 409, message: 'No available rooms' };
               assignedResourceId = room.id;
               assignedResourceType = 'room';
@@ -3112,7 +3145,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             blockType = 'INITIAL';
           }
 
-          const checkoutAt = new Date(signedAt.getTime() + 6 * 60 * 60 * 1000);
+          const checkoutAt = roundUpToQuarterHour(new Date(signedAt.getTime() + 6 * 60 * 60 * 1000));
 
           const blockResult = await client.query<{ id: string }>(
             `INSERT INTO checkin_blocks
@@ -3344,7 +3377,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       // Renewal extends from previous checkout time, not from now
       const latestBlockEnd = blocksResult.rows[0]!.ends_at;
       startsAt = latestBlockEnd;
-      endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000); // 6 hours from previous checkout
+      endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000)); // 6 hours from previous checkout, rounded up
       blockType = 'RENEWAL';
     } else {
       // For INITIAL: create new visit
@@ -3359,7 +3392,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
       // Create check-in block (6 hours from now)
       startsAt = new Date();
-      endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000);
+      endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
       blockType = 'INITIAL';
     }
 

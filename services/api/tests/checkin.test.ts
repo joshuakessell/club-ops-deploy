@@ -1417,5 +1417,184 @@ describe('Check-in Flow', () => {
         expect(roomAssignedResult.rows[0]!.assigned_to_customer_id).toBe(customerId);
       })
     );
+
+    it(
+      'should not assign rooms reserved to satisfy ACTIVE upgrade waitlist demand (new check-in fails when demand consumes supply)',
+      runIfDbAvailable(async () => {
+        // Supply: 2 CLEAN STANDARD rooms
+        await query(
+          `INSERT INTO rooms (number, type, status, floor)
+           VALUES ('101', 'STANDARD', 'CLEAN', 1), ('102', 'STANDARD', 'CLEAN', 1)`
+        );
+
+        // Demand: 2 ACTIVE STANDARD waitlist entries on an active visit + active block
+        const wlCustomer = await query<{ id: string }>(
+          `INSERT INTO customers (name) VALUES ('Waitlist Demand Customer') RETURNING id`
+        );
+        const wlVisit = await query<{ id: string }>(
+          `INSERT INTO visits (customer_id, started_at) VALUES ($1, NOW() - INTERVAL '1 hour') RETURNING id`,
+          [wlCustomer.rows[0]!.id]
+        );
+        const wlBlock = await query<{ id: string }>(
+          `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, rental_type)
+           VALUES ($1, 'INITIAL', NOW() - INTERVAL '1 hour', NOW() + INTERVAL '2 hours', 'STANDARD')
+           RETURNING id`,
+          [wlVisit.rows[0]!.id]
+        );
+        await query(
+          `INSERT INTO waitlist (visit_id, checkin_block_id, desired_tier, backup_tier, status)
+           VALUES
+             ($1, $2, 'STANDARD', 'STANDARD', 'ACTIVE'),
+             ($1, $2, 'STANDARD', 'STANDARD', 'ACTIVE')`,
+          [wlVisit.rows[0]!.id, wlBlock.rows[0]!.id]
+        );
+
+        // Create session, lock selection, create payment intent, demo-take-payment, then sign agreement (no preselected room)
+        const startResponse = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { idScanValue: 'ID123456', membershipScanValue: '12345' },
+        });
+        expect(startResponse.statusCode).toBe(200);
+        const startData = JSON.parse(startResponse.body);
+
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { confirmedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/demo-take-payment`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { outcome: 'CASH_SUCCESS' },
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          payload: {
+            signaturePayload:
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            sessionId: startData.sessionId,
+          },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expect(JSON.parse(response.body).error).toMatch(/No available rooms/i);
+      })
+    );
+
+    it(
+      'should not assign a room that is reserved by an OFFERED waitlist (explicit room_id reservation)',
+      runIfDbAvailable(async () => {
+        // Supply: 2 CLEAN STANDARD rooms
+        const r1 = await query<{ id: string; number: string }>(
+          `INSERT INTO rooms (number, type, status, floor)
+           VALUES ('101', 'STANDARD', 'CLEAN', 1)
+           RETURNING id, number`
+        );
+        const offeredRoomId = r1.rows[0]!.id;
+        await query(
+          `INSERT INTO rooms (number, type, status, floor)
+           VALUES ('102', 'STANDARD', 'CLEAN', 1)`
+        );
+
+        // OFFERED waitlist entry reserves room 101 (valid active visit + active block)
+        const wlCustomer = await query<{ id: string }>(
+          `INSERT INTO customers (name) VALUES ('Waitlist Offered Customer') RETURNING id`
+        );
+        const wlVisit = await query<{ id: string }>(
+          `INSERT INTO visits (customer_id, started_at) VALUES ($1, NOW() - INTERVAL '1 hour') RETURNING id`,
+          [wlCustomer.rows[0]!.id]
+        );
+        const wlBlock = await query<{ id: string }>(
+          `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, rental_type)
+           VALUES ($1, 'INITIAL', NOW() - INTERVAL '1 hour', NOW() + INTERVAL '2 hours', 'STANDARD')
+           RETURNING id`,
+          [wlVisit.rows[0]!.id]
+        );
+        await query(
+          `INSERT INTO waitlist (visit_id, checkin_block_id, desired_tier, backup_tier, status, offered_at, room_id)
+           VALUES ($1, $2, 'STANDARD', 'STANDARD', 'OFFERED', NOW(), $3)`,
+          [wlVisit.rows[0]!.id, wlBlock.rows[0]!.id, offeredRoomId]
+        );
+
+        // New check-in should skip offered room 101 and assign room 102
+        const startResponse = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { idScanValue: 'ID123456', membershipScanValue: '12345' },
+        });
+        expect(startResponse.statusCode).toBe(200);
+        const startData = JSON.parse(startResponse.body);
+
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { confirmedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/demo-take-payment`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { outcome: 'CASH_SUCCESS' },
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          payload: {
+            signaturePayload:
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            sessionId: startData.sessionId,
+          },
+        });
+        expect(response.statusCode).toBe(200);
+
+        const assignedRoom = await query<{ number: string }>(
+          `SELECT number
+           FROM rooms
+           WHERE assigned_to_customer_id = $1 AND status = 'OCCUPIED'
+           ORDER BY number ASC
+           LIMIT 1`,
+          [customerId]
+        );
+        expect(assignedRoom.rows[0]!.number).toBe('102');
+
+        const offeredRoom = await query<{ status: string; assigned_to_customer_id: string | null }>(
+          `SELECT status, assigned_to_customer_id FROM rooms WHERE id = $1`,
+          [offeredRoomId]
+        );
+        expect(offeredRoom.rows[0]!.status).toBe('CLEAN');
+        expect(offeredRoom.rows[0]!.assigned_to_customer_id).toBeNull();
+      })
+    );
   });
 });

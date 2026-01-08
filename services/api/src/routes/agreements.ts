@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { generateAgreementPdf } from '../utils/pdf-generator.js';
+import { roundUpToQuarterHour } from '../time/rounding.js';
 
 /**
  * Schema for signing an agreement.
@@ -210,7 +211,9 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
             }
 
             const startsAt = session.check_in_time;
-            const endsAt = session.checkout_at ?? new Date(startsAt.getTime() + 6 * 60 * 60 * 1000);
+            const endsAt =
+              session.checkout_at ??
+              roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
             const blockType = (session.checkin_type ?? 'INITIAL') as
               | 'INITIAL'
               | 'RENEWAL'

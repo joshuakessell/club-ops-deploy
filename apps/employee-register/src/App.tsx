@@ -24,6 +24,7 @@ import { InventorySelector } from './InventorySelector';
 import type { IdScanPayload } from '@club-ops/shared';
 import { ScanMode, type ScanModeResult } from './ScanMode';
 import { debounce } from './utils/debounce';
+import { OfferUpgradeModal } from './components/OfferUpgradeModal';
 
 interface HealthStatus {
   status: string;
@@ -214,11 +215,22 @@ function App() {
       customerName?: string;
     }>
   >([]);
+  const [inventoryAvailable, setInventoryAvailable] = useState<null | {
+    rooms: Record<string, number>;
+    rawRooms: Record<string, number>;
+    waitlistDemand: Record<string, number>;
+  }>(null);
   const [showUpgradesPanel, setShowUpgradesPanel] = useState(false);
   const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<string | null>(null);
   const [upgradePaymentIntentId, setUpgradePaymentIntentId] = useState<string | null>(null);
   const [upgradeFee, setUpgradeFee] = useState<number | null>(null);
   const [waitlistWidgetOpen, setWaitlistWidgetOpen] = useState(false);
+  const [showUpgradePulse, setShowUpgradePulse] = useState(false);
+  const [offerUpgradeModal, setOfferUpgradeModal] = useState<{
+    waitlistId: string;
+    desiredTier: 'STANDARD' | 'DOUBLE' | 'SPECIAL';
+    customerLabel?: string;
+  } | null>(null);
 
   // Customer info state
   const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(
@@ -239,6 +251,7 @@ function App() {
   const [paymentDeclineError, setPaymentDeclineError] = useState<string | null>(null);
   const paymentIntentCreateInFlightRef = useRef(false);
   const fetchWaitlistRef = useRef<(() => Promise<void>) | null>(null);
+  const fetchInventoryAvailableRef = useRef<(() => Promise<void>) | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerSuggestions, setCustomerSuggestions] = useState<
@@ -1033,32 +1046,133 @@ function App() {
         allEntries.push(...(offeredData.entries || []));
       }
 
+      // Oldest first (createdAt ascending)
+      allEntries.sort((a, b) => {
+        const at = new Date(a.createdAt).getTime();
+        const bt = new Date(b.createdAt).getTime();
+        return at - bt;
+      });
+
       setWaitlistEntries(allEntries);
     } catch (error) {
       console.error('Failed to fetch waitlist:', error);
     }
   };
 
+  const fetchInventoryAvailable = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/inventory/available`);
+      if (!res.ok) return;
+      const data: unknown = await res.json().catch(() => null);
+      if (
+        isRecord(data) &&
+        isRecord(data.rooms) &&
+        isRecord(data.rawRooms) &&
+        isRecord(data.waitlistDemand)
+      ) {
+        setInventoryAvailable({
+          rooms: data.rooms as Record<string, number>,
+          rawRooms: data.rawRooms as Record<string, number>,
+          waitlistDemand: data.waitlistDemand as Record<string, number>,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch inventory available:', error);
+    }
+  };
+
   fetchWaitlistRef.current = fetchWaitlist;
+  fetchInventoryAvailableRef.current = fetchInventoryAvailable;
 
   // Fetch waitlist on mount and when session is available
   useEffect(() => {
     if (session?.sessionToken) {
       void fetchWaitlistRef.current?.();
+      void fetchInventoryAvailableRef.current?.();
     }
+  }, [session?.sessionToken]);
+
+  // 30s live refresh for waitlist + availability
+  useEffect(() => {
+    if (!session?.sessionToken) return;
+    const interval = window.setInterval(() => {
+      void fetchWaitlistRef.current?.();
+      void fetchInventoryAvailableRef.current?.();
+    }, 30000);
+    return () => window.clearInterval(interval);
   }, [session?.sessionToken]);
 
   const topWaitlistEntry = waitlistEntries.find(
     (e) => e.status === 'ACTIVE' || e.status === 'OFFERED'
   );
   const waitlistDisplayNumber = topWaitlistEntry?.displayIdentifier || '...';
-  const waitlistInteractive = !!topWaitlistEntry;
   const sessionActive = !!currentSessionId;
+
+  const offeredCountByTier = waitlistEntries.reduce<Record<string, number>>((acc, e) => {
+    if (e.status === 'OFFERED') {
+      acc[e.desiredTier] = (acc[e.desiredTier] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  const isEntryOfferEligible = (entry: (typeof waitlistEntries)[number]): boolean => {
+    if (sessionActive) return false;
+    if (entry.status === 'OFFERED') return true;
+    if (entry.status !== 'ACTIVE') return false;
+    if (!inventoryAvailable) return false;
+    const tier = entry.desiredTier;
+    const raw = Number(inventoryAvailable.rawRooms?.[tier] ?? 0);
+    const offered = Number(offeredCountByTier[tier] ?? 0);
+    return raw - offered > 0;
+  };
+
+  const eligibleEntryCount = waitlistEntries.filter(isEntryOfferEligible).length;
+  const hasEligibleEntries = eligibleEntryCount > 0;
+  const waitlistInteractive = hasEligibleEntries && !sessionActive;
+  const prevSessionActiveRef = useRef<boolean>(false);
+  const pulseCandidateRef = useRef<boolean>(false);
+
+  const dismissUpgradePulse = () => {
+    pulseCandidateRef.current = false;
+    setShowUpgradePulse(false);
+  };
+
+  const openOfferUpgradeModal = (entry: (typeof waitlistEntries)[number]) => {
+    if (sessionActive) return;
+    if (entry.desiredTier !== 'STANDARD' && entry.desiredTier !== 'DOUBLE' && entry.desiredTier !== 'SPECIAL') {
+      alert('Only STANDARD/DOUBLE/SPECIAL upgrades can be offered.');
+      return;
+    }
+    dismissUpgradePulse();
+    setOfferUpgradeModal({
+      waitlistId: entry.id,
+      desiredTier: entry.desiredTier,
+      customerLabel: entry.customerName || entry.displayIdentifier,
+    });
+  };
+
+  // When a session ends, arm the pulse (we'll show it once we know upgrades are eligible).
+  useEffect(() => {
+    const prev = prevSessionActiveRef.current;
+    if (prev && !sessionActive) {
+      pulseCandidateRef.current = true;
+    }
+    prevSessionActiveRef.current = sessionActive;
+  }, [sessionActive]);
+
+  // If a session just ended and eligible upgrades exist, show the pulse.
+  useEffect(() => {
+    if (pulseCandidateRef.current && !sessionActive && hasEligibleEntries) {
+      setShowUpgradePulse(true);
+      pulseCandidateRef.current = false;
+    }
+  }, [hasEligibleEntries, sessionActive]);
 
   const handleWaitlistEntryAction = (entryId: string, customerName?: string) => {
     if (sessionActive) {
       return;
     }
+    dismissUpgradePulse();
     const label = customerName || 'customer';
     const confirm = window.confirm(`Begin upgrading ${label}?`);
     if (!confirm) return;
@@ -1073,6 +1187,7 @@ function App() {
       return;
     }
 
+    dismissUpgradePulse();
     setIsSubmitting(true);
     try {
       const response = await fetch(`${API_BASE}/v1/upgrades/complete`, {
@@ -1305,6 +1420,7 @@ function App() {
         } else if (message.type === 'WAITLIST_UPDATED') {
           // Refresh waitlist when updated
           void fetchWaitlistRef.current?.();
+          void fetchInventoryAvailableRef.current?.();
         } else if (message.type === 'SELECTION_PROPOSED') {
           const payload = message.payload as SelectionProposedPayload;
           if (payload.sessionId === currentSessionIdRef.current) {
@@ -1330,7 +1446,7 @@ function App() {
         } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
           setSelectionAcknowledged(true);
         } else if (message.type === 'INVENTORY_UPDATED' || message.type === 'ROOM_STATUS_CHANGED') {
-          // Refresh inventory will be handled by InventorySelector component
+          void fetchInventoryAvailableRef.current?.();
         } else if (message.type === 'ASSIGNMENT_CREATED') {
           const payload = message.payload as AssignmentCreatedPayload;
           if (payload.sessionId === currentSessionIdRef.current) {
@@ -2339,7 +2455,12 @@ function App() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
               <button
-                onClick={() => setWaitlistWidgetOpen(!waitlistWidgetOpen)}
+                className={showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : undefined}
+                onClick={() => {
+                  const nextOpen = !waitlistWidgetOpen;
+                  if (nextOpen) dismissUpgradePulse();
+                  setWaitlistWidgetOpen(nextOpen);
+                }}
                 disabled={!waitlistInteractive}
                 aria-label="Waitlist widget"
                 style={{
@@ -2413,7 +2534,9 @@ function App() {
                   {waitlistEntries.length === 0 && (
                     <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No waitlist entries</div>
                   )}
-                  {waitlistEntries.slice(0, 6).map((entry) => (
+                  {waitlistEntries.slice(0, 6).map((entry) => {
+                    const eligible = isEntryOfferEligible(entry);
+                    return (
                     <div
                       key={entry.id}
                       style={{
@@ -2436,23 +2559,25 @@ function App() {
                         aria-label={`Begin upgrade for ${entry.customerName || entry.displayIdentifier}`}
                         onClick={() => handleWaitlistEntryAction(entry.id, entry.customerName)}
                         style={{
-                          background: '#f59e0b',
+                          background: eligible ? '#f59e0b' : '#475569',
                           color: '#1f2937',
                           border: 'none',
                           borderRadius: '9999px',
                           padding: '0.4rem 0.55rem',
                           fontWeight: 700,
-                          cursor: sessionActive ? 'not-allowed' : 'pointer',
+                          cursor: eligible ? 'pointer' : 'not-allowed',
                         }}
-                        disabled={sessionActive}
+                        disabled={!eligible}
                       >
                         🔑
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                   {waitlistEntries.length > 6 && (
                     <div
                       onClick={() => {
+                        dismissUpgradePulse();
                         setShowUpgradesPanel(true);
                         setWaitlistWidgetOpen(false);
                       }}
@@ -2616,7 +2741,12 @@ function App() {
             {/* Waitlist/Upgrades Panel Toggle */}
             <section style={{ marginBottom: '1rem' }}>
               <button
-                onClick={() => setShowUpgradesPanel(!showUpgradesPanel)}
+                className={showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : undefined}
+                onClick={() => {
+                  const nextOpen = !showUpgradesPanel;
+                  if (nextOpen) dismissUpgradePulse();
+                  setShowUpgradesPanel(nextOpen);
+                }}
                 style={{
                   width: '100%',
                   padding: '0.75rem',
@@ -2652,6 +2782,11 @@ function App() {
                 <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
                   Waitlist & Upgrades
                 </h2>
+                {sessionActive && (
+                  <div style={{ marginBottom: '0.75rem', color: '#f59e0b', fontSize: '0.875rem' }}>
+                    Active session present — waitlist actions are disabled
+                  </div>
+                )}
 
                 {waitlistEntries.length === 0 ? (
                   <p style={{ color: '#94a3b8' }}>No active waitlist entries</p>
@@ -2716,6 +2851,7 @@ function App() {
                                       </div>
                                       <button
                                         onClick={() => {
+                                          dismissUpgradePulse();
                                           if (paymentStatus === 'PAID') {
                                             void handleCompleteUpgrade(
                                               entry.id,
@@ -2725,18 +2861,26 @@ function App() {
                                             alert('Please mark payment as paid in Square first');
                                           }
                                         }}
-                                        disabled={paymentStatus !== 'PAID' || isSubmitting}
+                                        disabled={
+                                          !isEntryOfferEligible(entry) ||
+                                          paymentStatus !== 'PAID' ||
+                                          isSubmitting
+                                        }
                                         style={{
                                           padding: '0.5rem 1rem',
                                           background:
-                                            paymentStatus === 'PAID' ? '#10b981' : '#475569',
+                                            paymentStatus === 'PAID' && isEntryOfferEligible(entry)
+                                              ? '#10b981'
+                                              : '#475569',
                                           color: 'white',
                                           border: 'none',
                                           borderRadius: '6px',
                                           fontSize: '0.875rem',
                                           fontWeight: 600,
                                           cursor:
-                                            paymentStatus === 'PAID' ? 'pointer' : 'not-allowed',
+                                            paymentStatus === 'PAID' && isEntryOfferEligible(entry)
+                                              ? 'pointer'
+                                              : 'not-allowed',
                                         }}
                                       >
                                         {paymentStatus === 'PAID'
@@ -2749,19 +2893,19 @@ function App() {
                               {status === 'ACTIVE' && (
                                 <button
                                   onClick={() => {
-                                    // For now, show alert - in production, would show room selector
-                                    alert('Select a room to offer. This will open room selector.');
-                                    // handleOfferUpgrade(entry.id, roomId);
+                                    dismissUpgradePulse();
+                                    openOfferUpgradeModal(entry);
                                   }}
+                                  disabled={!isEntryOfferEligible(entry)}
                                   style={{
                                     padding: '0.5rem 1rem',
-                                    background: '#3b82f6',
+                                    background: isEntryOfferEligible(entry) ? '#3b82f6' : '#475569',
                                     color: 'white',
                                     border: 'none',
                                     borderRadius: '6px',
                                     fontSize: '0.875rem',
                                     fontWeight: 600,
-                                    cursor: 'pointer',
+                                    cursor: isEntryOfferEligible(entry) ? 'pointer' : 'not-allowed',
                                   }}
                                 >
                                   Offer Upgrade
@@ -3373,6 +3517,22 @@ function App() {
                 </button>
               </div>
             </div>
+          )}
+
+          {offerUpgradeModal && session?.sessionToken && (
+            <OfferUpgradeModal
+              isOpen={true}
+              onClose={() => setOfferUpgradeModal(null)}
+              sessionToken={session.sessionToken}
+              waitlistId={offerUpgradeModal.waitlistId}
+              desiredTier={offerUpgradeModal.desiredTier}
+              customerLabel={offerUpgradeModal.customerLabel}
+              disabled={sessionActive}
+              onOffered={() => {
+                void fetchWaitlistRef.current?.();
+                void fetchInventoryAvailableRef.current?.();
+              }}
+            />
           )}
 
           {/* Customer Confirmation Pending Modal */}

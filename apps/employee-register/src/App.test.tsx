@@ -556,6 +556,20 @@ describe('App', () => {
           } as unknown as Response);
         }
 
+        if (u.includes('/v1/inventory/available')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                rooms: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+                rawRooms: { SPECIAL: 0, DOUBLE: 1, STANDARD: 0 },
+                waitlistDemand: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+                lockers: 0,
+                total: 0,
+              }),
+          } as unknown as Response);
+        }
+
         if (u.includes('/health')) {
           return Promise.resolve({
             ok: true,
@@ -585,11 +599,11 @@ describe('App', () => {
     });
 
     const waitlistButton = await screen.findByLabelText('Waitlist widget');
-    fireEvent.click(waitlistButton);
     const confirmSpy = vi.spyOn(window, 'confirm');
-    const keyButtons = await screen.findAllByLabelText(/Begin upgrade/);
-    const keyButton = keyButtons[0]!;
-    fireEvent.click(keyButton);
+    // With an active session, waitlist widget entry actions are disabled (widget button itself is disabled).
+    expect(waitlistButton).toHaveProperty('disabled', true);
+    fireEvent.click(waitlistButton);
+    expect(screen.queryByText('Waitlist')).toBeNull();
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 });

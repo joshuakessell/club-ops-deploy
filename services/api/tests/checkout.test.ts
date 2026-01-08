@@ -3,6 +3,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { checkoutRoutes } from '../src/routes/checkout.js';
 import { visitRoutes } from '../src/routes/visits.js';
+import { waitlistRoutes } from '../src/routes/waitlist.js';
 import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaster.js';
 import { RoomStatus } from '@club-ops/shared';
 import { truncateAllTables } from './testDb.js';
@@ -104,6 +105,7 @@ describe('Checkout Flow', () => {
   let testBlockId: string;
   let testStaffId: string;
   let testStaffToken: string;
+  let broadcastEvents: any[] = [];
 
   beforeAll(async () => {
     // Initialize database connection
@@ -175,7 +177,7 @@ describe('Checkout Flow', () => {
 
     const blockResult = await pool.query(
       `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, rental_type, room_id, has_tv_remote)
-       VALUES ($1, 'INITIAL', NOW() - INTERVAL '7 hours', NOW() - INTERVAL '1 hour', 'STANDARD', $2, true)
+       VALUES ($1, 'INITIAL', NOW() - INTERVAL '1 hour', NOW() + INTERVAL '1 hour', 'STANDARD', $2, true)
        RETURNING id`,
       [testVisitId, testRoomId]
     );
@@ -208,10 +210,17 @@ describe('Checkout Flow', () => {
 
     fastify = Fastify();
     const broadcaster = createBroadcaster();
+    broadcastEvents = [];
+    const originalBroadcast = broadcaster.broadcast.bind(broadcaster);
+    broadcaster.broadcast = (event: any) => {
+      broadcastEvents.push(event);
+      return originalBroadcast(event);
+    };
     fastify.decorate('broadcaster', broadcaster);
     // Register routes (auth is mocked via vi.mock)
     await fastify.register(checkoutRoutes);
     await fastify.register(visitRoutes);
+    await fastify.register(waitlistRoutes);
     await fastify.ready();
   });
 
@@ -424,6 +433,21 @@ describe('Checkout Flow', () => {
     });
 
     it('should complete checkout and update room status', async () => {
+      // Create active waitlist entries for this visit (they should be system-cancelled on checkout)
+      const waitlistActive = await pool.query(
+        `INSERT INTO waitlist (visit_id, checkin_block_id, desired_tier, backup_tier, status)
+         VALUES ($1, $2, 'DOUBLE', 'STANDARD', 'ACTIVE')
+         RETURNING id`,
+        [testVisitId, testBlockId]
+      );
+      const waitlistOffered = await pool.query(
+        `INSERT INTO waitlist (visit_id, checkin_block_id, desired_tier, backup_tier, status, offered_at)
+         VALUES ($1, $2, 'SPECIAL', 'DOUBLE', 'OFFERED', NOW())
+         RETURNING id`,
+        [testVisitId, testBlockId]
+      );
+      const waitlistIds = [waitlistActive.rows[0]!.id, waitlistOffered.rows[0]!.id];
+
       // Create a checkout request
       const requestResult = await pool.query(
         `INSERT INTO checkout_requests (occupancy_id, customer_id, kiosk_device_id, customer_checklist_json, late_minutes, late_fee_amount, claimed_by_staff_id, status, items_confirmed, fee_paid)
@@ -455,13 +479,106 @@ describe('Checkout Flow', () => {
       ]);
       expect(visitResult.rows[0]!.ended_at).not.toBeNull();
 
+      // Verify waitlist entries were cancelled
+      const waitlistResult = await pool.query(
+        `SELECT id, status, cancelled_at, cancelled_by_staff_id FROM waitlist WHERE id = ANY($1::uuid[])`,
+        [waitlistIds]
+      );
+      expect(waitlistResult.rows).toHaveLength(2);
+      for (const row of waitlistResult.rows) {
+        expect(row.status).toBe('CANCELLED');
+        expect(row.cancelled_at).not.toBeNull();
+        expect(row.cancelled_by_staff_id).toBeNull();
+      }
+
+      // Verify audit log rows exist with reason CHECKED_OUT
+      for (const waitlistId of waitlistIds) {
+        const auditResult = await pool.query(
+          `SELECT staff_id, action, new_value
+           FROM audit_log
+           WHERE entity_id = $1 AND action = 'WAITLIST_CANCELLED'`,
+          [waitlistId]
+        );
+        expect(auditResult.rows.length).toBe(1);
+        expect(auditResult.rows[0]!.staff_id).toBe(testStaffId);
+        const rawNewValue = auditResult.rows[0]!.new_value as unknown;
+        const newValue =
+          typeof rawNewValue === 'string'
+            ? (JSON.parse(rawNewValue) as Record<string, unknown>)
+            : (rawNewValue as Record<string, unknown>);
+        expect(newValue.status).toBe('CANCELLED');
+        expect(newValue.reason).toBe('CHECKED_OUT');
+      }
+
+      // Verify WAITLIST_UPDATED broadcasts were emitted for each cancelled entry
+      const cancelledEvents = broadcastEvents.filter(
+        (e) => e?.type === 'WAITLIST_UPDATED' && e?.payload?.status === 'CANCELLED'
+      );
+      expect(cancelledEvents.length).toBeGreaterThanOrEqual(2);
+      for (const waitlistId of waitlistIds) {
+        expect(
+          cancelledEvents.some(
+            (e) => e.payload.waitlistId === waitlistId && e.payload.visitId === testVisitId
+          )
+        ).toBe(true);
+      }
+
       // Clean up
       await pool.query('DELETE FROM checkout_requests WHERE id = $1', [requestId]);
+      await pool.query('DELETE FROM audit_log WHERE entity_type = $1 AND entity_id = ANY($2::uuid[])', [
+        'waitlist',
+        waitlistIds,
+      ]);
+      await pool.query('DELETE FROM waitlist WHERE id = ANY($1::uuid[])', [waitlistIds]);
       await pool.query(
         'UPDATE rooms SET status = $1, assigned_to_customer_id = NULL WHERE id = $2',
         [RoomStatus.CLEAN, testRoomId]
       );
       await pool.query('UPDATE visits SET ended_at = NULL WHERE id = $1', [testVisitId]);
+    });
+
+    it('GET /v1/waitlist should auto-expire stale entries before returning ACTIVE results', async () => {
+      // Make the block end in the past so the waitlist entry should expire
+      await pool.query(`UPDATE checkin_blocks SET ends_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [
+        testBlockId,
+      ]);
+
+      const waitlistRes = await pool.query(
+        `INSERT INTO waitlist (visit_id, checkin_block_id, desired_tier, backup_tier, status)
+         VALUES ($1, $2, 'DOUBLE', 'STANDARD', 'ACTIVE')
+         RETURNING id`,
+        [testVisitId, testBlockId]
+      );
+      const waitlistId = waitlistRes.rows[0]!.id;
+
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/v1/waitlist?status=ACTIVE',
+        headers: {
+          authorization: `Bearer ${testStaffToken}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.entries).toBeInstanceOf(Array);
+      expect(body.entries.some((e: any) => e.id === waitlistId)).toBe(false);
+
+      const dbRow = await pool.query(`SELECT status FROM waitlist WHERE id = $1`, [waitlistId]);
+      expect(dbRow.rows[0]!.status).toBe('EXPIRED');
+
+      const expiredEvents = broadcastEvents.filter(
+        (e) => e?.type === 'WAITLIST_UPDATED' && e?.payload?.status === 'EXPIRED'
+      );
+      expect(expiredEvents.some((e) => e.payload.waitlistId === waitlistId)).toBe(true);
+      expect(expiredEvents.some((e) => e.payload.visitId === testVisitId)).toBe(true);
+      expect(expiredEvents.some((e) => e.payload.desiredTier === 'DOUBLE')).toBe(true);
+
+      // Clean up and restore block end time
+      await pool.query('DELETE FROM waitlist WHERE id = $1', [waitlistId]);
+      await pool.query(`UPDATE checkin_blocks SET ends_at = NOW() + INTERVAL '1 hour' WHERE id = $1`, [
+        testBlockId,
+      ]);
     });
   });
 });

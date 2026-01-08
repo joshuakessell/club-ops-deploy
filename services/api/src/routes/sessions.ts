@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { serializableTransaction, query } from '../db/index.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
+import { roundUpToQuarterHour } from '../time/rounding.js';
 
 /**
  * Schema for creating a new session.
@@ -413,11 +414,15 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
           };
         } else {
           // Create new session
+          const checkInTime = new Date();
+          const checkoutAt = roundUpToQuarterHour(
+            new Date(checkInTime.getTime() + 6 * 60 * 60 * 1000)
+          );
           const newSessionResult = await query<SessionRow>(
-            `INSERT INTO sessions (customer_id, member_name, membership_number, expected_duration, status, lane, checkout_at)
-             VALUES ($1, $2, $3, 360, 'ACTIVE', $4, NOW() + INTERVAL '6 hours')
+            `INSERT INTO sessions (customer_id, member_name, membership_number, expected_duration, status, lane, check_in_time, checkout_at)
+             VALUES ($1, $2, $3, 360, 'ACTIVE', $4, $5, $6)
              RETURNING id, customer_id, member_name, membership_number, room_id, locker_id, check_in_time, expected_duration, status, lane, agreement_signed`,
-            [customer.id, customer.name, customer.membership_number, body.lane]
+            [customer.id, customer.name, customer.membership_number, body.lane, checkInTime, checkoutAt]
           );
           session = newSessionResult.rows[0]!;
         }
@@ -522,11 +527,15 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
             session = existingSession.rows[0]!;
           } else {
             // Create new session
+            const checkInTime = new Date();
+            const checkoutAt = roundUpToQuarterHour(
+              new Date(checkInTime.getTime() + 6 * 60 * 60 * 1000)
+            );
             const newSessionResult = await query<SessionRow>(
-              `INSERT INTO sessions (customer_id, member_name, membership_number, expected_duration, status, lane, checkout_at)
-             VALUES ($1, $2, $3, 360, 'ACTIVE', $4, NOW() + INTERVAL '6 hours')
+              `INSERT INTO sessions (customer_id, member_name, membership_number, expected_duration, status, lane, check_in_time, checkout_at)
+             VALUES ($1, $2, $3, 360, 'ACTIVE', $4, $5, $6)
              RETURNING id, customer_id, member_name, membership_number, room_id, locker_id, check_in_time, expected_duration, status, lane, agreement_signed`,
-              [customer.id, customer.name, customer.membership_number, body.lane]
+              [customer.id, customer.name, customer.membership_number, body.lane, checkInTime, checkoutAt]
             );
             session = newSessionResult.rows[0]!;
           }

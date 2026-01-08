@@ -9,6 +9,7 @@ export { customerRoutes } from './customers.js';
 export { sessionRoutes } from './sessions.js';
 export { laneRoutes } from './lanes.js';
 export { inventoryRoutes } from './inventory.js';
+export { roomsRoutes } from './rooms.js';
 export { keysRoutes } from './keys.js';
 export { cleaningRoutes } from './cleaning.js';
 export { adminRoutes } from './admin.js';
