@@ -803,7 +803,7 @@ paths:
   /v1/checkin/lane/{laneId}/kiosk-ack:
     post:
       tags: [Check-in]
-      summary: Kiosk acknowledgement of completion (clears lane session UI state)
+      summary: Kiosk acknowledgement of completion (UI-only; does not end/clear the lane session)
       parameters:
         - name: laneId
           in: path
@@ -814,9 +814,9 @@ paths:
         required: false
       responses:
         '200':
-          description: Kiosk acknowledged; session UI state cleared
+          description: Kiosk acknowledged
         '404':
-          description: No completed session found
+          description: No session found
 
   /v1/checkin/lane/{laneId}/customer-confirm:
     post:

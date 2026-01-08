@@ -39,6 +39,7 @@ interface SessionState {
   membershipNumber: string | null;
   membershipValidUntil?: string | null; // YYYY-MM-DD (customer membership expiration)
   membershipPurchaseIntent?: 'PURCHASE' | 'RENEW' | null;
+  kioskAcknowledgedAt?: string | null;
   allowedRentals: string[];
   visitId?: string;
   mode?: 'INITIAL' | 'RENEWAL';
@@ -351,6 +352,7 @@ function App() {
             membershipNumber: payload.membershipNumber || null,
             membershipValidUntil: payload.customerMembershipValidUntil || null,
             membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
+            kioskAcknowledgedAt: payload.kioskAcknowledgedAt || null,
             allowedRentals: payload.allowedRentals,
             visitId: payload.visitId,
             mode: payload.mode,
@@ -413,6 +415,12 @@ function App() {
           // If we have assignment, show complete view (highest priority after reset)
           if (payload.assignedResourceType && payload.assignedResourceNumber) {
             setView('complete');
+            return;
+          }
+
+          // If kiosk acknowledged, stay idle (lane still locked until employee-register completes/reset).
+          if (payload.kioskAcknowledgedAt && payload.customerName && payload.status !== 'COMPLETED') {
+            setView('idle');
             return;
           }
 
@@ -955,11 +963,33 @@ function App() {
 
   // Idle state: logo only, centered
   if (view === 'idle') {
+    const lang = session.customerPrimaryLanguage;
+    const locked = !!session.sessionId && !!session.kioskAcknowledgedAt;
     return (
       <I18nProvider lang={session.customerPrimaryLanguage}>
         <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
           {orientationOverlay}
-          <div className="idle-content"></div>
+          <div className="idle-content" onClick={() => locked && alert(t(lang, 'kiosk.locked.body'))}>
+            {locked && (
+              <div
+                style={{
+                  marginTop: '2rem',
+                  padding: '1.25rem',
+                  background: 'rgba(15,23,42,0.75)',
+                  border: '1px solid rgba(148,163,184,0.35)',
+                  borderRadius: '12px',
+                  maxWidth: '720px',
+                  textAlign: 'center',
+                  color: 'white',
+                }}
+              >
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
+                  {t(lang, 'kiosk.locked.title')}
+                </div>
+                <div style={{ fontSize: '1.05rem', opacity: 0.9 }}>{t(lang, 'kiosk.locked.body')}</div>
+              </div>
+            )}
+          </div>
         </ScreenShell>
       </I18nProvider>
     );
@@ -1194,26 +1224,22 @@ function App() {
                       void (async () => {
                         setIsSubmitting(true);
                         try {
-                          // Kiosk acknowledgement: clears lane session UI state so this kiosk resets for the next customer.
+                          // Kiosk acknowledgement: UI-only. Must NOT end/clear the lane session.
                           await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                           });
                         } catch (error) {
                           console.error('Failed to kiosk-ack completion:', error);
-                          // Continue to local reset even if server call fails; WS will reconcile when possible.
+                          // Continue to local UI reset even if server call fails; WS will reconcile when possible.
                         } finally {
-                          // Local reset (immediate UX), server broadcast will also clear deterministically.
+                          // Local reset (immediate UX): hide customer flow and return kiosk to idle,
+                          // but keep session data so the kiosk remains "locked" until employee-register completes.
                           setView('idle');
-                          setSession({
-                            sessionId: null,
-                            customerName: null,
-                            membershipNumber: null,
-                          membershipValidUntil: null,
-                          membershipPurchaseIntent: null,
-                            allowedRentals: [],
-                            blockEndsAt: undefined,
-                          });
+                          setSession((prev) => ({
+                            ...prev,
+                            kioskAcknowledgedAt: new Date().toISOString(),
+                          }));
                           setSelectedRental(null);
                           setAgreed(false);
                           setSignatureData(null);

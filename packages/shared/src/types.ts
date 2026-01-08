@@ -115,6 +115,11 @@ export interface SessionUpdatedPayload {
    * Server-authoritative (stored on lane_sessions).
    */
   membershipPurchaseIntent?: 'PURCHASE' | 'RENEW';
+  /**
+   * Timestamp (ISO) when the customer kiosk acknowledged completion (tapped OK) and returned to idle UI.
+   * This must NOT end/clear the lane session; employee-register reset is the only formal completion path.
+   */
+  kioskAcknowledgedAt?: string;
   allowedRentals: string[];
   mode?: 'INITIAL' | 'RENEWAL';
   blockEndsAt?: string;
