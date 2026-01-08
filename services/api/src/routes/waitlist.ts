@@ -95,6 +95,8 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           cb.room_id,
           cb.locker_id,
           cb.rental_type as current_rental_type,
+          cb.starts_at as checkin_starts_at,
+          cb.ends_at as checkin_ends_at,
           r.number as room_number,
           l.number as locker_number,
           v.customer_id,
@@ -121,6 +123,8 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             room_id: string | null;
             locker_id: string | null;
             current_rental_type: string;
+            checkin_starts_at: Date;
+            checkin_ends_at: Date;
             room_number: string | null;
             locker_number: string | null;
             customer_id: string;
@@ -138,6 +142,8 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           backupTier: row.backup_tier,
           status: row.status,
           createdAt: row.created_at,
+          checkinAt: row.checkin_starts_at,
+          checkoutAt: row.checkin_ends_at,
           offeredAt: row.offered_at,
           completedAt: row.completed_at,
           // Anonymous display: prefer locker number, fallback to room number, then masked ID

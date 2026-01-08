@@ -209,6 +209,8 @@ function App() {
       backupTier: string;
       status: string;
       createdAt: string;
+      checkinAt?: string;
+      checkoutAt?: string;
       offeredAt?: string;
       displayIdentifier: string;
       currentRentalType: string;
@@ -2832,8 +2834,10 @@ function App() {
                                     {entry.displayIdentifier} → {entry.desiredTier}
                                   </div>
                                   <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                                    Current: {entry.currentRentalType} • Created:{' '}
-                                    {new Date(entry.createdAt).toLocaleTimeString()}
+                                    Current: {entry.currentRentalType} • Check-in:{' '}
+                                    {entry.checkinAt ? new Date(entry.checkinAt).toLocaleTimeString() : '—'} •
+                                    Checkout:{' '}
+                                    {entry.checkoutAt ? new Date(entry.checkoutAt).toLocaleTimeString() : '—'}
                                   </div>
                                 </div>
                                 {status === 'OFFERED' &&
