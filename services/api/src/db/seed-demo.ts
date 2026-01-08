@@ -313,13 +313,14 @@ export async function seedDemoData(): Promise<void> {
           );
           timeclockSessionsCreated.push(sessionAResult.rows[0]!.id);
         } else {
-          // Missing clock-out (create session but leave clock_out_at null)
+          // Past days never create open timeclock sessions (open sessions would violate the unique index
+          // that enforces only one open session per employee). Use a closed session instead.
           const sessionAResult = await query<{ id: string }>(
             `INSERT INTO timeclock_sessions 
              (employee_id, shift_id, clock_in_at, clock_out_at, source)
-             VALUES ($1, $2, $3, NULL, 'OFFICE_DASHBOARD')
+             VALUES ($1, $2, $3, $4, 'OFFICE_DASHBOARD')
              RETURNING id`,
-            [shiftAEmployee.id, shiftAId, shiftAStart]
+            [shiftAEmployee.id, shiftAId, shiftAStart, shiftAEnd]
           );
           timeclockSessionsCreated.push(sessionAResult.rows[0]!.id);
         }
