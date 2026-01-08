@@ -547,6 +547,8 @@ describe('App', () => {
                     backupTier: 'STANDARD',
                     status: 'ACTIVE',
                     createdAt: new Date().toISOString(),
+                    checkinAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+                    checkoutAt: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
                     displayIdentifier: '218',
                     currentRentalType: 'STANDARD',
                     customerName: 'Test Customer',
