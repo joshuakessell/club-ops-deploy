@@ -309,6 +309,7 @@ CREATE TABLE public.charges (
     checkin_block_id uuid,
     type character varying(50) NOT NULL,
     amount numeric(10,2) NOT NULL,
+    payment_intent_id uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
@@ -1227,6 +1228,13 @@ CREATE INDEX idx_charges_visit ON public.charges USING btree (visit_id);
 
 
 --
+-- Name: idx_charges_payment_intent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_charges_payment_intent ON public.charges USING btree (payment_intent_id) WHERE (payment_intent_id IS NOT NULL);
+
+
+--
 -- Name: idx_checkin_blocks_ends_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1880,6 +1888,14 @@ ALTER TABLE ONLY public.audit_log
 
 ALTER TABLE ONLY public.charges
     ADD CONSTRAINT charges_checkin_block_id_fkey FOREIGN KEY (checkin_block_id) REFERENCES public.checkin_blocks(id) ON DELETE SET NULL;
+
+
+--
+-- Name: charges charges_payment_intent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.charges
+    ADD CONSTRAINT charges_payment_intent_id_fkey FOREIGN KEY (payment_intent_id) REFERENCES public.payment_intents(id);
 
 
 --

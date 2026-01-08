@@ -36,6 +36,8 @@ import { ManagerBypassModal } from '../components/register/modals/ManagerBypassM
 import { AddNoteModal } from '../components/register/modals/AddNoteModal';
 import { MembershipIdPromptModal } from '../components/register/modals/MembershipIdPromptModal';
 import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclineToast';
+import { AvailabilityStatusBar } from '../components/AvailabilityStatusBar';
+import { AvailabilityModal, type AvailabilityModalType } from '../components/AvailabilityModal';
 
 interface HealthStatus {
   status: string;
@@ -205,6 +207,7 @@ export function AppRoot() {
       checkinAt?: string;
       checkoutAt?: string;
       offeredAt?: string;
+      roomId?: string | null;
       displayIdentifier: string;
       currentRentalType: string;
       customerName?: string;
@@ -214,11 +217,18 @@ export function AppRoot() {
     rooms: Record<string, number>;
     rawRooms: Record<string, number>;
     waitlistDemand: Record<string, number>;
+    lockers: number;
   }>(null);
+  const [availabilityModalType, setAvailabilityModalType] = useState<AvailabilityModalType>(null);
   const [showUpgradesPanel, setShowUpgradesPanel] = useState(false);
   const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<string | null>(null);
   const [upgradePaymentIntentId, setUpgradePaymentIntentId] = useState<string | null>(null);
   const [upgradeFee, setUpgradeFee] = useState<number | null>(null);
+  const [upgradePaymentStatus, setUpgradePaymentStatus] = useState<'DUE' | 'PAID' | null>(null);
+  const [upgradeOriginalCharges, setUpgradeOriginalCharges] = useState<
+    Array<{ description: string; amount: number }>
+  >([]);
+  const [upgradeOriginalTotal, setUpgradeOriginalTotal] = useState<number | null>(null);
   const [waitlistWidgetOpen, setWaitlistWidgetOpen] = useState(false);
   const [showUpgradePulse, setShowUpgradePulse] = useState(false);
   const [offerUpgradeModal, setOfferUpgradeModal] = useState<{
@@ -1065,10 +1075,18 @@ export function AppRoot() {
         isRecord(data.rawRooms) &&
         isRecord(data.waitlistDemand)
       ) {
+        const lockersRaw = data['lockers'];
+        const lockers =
+          typeof lockersRaw === 'number'
+            ? lockersRaw
+            : typeof lockersRaw === 'string'
+              ? Number(lockersRaw)
+              : 0;
         setInventoryAvailable({
           rooms: data.rooms as Record<string, number>,
           rawRooms: data.rawRooms as Record<string, number>,
           waitlistDemand: data.waitlistDemand as Record<string, number>,
+          lockers: Number.isFinite(lockers) ? lockers : 0,
         });
       }
     } catch (error) {
@@ -1132,6 +1150,14 @@ export function AppRoot() {
     setShowUpgradePulse(false);
   };
 
+  const resetUpgradeState = () => {
+    setUpgradePaymentIntentId(null);
+    setUpgradeFee(null);
+    setUpgradePaymentStatus(null);
+    setUpgradeOriginalCharges([]);
+    setUpgradeOriginalTotal(null);
+  };
+
   const openOfferUpgradeModal = (entry: (typeof waitlistEntries)[number]) => {
     if (sessionActive) return;
     if (entry.desiredTier !== 'STANDARD' && entry.desiredTier !== 'DOUBLE' && entry.desiredTier !== 'SPECIAL') {
@@ -1176,6 +1202,99 @@ export function AppRoot() {
     setWaitlistWidgetOpen(false);
   };
 
+  const handleStartUpgradePayment = async (entry: (typeof waitlistEntries)[number]) => {
+    if (!session?.sessionToken) {
+      alert('Not authenticated');
+      return;
+    }
+    if (!entry.roomId) {
+      alert('No reserved room found for this offer. Refresh and retry.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/upgrades/fulfill`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          waitlistId: entry.id,
+          roomId: entry.roomId,
+          acknowledgedDisclaimer: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to start upgrade');
+      }
+
+      const payload = await readJson<{
+        paymentIntentId?: string;
+        upgradeFee?: number;
+        originalCharges?: Array<{ description: string; amount: number }>;
+        originalTotal?: number | null;
+      }>(response);
+
+      setSelectedWaitlistEntry(entry.id);
+      const intentId = payload.paymentIntentId ?? null;
+      setUpgradePaymentIntentId(intentId);
+      setUpgradeFee(
+        typeof payload.upgradeFee === 'number' && Number.isFinite(payload.upgradeFee)
+          ? payload.upgradeFee
+          : null
+      );
+      setUpgradePaymentStatus(intentId ? 'DUE' : null);
+      setUpgradeOriginalCharges(payload.originalCharges || []);
+      setUpgradeOriginalTotal(
+        typeof payload.originalTotal === 'number' && Number.isFinite(payload.originalTotal)
+          ? payload.originalTotal
+          : null
+      );
+      dismissUpgradePulse();
+      setShowUpgradesPanel(true);
+    } catch (error) {
+      console.error('Failed to start upgrade:', error);
+      alert(error instanceof Error ? error.message : 'Failed to start upgrade');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleMarkUpgradePaid = async () => {
+    if (!upgradePaymentIntentId || !session?.sessionToken) {
+      alert('No upgrade payment intent to mark paid.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/payments/${upgradePaymentIntentId}/mark-paid`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to mark upgrade payment as paid');
+      }
+
+      setUpgradePaymentStatus('PAID');
+    } catch (error) {
+      console.error('Failed to mark upgrade payment as paid:', error);
+      alert(error instanceof Error ? error.message : 'Failed to mark payment as paid');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCompleteUpgrade = async (waitlistId: string, paymentIntentId: string) => {
     if (!session?.sessionToken) {
       alert('Not authenticated');
@@ -1207,8 +1326,8 @@ export function AppRoot() {
         throw new Error(getErrorMessage(errorPayload) || 'Failed to complete upgrade');
       }
 
-      setUpgradePaymentIntentId(null);
-      setUpgradeFee(null);
+      resetUpgradeState();
+      setSelectedWaitlistEntry(null);
       await fetchWaitlist();
       alert('Upgrade completed successfully');
     } catch (error) {
@@ -2191,6 +2310,16 @@ export function AppRoot() {
             }}
           />
 
+          <AvailabilityStatusBar
+            counts={{
+              lockers: inventoryAvailable?.lockers,
+              STANDARD: inventoryAvailable?.rawRooms?.STANDARD,
+              DOUBLE: inventoryAvailable?.rawRooms?.DOUBLE,
+              SPECIAL: inventoryAvailable?.rawRooms?.SPECIAL,
+            }}
+            onOpen={(type) => setAvailabilityModalType(type)}
+          />
+
           <main className="main">
             {/* Customer Info Panel */}
             {currentSessionId && customerName && (
@@ -2420,59 +2549,154 @@ export function AppRoot() {
                                     {entry.checkoutAt ? new Date(entry.checkoutAt).toLocaleTimeString() : '—'}
                                   </div>
                                 </div>
-                                {status === 'OFFERED' &&
-                                  upgradePaymentIntentId &&
-                                  entry.id === selectedWaitlistEntry && (
-                                    <div style={{ textAlign: 'right' }}>
+                                {status === 'OFFERED' && (
+                                  <div style={{ marginTop: '0.5rem' }}>
+                                    {upgradePaymentIntentId && entry.id === selectedWaitlistEntry ? (
                                       <div
                                         style={{
-                                          fontSize: '0.875rem',
-                                          color: '#f59e0b',
-                                          marginBottom: '0.25rem',
+                                          padding: '0.75rem',
+                                          background: '#0b1220',
+                                          border: '1px solid #334155',
+                                          borderRadius: 6,
+                                          display: 'flex',
+                                          flexDirection: 'column',
+                                          gap: '0.5rem',
                                         }}
                                       >
-                                        Fee: ${upgradeFee?.toFixed(2)}
+                                        <div
+                                          style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                          }}
+                                        >
+                                          <div style={{ fontSize: '0.875rem', color: '#f59e0b' }}>
+                                            Upgrade Fee: ${upgradeFee?.toFixed(2) || '—'}
+                                          </div>
+                                          <div
+                                            style={{
+                                              fontSize: '0.75rem',
+                                              color: upgradePaymentStatus === 'PAID' ? '#10b981' : '#f59e0b',
+                                              fontWeight: 600,
+                                            }}
+                                          >
+                                            {upgradePaymentStatus === 'PAID' ? 'Paid' : 'Payment Due'}
+                                          </div>
+                                        </div>
+
+                                        {upgradeOriginalCharges.length > 0 && (
+                                          <div style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+                                            <div style={{ marginBottom: '0.25rem', color: '#94a3b8' }}>
+                                              Original charges:
+                                            </div>
+                                            {upgradeOriginalCharges.map((item, idx) => (
+                                              <div
+                                                key={`${item.description}-${idx}`}
+                                                style={{ display: 'flex', justifyContent: 'space-between' }}
+                                              >
+                                                <span>{item.description}</span>
+                                                <span>${item.amount.toFixed(2)}</span>
+                                              </div>
+                                            ))}
+                                            {upgradeOriginalTotal !== null && (
+                                              <div
+                                                style={{
+                                                  display: 'flex',
+                                                  justifyContent: 'space-between',
+                                                  marginTop: '0.25rem',
+                                                  color: '#e2e8f0',
+                                                  fontWeight: 600,
+                                                }}
+                                              >
+                                                <span>Original total</span>
+                                                <span>${upgradeOriginalTotal.toFixed(2)}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                          <button
+                                            onClick={() => void handleMarkUpgradePaid()}
+                                            disabled={
+                                              !upgradePaymentIntentId ||
+                                              upgradePaymentStatus === 'PAID' ||
+                                              isSubmitting
+                                            }
+                                            style={{
+                                              padding: '0.5rem 0.75rem',
+                                              background:
+                                                upgradePaymentStatus === 'PAID' ? '#475569' : '#f59e0b',
+                                              color: 'white',
+                                              border: 'none',
+                                              borderRadius: '6px',
+                                              fontSize: '0.85rem',
+                                              fontWeight: 600,
+                                              cursor:
+                                                upgradePaymentStatus === 'PAID' || isSubmitting
+                                                  ? 'not-allowed'
+                                                  : 'pointer',
+                                            }}
+                                          >
+                                            Mark Payment Received
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              dismissUpgradePulse();
+                                              void handleCompleteUpgrade(entry.id, upgradePaymentIntentId);
+                                            }}
+                                            disabled={
+                                              !isEntryOfferEligible(entry) ||
+                                              upgradePaymentStatus !== 'PAID' ||
+                                              isSubmitting
+                                            }
+                                            style={{
+                                              padding: '0.5rem 0.75rem',
+                                              background:
+                                                upgradePaymentStatus === 'PAID' && isEntryOfferEligible(entry)
+                                                  ? '#10b981'
+                                                  : '#475569',
+                                              color: 'white',
+                                              border: 'none',
+                                              borderRadius: '6px',
+                                              fontSize: '0.85rem',
+                                              fontWeight: 600,
+                                              cursor:
+                                                upgradePaymentStatus === 'PAID' && isEntryOfferEligible(entry)
+                                                  ? 'pointer'
+                                                  : 'not-allowed',
+                                            }}
+                                          >
+                                            Complete Upgrade
+                                          </button>
+                                        </div>
                                       </div>
+                                    ) : (
                                       <button
                                         onClick={() => {
                                           dismissUpgradePulse();
-                                          if (paymentStatus === 'PAID') {
-                                            void handleCompleteUpgrade(
-                                              entry.id,
-                                              upgradePaymentIntentId
-                                            );
-                                          } else {
-                                            alert('Please mark payment as paid in Square first');
-                                          }
+                                          resetUpgradeState();
+                                          setSelectedWaitlistEntry(entry.id);
+                                          void handleStartUpgradePayment(entry);
                                         }}
-                                        disabled={
-                                          !isEntryOfferEligible(entry) ||
-                                          paymentStatus !== 'PAID' ||
-                                          isSubmitting
-                                        }
+                                        disabled={!isEntryOfferEligible(entry) || isSubmitting}
                                         style={{
                                           padding: '0.5rem 1rem',
-                                          background:
-                                            paymentStatus === 'PAID' && isEntryOfferEligible(entry)
-                                              ? '#10b981'
-                                              : '#475569',
+                                          background: isEntryOfferEligible(entry) ? '#3b82f6' : '#475569',
                                           color: 'white',
                                           border: 'none',
                                           borderRadius: '6px',
                                           fontSize: '0.875rem',
                                           fontWeight: 600,
                                           cursor:
-                                            paymentStatus === 'PAID' && isEntryOfferEligible(entry)
-                                              ? 'pointer'
-                                              : 'not-allowed',
+                                            isEntryOfferEligible(entry) && !isSubmitting ? 'pointer' : 'not-allowed',
                                         }}
                                       >
-                                        {paymentStatus === 'PAID'
-                                          ? 'Complete Upgrade'
-                                          : 'Mark Paid First'}
+                                        Upgrade Room
                                       </button>
-                                    </div>
-                                  )}
+                                    )}
+                                  </div>
+                                )}
                               </div>
                               {status === 'ACTIVE' && (
                                 <button
@@ -3054,6 +3278,13 @@ export function AppRoot() {
             desiredTier={waitlistDesiredTier || ''}
             backupType={waitlistBackupType || ''}
             onClose={() => setShowWaitlistModal(false)}
+          />
+
+          <AvailabilityModal
+            isOpen={availabilityModalType !== null}
+            type={availabilityModalType}
+            onClose={() => setAvailabilityModalType(null)}
+            sessionToken={session.sessionToken}
           />
 
           {offerUpgradeModal && session?.sessionToken && (

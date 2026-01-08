@@ -143,7 +143,9 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
           Cancel
         </button>
         <div className="scan-mode-title">Scan Mode</div>
-        <div className="scan-mode-spacer" />
+        <button className="scan-mode-exit" onClick={handleCancel} aria-label="Exit scan mode">
+          Exit
+        </button>
       </div>
 
       <div className="scan-mode-body">

@@ -4474,30 +4474,16 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
       try {
         const result = await transaction(async (client) => {
+          // Grab the most recent non-cancelled session (active or already completed).
           const sessionResult = await client.query<LaneSessionRow>(
             `SELECT * FROM lane_sessions
-           WHERE lane_id = $1 AND status != 'COMPLETED'
+           WHERE lane_id = $1 AND status != 'CANCELLED'
            ORDER BY created_at DESC
            LIMIT 1`,
             [laneId]
           );
 
           if (sessionResult.rows.length === 0) {
-            // Idempotency: if already completed, treat as success.
-            const completed = await client.query<LaneSessionRow>(
-              `SELECT * FROM lane_sessions
-               WHERE lane_id = $1 AND status = 'COMPLETED'
-               ORDER BY created_at DESC
-               LIMIT 1`,
-              [laneId]
-            );
-            if (completed.rows.length > 0) {
-              request.log.info(
-                { laneId, sessionId: completed.rows[0]!.id, actor: 'employee-register', action: 'reset_idempotent' },
-                'Lane session reset called but session already completed'
-              );
-              return { success: true, sessionId: completed.rows[0]!.id, alreadyCompleted: true as const };
-            }
             throw { statusCode: 404, message: 'No active session found' };
           }
 
@@ -4507,7 +4493,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             'Completing lane session (reset)'
           );
 
-          // Mark session as completed and clear coordination fields so UI resets deterministically
+          // Always clear state and mark completed to keep reset idempotent.
           await client.query(
             `UPDATE lane_sessions
            SET status = 'COMPLETED',

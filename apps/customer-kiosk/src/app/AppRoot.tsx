@@ -937,6 +937,7 @@ export function AppRoot() {
               await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
               });
             } catch (error) {
               console.error('Failed to kiosk-ack completion:', error);

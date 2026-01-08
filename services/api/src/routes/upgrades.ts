@@ -32,6 +32,47 @@ const AcceptUpgradeSchema = z.object({
   }),
 });
 
+function toNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function extractPaymentLineItems(
+  raw: unknown
+): Array<{ description: string; amount: number }> | undefined {
+  if (raw === null || raw === undefined) return undefined;
+  let parsed: unknown = raw;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return undefined;
+    }
+  }
+  if (!isRecord(parsed)) return undefined;
+  const items = parsed['lineItems'];
+  if (!Array.isArray(items)) return undefined;
+
+  const normalized: Array<{ description: string; amount: number }> = [];
+  for (const it of items) {
+    if (!isRecord(it)) continue;
+    const description = it['description'];
+    const amount = toNumber(it['amount']);
+    if (typeof description !== 'string' || amount === undefined) continue;
+    normalized.push({ description, amount });
+  }
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 interface SessionRow {
   id: string;
   customer_id: string;
@@ -414,6 +455,8 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
             backup_tier: string;
             status: string;
             locker_or_room_assigned_initially: string | null;
+            created_at: Date;
+            updated_at: Date;
           }>(`SELECT * FROM waitlist WHERE id = $1 FOR UPDATE`, [waitlistId]);
 
           if (waitlistResult.rows.length === 0) {
@@ -437,8 +480,9 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
             locker_id: string | null;
             rental_type: string;
             ends_at: Date;
+            session_id: string | null;
           }>(
-            `SELECT id, visit_id, room_id, locker_id, rental_type::text as rental_type, ends_at FROM checkin_blocks WHERE id = $1 FOR UPDATE`,
+            `SELECT id, visit_id, room_id, locker_id, rental_type::text as rental_type, ends_at, session_id FROM checkin_blocks WHERE id = $1 FOR UPDATE`,
             [waitlist.checkin_block_id]
           );
 
@@ -447,6 +491,52 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           const block = blockResult.rows[0]!;
+
+          let originalLineItems: Array<{ description: string; amount: number }> | undefined;
+          let originalTotal: number | undefined;
+
+          if (block.session_id) {
+            const laneSessionResult = await client.query<{
+              id: string;
+              price_quote_json: unknown;
+              payment_intent_id: string | null;
+            }>(
+              `SELECT id, price_quote_json, payment_intent_id FROM lane_sessions WHERE id = $1 LIMIT 1`,
+              [block.session_id]
+            );
+            const laneSession = laneSessionResult.rows[0];
+
+            let originalIntent: { amount?: number | string; quote_json?: unknown } | undefined;
+            if (laneSession?.payment_intent_id) {
+              const intentResult = await client.query<{
+                id: string;
+                amount: number | string;
+                quote_json: unknown;
+              }>(`SELECT id, amount, quote_json FROM payment_intents WHERE id = $1 LIMIT 1`, [
+                laneSession.payment_intent_id,
+              ]);
+              originalIntent = intentResult.rows[0];
+            } else {
+              const intentResult = await client.query<{
+                id: string;
+                amount: number | string;
+                quote_json: unknown;
+              }>(
+                `SELECT id, amount, quote_json
+                 FROM payment_intents
+                 WHERE lane_session_id = $1
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [block.session_id]
+              );
+              originalIntent = intentResult.rows[0];
+            }
+
+            originalLineItems =
+              extractPaymentLineItems(laneSession?.price_quote_json) ??
+              extractPaymentLineItems(originalIntent?.quote_json);
+            originalTotal = toNumber(originalIntent?.amount);
+          }
 
           // 3. Get new room and verify availability
           const newRoomResult = await client.query<RoomRow>(
@@ -542,6 +632,8 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
             newRoomNumber: newRoom.number,
             newRoomTier,
             fromTier: block.rental_type,
+            originalCharges: originalLineItems || [],
+            originalTotal: originalTotal ?? null,
           };
         });
 
@@ -634,6 +726,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
             locker_id: string | null;
             rental_type: string;
             ends_at: Date;
+            session_id: string | null;
           }>(`SELECT * FROM checkin_blocks WHERE id = $1 FOR UPDATE`, [waitlist.checkin_block_id]);
 
           if (blockResult.rows.length === 0) {
@@ -641,6 +734,8 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           const block = blockResult.rows[0]!;
+
+          const upgradeAmount = toNumber(intent.amount);
 
           // 4. Get new room from payment intent quote (stored during fulfill)
           const quote = intent.quote_json as {
@@ -718,6 +813,21 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
            WHERE id = $1`,
             [waitlistId]
           );
+
+          // 8b. Record upgrade charge tied to this payment intent (idempotent on payment_intent_id)
+          if (upgradeAmount !== undefined) {
+            const existingCharge = await client.query<{ id: string }>(
+              `SELECT id FROM charges WHERE payment_intent_id = $1 LIMIT 1`,
+              [paymentIntentId]
+            );
+            if (existingCharge.rows.length === 0) {
+              await client.query(
+                `INSERT INTO charges (visit_id, checkin_block_id, type, amount, payment_intent_id)
+               VALUES ($1, $2, $3, $4, $5)`,
+                [waitlist.visit_id, block.id, 'UPGRADE_FEE', upgradeAmount, paymentIntentId]
+              );
+            }
+          }
 
           // 9. Log upgrade completed
           await client.query(
