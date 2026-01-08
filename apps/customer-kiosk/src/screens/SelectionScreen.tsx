@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { I18nProvider, t, type Language } from '../i18n';
+import { I18nProvider, t } from '../i18n';
 import { ScreenShell } from '../components/ScreenShell';
 import { getRentalDisplayName } from '../utils/display';
 import { getMembershipStatus, type SessionState } from '../utils/membership';

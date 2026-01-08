@@ -52,7 +52,7 @@ export function ScanView({
 }: ScanViewProps) {
   return (
     <div className="app-container">
-      <div className="camera-container">
+    <div className="camera-container" data-camera-mode={cameraFacingMode}>
         <video ref={videoRef} className="camera-preview" autoPlay playsInline muted />
         <canvas ref={canvasRef} className="camera-canvas" style={{ display: 'none' }} />
         {cameraError && (
@@ -109,6 +109,13 @@ export function ScanView({
               </button>
               <button className="button-secondary" onClick={onClearAll}>
                 Clear All
+              </button>
+              <button
+                className="button-secondary"
+                onClick={onLogout}
+                type="button"
+              >
+                Log Out
               </button>
             </div>
 
