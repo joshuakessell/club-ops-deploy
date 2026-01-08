@@ -461,6 +461,17 @@ body::before {
   cursor: pointer;
 }
 
+.scan-mode-exit {
+  width: 120px;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.35);
+  color: #bfdbfe;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .scan-mode-body {
   flex: 1;
   display: flex;
@@ -1187,6 +1198,183 @@ body::before {
 .offer-upgrade-cancel:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Availability Status Bar */
+.availability-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 0.75rem 0 1rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 14px;
+}
+
+.availability-pill {
+  padding: 0.5rem 0.75rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(2, 6, 23, 0.55);
+  color: rgba(226, 232, 240, 0.95);
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.availability-pill:hover:not(:disabled) {
+  border-color: rgba(59, 130, 246, 0.65);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+
+.availability-pill:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Availability Modal (placeholder) */
+.availability-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3200;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.availability-modal {
+  width: min(720px, 96vw);
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 14px;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
+  color: var(--text);
+}
+
+.availability-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.availability-modal-title {
+  font-weight: 900;
+  letter-spacing: 0.01em;
+}
+
+.availability-modal-close {
+  background: transparent;
+  border: none;
+  color: rgba(148, 163, 184, 0.95);
+  font-size: 1.6rem;
+  cursor: pointer;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.availability-modal-close:hover {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.availability-modal-body {
+  padding: 1rem;
+}
+
+.availability-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 0.5rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.availability-modal-refresh,
+.availability-modal-close-btn {
+  padding: 0.45rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(2, 6, 23, 0.6);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+}
+
+.availability-modal-refresh:hover:not(:disabled),
+.availability-modal-close-btn:hover {
+  border-color: rgba(59, 130, 246, 0.55);
+}
+
+.availability-modal-refresh:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.availability-modal-list {
+  max-height: 70vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.availability-modal-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.availability-modal-row:last-child {
+  border-bottom: none;
+}
+
+.availability-modal-row-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.availability-modal-status {
+  margin-top: 0.1rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.availability-modal-row-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-end;
+  text-align: right;
+  min-width: 120px;
+}
+
+.availability-modal-subtext {
+  font-size: 0.78rem;
+  color: rgba(226, 232, 240, 0.8);
+}
+
+.availability-modal-empty,
+.availability-modal-error,
+.availability-modal-loading {
+  padding: 1rem;
+  text-align: center;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.availability-modal-error {
+  color: #fecaca;
 }
 
 /* Landscape-only layout */

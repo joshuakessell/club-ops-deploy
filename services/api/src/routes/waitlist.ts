@@ -146,6 +146,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           checkoutAt: row.checkin_ends_at,
           offeredAt: row.offered_at,
           completedAt: row.completed_at,
+            roomId: row.room_id,
           // Anonymous display: prefer locker number, fallback to room number, then masked ID
           displayIdentifier: row.locker_number || row.room_number || `***${row.id.substring(0, 8)}`,
           currentRentalType: row.current_rental_type,

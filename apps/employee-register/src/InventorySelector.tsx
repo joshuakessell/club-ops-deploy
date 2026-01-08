@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { RoomStatus } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { getRoomTier } from './utils/getRoomTier';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -252,23 +253,6 @@ export function InventorySelector({
         const data = await readJson<{ rooms?: unknown[]; lockers?: unknown[] }>(response);
         if (mounted) {
           // Transform detailed inventory response
-          // Map room tier from type field using getRoomTier function
-          const getRoomTier = (roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' => {
-            const num = parseInt(roomNumber, 10);
-            if (num === 201 || num === 232 || num === 256) return 'SPECIAL';
-            if (
-              num === 216 ||
-              num === 218 ||
-              num === 232 ||
-              num === 252 ||
-              num === 256 ||
-              num === 262 ||
-              num === 225
-            )
-              return 'DOUBLE';
-            return 'STANDARD';
-          };
-
           const rooms: DetailedRoom[] = (Array.isArray(data.rooms) ? data.rooms : [])
             .filter(isRecord)
             .filter(

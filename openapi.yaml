@@ -1310,6 +1310,27 @@ paths:
       responses:
         '200':
           description: Payment intent created for upgrade
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  waitlistId: { type: string, format: uuid }
+                  paymentIntentId: { type: string, format: uuid }
+                  upgradeFee: { type: number }
+                  newRoomId: { type: string, format: uuid }
+                  newRoomNumber: { type: string }
+                  newRoomTier: { type: string }
+                  fromTier: { type: string }
+                  originalTotal: { type: number, nullable: true }
+                  originalCharges:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        description: { type: string }
+                        amount: { type: number }
+                      required: [description, amount]
 
   /v1/upgrades/complete:
     post:
