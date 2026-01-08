@@ -6,3 +6,5 @@
 // Example usage in Vite apps:
 // import '@club-ops/ui/src/styles/tokens.css';
 // import '@club-ops/ui/src/styles/components.css';
+
+export * from './websocket/useReconnectingWebSocket';

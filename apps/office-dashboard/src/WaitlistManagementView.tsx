@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { WebSocketEvent } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { ApiError, apiJson, wsBaseUrl } from './api';
 import { ReAuthModal } from './ReAuthModal';
@@ -65,24 +66,20 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
 
   useEffect(() => {
     load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
-    const ws = new WebSocket(wsBaseUrl());
-    ws.onopen = () =>
-      ws.send(
-        JSON.stringify({ type: 'subscribe', events: ['WAITLIST_UPDATED', 'INVENTORY_UPDATED'] })
-      );
-    ws.onmessage = (event) => {
-      try {
-        const msg: WebSocketEvent = JSON.parse(event.data);
-        if (msg.type === 'WAITLIST_UPDATED' || msg.type === 'INVENTORY_UPDATED') {
-          load().catch(() => {});
-        }
-      } catch {
-        // ignore
-      }
-    };
-    return () => ws.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.sessionToken]);
+
+  useReconnectingWebSocket({
+    url: wsBaseUrl(),
+    onOpenSendJson: [{ type: 'subscribe', events: ['WAITLIST_UPDATED', 'INVENTORY_UPDATED'] }],
+    onMessage: (event) => {
+      const msg = safeJsonParse<WebSocketEvent>(String(event.data));
+      if (!msg) return;
+      if (msg.type === 'WAITLIST_UPDATED' || msg.type === 'INVENTORY_UPDATED') {
+        load().catch(() => {});
+      }
+    },
+  });
 
   const availableRoomsForEntry = useMemo(() => {
     if (!selectedEntry) return [];

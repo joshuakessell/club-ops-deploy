@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   SessionUpdatedPayload,
   WebSocketEvent,
@@ -10,6 +10,7 @@ import type {
   SelectionForcedPayload,
 } from '@club-ops/shared';
 import { getCustomerMembershipStatus } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import blackLogo from './assets/logo_vector_transparent_hi_black.svg';
 import { I18nProvider, t, type Language } from './i18n';
 import { ScreenShell } from './components/ScreenShell';
@@ -276,6 +277,206 @@ function App() {
 
   const API_BASE = '/api';
 
+  const onWsMessage = useCallback((event: MessageEvent) => {
+    try {
+      const parsed: unknown = safeJsonParse(String(event.data));
+      if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+      const message = parsed as unknown as WebSocketEvent;
+      console.log('WebSocket message:', message);
+
+      if (message.type === 'SESSION_UPDATED') {
+        const payload = message.payload as SessionUpdatedPayload;
+
+        // Update session state with all fields
+        setSession((prev) => ({
+          ...prev,
+          sessionId: payload.sessionId || null,
+          customerName: payload.customerName,
+          membershipNumber: payload.membershipNumber || null,
+          membershipValidUntil: payload.customerMembershipValidUntil || null,
+          membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
+          kioskAcknowledgedAt: payload.kioskAcknowledgedAt || null,
+          allowedRentals: payload.allowedRentals,
+          visitId: payload.visitId,
+          mode: payload.mode,
+          blockEndsAt: payload.blockEndsAt,
+          customerPrimaryLanguage: payload.customerPrimaryLanguage,
+          pastDueBlocked: payload.pastDueBlocked,
+          pastDueBalance: payload.pastDueBalance,
+          paymentStatus: payload.paymentStatus,
+          paymentTotal: payload.paymentTotal,
+          paymentLineItems: payload.paymentLineItems,
+          paymentFailureReason: payload.paymentFailureReason,
+          agreementSigned: payload.agreementSigned,
+          assignedResourceType: payload.assignedResourceType,
+          assignedResourceNumber: payload.assignedResourceNumber,
+          checkoutAt: payload.checkoutAt,
+        }));
+
+        // Set check-in mode from payload
+        if (payload.mode) {
+          setCheckinMode(payload.mode);
+        }
+
+        // Handle view transitions based on session state
+        // First check: Reset to idle if session is completed and cleared
+        if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
+          // Reset to idle
+          setView('idle');
+          setSession({
+            sessionId: null,
+            customerName: null,
+            membershipNumber: null,
+            membershipValidUntil: null,
+            membershipPurchaseIntent: null,
+            allowedRentals: [],
+            blockEndsAt: undefined,
+          });
+          setSelectedRental(null);
+          setAgreed(false);
+          setSignatureData(null);
+          setShowUpgradeDisclaimer(false);
+          setUpgradeAction(null);
+          setShowRenewalDisclaimer(false);
+          setCheckinMode(null);
+          setShowWaitlistModal(false);
+          setWaitlistDesiredType(null);
+          setWaitlistBackupType(null);
+          setProposedRentalType(null);
+          setProposedBy(null);
+          setSelectionConfirmed(false);
+          setSelectionConfirmedBy(null);
+          setSelectionAcknowledged(false);
+          setUpgradeDisclaimerAcknowledged(false);
+          setHasScrolledAgreement(false);
+          return;
+        }
+
+        // If we have assignment, show complete view (highest priority after reset)
+        if (payload.assignedResourceType && payload.assignedResourceNumber) {
+          setView('complete');
+          return;
+        }
+
+        // If kiosk acknowledged, stay idle (lane still locked until employee-register completes/reset).
+        if (payload.kioskAcknowledgedAt && payload.customerName && payload.status !== 'COMPLETED') {
+          setView('idle');
+          return;
+        }
+
+        // Language selection (first visit, before past-due check)
+        if (payload.customerName && !payload.customerPrimaryLanguage && !payload.pastDueBlocked) {
+          setView('language');
+          return;
+        }
+
+        // Past-due block screen (shows selection but disabled)
+        if (payload.pastDueBlocked) {
+          setView('selection');
+          return;
+        }
+
+        // Agreement screen (after payment is PAID, before assignment)
+        if (
+          payload.paymentStatus === 'PAID' &&
+          !payload.agreementSigned &&
+          (payload.mode === 'INITIAL' || payload.mode === 'RENEWAL')
+        ) {
+          setView('agreement');
+          return;
+        }
+
+        // Payment pending screen (after selection confirmed, before payment)
+        if (payload.selectionConfirmed && payload.paymentStatus === 'DUE') {
+          setView('payment');
+          return;
+        }
+
+        // Selection view (default active session state)
+        if (payload.customerName) {
+          setView('selection');
+        }
+
+        // Update selection state
+        if (payload.proposedRentalType) {
+          setProposedRentalType(payload.proposedRentalType);
+          setProposedBy(payload.proposedBy || null);
+        }
+        if (payload.selectionConfirmed !== undefined) {
+          setSelectionConfirmed(payload.selectionConfirmed);
+          setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
+        }
+      } else if (message.type === 'SELECTION_PROPOSED') {
+        const payload = message.payload as SelectionProposedPayload;
+        if (payload.sessionId === sessionIdRef.current) {
+          setProposedRentalType(payload.rentalType);
+          setProposedBy(payload.proposedBy);
+        }
+      } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
+        const payload = message.payload as SelectionLockedPayload | SelectionForcedPayload;
+        if (payload.sessionId === sessionIdRef.current) {
+          setSelectionConfirmed(true);
+          setSelectionConfirmedBy('EMPLOYEE');
+          setSelectedRental(payload.rentalType);
+          setSelectionAcknowledged(true);
+          setView('payment');
+        }
+      } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
+        setSelectionAcknowledged(true);
+      } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
+        const payload = message.payload as CustomerConfirmationRequiredPayload;
+        setCustomerConfirmationData(payload);
+        setShowCustomerConfirmation(true);
+      } else if (message.type === 'ASSIGNMENT_CREATED') {
+        const payload = message.payload as AssignmentCreatedPayload;
+        // Assignment successful - could show confirmation message
+        console.log('Assignment created:', payload);
+      } else if (message.type === 'INVENTORY_UPDATED') {
+        const payload = message.payload as InventoryUpdatedPayload;
+        // Update inventory counts for availability warnings
+        if (payload.inventory) {
+          const rooms: Record<string, number> = {};
+          if (payload.inventory.byType) {
+            Object.entries(payload.inventory.byType).forEach(([type, summary]) => {
+              rooms[type] = summary.clean;
+            });
+          }
+          setInventory({
+            rooms,
+            lockers: payload.inventory.lockers?.clean || 0,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to parse WebSocket message:', error);
+    }
+  }, []);
+
+  const wsUrl = `ws://${window.location.hostname}:3001/ws?lane=${encodeURIComponent(lane)}`;
+  const ws = useReconnectingWebSocket({
+    url: wsUrl,
+    onMessage: onWsMessage,
+    onOpenSendJson: [
+      {
+        type: 'subscribe',
+        events: [
+          'SESSION_UPDATED',
+          'SELECTION_PROPOSED',
+          'SELECTION_LOCKED',
+          'SELECTION_ACKNOWLEDGED',
+          'CUSTOMER_CONFIRMATION_REQUIRED',
+          'ASSIGNMENT_CREATED',
+          'INVENTORY_UPDATED',
+          'WAITLIST_CREATED',
+        ],
+      },
+    ],
+  });
+
+  useEffect(() => {
+    setWsConnected(ws.connected);
+  }, [ws.connected]);
+
   useEffect(() => {
     // Check API health
     fetch(`${API_BASE}/health`)
@@ -302,217 +503,6 @@ function App() {
       })
       .catch(console.error);
 
-    // Connect to WebSocket with lane parameter
-    const ws = new WebSocket(
-      `ws://${window.location.hostname}:3001/ws?lane=${encodeURIComponent(lane)}`
-    );
-
-    ws.onopen = () => {
-      console.log('WebSocket connected to lane:', lane);
-      setWsConnected(true);
-
-      // Subscribe to relevant events
-      ws.send(
-        JSON.stringify({
-          type: 'subscribe',
-          events: [
-            'SESSION_UPDATED',
-            'SELECTION_PROPOSED',
-            'SELECTION_LOCKED',
-            'SELECTION_ACKNOWLEDGED',
-            'CUSTOMER_CONFIRMATION_REQUIRED',
-            'ASSIGNMENT_CREATED',
-            'INVENTORY_UPDATED',
-            'WAITLIST_CREATED',
-          ],
-        })
-      );
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      setWsConnected(false);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
-        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-        const message = parsed as unknown as WebSocketEvent;
-        console.log('WebSocket message:', message);
-
-        if (message.type === 'SESSION_UPDATED') {
-          const payload = message.payload as SessionUpdatedPayload;
-
-          // Update session state with all fields
-          setSession((prev) => ({
-            ...prev,
-            sessionId: payload.sessionId || null,
-            customerName: payload.customerName,
-            membershipNumber: payload.membershipNumber || null,
-            membershipValidUntil: payload.customerMembershipValidUntil || null,
-            membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
-            kioskAcknowledgedAt: payload.kioskAcknowledgedAt || null,
-            allowedRentals: payload.allowedRentals,
-            visitId: payload.visitId,
-            mode: payload.mode,
-            blockEndsAt: payload.blockEndsAt,
-            customerPrimaryLanguage: payload.customerPrimaryLanguage,
-            pastDueBlocked: payload.pastDueBlocked,
-            pastDueBalance: payload.pastDueBalance,
-            paymentStatus: payload.paymentStatus,
-            paymentTotal: payload.paymentTotal,
-            paymentLineItems: payload.paymentLineItems,
-            paymentFailureReason: payload.paymentFailureReason,
-            agreementSigned: payload.agreementSigned,
-            assignedResourceType: payload.assignedResourceType,
-            assignedResourceNumber: payload.assignedResourceNumber,
-            checkoutAt: payload.checkoutAt,
-          }));
-
-          // Set check-in mode from payload
-          if (payload.mode) {
-            setCheckinMode(payload.mode);
-          }
-
-          // Handle view transitions based on session state
-          // First check: Reset to idle if session is completed and cleared
-          if (
-            payload.status === 'COMPLETED' &&
-            (!payload.customerName || payload.customerName === '')
-          ) {
-            // Reset to idle
-            setView('idle');
-            setSession({
-              sessionId: null,
-              customerName: null,
-              membershipNumber: null,
-              membershipValidUntil: null,
-              membershipPurchaseIntent: null,
-              allowedRentals: [],
-              blockEndsAt: undefined,
-            });
-            setSelectedRental(null);
-            setAgreed(false);
-            setSignatureData(null);
-            setShowUpgradeDisclaimer(false);
-            setUpgradeAction(null);
-            setShowRenewalDisclaimer(false);
-            setCheckinMode(null);
-            setShowWaitlistModal(false);
-            setWaitlistDesiredType(null);
-            setWaitlistBackupType(null);
-            setProposedRentalType(null);
-            setProposedBy(null);
-            setSelectionConfirmed(false);
-            setSelectionConfirmedBy(null);
-            setSelectionAcknowledged(false);
-            setUpgradeDisclaimerAcknowledged(false);
-            setHasScrolledAgreement(false);
-            return;
-          }
-
-          // If we have assignment, show complete view (highest priority after reset)
-          if (payload.assignedResourceType && payload.assignedResourceNumber) {
-            setView('complete');
-            return;
-          }
-
-          // If kiosk acknowledged, stay idle (lane still locked until employee-register completes/reset).
-          if (payload.kioskAcknowledgedAt && payload.customerName && payload.status !== 'COMPLETED') {
-            setView('idle');
-            return;
-          }
-
-          // Language selection (first visit, before past-due check)
-          if (payload.customerName && !payload.customerPrimaryLanguage && !payload.pastDueBlocked) {
-            setView('language');
-            return;
-          }
-
-          // Past-due block screen (shows selection but disabled)
-          if (payload.pastDueBlocked) {
-            setView('selection');
-            return;
-          }
-
-          // Agreement screen (after payment is PAID, before assignment)
-          if (
-            payload.paymentStatus === 'PAID' &&
-            !payload.agreementSigned &&
-            (payload.mode === 'INITIAL' || payload.mode === 'RENEWAL')
-          ) {
-            setView('agreement');
-            return;
-          }
-
-          // Payment pending screen (after selection confirmed, before payment)
-          if (payload.selectionConfirmed && payload.paymentStatus === 'DUE') {
-            setView('payment');
-            return;
-          }
-
-          // Selection view (default active session state)
-          if (payload.customerName) {
-            setView('selection');
-          }
-
-          // Update selection state
-          if (payload.proposedRentalType) {
-            setProposedRentalType(payload.proposedRentalType);
-            setProposedBy(payload.proposedBy || null);
-          }
-          if (payload.selectionConfirmed !== undefined) {
-            setSelectionConfirmed(payload.selectionConfirmed);
-            setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
-          }
-        } else if (message.type === 'SELECTION_PROPOSED') {
-          const payload = message.payload as SelectionProposedPayload;
-          if (payload.sessionId === sessionIdRef.current) {
-            setProposedRentalType(payload.rentalType);
-            setProposedBy(payload.proposedBy);
-          }
-        } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
-          const payload = message.payload as SelectionLockedPayload | SelectionForcedPayload;
-          if (payload.sessionId === sessionIdRef.current) {
-            setSelectionConfirmed(true);
-            setSelectionConfirmedBy('EMPLOYEE');
-            setSelectedRental(payload.rentalType);
-            setSelectionAcknowledged(true);
-            setView('payment');
-          }
-        } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
-          setSelectionAcknowledged(true);
-        } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
-          const payload = message.payload as CustomerConfirmationRequiredPayload;
-          setCustomerConfirmationData(payload);
-          setShowCustomerConfirmation(true);
-        } else if (message.type === 'ASSIGNMENT_CREATED') {
-          const payload = message.payload as AssignmentCreatedPayload;
-          // Assignment successful - could show confirmation message
-          console.log('Assignment created:', payload);
-        } else if (message.type === 'INVENTORY_UPDATED') {
-          const payload = message.payload as InventoryUpdatedPayload;
-          // Update inventory counts for availability warnings
-          if (payload.inventory) {
-            const rooms: Record<string, number> = {};
-            if (payload.inventory.byType) {
-              Object.entries(payload.inventory.byType).forEach(([type, summary]) => {
-                rooms[type] = summary.clean;
-              });
-            }
-            setInventory({
-              rooms,
-              lockers: payload.inventory.lockers?.clean || 0,
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
-
-    return () => ws.close();
   }, [lane]);
 
   // Show a brief welcome overlay when a new session becomes active

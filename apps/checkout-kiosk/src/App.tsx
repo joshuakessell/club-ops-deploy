@@ -1,10 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   WebSocketEvent,
   ResolvedCheckoutKey,
   CheckoutChecklist,
   CheckoutCompletedPayload,
 } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import { Html5Qrcode } from 'html5-qrcode';
 import logoImage from './assets/the-clubs-logo.png';
 
@@ -80,60 +81,39 @@ function App() {
     return id;
   })[0];
 
-  // WebSocket connection for checkout completion events
+  const requestIdRef = useRef<string | null>(null);
   useEffect(() => {
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
+    requestIdRef.current = requestId;
+  }, [requestId]);
 
-    ws.onopen = () => {
-      console.log('WebSocket connected');
+  const onWsMessage = useCallback(
+    (event: MessageEvent) => {
+      const parsed = safeJsonParse<unknown>(String(event.data));
+      if (!isWebSocketEvent(parsed)) return;
+      const message = parsed;
+      if (message.type !== 'CHECKOUT_COMPLETED') return;
 
-      // Subscribe to checkout events
-      ws.send(
-        JSON.stringify({
-          type: 'subscribe',
-          events: ['CHECKOUT_COMPLETED'],
-        })
-      );
-    };
+      const payload = message.payload as CheckoutCompletedPayload;
+      if (payload.kioskDeviceId !== kioskDeviceId) return;
+      if (!requestIdRef.current || payload.requestId !== requestIdRef.current) return;
 
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-    };
+      setView('complete');
+      window.setTimeout(() => {
+        setView('idle');
+        setResolvedKey(null);
+        setChecklist({});
+        setRequestId(null);
+        setLateFeeAmount(0);
+      }, 10000);
+    },
+    [kioskDeviceId]
+  );
 
-    ws.onmessage = (event: MessageEvent) => {
-      try {
-        const dataString = typeof event.data === 'string' ? event.data : String(event.data);
-        const parsed = JSON.parse(dataString) as unknown;
-        if (!isWebSocketEvent(parsed)) {
-          console.error('Invalid WebSocket message format:', parsed);
-          return;
-        }
-        const message = parsed;
-        console.log('WebSocket message:', message);
-
-        if (message.type === 'CHECKOUT_COMPLETED') {
-          const payload = message.payload as CheckoutCompletedPayload;
-          if (payload.kioskDeviceId === kioskDeviceId && payload.requestId === requestId) {
-            // Checkout completed
-            setView('complete');
-
-            // Reset after 10 seconds
-            setTimeout(() => {
-              setView('idle');
-              setResolvedKey(null);
-              setChecklist({});
-              setRequestId(null);
-              setLateFeeAmount(0);
-            }, 10000);
-          }
-        }
-      } catch (err: unknown) {
-        console.error('Failed to parse WebSocket message:', err);
-      }
-    };
-
-    return () => ws.close();
-  }, [kioskDeviceId, requestId]);
+  useReconnectingWebSocket({
+    url: `ws://${window.location.hostname}:3001/ws`,
+    onMessage: onWsMessage,
+    onOpenSendJson: [{ type: 'subscribe', events: ['CHECKOUT_COMPLETED'] }],
+  });
 
   // Start QR scanning
   const handleStartCheckout = async () => {

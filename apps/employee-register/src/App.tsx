@@ -18,6 +18,7 @@ import {
   type SelectionForcedPayload,
   getCustomerMembershipStatus,
 } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import { RegisterSignIn } from './RegisterSignIn';
 import { InventorySelector } from './InventorySelector';
 import type { IdScanPayload } from '@club-ops/shared';
@@ -172,6 +173,22 @@ function App() {
     null
   );
   const [customerMembershipValidUntil, setCustomerMembershipValidUntil] = useState<string | null>(null);
+
+  // Keep WebSocket handlers stable while still reading the latest values.
+  const selectedCheckoutRequestRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedCheckoutRequestRef.current = selectedCheckoutRequest;
+  }, [selectedCheckoutRequest]);
+
+  const currentSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
+
+  const customerSelectedTypeRef = useRef<string | null>(null);
+  useEffect(() => {
+    customerSelectedTypeRef.current = customerSelectedType;
+  }, [customerSelectedType]);
 
   const [showMembershipIdPrompt, setShowMembershipIdPrompt] = useState(false);
   const [membershipIdInput, setMembershipIdInput] = useState('');
@@ -1107,50 +1124,37 @@ function App() {
         }
       })
       .catch(console.error);
+  }, [lane]);
 
-    // Connect to WebSocket (use Vite proxy)
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`
-    );
-
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      setWsConnected(true);
-
-      // Subscribe to events
-      ws.send(
-        JSON.stringify({
-          type: 'subscribe',
-          events: [
-            'CHECKOUT_REQUESTED',
-            'CHECKOUT_CLAIMED',
-            'CHECKOUT_UPDATED',
-            'CHECKOUT_COMPLETED',
-            'SESSION_UPDATED',
-            'ROOM_STATUS_CHANGED',
-            'INVENTORY_UPDATED',
-            'ASSIGNMENT_CREATED',
-            'ASSIGNMENT_FAILED',
-            'CUSTOMER_CONFIRMED',
-            'CUSTOMER_DECLINED',
-            'WAITLIST_UPDATED',
-            'SELECTION_PROPOSED',
-            'SELECTION_LOCKED',
-            'SELECTION_ACKNOWLEDGED',
-          ],
-        })
-      );
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      setWsConnected(false);
-    };
-
-    ws.onmessage = (event) => {
+  const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
+  const ws = useReconnectingWebSocket({
+    url: wsUrl,
+    onOpenSendJson: [
+      {
+        type: 'subscribe',
+        events: [
+          'CHECKOUT_REQUESTED',
+          'CHECKOUT_CLAIMED',
+          'CHECKOUT_UPDATED',
+          'CHECKOUT_COMPLETED',
+          'SESSION_UPDATED',
+          'ROOM_STATUS_CHANGED',
+          'INVENTORY_UPDATED',
+          'ASSIGNMENT_CREATED',
+          'ASSIGNMENT_FAILED',
+          'CUSTOMER_CONFIRMED',
+          'CUSTOMER_DECLINED',
+          'WAITLIST_UPDATED',
+          'SELECTION_PROPOSED',
+          'SELECTION_LOCKED',
+          'SELECTION_ACKNOWLEDGED',
+        ],
+      },
+    ],
+    onMessage: (event) => {
       try {
-        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
+        const parsed: unknown = safeJsonParse(String(event.data));
         if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
         const message = parsed as unknown as WebSocketEvent;
         console.log('WebSocket message:', message);
@@ -1171,7 +1175,7 @@ function App() {
           });
         } else if (message.type === 'CHECKOUT_UPDATED') {
           const payload = message.payload as CheckoutUpdatedPayload;
-          if (selectedCheckoutRequest === payload.requestId) {
+          if (selectedCheckoutRequestRef.current === payload.requestId) {
             setCheckoutItemsConfirmed(payload.itemsConfirmed);
             setCheckoutFeePaid(payload.feePaid);
           }
@@ -1182,7 +1186,7 @@ function App() {
             next.delete(payload.requestId);
             return next;
           });
-          if (selectedCheckoutRequest === payload.requestId) {
+          if (selectedCheckoutRequestRef.current === payload.requestId) {
             setSelectedCheckoutRequest(null);
             setCheckoutChecklist({});
             setCheckoutItemsConfirmed(false);
@@ -1275,10 +1279,7 @@ function App() {
           }
 
           // If server cleared the lane session (COMPLETED with empty customer name), reset local UI.
-          if (
-            payload.status === 'COMPLETED' &&
-            (!payload.customerName || payload.customerName === '')
-          ) {
+          if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
             setCurrentSessionId(null);
             setCustomerName('');
             setMembershipNumber('');
@@ -1306,13 +1307,13 @@ function App() {
           void fetchWaitlistRef.current?.();
         } else if (message.type === 'SELECTION_PROPOSED') {
           const payload = message.payload as SelectionProposedPayload;
-          if (payload.sessionId === currentSessionId) {
+          if (payload.sessionId === currentSessionIdRef.current) {
             setProposedRentalType(payload.rentalType);
             setProposedBy(payload.proposedBy);
           }
         } else if (message.type === 'SELECTION_LOCKED') {
           const payload = message.payload as SelectionLockedPayload;
-          if (payload.sessionId === currentSessionId) {
+          if (payload.sessionId === currentSessionIdRef.current) {
             setSelectionConfirmed(true);
             setSelectionConfirmedBy(payload.confirmedBy);
             setCustomerSelectedType(payload.rentalType);
@@ -1320,7 +1321,7 @@ function App() {
           }
         } else if (message.type === 'SELECTION_FORCED') {
           const payload = message.payload as SelectionForcedPayload;
-          if (payload.sessionId === currentSessionId) {
+          if (payload.sessionId === currentSessionIdRef.current) {
             setSelectionConfirmed(true);
             setSelectionConfirmedBy('EMPLOYEE');
             setCustomerSelectedType(payload.rentalType);
@@ -1332,30 +1333,30 @@ function App() {
           // Refresh inventory will be handled by InventorySelector component
         } else if (message.type === 'ASSIGNMENT_CREATED') {
           const payload = message.payload as AssignmentCreatedPayload;
-          if (payload.sessionId === currentSessionId) {
+          if (payload.sessionId === currentSessionIdRef.current) {
             // Assignment successful - payment should already be handled before agreement + assignment.
             // SessionUpdated will carry assigned resource details.
           }
         } else if (message.type === 'ASSIGNMENT_FAILED') {
           const payload = message.payload as AssignmentFailedPayload;
-          if (payload.sessionId === currentSessionId) {
+          if (payload.sessionId === currentSessionIdRef.current) {
             // Handle race condition - refresh and re-select
             alert('Assignment failed: ' + payload.reason);
             setSelectedInventoryItem(null);
           }
         } else if (message.type === 'CUSTOMER_CONFIRMED') {
           const payload = message.payload as CustomerConfirmedPayload;
-          if (payload.sessionId === currentSessionId) {
+          if (payload.sessionId === currentSessionIdRef.current) {
             setShowCustomerConfirmationPending(false);
             setCustomerConfirmationType(null);
           }
         } else if (message.type === 'CUSTOMER_DECLINED') {
           const payload = message.payload as CustomerDeclinedPayload;
-          if (payload.sessionId === currentSessionId) {
+          if (payload.sessionId === currentSessionIdRef.current) {
             setShowCustomerConfirmationPending(false);
             setCustomerConfirmationType(null);
             // Revert to customer's requested type
-            if (customerSelectedType) {
+            if (customerSelectedTypeRef.current) {
               setSelectedInventoryItem(null);
               // This will trigger auto-selection in InventorySelector
             }
@@ -1364,10 +1365,12 @@ function App() {
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error);
       }
-    };
+    },
+  });
 
-    return () => ws.close();
-  }, [selectedCheckoutRequest, lane]);
+  useEffect(() => {
+    setWsConnected(ws.connected);
+  }, [ws.connected]);
 
   const handleInventorySelect = (
     type: 'room' | 'locker',

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { InventoryUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
 
@@ -32,22 +33,21 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
 
   useEffect(() => {
     load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load reports'));
-    const ws = new WebSocket(wsBaseUrl());
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'subscribe', events: ['INVENTORY_UPDATED'] }));
-    ws.onmessage = (event) => {
-      try {
-        const msg: WebSocketEvent = JSON.parse(event.data);
-        if (msg.type === 'INVENTORY_UPDATED') {
-          const payload = msg.payload as InventoryUpdatedPayload;
-          setInventory(payload.inventory as unknown as InventorySummaryResponse);
-        }
-      } catch {
-        // ignore
-      }
-    };
-    return () => ws.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.sessionToken]);
+
+  useReconnectingWebSocket({
+    url: wsBaseUrl(),
+    onOpenSendJson: [{ type: 'subscribe', events: ['INVENTORY_UPDATED'] }],
+    onMessage: (event) => {
+      const msg = safeJsonParse<WebSocketEvent>(String(event.data));
+      if (!msg) return;
+      if (msg.type === 'INVENTORY_UPDATED') {
+        const payload = msg.payload as InventoryUpdatedPayload;
+        setInventory(payload.inventory as unknown as InventorySummaryResponse);
+      }
+    },
+  });
 
   const lowTiers = useMemo(() => {
     const byType = inventory?.byType || {};

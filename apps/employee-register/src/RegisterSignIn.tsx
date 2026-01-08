@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SignInModal } from './SignInModal';
 import type { WebSocketEvent, RegisterSessionUpdatedPayload } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -31,19 +32,12 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [registerSession, setRegisterSession] = useState<RegisterSession | null>(null);
   const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
 
   const handleSessionInvalidated = useCallback(() => {
     // Clear heartbeat interval
     if (heartbeatInterval) {
       clearInterval(heartbeatInterval);
       setHeartbeatInterval(null);
-    }
-
-    // Close WebSocket
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
     }
 
     // Clear register session state
@@ -101,58 +95,9 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     void checkRegisterStatus();
   }, [checkRegisterStatus]);
 
-  // Set up WebSocket subscription for register session updates
-  useEffect(() => {
-    if (!registerSession) return;
-
-    // Use the Vite proxy path instead of direct connection
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          type: 'subscribe',
-          events: ['REGISTER_SESSION_UPDATED'],
-        })
-      );
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket connection error:', error);
-      // Don't disconnect on error - connection might recover
-    };
-
-    ws.onclose = () => {
-      // WebSocket closed - this is normal on cleanup
-      wsRef.current = null;
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
-        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-        const message = parsed as unknown as WebSocketEvent;
-        if (message.type === 'REGISTER_SESSION_UPDATED') {
-          const payload = message.payload as RegisterSessionUpdatedPayload;
-          // If this event targets our device and session is no longer active, sign out
-          if (payload.deviceId === deviceId && !payload.active) {
-            handleSessionInvalidated();
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
-
-    return () => {
-      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-        ws.close();
-      }
-      wsRef.current = null;
-    };
-  }, [registerSession, deviceId, handleSessionInvalidated]);
+  const signedInWs = registerSession ? (
+    <RegisterSessionWs deviceId={deviceId} onInvalidated={handleSessionInvalidated} />
+  ) : null;
 
   const startHeartbeat = () => {
     // Clear existing interval
@@ -314,7 +259,41 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
         <div style={{ width: '40px' }} /> {/* Spacer for alignment */}
       </div>
 
+      {signedInWs}
       {children}
     </div>
   );
+}
+
+function RegisterSessionWs({
+  deviceId,
+  onInvalidated,
+}: {
+  deviceId: string;
+  onInvalidated: () => void;
+}) {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+  const ws = useReconnectingWebSocket({
+    url: wsUrl,
+    onOpenSendJson: [{ type: 'subscribe', events: ['REGISTER_SESSION_UPDATED'] }],
+    onMessage: (event) => {
+      const parsed = safeJsonParse<unknown>(String(event.data));
+      if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+      const message = parsed as unknown as WebSocketEvent;
+      if (message.type !== 'REGISTER_SESSION_UPDATED') return;
+      const payload = message.payload as RegisterSessionUpdatedPayload;
+      if (payload.deviceId === deviceId && !payload.active) {
+        ws.close();
+        onInvalidated();
+      }
+    },
+    onError: (error) => {
+      console.error('WebSocket connection error:', error);
+      // Don't disconnect on error - connection might recover
+    },
+  });
+
+  return null;
 }

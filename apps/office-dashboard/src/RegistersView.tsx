@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { RegisterSessionUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -52,57 +53,36 @@ export function RegistersView({ session }: RegistersViewProps) {
     fetchRegisters();
   }, []);
 
-  // Set up WebSocket connection and subscribe to events
-  useEffect(() => {
-    const wsConnection = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
-
-    wsConnection.onopen = () => {
-      wsConnection.send(
-        JSON.stringify({
-          type: 'subscribe',
-          events: ['REGISTER_SESSION_UPDATED'],
-        })
-      );
-    };
-
-    wsConnection.onclose = () => {};
-
-    wsConnection.onmessage = (event) => {
-      try {
-        const message: WebSocketEvent = JSON.parse(event.data);
-        if (message.type === 'REGISTER_SESSION_UPDATED') {
-          const payload = message.payload as RegisterSessionUpdatedPayload;
-          // Update the specific register in state
-          setRegisters((prev) =>
-            prev.map((reg) =>
-              reg.registerNumber === payload.registerNumber
-                ? {
-                    registerNumber: payload.registerNumber,
-                    active: payload.active,
-                    sessionId: payload.sessionId,
-                    employee: payload.employee,
-                    deviceId: payload.deviceId,
-                    createdAt: payload.createdAt,
-                    lastHeartbeatAt: payload.lastHeartbeatAt,
-                    secondsSinceHeartbeat: payload.lastHeartbeatAt
-                      ? Math.floor(
-                          (Date.now() - new Date(payload.lastHeartbeatAt).getTime()) / 1000
-                        )
-                      : null,
-                  }
-                : reg
-            )
-          );
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+  useReconnectingWebSocket({
+    url: `ws://${window.location.hostname}:3001/ws`,
+    onOpenSendJson: [{ type: 'subscribe', events: ['REGISTER_SESSION_UPDATED'] }],
+    onMessage: (event) => {
+      const message = safeJsonParse<WebSocketEvent>(String(event.data));
+      if (!message) return;
+      if (message.type === 'REGISTER_SESSION_UPDATED') {
+        const payload = message.payload as RegisterSessionUpdatedPayload;
+        // Update the specific register in state
+        setRegisters((prev) =>
+          prev.map((reg) =>
+            reg.registerNumber === payload.registerNumber
+              ? {
+                  registerNumber: payload.registerNumber,
+                  active: payload.active,
+                  sessionId: payload.sessionId,
+                  employee: payload.employee,
+                  deviceId: payload.deviceId,
+                  createdAt: payload.createdAt,
+                  lastHeartbeatAt: payload.lastHeartbeatAt,
+                  secondsSinceHeartbeat: payload.lastHeartbeatAt
+                    ? Math.floor((Date.now() - new Date(payload.lastHeartbeatAt).getTime()) / 1000)
+                    : null,
+                }
+              : reg
+          )
+        );
       }
-    };
-
-    return () => {
-      wsConnection.close();
-    };
-  }, []);
+    },
+  });
 
   const handleForceSignOut = async (registerNumber: number) => {
     setForceSignOutLoading(registerNumber);

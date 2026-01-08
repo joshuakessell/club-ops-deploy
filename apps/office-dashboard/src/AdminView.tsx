@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { WebSocketEvent } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -80,6 +81,11 @@ export function AdminView({ session }: AdminViewProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [wsConnected, setWsConnected] = useState(false);
 
+  const activeTabRef = useRef<AdminTab>(activeTab);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
   const loadOperationsData = async () => {
     if (!session.sessionToken) return;
 
@@ -101,6 +107,11 @@ export function AdminView({ session }: AdminViewProps) {
       setExpirations(expData.expirations || []);
     }
   };
+
+  const loadOperationsDataRef = useRef(loadOperationsData);
+  useEffect(() => {
+    loadOperationsDataRef.current = loadOperationsData;
+  });
 
   const loadData = async () => {
     if (!session.sessionToken) return;
@@ -137,43 +148,6 @@ export function AdminView({ session }: AdminViewProps) {
     }
 
     loadData();
-
-    // Connect to WebSocket for real-time updates
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
-
-    ws.onopen = () => {
-      setWsConnected(true);
-      ws.send(
-        JSON.stringify({
-          type: 'subscribe',
-          events: ['INVENTORY_UPDATED', 'ROOM_STATUS_CHANGED', 'SESSION_UPDATED'],
-        })
-      );
-    };
-
-    ws.onclose = () => {
-      setWsConnected(false);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const message: WebSocketEvent = JSON.parse(event.data);
-        if (
-          message.type === 'INVENTORY_UPDATED' ||
-          message.type === 'ROOM_STATUS_CHANGED' ||
-          message.type === 'SESSION_UPDATED'
-        ) {
-          // Refresh operations data when inventory or sessions change
-          if (activeTab === 'operations') {
-            loadOperationsData().catch(console.error);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    };
-
-    return () => ws.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.role, activeTab]);
 
@@ -258,6 +232,11 @@ export function AdminView({ session }: AdminViewProps) {
       className="admin-container"
       style={{ padding: '2rem', maxWidth: '1600px', margin: '0 auto' }}
     >
+      <AdminWs
+        activeTabRef={activeTabRef}
+        loadOperationsDataRef={loadOperationsDataRef}
+        onConnectedChange={setWsConnected}
+      />
       <div
         className="admin-header"
         style={{
@@ -771,4 +750,41 @@ export function AdminView({ session }: AdminViewProps) {
       )}
     </div>
   );
+}
+
+function AdminWs({
+  activeTabRef,
+  loadOperationsDataRef,
+  onConnectedChange,
+}: {
+  activeTabRef: { current: AdminTab };
+  loadOperationsDataRef: { current: () => Promise<void> };
+  onConnectedChange: (connected: boolean) => void;
+}) {
+  const ws = useReconnectingWebSocket({
+    url: `ws://${window.location.hostname}:3001/ws`,
+    onOpenSendJson: [
+      { type: 'subscribe', events: ['INVENTORY_UPDATED', 'ROOM_STATUS_CHANGED', 'SESSION_UPDATED'] },
+    ],
+    onMessage: (event) => {
+      const message = safeJsonParse<WebSocketEvent>(String(event.data));
+      if (!message) return;
+      if (
+        message.type === 'INVENTORY_UPDATED' ||
+        message.type === 'ROOM_STATUS_CHANGED' ||
+        message.type === 'SESSION_UPDATED'
+      ) {
+        // Avoid socket recreation on tab changes.
+        if (activeTabRef.current === 'operations') {
+          loadOperationsDataRef.current().catch(console.error);
+        }
+      }
+    },
+  });
+
+  useEffect(() => {
+    onConnectedChange(ws.connected);
+  }, [onConnectedChange, ws.connected]);
+
+  return null;
 }

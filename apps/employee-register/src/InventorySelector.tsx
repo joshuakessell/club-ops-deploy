@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { RoomStatus } from '@club-ops/shared';
+import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -201,44 +202,26 @@ export function InventorySelector({
     return () => window.clearInterval(id);
   }, []);
 
-  // Listen for WebSocket events to trigger refresh
-  useEffect(() => {
-    // Use Vite proxy instead of direct connection
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`
-    );
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
 
-    ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          type: 'subscribe',
-          events: ['ROOM_STATUS_CHANGED', 'INVENTORY_UPDATED', 'ROOM_ASSIGNED', 'ROOM_RELEASED'],
-        })
-      );
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const parsed: unknown = JSON.parse(String(event.data)) as unknown;
-        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-        const t = parsed.type;
-        if (
-          t === 'ROOM_STATUS_CHANGED' ||
-          t === 'INVENTORY_UPDATED' ||
-          t === 'ROOM_ASSIGNED' ||
-          t === 'ROOM_RELEASED'
-        ) {
-          // Trigger refresh
-          setRefreshTrigger((prev) => prev + 1);
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+  useReconnectingWebSocket({
+    url: wsUrl,
+    onOpenSendJson: [
+      {
+        type: 'subscribe',
+        events: ['ROOM_STATUS_CHANGED', 'INVENTORY_UPDATED', 'ROOM_ASSIGNED', 'ROOM_RELEASED'],
+      },
+    ],
+    onMessage: (event) => {
+      const parsed = safeJsonParse<unknown>(String(event.data));
+      if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+      const t = parsed.type;
+      if (t === 'ROOM_STATUS_CHANGED' || t === 'INVENTORY_UPDATED' || t === 'ROOM_ASSIGNED' || t === 'ROOM_RELEASED') {
+        setRefreshTrigger((prev) => prev + 1);
       }
-    };
-
-    return () => ws.close();
-  }, [lane]);
+    },
+  });
 
   // Determine which section to auto-expand
   useEffect(() => {

@@ -164,6 +164,8 @@ async function main() {
   fastify.get('/ws', { websocket: true }, (connection, req) => {
     const clientId = crypto.randomUUID();
     const socket = connection.socket as unknown as WebSocket;
+    type AliveWebSocket = WebSocket & { isAlive?: boolean };
+    const alive = socket as AliveWebSocket;
 
     // Extract lane from query string if present
     const url = req.url || '';
@@ -172,7 +174,25 @@ async function main() {
 
     fastify.log.info({ clientId, lane }, 'WebSocket client connected');
 
-    broadcaster.addClient(clientId, socket, lane);
+    broadcaster.addClient(clientId, alive, lane);
+
+    // Keepalive: send ping frames to prevent idle timeouts and detect half-open connections.
+    alive.isAlive = true;
+    alive.on('pong', () => {
+      alive.isAlive = true;
+    });
+
+    const keepaliveInterval = setInterval(() => {
+      if (alive.readyState !== alive.OPEN) return;
+      if (alive.isAlive === false) {
+        alive.terminate();
+        broadcaster.removeClient(clientId);
+        clearInterval(keepaliveInterval);
+        return;
+      }
+      alive.isAlive = false;
+      alive.ping();
+    }, 30000); // 30s
 
     connection.on('message', (message: Buffer) => {
       try {
@@ -197,11 +217,13 @@ async function main() {
     });
 
     connection.on('close', () => {
+      clearInterval(keepaliveInterval);
       broadcaster.removeClient(clientId);
       fastify.log.info({ clientId }, 'WebSocket client disconnected');
     });
 
     connection.on('error', (err) => {
+      clearInterval(keepaliveInterval);
       fastify.log.error({ clientId, err }, 'WebSocket error');
       broadcaster.removeClient(clientId);
     });
