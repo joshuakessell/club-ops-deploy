@@ -45,6 +45,7 @@ interface LaneSessionRow {
   payment_intent_id: string | null;
   membership_purchase_intent?: 'PURCHASE' | 'RENEW' | null;
   membership_purchase_requested_at?: Date | null;
+  kiosk_acknowledged_at?: Date | null;
   checkin_mode: string | null; // 'INITIAL' or 'RENEWAL'
   proposed_rental_type: string | null;
   proposed_by: string | null;
@@ -418,6 +419,7 @@ async function buildFullSessionUpdatedPayload(
     membershipNumber,
     customerMembershipValidUntil,
     membershipPurchaseIntent: (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
+    kioskAcknowledgedAt: session.kiosk_acknowledged_at ? session.kiosk_acknowledged_at.toISOString() : undefined,
     allowedRentals,
     mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
     status: session.status,
@@ -4448,10 +4450,29 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           if (sessionResult.rows.length === 0) {
+            // Idempotency: if already completed, treat as success.
+            const completed = await client.query<LaneSessionRow>(
+              `SELECT * FROM lane_sessions
+               WHERE lane_id = $1 AND status = 'COMPLETED'
+               ORDER BY created_at DESC
+               LIMIT 1`,
+              [laneId]
+            );
+            if (completed.rows.length > 0) {
+              request.log.info(
+                { laneId, sessionId: completed.rows[0]!.id, actor: 'employee-register', action: 'reset_idempotent' },
+                'Lane session reset called but session already completed'
+              );
+              return { success: true, sessionId: completed.rows[0]!.id, alreadyCompleted: true as const };
+            }
             throw { statusCode: 404, message: 'No active session found' };
           }
 
           const session = sessionResult.rows[0]!;
+          request.log.info(
+            { laneId, sessionId: session.id, actor: 'employee-register', action: 'reset_complete' },
+            'Completing lane session (reset)'
+          );
 
           // Mark session as completed and clear coordination fields so UI resets deterministically
           await client.query(
@@ -4470,6 +4491,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                payment_intent_id = NULL,
                membership_purchase_intent = NULL,
                membership_purchase_requested_at = NULL,
+               kiosk_acknowledged_at = NULL,
                proposed_rental_type = NULL,
                proposed_by = NULL,
                selection_confirmed = false,
@@ -4510,10 +4532,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    * POST /v1/checkin/lane/:laneId/kiosk-ack
    *
    * Public kiosk acknowledgement that the customer has tapped OK on the completion screen.
-   * This clears lane_session coordination fields so kiosks/lanes reset to idle deterministically.
+   * This must NOT clear/end the lane session. It only marks kiosk_acknowledged_at so the kiosk UI can
+   * safely return to idle while the employee-register still completes the transaction.
    *
    * Security: optionalAuth (kiosk does not have staff token).
-   * Guard: only operates on sessions already in COMPLETED status.
    */
   fastify.post<{
     Params: { laneId: string };
@@ -4528,42 +4550,27 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         const result = await transaction(async (client) => {
           const sessionResult = await client.query<LaneSessionRow>(
             `SELECT * FROM lane_sessions
-           WHERE lane_id = $1 AND status = 'COMPLETED'
+           WHERE lane_id = $1 AND status != 'CANCELLED'
            ORDER BY created_at DESC
            LIMIT 1`,
             [laneId]
           );
 
           if (sessionResult.rows.length === 0) {
-            throw { statusCode: 404, message: 'No completed session found' };
+            throw { statusCode: 404, message: 'No session found' };
           }
 
           const session = sessionResult.rows[0]!;
+          request.log.info(
+            { laneId, sessionId: session.id, actor: 'kiosk', action: 'kiosk_ack' },
+            'Kiosk acknowledged; marking kiosk_acknowledged_at (no session clear)'
+          );
 
-          // Clear coordination fields (same shape as staff reset), but only for already-completed sessions.
           await client.query(
             `UPDATE lane_sessions
-           SET staff_id = NULL,
-               customer_id = NULL,
-               customer_display_name = NULL,
-               membership_number = NULL,
-               desired_rental_type = NULL,
-               waitlist_desired_type = NULL,
-               backup_rental_type = NULL,
-               assigned_resource_id = NULL,
-               assigned_resource_type = NULL,
-               price_quote_json = NULL,
-               payment_intent_id = NULL,
-               membership_purchase_intent = NULL,
-               membership_purchase_requested_at = NULL,
-               proposed_rental_type = NULL,
-               proposed_by = NULL,
-               selection_confirmed = false,
-               selection_confirmed_by = NULL,
-               selection_locked_at = NULL,
-               disclaimers_ack_json = NULL,
-               updated_at = NOW()
-           WHERE id = $1`,
+             SET kiosk_acknowledged_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = $1`,
             [session.id]
           );
 

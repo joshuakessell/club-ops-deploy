@@ -32,6 +32,8 @@ export const en = {
   'common.decline': 'Decline',
   'common.you': 'You',
   'common.staff': 'Staff',
+  'kiosk.locked.title': 'Please see attendant',
+  'kiosk.locked.body': 'This lane is still being completed. Please see attendant to finish checkout.',
 
   // Past due
   pastDueBlocked: 'Please see the front desk to resolve your balance.',

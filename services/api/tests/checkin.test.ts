@@ -987,12 +987,12 @@ describe('Check-in Flow', () => {
 
   describe('POST /v1/checkin/lane/:laneId/kiosk-ack', () => {
     it(
-      'clears a completed lane session so kiosks reset to idle',
+      'marks kiosk_acknowledged_at but does NOT clear/end the lane session',
       runIfDbAvailable(async () => {
-        // Create a minimal completed lane session with display fields set (mirrors sign-agreement completion).
+        // Create a minimal active lane session with display fields set.
         const sessionResult = await query<{ id: string }>(
           `INSERT INTO lane_sessions (lane_id, status, customer_display_name, checkin_mode)
-         VALUES ($1, 'COMPLETED', 'Done Customer', 'INITIAL')
+         VALUES ($1, 'ACTIVE', 'Done Customer', 'INITIAL')
          RETURNING id`,
           [laneId]
         );
@@ -1007,11 +1007,16 @@ describe('Check-in Flow', () => {
         const cleared = await query<{
           customer_display_name: string | null;
           customer_id: string | null;
-        }>(`SELECT customer_display_name, customer_id FROM lane_sessions WHERE id = $1`, [
+          kiosk_acknowledged_at: string | null;
+          status: string;
+        }>(`SELECT customer_display_name, customer_id, kiosk_acknowledged_at::text, status::text as status
+            FROM lane_sessions WHERE id = $1`, [
           sessionId,
         ]);
-        expect(cleared.rows[0]!.customer_display_name).toBeNull();
-        expect(cleared.rows[0]!.customer_id).toBeNull();
+        // Contract: kiosk-ack is UI-only and must not clear customer association.
+        expect(cleared.rows[0]!.customer_display_name).toBe('Done Customer');
+        expect(cleared.rows[0]!.status).not.toBe('COMPLETED');
+        expect(cleared.rows[0]!.kiosk_acknowledged_at).toBeTruthy();
       })
     );
   });

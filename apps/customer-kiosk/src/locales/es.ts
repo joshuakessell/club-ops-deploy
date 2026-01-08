@@ -28,6 +28,9 @@ export const es: Record<keyof typeof en, string> = {
   'common.decline': 'Rechazar',
   'common.you': 'Usted',
   'common.staff': 'Personal',
+  'kiosk.locked.title': 'Por favor, vea al empleado',
+  'kiosk.locked.body':
+    'Este carril aún se está completando. Por favor, vea al empleado para finalizar la salida.',
 
   // Past due
   pastDueBlocked: 'Por favor, vea al mostrador para resolver su saldo.',
