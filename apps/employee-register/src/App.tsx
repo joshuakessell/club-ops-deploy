@@ -18,13 +18,24 @@ import {
   type SelectionForcedPayload,
   getCustomerMembershipStatus,
 } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { RegisterSignIn } from './RegisterSignIn';
 import { InventorySelector } from './InventorySelector';
 import type { IdScanPayload } from '@club-ops/shared';
 import { ScanMode, type ScanModeResult } from './ScanMode';
 import { debounce } from './utils/debounce';
 import { OfferUpgradeModal } from './components/OfferUpgradeModal';
+import { CheckoutRequestsBanner } from './components/register/CheckoutRequestsBanner';
+import { CheckoutVerificationModal } from './components/register/CheckoutVerificationModal';
+import { RegisterHeader } from './components/register/RegisterHeader';
+import { WaitlistPopover } from './components/register/WaitlistPopover';
+import { WaitlistNoticeModal } from './components/register/modals/WaitlistNoticeModal';
+import { CustomerConfirmationPendingModal } from './components/register/modals/CustomerConfirmationPendingModal';
+import { PastDuePaymentModal } from './components/register/modals/PastDuePaymentModal';
+import { ManagerBypassModal } from './components/register/modals/ManagerBypassModal';
+import { AddNoteModal } from './components/register/modals/AddNoteModal';
+import { MembershipIdPromptModal } from './components/register/modals/MembershipIdPromptModal';
+import { PaymentDeclineToast } from './components/register/toasts/PaymentDeclineToast';
 
 interface HealthStatus {
   status: string;
@@ -41,19 +52,6 @@ interface StaffSession {
   sessionToken: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function getErrorMessage(value: unknown): string | undefined {
-  if (!isRecord(value)) return undefined;
-  const err = value['error'];
-  const msg = value['message'];
-  if (typeof err === 'string' && err.trim()) return err;
-  if (typeof msg === 'string' && msg.trim()) return msg;
-  return undefined;
-}
-
 function parseStaffSession(value: unknown): StaffSession | null {
   if (!isRecord(value)) return null;
   const staffId = value['staffId'];
@@ -65,11 +63,6 @@ function parseStaffSession(value: unknown): StaffSession | null {
   if (role !== 'STAFF' && role !== 'ADMIN') return null;
   if (typeof sessionToken !== 'string') return null;
   return { staffId, name, role, sessionToken };
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  const data: unknown = await response.json();
-  return data as T;
 }
 
 /**
@@ -2128,110 +2121,10 @@ function App() {
         <div className="container" style={{ marginTop: '60px', padding: '1.5rem' }}>
           {/* Checkout Request Notifications */}
           {checkoutRequests.size > 0 && !selectedCheckoutRequest && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                background: '#1e293b',
-                borderBottom: '2px solid #3b82f6',
-                zIndex: 1000,
-                padding: '1rem',
-                maxHeight: '200px',
-                overflowY: 'auto',
-              }}
-            >
-              {Array.from(checkoutRequests.values()).map((request) => {
-                const lateMinutes = request.lateMinutes;
-                const feeAmount = request.lateFeeAmount;
-                const banApplied = request.banApplied;
-
-                return (
-                  <div
-                    key={request.requestId}
-                    onClick={() => void handleClaimCheckout(request.requestId)}
-                    style={{
-                      padding: '1rem',
-                      marginBottom: '0.5rem',
-                      background: '#0f172a',
-                      border: '2px solid #3b82f6',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#1e293b';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = '#0f172a';
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}
-                        >
-                          {request.customerName}
-                          {request.membershipNumber && ` (${request.membershipNumber})`}
-                        </div>
-                        <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                          {request.rentalType} •{' '}
-                          {request.roomNumber || request.lockerNumber || 'N/A'}
-                        </div>
-                        <div
-                          style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}
-                        >
-                          Scheduled: {new Date(request.scheduledCheckoutAt).toLocaleString()} •
-                          Current: {new Date(request.currentTime).toLocaleString()} •
-                          {lateMinutes > 0 ? (
-                            <span style={{ color: '#f59e0b' }}>{lateMinutes} min late</span>
-                          ) : (
-                            <span>On time</span>
-                          )}
-                        </div>
-                        {feeAmount > 0 && (
-                          <div
-                            style={{
-                              fontSize: '0.875rem',
-                              color: '#f59e0b',
-                              marginTop: '0.25rem',
-                              fontWeight: 600,
-                            }}
-                          >
-                            Late fee: ${feeAmount.toFixed(2)}
-                            {banApplied && ' • 30-day ban applied'}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleClaimCheckout(request.requestId);
-                        }}
-                        style={{
-                          padding: '0.5rem 1rem',
-                          background: '#3b82f6',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontWeight: 600,
-                        }}
-                      >
-                        Claim
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <CheckoutRequestsBanner
+              requests={Array.from(checkoutRequests.values())}
+              onClaim={(id) => void handleClaimCheckout(id)}
+            />
           )}
 
           {/* Checkout Verification Screen */}
@@ -2239,377 +2132,64 @@ function App() {
             (() => {
               const request = checkoutRequests.get(selectedCheckoutRequest);
               if (!request) return null;
-
               return (
-                <div
-                  style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(0, 0, 0, 0.8)',
-                    zIndex: 2000,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '2rem',
+                <CheckoutVerificationModal
+                  request={request}
+                  isSubmitting={isSubmitting}
+                  checkoutItemsConfirmed={checkoutItemsConfirmed}
+                  checkoutFeePaid={checkoutFeePaid}
+                  onConfirmItems={() => void handleConfirmItems(selectedCheckoutRequest)}
+                  onMarkFeePaid={() => void handleMarkFeePaid(selectedCheckoutRequest)}
+                  onComplete={() => void handleCompleteCheckout(selectedCheckoutRequest)}
+                  onCancel={() => {
+                    setSelectedCheckoutRequest(null);
+                    setCheckoutChecklist({});
+                    setCheckoutItemsConfirmed(false);
+                    setCheckoutFeePaid(false);
                   }}
-                >
-                  <div
-                    style={{
-                      background: '#1e293b',
-                      border: '2px solid #3b82f6',
-                      borderRadius: '12px',
-                      padding: '2rem',
-                      maxWidth: '600px',
-                      width: '100%',
-                      maxHeight: '90vh',
-                      overflowY: 'auto',
-                    }}
-                  >
-                    <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>
-                      Checkout Verification
-                    </h2>
-
-                    <div style={{ marginBottom: '1.5rem' }}>
-                      <div style={{ marginBottom: '0.5rem' }}>
-                        <strong>Customer:</strong> {request.customerName}
-                        {request.membershipNumber && ` (${request.membershipNumber})`}
-                      </div>
-                      <div style={{ marginBottom: '0.5rem' }}>
-                        <strong>Rental:</strong> {request.rentalType} •{' '}
-                        {request.roomNumber || request.lockerNumber || 'N/A'}
-                      </div>
-                      <div style={{ marginBottom: '0.5rem' }}>
-                        <strong>Scheduled Checkout:</strong>{' '}
-                        {new Date(request.scheduledCheckoutAt).toLocaleString()}
-                      </div>
-                      {request.lateMinutes > 0 && (
-                        <div style={{ marginBottom: '0.5rem', color: '#f59e0b' }}>
-                          <strong>Late:</strong> {request.lateMinutes} minutes
-                        </div>
-                      )}
-                      {request.lateFeeAmount > 0 && (
-                        <div style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
-                          <strong>Late Fee:</strong> ${request.lateFeeAmount.toFixed(2)}
-                          {request.banApplied && ' • 30-day ban applied'}
-                        </div>
-                      )}
-                    </div>
-
-                    <div
-                      style={{
-                        marginBottom: '1.5rem',
-                        padding: '1rem',
-                        background: '#0f172a',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>
-                        Customer Checklist:
-                      </div>
-                      <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                        (Items customer marked as returned)
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1rem',
-                        marginBottom: '1.5rem',
-                      }}
-                    >
-                      <button
-                        onClick={() => void handleConfirmItems(selectedCheckoutRequest)}
-                        disabled={checkoutItemsConfirmed}
-                        style={{
-                          padding: '0.75rem',
-                          background: checkoutItemsConfirmed ? '#10b981' : '#3b82f6',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: checkoutItemsConfirmed ? 'default' : 'pointer',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {checkoutItemsConfirmed ? '✓ Items Confirmed' : 'Confirm Items Returned'}
-                      </button>
-
-                      {request.lateFeeAmount > 0 && (
-                        <button
-                          onClick={() => void handleMarkFeePaid(selectedCheckoutRequest)}
-                          disabled={checkoutFeePaid}
-                          style={{
-                            padding: '0.75rem',
-                            background: checkoutFeePaid ? '#10b981' : '#f59e0b',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: checkoutFeePaid ? 'default' : 'pointer',
-                            fontWeight: 600,
-                          }}
-                        >
-                          {checkoutFeePaid ? '✓ Fee Marked Paid' : 'Mark Late Fee Paid'}
-                        </button>
-                      )}
-
-                      <button
-                        onClick={() => void handleCompleteCheckout(selectedCheckoutRequest)}
-                        disabled={
-                          !checkoutItemsConfirmed ||
-                          (request.lateFeeAmount > 0 && !checkoutFeePaid) ||
-                          isSubmitting
-                        }
-                        style={{
-                          padding: '0.75rem',
-                          background:
-                            !checkoutItemsConfirmed ||
-                            (request.lateFeeAmount > 0 && !checkoutFeePaid)
-                              ? '#475569'
-                              : '#10b981',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor:
-                            !checkoutItemsConfirmed ||
-                            (request.lateFeeAmount > 0 && !checkoutFeePaid)
-                              ? 'not-allowed'
-                              : 'pointer',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {isSubmitting ? 'Processing...' : 'Complete Checkout'}
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setSelectedCheckoutRequest(null);
-                        setCheckoutChecklist({});
-                        setCheckoutItemsConfirmed(false);
-                        setCheckoutFeePaid(false);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem',
-                        background: 'transparent',
-                        color: '#94a3b8',
-                        border: '1px solid #475569',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
+                />
               );
             })()}
 
-          <header
-            className="header"
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: '1rem',
-              flexWrap: 'wrap',
+          <RegisterHeader
+            health={health}
+            wsConnected={wsConnected}
+            lane={lane}
+            staffName={session.name}
+            staffRole={session.role}
+            onSignOut={() => void handleLogout()}
+            waitlistInteractive={waitlistInteractive}
+            waitlistWidgetOpen={waitlistWidgetOpen}
+            waitlistDisplayNumber={waitlistDisplayNumber}
+            showUpgradePulse={showUpgradePulse}
+            hasEligibleEntries={hasEligibleEntries}
+            dismissUpgradePulse={dismissUpgradePulse}
+            onToggleWaitlistWidget={() => {
+              const nextOpen = !waitlistWidgetOpen;
+              if (nextOpen) dismissUpgradePulse();
+              setWaitlistWidgetOpen(nextOpen);
             }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-              <h1 style={{ margin: 0 }}>Employee Register</h1>
-              <div
-                className="status-badges"
-                style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
-              >
-                <span
-                  className={`badge ${health?.status === 'ok' ? 'badge-success' : 'badge-error'}`}
-                >
-                  API: {health?.status ?? '...'}
-                </span>
-                <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
-                  WS: {wsConnected ? 'Live' : 'Offline'}
-                </span>
-                <span className="badge badge-info">Lane: {lane}</span>
-                <span className="badge badge-info">
-                  {session.name} ({session.role})
-                </span>
-              </div>
-              <button
-                onClick={() => void handleLogout()}
-                style={{
-                  padding: '0.375rem 0.75rem',
-                  background: 'rgba(239, 68, 68, 0.2)',
-                  border: '1px solid var(--error)',
-                  borderRadius: '9999px',
-                  color: 'var(--error)',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Sign Out
-              </button>
-            </div>
+          />
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <button
-                className={showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : undefined}
-                onClick={() => {
-                  const nextOpen = !waitlistWidgetOpen;
-                  if (nextOpen) dismissUpgradePulse();
-                  setWaitlistWidgetOpen(nextOpen);
-                }}
-                disabled={!waitlistInteractive}
-                aria-label="Waitlist widget"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  padding: '0.45rem 0.75rem',
-                  background: waitlistInteractive ? '#fef3c7' : '#1f2937',
-                  border: `1px solid ${waitlistInteractive ? '#f59e0b' : '#334155'}`,
-                  borderRadius: '9999px',
-                  color: waitlistInteractive ? '#92400e' : '#94a3b8',
-                  fontWeight: 700,
-                  cursor: waitlistInteractive ? 'pointer' : 'not-allowed',
-                  minWidth: '110px',
-                  justifyContent: 'center',
-                }}
-              >
-                <span role="img" aria-label="waitlist clock">
-                  ⏰
-                </span>
-                <span>{waitlistDisplayNumber}</span>
-              </button>
-            </div>
-          </header>
-
-          {waitlistWidgetOpen && (
-            <div style={{ position: 'relative', marginTop: '0.5rem' }}>
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  zIndex: 1500,
-                  background: '#0b1220',
-                  border: '1px solid #1f2937',
-                  borderRadius: '8px',
-                  width: '320px',
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
-                }}
-              >
-                <div
-                  style={{
-                    padding: '0.75rem',
-                    borderBottom: '1px solid #1f2937',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div style={{ fontWeight: 700, color: '#f59e0b' }}>Waitlist</div>
-                  <button
-                    onClick={() => setWaitlistWidgetOpen(false)}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#94a3b8',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    Close
-                  </button>
-                </div>
-                <div
-                  style={{
-                    maxHeight: '260px',
-                    overflowY: 'auto',
-                    opacity: sessionActive ? 0.65 : 1,
-                    pointerEvents: sessionActive ? 'none' : 'auto',
-                  }}
-                >
-                  {waitlistEntries.length === 0 && (
-                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No waitlist entries</div>
-                  )}
-                  {waitlistEntries.slice(0, 6).map((entry) => {
-                    const eligible = isEntryOfferEligible(entry);
-                    return (
-                    <div
-                      key={entry.id}
-                      style={{
-                        padding: '0.75rem',
-                        borderBottom: '1px solid #1f2937',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 600 }}>
-                          {entry.customerName || entry.displayIdentifier}
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-                          {entry.displayIdentifier} → {entry.desiredTier}
-                        </div>
-                      </div>
-                      <button
-                        aria-label={`Begin upgrade for ${entry.customerName || entry.displayIdentifier}`}
-                        onClick={() => handleWaitlistEntryAction(entry.id, entry.customerName)}
-                        style={{
-                          background: eligible ? '#f59e0b' : '#475569',
-                          color: '#1f2937',
-                          border: 'none',
-                          borderRadius: '9999px',
-                          padding: '0.4rem 0.55rem',
-                          fontWeight: 700,
-                          cursor: eligible ? 'pointer' : 'not-allowed',
-                        }}
-                        disabled={!eligible}
-                      >
-                        🔑
-                      </button>
-                    </div>
-                    );
-                  })}
-                  {waitlistEntries.length > 6 && (
-                    <div
-                      onClick={() => {
-                        dismissUpgradePulse();
-                        setShowUpgradesPanel(true);
-                        setWaitlistWidgetOpen(false);
-                      }}
-                      style={{
-                        padding: '0.75rem',
-                        borderTop: '1px solid #1f2937',
-                        color: '#f59e0b',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      More..
-                    </div>
-                  )}
-                </div>
-                {sessionActive && (
-                  <div
-                    style={{
-                      padding: '0.65rem 0.75rem',
-                      color: '#f59e0b',
-                      fontSize: '0.85rem',
-                      borderTop: '1px solid #1f2937',
-                    }}
-                  >
-                    Active session present — actions disabled
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          <WaitlistPopover
+            open={waitlistWidgetOpen}
+            disabledReason={sessionActive ? 'Active session present — actions disabled' : null}
+            items={waitlistEntries.slice(0, 6).map((entry) => ({
+              id: entry.id,
+              title: entry.customerName || entry.displayIdentifier,
+              subtitle: `${entry.displayIdentifier} → ${entry.desiredTier}`,
+              eligible: isEntryOfferEligible(entry),
+              customerName: entry.customerName,
+            }))}
+            hasMore={waitlistEntries.length > 6}
+            onClose={() => setWaitlistWidgetOpen(false)}
+            onAction={(id, name) => handleWaitlistEntryAction(id, name ?? undefined)}
+            onMore={() => {
+              dismissUpgradePulse();
+              setShowUpgradesPanel(true);
+              setWaitlistWidgetOpen(false);
+            }}
+          />
 
           <main className="main">
             {/* Customer Info Panel */}
@@ -3469,59 +3049,12 @@ function App() {
             <p>Employee-facing tablet • Runs alongside Square POS</p>
           </footer>
 
-          {/* Waitlist Modal */}
-          {showWaitlistModal && waitlistDesiredTier && waitlistBackupType && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0, 0, 0, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2000,
-              }}
-              onClick={() => setShowWaitlistModal(false)}
-            >
-              <div
-                style={{
-                  background: '#1e293b',
-                  padding: '2rem',
-                  borderRadius: '12px',
-                  maxWidth: '500px',
-                  width: '90%',
-                }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-                  Waitlist Notice
-                </h2>
-                <p style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
-                  Customer requested waitlist for {waitlistDesiredTier}. Assigning a{' '}
-                  {waitlistBackupType} in the meantime.
-                </p>
-                <button
-                  onClick={() => setShowWaitlistModal(false)}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  OK
-                </button>
-              </div>
-            </div>
-          )}
+          <WaitlistNoticeModal
+            isOpen={showWaitlistModal && !!waitlistDesiredTier && !!waitlistBackupType}
+            desiredTier={waitlistDesiredTier || ''}
+            backupType={waitlistBackupType || ''}
+            onClose={() => setShowWaitlistModal(false)}
+          />
 
           {offerUpgradeModal && session?.sessionToken && (
             <OfferUpgradeModal
@@ -3539,63 +3072,19 @@ function App() {
             />
           )}
 
-          {/* Customer Confirmation Pending Modal */}
-          {showCustomerConfirmationPending && customerConfirmationType && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0, 0, 0, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2000,
-              }}
-            >
-              <div
-                style={{
-                  background: '#1e293b',
-                  padding: '2rem',
-                  borderRadius: '12px',
-                  maxWidth: '500px',
-                  width: '90%',
-                }}
-              >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-                  Waiting for Customer Confirmation
-                </h2>
-                <p style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
-                  Staff selected a different option: {customerConfirmationType.selected}{' '}
-                  {customerConfirmationType.number}. Waiting for customer to accept or decline on
-                  their device.
-                </p>
-                <button
-                  onClick={() => {
+          <CustomerConfirmationPendingModal
+            isOpen={showCustomerConfirmationPending && !!customerConfirmationType}
+            data={customerConfirmationType || { requested: '', selected: '', number: '' }}
+            onCancel={
+              customerConfirmationType
+                ? () => {
                     setShowCustomerConfirmationPending(false);
                     setCustomerConfirmationType(null);
-                    // Revert selection
                     setSelectedInventoryItem(null);
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: '#475569',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+                  }
+                : undefined
+            }
+          />
 
           {/* Full-screen Scan Mode (keyboard-wedge scanner; no iPad camera) */}
           <ScanMode
@@ -3608,577 +3097,74 @@ function App() {
             onCreateFromNoMatch={handleCreateFromNoMatch}
           />
 
-          {/* Past-Due Payment Modal */}
-          {showPastDueModal && paymentQuote && paymentQuote.total > 0 && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0, 0, 0, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2000,
+          {paymentQuote && paymentQuote.total > 0 && (
+            <PastDuePaymentModal
+              isOpen={showPastDueModal}
+              quote={paymentQuote}
+              onPayInSquare={(outcome, reason) => void handlePastDuePayment(outcome, reason)}
+              onManagerBypass={() => {
+                setShowPastDueModal(false);
+                setShowManagerBypassModal(true);
               }}
-            >
-              <div
-                style={{
-                  background: '#1e293b',
-                  padding: '2rem',
-                  borderRadius: '12px',
-                  maxWidth: '500px',
-                  width: '90%',
-                }}
-              >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-                  Past Due Balance: ${paymentQuote.total.toFixed(2)}
-                </h2>
-                <p style={{ marginBottom: '1.5rem', color: '#94a3b8' }}>
-                  Customer has a past due balance. Please process payment or bypass.
-                </p>
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.75rem',
-                    marginBottom: '1rem',
-                  }}
-                >
-                  <button
-                    onClick={() => void handlePastDuePayment('CREDIT_SUCCESS')}
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '0.75rem',
-                      background: '#3b82f6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Credit Success
-                  </button>
-                  <button
-                    onClick={() => void handlePastDuePayment('CASH_SUCCESS')}
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '0.75rem',
-                      background: '#10b981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Cash Success
-                  </button>
-                  <button
-                    onClick={() => void handlePastDuePayment('CREDIT_DECLINE', 'Card declined')}
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '0.75rem',
-                      background: '#ef4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Credit Decline
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowPastDueModal(false);
-                      setShowManagerBypassModal(true);
-                    }}
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '0.75rem',
-                      background: 'transparent',
-                      color: '#94a3b8',
-                      border: '1px solid #475569',
-                      borderRadius: '6px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Manager Bypass
-                  </button>
-                </div>
-                <button
-                  onClick={() => setShowPastDueModal(false)}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: 'transparent',
-                    color: '#94a3b8',
-                    border: '1px solid #475569',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+              onClose={() => setShowPastDueModal(false)}
+              isSubmitting={isSubmitting}
+            />
           )}
 
-          {/* Membership ID Prompt (after membership purchase/renewal payment is accepted) */}
-          {showMembershipIdPrompt && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0, 0, 0, 0.6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2500,
-              }}
-            >
-              <div
-                style={{
-                  background: '#1e293b',
-                  padding: '2rem',
-                  borderRadius: '12px',
-                  maxWidth: '520px',
-                  width: '92%',
-                  border: '1px solid #334155',
-                }}
-              >
-                <h2 style={{ marginBottom: '0.75rem', fontSize: '1.5rem', fontWeight: 700 }}>
-                  Enter Membership ID
-                </h2>
-                <p style={{ marginBottom: '1rem', color: '#94a3b8' }}>
-                  Payment was accepted for a 6 month membership. Scan or type the membership number from
-                  the physical card, then press Enter.
-                </p>
+          <MembershipIdPromptModal
+            isOpen={showMembershipIdPrompt}
+            membershipIdMode={membershipIdMode}
+            membershipIdInput={membershipIdInput}
+            membershipNumber={membershipNumber}
+            membershipPurchaseIntent={membershipPurchaseIntent}
+            error={membershipIdError}
+            isSubmitting={membershipIdSubmitting}
+            onModeChange={(mode) => {
+              setMembershipIdMode(mode);
+              if (mode === 'KEEP_EXISTING' && membershipNumber) {
+                setMembershipIdInput(membershipNumber);
+              } else {
+                setMembershipIdInput('');
+              }
+              setMembershipIdError(null);
+            }}
+            onInputChange={setMembershipIdInput}
+            onConfirm={(membershipId) => void handleCompleteMembershipPurchase(membershipId)}
+            onNotNow={() => {
+              setShowMembershipIdPrompt(false);
+              setMembershipIdError(null);
+            }}
+          />
 
-                {membershipPurchaseIntent === 'RENEW' && membershipNumber ? (
-                  <div style={{ marginBottom: '0.75rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                      <button
-                        onClick={() => {
-                          setMembershipIdMode('KEEP_EXISTING');
-                          setMembershipIdInput(membershipNumber);
-                          setMembershipIdError(null);
-                        }}
-                        disabled={membershipIdSubmitting}
-                        style={{
-                          flex: 1,
-                          padding: '0.6rem',
-                          background: membershipIdMode === 'KEEP_EXISTING' ? '#3b82f6' : 'transparent',
-                          color: membershipIdMode === 'KEEP_EXISTING' ? 'white' : '#cbd5e1',
-                          border: '1px solid #475569',
-                          borderRadius: '6px',
-                          fontWeight: 700,
-                          cursor: membershipIdSubmitting ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        Keep Same ID
-                      </button>
-                      <button
-                        onClick={() => {
-                          setMembershipIdMode('ENTER_NEW');
-                          setMembershipIdInput('');
-                          setMembershipIdError(null);
-                        }}
-                        disabled={membershipIdSubmitting}
-                        style={{
-                          flex: 1,
-                          padding: '0.6rem',
-                          background: membershipIdMode === 'ENTER_NEW' ? '#3b82f6' : 'transparent',
-                          color: membershipIdMode === 'ENTER_NEW' ? 'white' : '#cbd5e1',
-                          border: '1px solid #475569',
-                          borderRadius: '6px',
-                          fontWeight: 700,
-                          cursor: membershipIdSubmitting ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        Enter New ID
-                      </button>
-                    </div>
+          <ManagerBypassModal
+            isOpen={showManagerBypassModal}
+            managers={managerList}
+            managerId={managerId}
+            managerPin={managerPin}
+            onChangeManagerId={setManagerId}
+            onChangeManagerPin={setManagerPin}
+            onBypass={() => void handleManagerBypass()}
+            onCancel={() => {
+              setShowManagerBypassModal(false);
+              setManagerId('');
+              setManagerPin('');
+            }}
+            isSubmitting={isSubmitting}
+          />
 
-                    {membershipIdMode === 'KEEP_EXISTING' && (
-                      <div
-                        style={{
-                          padding: '0.75rem',
-                          background: '#0f172a',
-                          border: '1px solid #475569',
-                          borderRadius: '6px',
-                          color: 'white',
-                          fontSize: '1.25rem',
-                          letterSpacing: '0.04em',
-                        }}
-                      >
-                        {membershipNumber}
-                      </div>
-                    )}
-                  </div>
-                ) : null}
+          <AddNoteModal
+            isOpen={showAddNoteModal}
+            noteText={newNoteText}
+            onChangeNoteText={setNewNoteText}
+            onSubmit={() => void handleAddNote()}
+            onCancel={() => {
+              setShowAddNoteModal(false);
+              setNewNoteText('');
+            }}
+            isSubmitting={isSubmitting}
+          />
 
-                {(membershipPurchaseIntent !== 'RENEW' ||
-                  !membershipNumber ||
-                  membershipIdMode === 'ENTER_NEW') && (
-                  <input
-                    type="text"
-                    value={membershipIdInput}
-                    autoFocus
-                    onChange={(e) => setMembershipIdInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      // Allow scanner wedge input (keyboard) and Enter-to-submit; prevent bubbling to global handlers.
-                      e.stopPropagation();
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        void handleCompleteMembershipPurchase();
-                      }
-                    }}
-                    placeholder="Membership ID"
-                    disabled={membershipIdSubmitting}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      borderRadius: '6px',
-                      color: 'white',
-                      fontSize: '1.25rem',
-                      letterSpacing: '0.04em',
-                      marginBottom: '0.75rem',
-                    }}
-                  />
-                )}
-
-                {membershipIdError && (
-                  <div style={{ color: '#fecaca', marginBottom: '0.75rem' }}>{membershipIdError}</div>
-                )}
-
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button
-                    onClick={() =>
-                      void handleCompleteMembershipPurchase(
-                        membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
-                          ? membershipNumber
-                          : undefined
-                      )
-                    }
-                    disabled={
-                      membershipIdSubmitting ||
-                      (membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
-                        ? !membershipNumber
-                        : !membershipIdInput.trim())
-                    }
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      background:
-                        (membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
-                          ? membershipNumber
-                          : membershipIdInput.trim())
-                          ? '#3b82f6'
-                          : '#475569',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '1rem',
-                      fontWeight: 700,
-                      cursor:
-                        membershipIdSubmitting ||
-                        (membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
-                          ? !membershipNumber
-                          : !membershipIdInput.trim())
-                          ? 'not-allowed'
-                          : 'pointer',
-                    }}
-                  >
-                    {membershipIdSubmitting ? 'Saving…' : 'Save Membership'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowMembershipIdPrompt(false);
-                      setMembershipIdError(null);
-                    }}
-                    disabled={membershipIdSubmitting}
-                    style={{
-                      padding: '0.75rem 1rem',
-                      background: 'transparent',
-                      color: '#94a3b8',
-                      border: '1px solid #475569',
-                      borderRadius: '6px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: membershipIdSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Not now
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Manager Bypass Modal */}
-          {showManagerBypassModal && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0, 0, 0, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2000,
-              }}
-            >
-              <div
-                style={{
-                  background: '#1e293b',
-                  padding: '2rem',
-                  borderRadius: '12px',
-                  maxWidth: '500px',
-                  width: '90%',
-                }}
-              >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-                  Manager Bypass
-                </h2>
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                    Select Manager
-                  </label>
-                  <select
-                    value={managerId}
-                    onChange={(e) => setManagerId(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      borderRadius: '6px',
-                      color: 'white',
-                      fontSize: '1rem',
-                    }}
-                  >
-                    <option value="">Select a manager...</option>
-                    {managerList.map((manager) => (
-                      <option key={manager.id} value={manager.id}>
-                        {manager.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                    PIN
-                  </label>
-                  <input
-                    type="password"
-                    value={managerPin}
-                    onChange={(e) => setManagerPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="Enter 6-digit PIN"
-                    maxLength={6}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      background: '#0f172a',
-                      border: '1px solid #475569',
-                      borderRadius: '6px',
-                      color: 'white',
-                      fontSize: '1rem',
-                    }}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => void handleManagerBypass()}
-                    disabled={isSubmitting || !managerId || managerPin.trim().length !== 6}
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      background:
-                        managerId && managerPin.trim().length === 6 ? '#3b82f6' : '#475569',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor:
-                        managerId && managerPin.trim().length === 6 && !isSubmitting
-                          ? 'pointer'
-                          : 'not-allowed',
-                    }}
-                  >
-                    {isSubmitting ? 'Processing...' : 'Bypass'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowManagerBypassModal(false);
-                      setManagerId('');
-                      setManagerPin('');
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      background: 'transparent',
-                      color: '#94a3b8',
-                      border: '1px solid #475569',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Add Note Modal */}
-          {showAddNoteModal && (
-            <div
-              style={{
-                position: 'fixed',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'rgba(0, 0, 0, 0.5)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                zIndex: 2000,
-              }}
-            >
-              <div
-                style={{
-                  background: '#1e293b',
-                  padding: '2rem',
-                  borderRadius: '12px',
-                  maxWidth: '500px',
-                  width: '90%',
-                }}
-              >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem', fontWeight: 600 }}>
-                  Add Note
-                </h2>
-                <textarea
-                  value={newNoteText}
-                  onChange={(e) => setNewNoteText(e.target.value)}
-                  placeholder="Enter note..."
-                  rows={4}
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    background: '#0f172a',
-                    border: '1px solid #475569',
-                    borderRadius: '6px',
-                    color: 'white',
-                    fontSize: '1rem',
-                    marginBottom: '1rem',
-                    resize: 'vertical',
-                  }}
-                />
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => void handleAddNote()}
-                    disabled={isSubmitting || !newNoteText.trim()}
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      background: newNoteText.trim() ? '#3b82f6' : '#475569',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: newNoteText.trim() && !isSubmitting ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    {isSubmitting ? 'Adding...' : 'Add Note'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAddNoteModal(false);
-                      setNewNoteText('');
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      background: 'transparent',
-                      color: '#94a3b8',
-                      border: '1px solid #475569',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Payment Decline Error (dismissible) */}
-          {paymentDeclineError && (
-            <div
-              style={{
-                position: 'fixed',
-                top: '1rem',
-                right: '1rem',
-                background: '#ef4444',
-                color: 'white',
-                padding: '1rem',
-                borderRadius: '8px',
-                zIndex: 2000,
-                maxWidth: '400px',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'start',
-                  marginBottom: '0.5rem',
-                }}
-              >
-                <div style={{ fontWeight: 600 }}>Payment Declined</div>
-                <button
-                  onClick={() => setPaymentDeclineError(null)}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'white',
-                    fontSize: '1.25rem',
-                    cursor: 'pointer',
-                    padding: 0,
-                    marginLeft: '1rem',
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-              <div style={{ fontSize: '0.875rem' }}>{paymentDeclineError}</div>
-            </div>
-          )}
+          <PaymentDeclineToast message={paymentDeclineError} onDismiss={() => setPaymentDeclineError(null)} />
 
           {/* Agreement + Assignment Display */}
           {currentSessionId && customerName && (agreementSigned || assignedResourceType) && (
