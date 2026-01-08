@@ -8,3 +8,5 @@
 // import '@club-ops/ui/src/styles/components.css';
 
 export * from './websocket/useReconnectingWebSocket';
+export * from './utils/typeGuards';
+export * from './utils/http';
