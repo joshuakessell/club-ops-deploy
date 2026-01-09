@@ -83,17 +83,7 @@ export function OfficeShell({
             <span style={{ color: 'var(--text-muted)' }}>{location.pathname}</span>
             <button
               onClick={onLogout}
-              style={{
-                marginLeft: '1rem',
-                padding: '0.5rem 1rem',
-                background: '#d32f2f',
-                border: 'none',
-                borderRadius: '0.375rem',
-                color: 'white',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+              className="cs-liquid-button cs-liquid-button--danger"
             >
               Sign Out
             </button>

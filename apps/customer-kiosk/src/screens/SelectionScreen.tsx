@@ -69,7 +69,7 @@ export function SelectionScreen({
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                     <div
-                      className="btn-liquid-glass btn-liquid-glass--disabled"
+                      className="cs-liquid-button cs-liquid-button--disabled"
                       style={{
                         opacity: 1,
                         cursor: 'default',
@@ -117,7 +117,7 @@ export function SelectionScreen({
 
                     {isNonMember && (
                       <button
-                        className="btn-liquid-glass"
+                        className="cs-liquid-button"
                         onClick={() => onOpenMembershipModal('PURCHASE')}
                         disabled={isSubmitting}
                       >
@@ -127,7 +127,7 @@ export function SelectionScreen({
 
                     {isExpired && (
                       <button
-                        className="btn-liquid-glass"
+                        className="cs-liquid-button"
                         onClick={() => onOpenMembershipModal('RENEW')}
                         disabled={isSubmitting}
                       >
@@ -201,7 +201,7 @@ export function SelectionScreen({
                     return (
                       <button
                         key={rental}
-                        className={`btn-liquid-glass ${isSelected ? 'btn-liquid-glass--selected' : ''} ${isStaffProposed ? 'btn-liquid-glass--staff-proposed' : ''} ${isDisabled ? 'btn-liquid-glass--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
+                        className={`cs-liquid-button ${isSelected ? 'cs-liquid-button--selected' : ''} ${isStaffProposed ? 'cs-liquid-button--staff-proposed' : ''} ${isDisabled ? 'cs-liquid-button--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
                         data-forced={isForced}
                         onClick={() => {
                           if (!isDisabled) {
@@ -234,7 +234,7 @@ export function SelectionScreen({
                     );
                   })
                 ) : (
-                  <div className="btn-liquid-glass btn-liquid-glass--disabled">
+                  <div className="cs-liquid-button cs-liquid-button--disabled">
                     {t(session.customerPrimaryLanguage, 'noOptionsAvailable')}
                   </div>
                 )}
@@ -243,7 +243,7 @@ export function SelectionScreen({
 
             {/* Waitlist button (shown when higher tier available) */}
             {session.allowedRentals.includes('STANDARD') && (
-              <button className="btn-liquid-glass waitlist-btn" onClick={onJoinWaitlist}>
+              <button className="cs-liquid-button waitlist-btn" onClick={onJoinWaitlist}>
                 {t(session.customerPrimaryLanguage, 'waitlist.joinUpgrade')}
               </button>
             )}

@@ -1,6 +1,6 @@
 export function MessagesView() {
   return (
-    <section className="panel">
+    <section className="panel cs-liquid-card">
       <div className="panel-header">
         <h2>Messages (stub)</h2>
       </div>

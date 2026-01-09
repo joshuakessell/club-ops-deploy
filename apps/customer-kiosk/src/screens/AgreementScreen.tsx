@@ -114,14 +114,14 @@ export function AgreementScreen({
                   onTouchMove={onSignatureMove}
                   onTouchEnd={onSignatureEnd}
                 />
-                <button type="button" className="clear-signature-btn" onClick={onClearSignature}>
+                <button type="button" className="clear-signature-btn cs-liquid-button cs-liquid-button--secondary" onClick={onClearSignature}>
                   {t(customerPrimaryLanguage, 'clear')}
                 </button>
               </div>
 
               <div className="agreement-submit-container">
                 <button
-                  className="btn-liquid-glass submit-agreement-btn"
+                  className="cs-liquid-button submit-agreement-btn"
                   onClick={onSubmit}
                   disabled={!agreed || !signatureData || !hasScrolledAgreement || isSubmitting}
                 >

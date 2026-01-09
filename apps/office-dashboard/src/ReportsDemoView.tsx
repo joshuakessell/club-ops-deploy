@@ -72,7 +72,7 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
         </div>
       )}
 
-      <section className="panel" style={{ marginBottom: '1.5rem' }}>
+      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
         <div className="panel-header">
           <h2>Inventory Summary</h2>
         </div>
@@ -101,7 +101,7 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
         </div>
       </section>
 
-      <section className="panel" style={{ marginBottom: '1.5rem' }}>
+      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
         <div className="panel-header">
           <h2>Low Availability Alerts</h2>
         </div>
@@ -129,7 +129,7 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel cs-liquid-card">
         <div className="panel-header">
           <h2>Cash Totals (Demo)</h2>
         </div>
@@ -166,7 +166,7 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
                   marginTop: '1.5rem',
                 }}
               >
-                <div className="csRaisedCard" style={{ padding: '1rem' }}>
+                <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
                   <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>By Payment Method</div>
                   <table className="rooms-table">
                     <tbody>
@@ -180,7 +180,7 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
                   </table>
                 </div>
 
-                <div className="csRaisedCard" style={{ padding: '1rem' }}>
+                <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
                   <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>By Register</div>
                   <table className="rooms-table">
                     <tbody>

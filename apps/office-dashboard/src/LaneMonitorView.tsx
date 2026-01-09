@@ -104,7 +104,7 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-      <section className="panel" style={{ marginBottom: '1.5rem' }}>
+      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
         <div className="panel-header">
           <h2>Live Lane Monitor</h2>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -140,7 +140,7 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
       <div
         style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}
       >
-        <section className="panel">
+        <section className="panel cs-liquid-card">
           <div className="panel-header">
             <h2>Employee Register (Lane {lane})</h2>
           </div>
@@ -186,7 +186,7 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel cs-liquid-card">
           <div className="panel-header">
             <h2>Customer Kiosk (Lane {lane})</h2>
           </div>

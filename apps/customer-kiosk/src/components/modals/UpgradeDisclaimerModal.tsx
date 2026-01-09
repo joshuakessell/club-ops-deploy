@@ -19,7 +19,7 @@ export function UpgradeDisclaimerModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content cs-liquid-card" onClick={(e) => e.stopPropagation()}>
         <h2>{t(customerPrimaryLanguage, 'upgrade.title')}</h2>
         <div className="disclaimer-text">
           <p>
@@ -48,7 +48,7 @@ export function UpgradeDisclaimerModal({
           </ul>
         </div>
         <button
-          className="btn-liquid-glass modal-ok-btn"
+          className="cs-liquid-button modal-ok-btn"
           onClick={() => void onAcknowledge()}
           disabled={isSubmitting}
         >

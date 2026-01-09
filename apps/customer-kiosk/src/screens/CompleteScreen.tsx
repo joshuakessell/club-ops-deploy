@@ -52,7 +52,7 @@ export function CompleteScreen({
 
               <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center' }}>
                 <button
-                  className="btn-liquid-glass modal-ok-btn"
+                  className="cs-liquid-button modal-ok-btn"
                   onClick={onComplete}
                   disabled={isSubmitting}
                 >
