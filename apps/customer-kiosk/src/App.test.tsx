@@ -76,8 +76,10 @@ describe('App', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders logo-only idle screen', () => {
-    render(<App />);
+  it('renders logo-only idle screen', async () => {
+    await act(async () => {
+      render(<App />);
+    });
     const logo = screen.getByAltText('Club Dallas');
     expect(logo).toBeDefined();
     // Idle should be logo-only; implementation details (class names) may change with layout/watermark updates.
@@ -85,8 +87,10 @@ describe('App', () => {
     expect(screen.queryByText(/Select Language/i)).toBeNull();
   });
 
-  it('shows idle state when no session exists', () => {
-    render(<App />);
+  it('shows idle state when no session exists', async () => {
+    await act(async () => {
+      render(<App />);
+    });
     // Should show logo-only idle screen
     const logo = screen.getByAltText('Club Dallas');
     expect(logo).toBeDefined();
@@ -96,9 +100,11 @@ describe('App', () => {
   });
 
   it('never shows a payment decline reason (generic guidance only)', async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
-    act(() => {
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -168,10 +174,12 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    const { unmount } = render(<App />);
+    const { unmount } = await act(async () => {
+      return render(<App />);
+    });
 
     // Initial session with no language set should show language prompt.
-    act(() => {
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -219,8 +227,10 @@ describe('App', () => {
     // "Reload": unmount + remount. When the same customer/session arrives with language already set,
     // the language prompt must not reappear.
     unmount();
-    render(<App />);
-    act(() => {
+    await act(async () => {
+      render(<App />);
+    });
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -241,9 +251,11 @@ describe('App', () => {
   });
 
   it('shows Active Member status (no purchase/renew CTA) when membership is not expired', async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
-    act(() => {
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -267,9 +279,11 @@ describe('App', () => {
   });
 
   it('shows Non-Member status + Purchase CTA when membership id is missing', async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
-    act(() => {
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -292,9 +306,11 @@ describe('App', () => {
   });
 
   it('shows Non-Member + Expired indicator + Renew CTA when membership is expired', async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
-    act(() => {
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -318,9 +334,11 @@ describe('App', () => {
   });
 
   it('translates membership CTA in Spanish', async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
-    act(() => {
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -345,9 +363,11 @@ describe('App', () => {
   });
 
   it('renders Spanish membership modal copy (no English fallback) when language is ES', async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
-    act(() => {
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -380,9 +400,11 @@ describe('App', () => {
   });
 
   it('purchase CTA opens modal; cancel closes; continue sets Member (Pending)', async () => {
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
-    act(() => {
+    await act(async () => {
       lastWs?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',

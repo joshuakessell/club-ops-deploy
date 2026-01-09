@@ -50,8 +50,10 @@ describe('App', () => {
     });
   });
 
-  it('renders lock screen when not authenticated', () => {
-    render(<App />);
+  it('renders lock screen when not authenticated', async () => {
+    await act(async () => {
+      render(<App />);
+    });
     // When not authenticated, LockScreen is shown instead of the main app
     // The LockScreen component should be rendered
     expect(screen.queryByText('Employee Register')).toBeNull();
@@ -99,7 +101,9 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
     expect(await screen.findByText('Employee Register')).toBeDefined();
   });
 
@@ -144,7 +148,9 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
     expect(await screen.findByText('Lane Session')).toBeDefined();
   });
 
@@ -189,7 +195,9 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
     expect(await screen.findByText('Lane Session')).toBeDefined();
 
     // Wait until App has attached its onmessage handler, then simulate an agreement-signed update.
@@ -204,7 +212,7 @@ describe('App', () => {
       expect(wsWithHandler).not.toBeNull();
     });
 
-    act(() => {
+    await act(async () => {
       wsWithHandler?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -312,19 +320,29 @@ describe('App', () => {
       }
     );
 
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    fireEvent.change(searchInput, { target: { value: 'Ale' } });
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: 'Ale' } });
+    });
 
     // Allow debounced search to fire
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
 
     const suggestion = await screen.findByText(/Rivera, Alex/);
-    fireEvent.click(suggestion);
+    await act(async () => {
+      fireEvent.click(suggestion);
+    });
 
     const confirmButton = await screen.findByText(/Confirm/);
-    fireEvent.click(confirmButton);
+    await act(async () => {
+      fireEvent.click(confirmButton);
+    });
 
     await waitFor(() => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
@@ -439,25 +457,39 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    fireEvent.change(searchInput, { target: { value: 'Ale' } });
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: 'Ale' } });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
     const suggestion = await screen.findByText(/Rivera, Alex/);
-    fireEvent.click(suggestion);
+    await act(async () => {
+      fireEvent.click(suggestion);
+    });
     const confirmButton = await screen.findByText(/Confirm/);
-    fireEvent.click(confirmButton);
+    await act(async () => {
+      fireEvent.click(confirmButton);
+    });
     await waitFor(() => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
 
     const proposeButtons = screen.getAllByText(/Propose/);
-    fireEvent.click(proposeButtons[0]!); // first tap proposes
+    await act(async () => {
+      fireEvent.click(proposeButtons[0]!); // first tap proposes
+    });
     await waitFor(() => {
       expect(screen.queryAllByText(/Proposed:/).length).toBeGreaterThan(0);
     });
-    fireEvent.click(proposeButtons[0]!); // second tap forces (confirm)
+    await act(async () => {
+      fireEvent.click(proposeButtons[0]!); // second tap forces (confirm)
+    });
 
     await waitFor(() => {
       // Confirming selection triggers payment intent creation; the quote total is surfaced
@@ -587,15 +619,25 @@ describe('App', () => {
       }
     );
 
-    render(<App />);
+    await act(async () => {
+      render(<App />);
+    });
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    fireEvent.change(searchInput, { target: { value: 'Ale' } });
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await act(async () => {
+      fireEvent.change(searchInput, { target: { value: 'Ale' } });
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
     const suggestion = await screen.findByText(/Rivera, Alex/);
-    fireEvent.click(suggestion);
+    await act(async () => {
+      fireEvent.click(suggestion);
+    });
     const confirmButton = await screen.findByText(/Confirm/);
-    fireEvent.click(confirmButton);
+    await act(async () => {
+      fireEvent.click(confirmButton);
+    });
     await waitFor(() => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
@@ -604,7 +646,9 @@ describe('App', () => {
     const confirmSpy = vi.spyOn(window, 'confirm');
     // With an active session, waitlist widget entry actions are disabled (widget button itself is disabled).
     expect(waitlistButton).toHaveProperty('disabled', true);
-    fireEvent.click(waitlistButton);
+    await act(async () => {
+      fireEvent.click(waitlistButton);
+    });
     expect(screen.queryByText('Waitlist')).toBeNull();
     expect(confirmSpy).not.toHaveBeenCalled();
   });
