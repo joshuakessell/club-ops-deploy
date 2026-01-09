@@ -30,13 +30,11 @@ export function WaitlistPopover({
   return (
     <div style={{ position: 'relative', marginTop: '0.5rem' }}>
       <div
+        className="cs-liquid-card"
         style={{
           position: 'absolute',
           right: 0,
           zIndex: 1500,
-          background: '#0b1220',
-          border: '1px solid #1f2937',
-          borderRadius: '8px',
           width: '320px',
           boxShadow: '0 10px 30px rgba(0,0,0,0.4)',
         }}
@@ -53,12 +51,10 @@ export function WaitlistPopover({
           <div style={{ fontWeight: 700, color: '#f59e0b' }}>Waitlist</div>
           <button
             onClick={onClose}
+            className="cs-liquid-button cs-liquid-button--secondary"
             style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
               fontSize: '0.9rem',
+              padding: '0.25rem 0.6rem',
             }}
           >
             Close
@@ -93,14 +89,15 @@ export function WaitlistPopover({
               <button
                 aria-label={`Begin upgrade for ${item.title}`}
                 onClick={() => onAction(item.id, item.customerName)}
+                className={[
+                  'cs-liquid-button',
+                  item.eligible ? '' : 'cs-liquid-button--secondary',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 style={{
-                  background: item.eligible ? '#f59e0b' : '#475569',
-                  color: '#1f2937',
-                  border: 'none',
-                  borderRadius: '9999px',
                   padding: '0.4rem 0.55rem',
                   fontWeight: 700,
-                  cursor: item.eligible ? 'pointer' : 'not-allowed',
                 }}
                 disabled={!item.eligible}
               >

@@ -20,13 +20,10 @@ export function WaitlistNoticeModal({
       </p>
       <button
         onClick={onClose}
+        className="cs-liquid-button"
         style={{
           width: '100%',
           padding: '0.75rem',
-          background: '#3b82f6',
-          color: 'white',
-          border: 'none',
-          borderRadius: '6px',
           fontSize: '1rem',
           fontWeight: 600,
           cursor: 'pointer',

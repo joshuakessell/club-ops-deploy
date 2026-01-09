@@ -12,7 +12,7 @@ export function AvailabilityStatusBar(props: {
     return (
       <button
         type="button"
-        className="availability-pill"
+        className="availability-pill cs-liquid-button cs-liquid-button--secondary"
         onClick={() => onOpen(type)}
         disabled={!ready}
         aria-disabled={!ready}
@@ -23,7 +23,7 @@ export function AvailabilityStatusBar(props: {
   };
 
   return (
-    <div className="availability-bar" aria-label="Availability">
+    <div className="availability-bar cs-liquid-card" aria-label="Availability">
       {pill('LOCKER', 'Lockers', counts.lockers)}
       {pill('STANDARD', 'Standard', counts.STANDARD)}
       {pill('DOUBLE', 'Double', counts.DOUBLE)}

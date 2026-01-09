@@ -24,13 +24,10 @@ export function CustomerConfirmationPendingModal({
       {onCancel && (
         <button
           onClick={onCancel}
+          className="cs-liquid-button cs-liquid-button--danger"
           style={{
             width: '100%',
             padding: '0.75rem',
-            background: '#475569',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
             fontSize: '1rem',
             fontWeight: 600,
             cursor: 'pointer',

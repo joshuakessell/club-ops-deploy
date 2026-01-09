@@ -38,10 +38,8 @@ export function CheckoutVerificationModal({
       }}
     >
       <div
+        className="cs-liquid-card"
         style={{
-          background: '#1e293b',
-          border: '2px solid #3b82f6',
-          borderRadius: '12px',
           padding: '2rem',
           maxWidth: '600px',
           width: '100%',
@@ -80,10 +78,10 @@ export function CheckoutVerificationModal({
         </div>
 
         <div
+          className="cs-liquid-card"
           style={{
             marginBottom: '1.5rem',
             padding: '1rem',
-            background: '#0f172a',
             borderRadius: '8px',
           }}
         >
@@ -106,12 +104,14 @@ export function CheckoutVerificationModal({
           <button
             onClick={onConfirmItems}
             disabled={checkoutItemsConfirmed}
+            className={[
+              'cs-liquid-button',
+              checkoutItemsConfirmed ? 'cs-liquid-button--selected' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
             style={{
               padding: '0.75rem',
-              background: checkoutItemsConfirmed ? '#10b981' : '#3b82f6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
               cursor: checkoutItemsConfirmed ? 'default' : 'pointer',
               fontWeight: 600,
             }}
@@ -123,12 +123,14 @@ export function CheckoutVerificationModal({
             <button
               onClick={onMarkFeePaid}
               disabled={checkoutFeePaid}
+              className={[
+                'cs-liquid-button',
+                checkoutFeePaid ? 'cs-liquid-button--selected' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               style={{
                 padding: '0.75rem',
-                background: checkoutFeePaid ? '#10b981' : '#f59e0b',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
                 cursor: checkoutFeePaid ? 'default' : 'pointer',
                 fontWeight: 600,
               }}
@@ -144,16 +146,9 @@ export function CheckoutVerificationModal({
               (request.lateFeeAmount > 0 && !checkoutFeePaid) ||
               isSubmitting
             }
+            className="cs-liquid-button"
             style={{
               padding: '0.75rem',
-              background:
-                !checkoutItemsConfirmed ||
-                (request.lateFeeAmount > 0 && !checkoutFeePaid)
-                  ? '#475569'
-                  : '#10b981',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
               cursor:
                 !checkoutItemsConfirmed ||
                 (request.lateFeeAmount > 0 && !checkoutFeePaid)
@@ -168,13 +163,10 @@ export function CheckoutVerificationModal({
 
         <button
           onClick={onCancel}
+          className="cs-liquid-button cs-liquid-button--danger"
           style={{
             width: '100%',
             padding: '0.75rem',
-            background: 'transparent',
-            color: '#94a3b8',
-            border: '1px solid #475569',
-            borderRadius: '6px',
             cursor: 'pointer',
           }}
         >

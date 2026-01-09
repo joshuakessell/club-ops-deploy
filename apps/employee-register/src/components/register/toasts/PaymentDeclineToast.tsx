@@ -32,13 +32,11 @@ export function PaymentDeclineToast({ message, onDismiss }: PaymentDeclineToastP
         <div style={{ fontWeight: 600 }}>Payment Declined</div>
         <button
           onClick={onDismiss}
+          className="cs-liquid-button cs-liquid-button--secondary"
           style={{
-            background: 'transparent',
-            border: 'none',
-            color: 'white',
             fontSize: '1.25rem',
             cursor: 'pointer',
-            padding: 0,
+            padding: '0.2rem 0.55rem',
             marginLeft: '1rem',
           }}
           aria-label="Dismiss"

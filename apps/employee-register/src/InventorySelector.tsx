@@ -424,9 +424,8 @@ export function InventorySelector({
 
   return (
     <div
+      className="cs-liquid-card"
       style={{
-        background: '#1e293b',
-        borderRadius: '8px',
         padding: '1rem',
         maxHeight: 'calc(100vh - 200px)',
         overflowY: 'auto',
@@ -518,13 +517,10 @@ function InventorySection({
     <div style={{ marginBottom: '1rem' }}>
       <button
         onClick={onToggle}
+        className={`cs-liquid-button ${isExpanded ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary'}`}
         style={{
           width: '100%',
           padding: '0.75rem',
-          background: isExpanded ? '#334155' : '#0f172a',
-          border: '1px solid #475569',
-          borderRadius: '6px',
-          color: '#f8fafc',
           fontSize: '1rem',
           fontWeight: 600,
           cursor: 'pointer',
@@ -541,11 +537,10 @@ function InventorySection({
 
       {isExpanded && (
         <div
+          className="cs-liquid-card"
           style={{
             marginTop: '0.5rem',
             padding: '0.5rem',
-            background: '#0f172a',
-            borderRadius: '6px',
           }}
         >
           {/* Upgrade Requests (Waitlist) */}
@@ -814,13 +809,10 @@ function LockerSection({
     <div style={{ marginBottom: '1rem' }}>
       <button
         onClick={onToggle}
+        className={`cs-liquid-button ${isExpanded ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary'}`}
         style={{
           width: '100%',
           padding: '0.75rem',
-          background: isExpanded ? '#334155' : '#0f172a',
-          border: '1px solid #475569',
-          borderRadius: '6px',
-          color: '#f8fafc',
           fontSize: '1rem',
           fontWeight: 600,
           cursor: 'pointer',
@@ -837,11 +829,10 @@ function LockerSection({
 
       {isExpanded && (
         <div
+          className="cs-liquid-card"
           style={{
             marginTop: '0.5rem',
             padding: '0.5rem',
-            background: '#0f172a',
-            borderRadius: '6px',
           }}
         >
           {/* Available first */}

@@ -116,10 +116,14 @@ export function OfferUpgradeModal(props: {
 
   return (
     <div className="offer-upgrade-modal-overlay" role="dialog" aria-label="Offer upgrade modal">
-      <div className="offer-upgrade-modal">
+      <div className="offer-upgrade-modal cs-liquid-card">
         <div className="offer-upgrade-modal-header">
           <div className="offer-upgrade-modal-title">{title}</div>
-          <button className="offer-upgrade-modal-close" onClick={onClose} aria-label="Close offer modal">
+          <button
+            className="offer-upgrade-modal-close cs-liquid-button cs-liquid-button--secondary"
+            onClick={onClose}
+            aria-label="Close offer modal"
+          >
             ×
           </button>
         </div>
@@ -142,7 +146,7 @@ export function OfferUpgradeModal(props: {
               {rooms.map((r) => (
                 <button
                   key={r.id}
-                  className={`offer-upgrade-room-item ${selectedRoomId === r.id ? 'selected' : ''}`}
+                  className={`offer-upgrade-room-item cs-liquid-button cs-liquid-button--secondary ${selectedRoomId === r.id ? 'cs-liquid-button--selected selected' : ''}`}
                   onClick={() => setSelectedRoomId(r.id)}
                   disabled={Boolean(disabled) || isLoading}
                 >
@@ -154,11 +158,15 @@ export function OfferUpgradeModal(props: {
         </div>
 
         <div className="offer-upgrade-modal-actions">
-          <button className="offer-upgrade-cancel" onClick={onClose} disabled={isLoading}>
+          <button
+            className="offer-upgrade-cancel cs-liquid-button cs-liquid-button--danger"
+            onClick={onClose}
+            disabled={isLoading}
+          >
             Cancel
           </button>
           <button
-            className="offer-upgrade-confirm"
+            className="offer-upgrade-confirm cs-liquid-button"
             onClick={() => void handleConfirm()}
             disabled={Boolean(disabled) || isLoading || !selectedRoomId}
           >

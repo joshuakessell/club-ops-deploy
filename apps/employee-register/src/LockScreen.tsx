@@ -150,7 +150,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
 
   return (
     <div className="lock-screen">
-      <div className="lock-screen-content">
+      <div className="lock-screen-content cs-liquid-card">
         <div className="lock-screen-header">
           <h1>Staff Login</h1>
           <p>Sign in with fingerprint or PIN</p>
@@ -159,7 +159,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
         <div className="lock-screen-tabs">
           {webauthnSupported && (
             <button
-              className={`tab-button ${mode === 'webauthn' ? 'active' : ''}`}
+              className={`tab-button cs-liquid-button cs-liquid-button--secondary ${mode === 'webauthn' ? 'cs-liquid-button--selected' : ''}`}
               onClick={() => {
                 setMode('webauthn');
                 setError(null);
@@ -170,7 +170,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             </button>
           )}
           <button
-            className={`tab-button ${mode === 'pin' ? 'active' : ''}`}
+            className={`tab-button cs-liquid-button cs-liquid-button--secondary ${mode === 'pin' ? 'cs-liquid-button--selected' : ''}`}
             onClick={() => {
               setMode('pin');
               setError(null);
@@ -187,7 +187,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
           <div className="lock-screen-webauthn">
             <input
               type="text"
-              className="staff-lookup-input"
+              className="staff-lookup-input cs-liquid-input"
               placeholder="Enter your name or staff ID"
               value={staffLookup}
               onChange={(e) => setStaffLookup(e.target.value)}
@@ -196,7 +196,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             />
             <button
               type="button"
-              className="webauthn-button"
+              className="webauthn-button cs-liquid-button"
               onClick={() => void handleWebAuthnLogin()}
               disabled={isLoading || !staffLookup.trim()}
             >
@@ -204,7 +204,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             </button>
             <button
               type="button"
-              className="pin-fallback-button"
+              className="pin-fallback-button cs-liquid-button cs-liquid-button--secondary"
               onClick={() => {
                 setMode('pin');
                 setError(null);
@@ -218,7 +218,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
           <form className="lock-screen-pin" onSubmit={(e) => void handlePinSubmit(e)}>
             <input
               type="text"
-              className="staff-lookup-input"
+              className="staff-lookup-input cs-liquid-input"
               placeholder="Enter your name or staff ID"
               value={staffLookup}
               onChange={(e) => setStaffLookup(e.target.value)}
@@ -227,7 +227,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             />
             <input
               type="password"
-              className="pin-input"
+              className="pin-input cs-liquid-input"
               placeholder="Enter 6-digit PIN"
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -238,7 +238,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             />
             <button
               type="submit"
-              className="pin-submit-button"
+              className="pin-submit-button cs-liquid-button"
               disabled={isLoading || pin.trim().length !== 6 || !staffLookup.trim()}
             >
               {isLoading ? 'Logging in...' : 'Login'}
@@ -246,7 +246,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             {webauthnSupported && (
               <button
                 type="button"
-                className="webauthn-fallback-button"
+                className="webauthn-fallback-button cs-liquid-button cs-liquid-button--secondary"
                 onClick={() => {
                   setMode('webauthn');
                   setError(null);

@@ -50,13 +50,11 @@ export function UpgradePaymentModal({
         </div>
 
         <div
+          className="cs-liquid-card"
           style={{
             display: 'flex',
             flexDirection: 'column',
             gap: '0.5rem',
-            background: '#0b1220',
-            border: '1px solid #334155',
-            borderRadius: '8px',
             padding: '0.75rem',
           }}
         >
@@ -98,13 +96,11 @@ export function UpgradePaymentModal({
         </div>
 
         <div
+          className="cs-liquid-card"
           style={{
             display: 'flex',
             flexDirection: 'column',
             gap: '0.5rem',
-            background: '#0b1220',
-            border: '1px solid #334155',
-            borderRadius: '8px',
             padding: '0.75rem',
           }}
         >
@@ -123,13 +119,11 @@ export function UpgradePaymentModal({
         </div>
 
         <div
+          className="cs-liquid-card"
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            background: '#0b1220',
-            border: '1px solid #334155',
-            borderRadius: '8px',
             padding: '0.75rem',
           }}
         >
@@ -147,14 +141,10 @@ export function UpgradePaymentModal({
           <button
             onClick={onPayCreditSuccess}
             disabled={isSubmitting || !canComplete}
+            className="cs-liquid-button"
             style={{
               padding: '0.75rem 1rem',
-              background: '#22c55e',
-              color: '#0b1220',
-              border: 'none',
-              borderRadius: '8px',
               fontWeight: 700,
-              cursor: isSubmitting || !canComplete ? 'not-allowed' : 'pointer',
             }}
           >
             Credit Success
@@ -162,14 +152,10 @@ export function UpgradePaymentModal({
           <button
             onClick={onPayCashSuccess}
             disabled={isSubmitting || !canComplete}
+            className="cs-liquid-button"
             style={{
               padding: '0.75rem 1rem',
-              background: '#38bdf8',
-              color: '#0b1220',
-              border: 'none',
-              borderRadius: '8px',
               fontWeight: 700,
-              cursor: isSubmitting || !canComplete ? 'not-allowed' : 'pointer',
             }}
           >
             Cash Success
@@ -177,14 +163,10 @@ export function UpgradePaymentModal({
           <button
             onClick={onDecline}
             disabled={isSubmitting}
+            className="cs-liquid-button cs-liquid-button--danger"
             style={{
               padding: '0.75rem 1rem',
-              background: '#f87171',
-              color: '#0b1220',
-              border: 'none',
-              borderRadius: '8px',
               fontWeight: 700,
-              cursor: isSubmitting ? 'not-allowed' : 'pointer',
             }}
           >
             Credit Decline
@@ -204,14 +186,13 @@ export function UpgradePaymentModal({
           <button
             onClick={onComplete}
             disabled={paymentStatus !== 'PAID' || isSubmitting || !canComplete}
+            className={[
+              'cs-liquid-button',
+              paymentStatus === 'PAID' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+            ].join(' ')}
             style={{
               padding: '0.75rem 1.25rem',
-              background: paymentStatus === 'PAID' && canComplete ? '#10b981' : '#475569',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
               fontWeight: 700,
-              cursor: paymentStatus === 'PAID' && canComplete && !isSubmitting ? 'pointer' : 'not-allowed',
             }}
           >
             Complete Upgrade

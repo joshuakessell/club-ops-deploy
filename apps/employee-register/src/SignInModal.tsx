@@ -261,8 +261,12 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
 
   return (
     <div className="sign-in-modal-overlay" onClick={onClose}>
-      <div className="sign-in-modal" onClick={(e) => e.stopPropagation()}>
-        <button className="sign-in-modal-close" onClick={onClose}>
+      <div className="sign-in-modal cs-liquid-card" onClick={(e) => e.stopPropagation()}>
+        <button
+          className="sign-in-modal-close cs-liquid-button cs-liquid-button--secondary"
+          onClick={onClose}
+          aria-label="Close"
+        >
           ×
         </button>
 
@@ -277,7 +281,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                 employees.map((emp) => (
                   <button
                     key={emp.id}
-                    className="employee-item"
+                    className="employee-item cs-liquid-button cs-liquid-button--secondary"
                     onClick={() => handleSelectEmployee(emp)}
                     disabled={isLoading}
                   >
@@ -298,7 +302,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
             <form onSubmit={(e) => void handlePinSubmit(e)}>
               <input
                 type="password"
-                className={`pin-input ${pinError ? 'shake' : ''}`}
+                className={`pin-input cs-liquid-input ${pinError ? 'shake' : ''}`}
                 value={pin}
                 onChange={(e) => {
                   setPin(e.target.value.replace(/\D/g, '').slice(0, 6));
@@ -312,10 +316,19 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                 disabled={isLoading}
               />
               <div className="sign-in-actions">
-                <button type="button" onClick={handleBack} disabled={isLoading}>
+                <button
+                  type="button"
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  onClick={handleBack}
+                  disabled={isLoading}
+                >
                   Back
                 </button>
-                <button type="submit" disabled={isLoading || pin.length !== 6}>
+                <button
+                  type="submit"
+                  className="cs-liquid-button"
+                  disabled={isLoading || pin.length !== 6}
+                >
                   {isLoading ? 'Verifying...' : 'Verify PIN'}
                 </button>
               </div>
@@ -341,7 +354,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                   return (
                     <button
                       key={num}
-                      className="register-button"
+                      className="register-button cs-liquid-button"
                       onClick={() => void handleSelectRegister(num)}
                       disabled={isLoading || occupied}
                       title={occupied ? `Register ${num} is occupied` : `Use Register ${num}`}
@@ -354,11 +367,16 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
               </div>
             )}
             <div className="sign-in-actions">
-              <button onClick={handleBack} disabled={isLoading}>
+              <button
+                className="cs-liquid-button cs-liquid-button--secondary"
+                onClick={handleBack}
+                disabled={isLoading}
+              >
                 Back
               </button>
               <button
                 type="button"
+                className="cs-liquid-button cs-liquid-button--secondary"
                 onClick={() => void fetchRegisterAvailability()}
                 disabled={isLoading}
               >
@@ -374,10 +392,14 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
             <p className="sign-in-subtitle">Employee: {selectedEmployee?.name}</p>
             {error && <div className="sign-in-error">{error}</div>}
             <div className="sign-in-actions">
-              <button onClick={handleBack} disabled={isLoading}>
+              <button
+                className="cs-liquid-button cs-liquid-button--secondary"
+                onClick={handleBack}
+                disabled={isLoading}
+              >
                 Back
               </button>
-              <button onClick={() => void handleConfirm()} disabled={isLoading}>
+              <button className="cs-liquid-button" onClick={() => void handleConfirm()} disabled={isLoading}>
                 {isLoading ? 'Confirming...' : 'Confirm'}
               </button>
             </div>

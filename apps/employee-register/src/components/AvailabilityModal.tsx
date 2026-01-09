@@ -188,7 +188,7 @@ export function AvailabilityModal({ isOpen, type, sessionToken, onClose }: Avail
     return () => window.removeEventListener('keydown', handleKeydown);
   }, [isOpen, onClose]);
 
-  const items = useMemo(() => {
+  const items = useMemo<AvailabilityInventoryItem[]>(() => {
     if (!inventory) return [];
     if (type === 'LOCKER') {
       return inventory.lockers.map((locker) => ({
@@ -227,12 +227,12 @@ export function AvailabilityModal({ isOpen, type, sessionToken, onClose }: Avail
       aria-modal="true"
       aria-label={`Availability modal: ${type}`}
     >
-      <div className="availability-modal">
+      <div className="availability-modal cs-liquid-card">
         <div className="availability-modal-header">
           <div className="availability-modal-title">Availability — {type}</div>
           <button
             type="button"
-            className="availability-modal-close"
+            className="availability-modal-close cs-liquid-button cs-liquid-button--secondary"
             onClick={onClose}
             aria-label="Close availability modal"
           >
@@ -243,13 +243,17 @@ export function AvailabilityModal({ isOpen, type, sessionToken, onClose }: Avail
         <div className="availability-modal-actions">
           <button
             type="button"
-            className="availability-modal-refresh"
+            className="availability-modal-refresh cs-liquid-button cs-liquid-button--secondary"
             onClick={() => void fetchInventory()}
             disabled={loading}
           >
             Refresh
           </button>
-          <button type="button" className="availability-modal-close-btn" onClick={onClose}>
+          <button
+            type="button"
+            className="availability-modal-close-btn cs-liquid-button cs-liquid-button--secondary"
+            onClick={onClose}
+          >
             Close
           </button>
         </div>

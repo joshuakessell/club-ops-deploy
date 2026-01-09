@@ -36,10 +36,9 @@ export function ModalFrame({
       onClick={closeOnOverlayClick ? onClose : undefined}
     >
       <div
+        className="cs-liquid-card"
         style={{
-          background: '#1e293b',
           padding: '2rem',
-          borderRadius: '12px',
           maxWidth,
           width: '90%',
         }}
@@ -56,16 +55,12 @@ export function ModalFrame({
           <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>{title}</h2>
           <button
             onClick={onClose}
+            className="cs-liquid-button cs-liquid-button--secondary"
             style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
               fontSize: '1.5rem',
               cursor: 'pointer',
-              padding: 0,
+              padding: '0.25rem 0.5rem',
               lineHeight: 1,
-              width: '24px',
-              height: '24px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

@@ -68,16 +68,8 @@ export function RegisterHeader({
         </div>
         <button
           onClick={() => void onSignOut()}
-          style={{
-            padding: '0.375rem 0.75rem',
-            background: 'rgba(239, 68, 68, 0.2)',
-            border: '1px solid var(--error)',
-            borderRadius: '9999px',
-            color: 'var(--error)',
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
+          className="cs-liquid-button cs-liquid-button--danger"
+          style={{ padding: '0.375rem 0.75rem' }}
         >
           Sign Out
         </button>
@@ -85,7 +77,14 @@ export function RegisterHeader({
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <button
-          className={showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : undefined}
+          className={[
+            'cs-liquid-button',
+            'cs-liquid-button--secondary',
+            waitlistWidgetOpen ? 'cs-liquid-button--selected' : '',
+            showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
           onClick={() => {
             if (!waitlistWidgetOpen) dismissUpgradePulse();
             onToggleWaitlistWidget();
@@ -97,12 +96,7 @@ export function RegisterHeader({
             alignItems: 'center',
             gap: '0.4rem',
             padding: '0.45rem 0.75rem',
-            background: waitlistInteractive ? '#fef3c7' : '#1f2937',
-            border: `1px solid ${waitlistInteractive ? '#f59e0b' : '#334155'}`,
-            borderRadius: '9999px',
-            color: waitlistInteractive ? '#92400e' : '#94a3b8',
             fontWeight: 700,
-            cursor: waitlistInteractive ? 'pointer' : 'not-allowed',
             minWidth: '110px',
             justifyContent: 'center',
           }}

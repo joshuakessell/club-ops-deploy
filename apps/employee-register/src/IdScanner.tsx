@@ -247,16 +247,7 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
       }}
     >
       {showConfirm && scannedData ? (
-        <div
-          style={{
-            background: '#1e293b',
-            padding: '2rem',
-            borderRadius: '12px',
-            maxWidth: '500px',
-            width: '90%',
-            color: 'white',
-          }}
-        >
+        <div className="cs-liquid-card" style={{ padding: '2rem', maxWidth: '500px', width: '90%' }}>
           <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem' }}>Confirm ID Details</h2>
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ marginBottom: '0.5rem' }}>
@@ -284,13 +275,10 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
               onClick={handleConfirm}
+              className="cs-liquid-button"
               style={{
                 flex: 1,
                 padding: '0.75rem',
-                background: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
                 fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -300,13 +288,10 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
             </button>
             <button
               onClick={handleEdit}
+              className="cs-liquid-button cs-liquid-button--secondary"
               style={{
                 flex: 1,
                 padding: '0.75rem',
-                background: '#475569',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
                 fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -407,12 +392,9 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
               onClick={onClose}
+              className="cs-liquid-button cs-liquid-button--danger"
               style={{
                 padding: '0.75rem 1.5rem',
-                background: '#475569',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
                 fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -422,12 +404,9 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
             </button>
             <button
               onClick={onManualEntry}
+              className="cs-liquid-button cs-liquid-button--secondary"
               style={{
                 padding: '0.75rem 1.5rem',
-                background: '#64748b',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
                 fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',

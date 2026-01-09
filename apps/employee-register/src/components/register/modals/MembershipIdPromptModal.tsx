@@ -40,13 +40,16 @@ export function MembershipIdPromptModal({
             <button
               onClick={() => onModeChange('KEEP_EXISTING')}
               disabled={isSubmitting}
+              className={[
+                'cs-liquid-button',
+                'cs-liquid-button--secondary',
+                membershipIdMode === 'KEEP_EXISTING' ? 'cs-liquid-button--selected' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               style={{
                 flex: 1,
                 padding: '0.6rem',
-                background: membershipIdMode === 'KEEP_EXISTING' ? '#3b82f6' : 'transparent',
-                color: membershipIdMode === 'KEEP_EXISTING' ? 'white' : '#cbd5e1',
-                border: '1px solid #475569',
-                borderRadius: '6px',
                 fontWeight: 700,
                 cursor: isSubmitting ? 'not-allowed' : 'pointer',
               }}
@@ -56,13 +59,16 @@ export function MembershipIdPromptModal({
             <button
               onClick={() => onModeChange('ENTER_NEW')}
               disabled={isSubmitting}
+              className={[
+                'cs-liquid-button',
+                'cs-liquid-button--secondary',
+                membershipIdMode === 'ENTER_NEW' ? 'cs-liquid-button--selected' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
               style={{
                 flex: 1,
                 padding: '0.6rem',
-                background: membershipIdMode === 'ENTER_NEW' ? '#3b82f6' : 'transparent',
-                color: membershipIdMode === 'ENTER_NEW' ? 'white' : '#cbd5e1',
-                border: '1px solid #475569',
-                borderRadius: '6px',
                 fontWeight: 700,
                 cursor: isSubmitting ? 'not-allowed' : 'pointer',
               }}
@@ -73,11 +79,9 @@ export function MembershipIdPromptModal({
 
           {membershipIdMode === 'KEEP_EXISTING' && (
             <div
+              className="cs-liquid-card"
               style={{
                 padding: '0.75rem',
-                background: '#0f172a',
-                border: '1px solid #475569',
-                borderRadius: '6px',
                 color: 'white',
                 fontSize: '1.25rem',
                 letterSpacing: '0.04em',
@@ -110,13 +114,10 @@ export function MembershipIdPromptModal({
           }}
           placeholder="Membership ID"
           disabled={isSubmitting}
+          className="cs-liquid-input"
           style={{
             width: '100%',
             padding: '0.75rem',
-            background: '#0f172a',
-            border: '1px solid #475569',
-            borderRadius: '6px',
-            color: 'white',
             fontSize: '1.25rem',
             letterSpacing: '0.04em',
             marginBottom: '0.75rem',
@@ -141,27 +142,12 @@ export function MembershipIdPromptModal({
               ? !membershipNumber
               : !membershipIdInput.trim())
           }
+          className="cs-liquid-button"
           style={{
             flex: 1,
             padding: '0.75rem',
-            background:
-              (membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
-                ? membershipNumber
-                : membershipIdInput.trim())
-                ? '#3b82f6'
-                : '#475569',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
             fontSize: '1rem',
             fontWeight: 700,
-            cursor:
-              isSubmitting ||
-              (membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
-                ? !membershipNumber
-                : !membershipIdInput.trim())
-                ? 'not-allowed'
-                : 'pointer',
           }}
         >
           {isSubmitting ? 'Saving…' : 'Save Membership'}
@@ -169,12 +155,9 @@ export function MembershipIdPromptModal({
         <button
           onClick={onNotNow}
           disabled={isSubmitting}
+          className="cs-liquid-button cs-liquid-button--secondary"
           style={{
             padding: '0.75rem 1rem',
-            background: 'transparent',
-            color: '#94a3b8',
-            border: '1px solid #475569',
-            borderRadius: '6px',
             fontSize: '1rem',
             fontWeight: 600,
             cursor: isSubmitting ? 'not-allowed' : 'pointer',

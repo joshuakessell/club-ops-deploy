@@ -178,61 +178,11 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   // If not signed in, show initial state
   if (!registerSession) {
     return (
-      <div
-        className="register-sign-in-container"
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#0f172a',
-          color: '#e2e8f0',
-          position: 'relative',
-        }}
-      >
-        <div
-          className="register-sign-in-logo"
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            fontSize: '3rem',
-            fontWeight: 700,
-            textAlign: 'center',
-            zIndex: 1,
-            color: '#e2e8f0',
-          }}
-        >
-          Club Dallas
-        </div>
+      <div className="register-sign-in-container">
+        <div className="register-sign-in-logo">Club Dallas</div>
         <button
-          className="register-sign-in-button"
+          className="register-sign-in-button cs-liquid-button"
           onClick={() => setShowSignInModal(true)}
-          style={{
-            position: 'absolute',
-            top: '60%',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '1rem 2rem',
-            background: '#111827',
-            color: '#e2e8f0',
-            border: '1px solid #1e293b',
-            borderRadius: '0.5rem',
-            fontSize: '1.125rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            zIndex: 3,
-            transition: 'all 0.2s',
-            boxShadow: '0 1px 5px rgba(0, 0, 0, 0.32), 0 2px 2px rgba(0, 0, 0, 0.22)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(148, 163, 184, 0.12)';
-            e.currentTarget.style.borderColor = '#3c50e0';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = '#111827';
-            e.currentTarget.style.borderColor = '#1e293b';
-          }}
         >
           Sign In
         </button>

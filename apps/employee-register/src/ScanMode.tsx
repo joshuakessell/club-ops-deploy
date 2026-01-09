@@ -139,11 +139,15 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
   return (
     <div className="scan-mode-overlay" role="dialog" aria-modal="true" aria-label="Scan Mode">
       <div className="scan-mode-topbar">
-        <button className="scan-mode-cancel" onClick={handleCancel}>
+        <button className="scan-mode-cancel cs-liquid-button cs-liquid-button--danger" onClick={handleCancel}>
           Cancel
         </button>
         <div className="scan-mode-title">Scan Mode</div>
-        <button className="scan-mode-exit" onClick={handleCancel} aria-label="Exit scan mode">
+        <button
+          className="scan-mode-exit cs-liquid-button cs-liquid-button--secondary"
+          onClick={handleCancel}
+          aria-label="Exit scan mode"
+        >
           Exit
         </button>
       </div>
@@ -171,7 +175,7 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
           <div className="scan-mode-actions">
             {status === 'error' && (
               <button
-                className="scan-mode-primary"
+                className="scan-mode-primary cs-liquid-button"
                 onClick={() => {
                   reset();
                   resetUi();
@@ -184,12 +188,12 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
 
             {status === 'no_match' && (
               <>
-                <button className="scan-mode-primary" onClick={handleCancel}>
+                <button className="scan-mode-primary cs-liquid-button cs-liquid-button--danger" onClick={handleCancel}>
                   Cancel
                 </button>
                 {canCreate && onCreateFromNoMatch && (
                   <button
-                    className="scan-mode-primary"
+                    className="scan-mode-primary cs-liquid-button"
                     style={{ marginLeft: '0.75rem' }}
                     onClick={() =>
                       void (async () => {
@@ -230,7 +234,7 @@ export function ScanMode({ isOpen, onCancel, onBarcodeCaptured, onCreateFromNoMa
 
       {showOverlayProcessing && (
         <div className="scan-mode-processing-overlay" aria-hidden="true">
-          <div className="scan-mode-processing-card">Processing…</div>
+          <div className="scan-mode-processing-card cs-liquid-card">Processing…</div>
         </div>
       )}
 

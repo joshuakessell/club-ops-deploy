@@ -2455,12 +2455,9 @@ export function AppRoot() {
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
                   <button
                     onClick={() => setShowAddNoteModal(true)}
+                    className="cs-liquid-button cs-liquid-button--secondary"
                     style={{
                       padding: '0.5rem 1rem',
-                      background: '#3b82f6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
                       fontSize: '0.875rem',
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -2475,7 +2472,13 @@ export function AppRoot() {
             {/* Waitlist/Upgrades Panel Toggle */}
             <section style={{ marginBottom: '1rem' }}>
               <button
-                className={showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : undefined}
+                className={[
+                  'cs-liquid-button',
+                  showUpgradesPanel ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                  showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 onClick={() => {
                   const nextOpen = !showUpgradesPanel;
                   if (nextOpen) dismissUpgradePulse();
@@ -2484,10 +2487,6 @@ export function AppRoot() {
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  background: showUpgradesPanel ? '#3b82f6' : '#475569',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
                   fontSize: '1rem',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -2505,12 +2504,10 @@ export function AppRoot() {
             {/* Waitlist/Upgrades Panel */}
             {showUpgradesPanel && (
               <section
+                className="cs-liquid-card"
                 style={{
                   marginBottom: '1rem',
                   padding: '1rem',
-                  background: '#1e293b',
-                  border: '1px solid #475569',
-                  borderRadius: '8px',
                 }}
               >
                 <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
@@ -2610,12 +2607,9 @@ export function AppRoot() {
                                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                                           <button
                                             onClick={() => openUpgradePaymentQuote(entry)}
+                                            className="cs-liquid-button cs-liquid-button--secondary"
                                             style={{
                                               padding: '0.5rem 0.75rem',
-                                              background: '#3b82f6',
-                                              color: 'white',
-                                              border: 'none',
-                                              borderRadius: '6px',
                                               fontSize: '0.85rem',
                                               fontWeight: 600,
                                               cursor: 'pointer',
@@ -2630,6 +2624,7 @@ export function AppRoot() {
                                                 void handleUpgradePaymentFlow('CREDIT');
                                               }
                                             }}
+                                            className="cs-liquid-button"
                                             disabled={
                                               !isEntryOfferEligible(entry) ||
                                               upgradePaymentStatus !== 'PAID' ||
@@ -2638,19 +2633,8 @@ export function AppRoot() {
                                             }
                                             style={{
                                               padding: '0.5rem 0.75rem',
-                                              background:
-                                                upgradePaymentStatus === 'PAID' && isEntryOfferEligible(entry)
-                                                  ? '#10b981'
-                                                  : '#475569',
-                                              color: 'white',
-                                              border: 'none',
-                                              borderRadius: '6px',
                                               fontSize: '0.85rem',
                                               fontWeight: 600,
-                                              cursor:
-                                                upgradePaymentStatus === 'PAID' && isEntryOfferEligible(entry)
-                                                  ? 'pointer'
-                                                  : 'not-allowed',
                                             }}
                                           >
                                             Complete Upgrade
@@ -2665,17 +2649,12 @@ export function AppRoot() {
                                           setSelectedWaitlistEntry(entry.id);
                                           void handleStartUpgradePayment(entry);
                                         }}
+                                        className="cs-liquid-button"
                                         disabled={!isEntryOfferEligible(entry) || isSubmitting}
                                         style={{
                                           padding: '0.5rem 1rem',
-                                          background: isEntryOfferEligible(entry) ? '#3b82f6' : '#475569',
-                                          color: 'white',
-                                          border: 'none',
-                                          borderRadius: '6px',
                                           fontSize: '0.875rem',
                                           fontWeight: 600,
-                                          cursor:
-                                            isEntryOfferEligible(entry) && !isSubmitting ? 'pointer' : 'not-allowed',
                                         }}
                                       >
                                         Upgrade Room
@@ -2690,16 +2669,12 @@ export function AppRoot() {
                                     dismissUpgradePulse();
                                     openOfferUpgradeModal(entry);
                                   }}
+                                  className="cs-liquid-button cs-liquid-button--secondary"
                                   disabled={!isEntryOfferEligible(entry)}
                                   style={{
                                     padding: '0.5rem 1rem',
-                                    background: isEntryOfferEligible(entry) ? '#3b82f6' : '#475569',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '6px',
                                     fontSize: '0.875rem',
                                     fontWeight: 600,
-                                    cursor: isEntryOfferEligible(entry) ? 'pointer' : 'not-allowed',
                                   }}
                                 >
                                   Offer Upgrade
@@ -2757,13 +2732,10 @@ export function AppRoot() {
                 {!selectionConfirmed && proposedBy === 'EMPLOYEE' && (
                   <button
                     onClick={() => void handleConfirmSelection()}
+                    className="cs-liquid-button"
                     disabled={isSubmitting}
                     style={{
                       padding: '0.5rem 1rem',
-                      background: 'white',
-                      color: '#3b82f6',
-                      border: 'none',
-                      borderRadius: '6px',
                       fontWeight: 600,
                       cursor: isSubmitting ? 'not-allowed' : 'pointer',
                     }}
@@ -2774,13 +2746,10 @@ export function AppRoot() {
                 {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
                   <button
                     onClick={() => void handleConfirmSelection()}
+                    className="cs-liquid-button"
                     disabled={isSubmitting}
                     style={{
                       padding: '0.5rem 1rem',
-                      background: 'white',
-                      color: '#3b82f6',
-                      border: 'none',
-                      borderRadius: '6px',
                       fontWeight: 600,
                       cursor: isSubmitting ? 'not-allowed' : 'pointer',
                     }}
@@ -2806,12 +2775,15 @@ export function AppRoot() {
                     key={rental}
                     onClick={() => void handleProposeSelection(rental)}
                     disabled={isSubmitting}
+                    className={[
+                      'cs-liquid-button',
+                      'cs-liquid-button--secondary',
+                      proposedRentalType === rental ? 'cs-liquid-button--selected' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                     style={{
                       padding: '0.5rem 1rem',
-                      background: proposedRentalType === rental ? '#3b82f6' : '#475569',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
                       fontWeight: 600,
                       cursor: isSubmitting ? 'not-allowed' : 'pointer',
                     }}
@@ -2839,10 +2811,10 @@ export function AppRoot() {
             {/* Assignment Bar */}
             {selectedInventoryItem && (
               <div
+                className="cs-liquid-card"
                 style={{
                   position: 'sticky',
                   bottom: 0,
-                  background: '#1e293b',
                   borderTop: '2px solid #3b82f6',
                   padding: '1rem',
                   zIndex: 100,
@@ -2872,6 +2844,7 @@ export function AppRoot() {
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       onClick={() => void handleAssign()}
+                      className="cs-liquid-button"
                       disabled={
                         isSubmitting ||
                         showCustomerConfirmationPending ||
@@ -2880,16 +2853,6 @@ export function AppRoot() {
                       }
                       style={{
                         padding: '0.75rem 1.5rem',
-                        background:
-                          isSubmitting ||
-                          showCustomerConfirmationPending ||
-                          !agreementSigned ||
-                          paymentStatus !== 'PAID'
-                            ? '#475569'
-                            : '#3b82f6',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
                         fontSize: '1rem',
                         fontWeight: 600,
                         cursor:
@@ -2931,13 +2894,10 @@ export function AppRoot() {
                             void handleManualSignatureOverride();
                           }
                         }}
+                        className="cs-liquid-button cs-liquid-button--danger"
                         disabled={isSubmitting}
                         style={{
                           padding: '0.75rem 1.5rem',
-                          background: '#ef4444',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '6px',
                           fontSize: '1rem',
                           fontWeight: 600,
                           cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -2948,13 +2908,10 @@ export function AppRoot() {
                     ) : (
                       <button
                         onClick={handleClearSelection}
+                        className="cs-liquid-button cs-liquid-button--secondary"
                         disabled={isSubmitting}
                         style={{
                           padding: '0.75rem 1.5rem',
-                          background: 'transparent',
-                          color: '#94a3b8',
-                          border: '1px solid #475569',
-                          borderRadius: '6px',
                           fontSize: '1rem',
                           fontWeight: 600,
                           cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -2969,11 +2926,9 @@ export function AppRoot() {
                 {/* Payment Quote and Mark Paid */}
                 {paymentQuote && (
                   <div
+                    className="cs-liquid-card"
                     style={{
                       padding: '1rem',
-                      background: '#0f172a',
-                      borderRadius: '6px',
-                      border: '1px solid #475569',
                     }}
                   >
                     <div style={{ marginBottom: '0.75rem', fontWeight: 600, fontSize: '1rem' }}>
@@ -3021,16 +2976,17 @@ export function AppRoot() {
                     <button
                       onClick={() => void handleMarkPaid()}
                       disabled={isSubmitting || paymentStatus === 'PAID'}
+                      className={[
+                        'cs-liquid-button',
+                        paymentStatus === 'PAID' ? 'cs-liquid-button--selected' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
                       style={{
                         width: '100%',
                         padding: '0.75rem',
-                        background: paymentStatus === 'PAID' ? '#10b981' : '#f59e0b',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
                         fontSize: '1rem',
                         fontWeight: 600,
-                        cursor: paymentStatus === 'PAID' ? 'default' : 'pointer',
                       }}
                     >
                       {paymentStatus === 'PAID' ? '✓ Paid in Square' : 'Mark Paid in Square'}
@@ -3044,7 +3000,7 @@ export function AppRoot() {
               <h2>Lane Session</h2>
               <div className="action-buttons">
                 <button
-                  className={`action-btn ${scanModeOpen ? 'active' : ''}`}
+                  className={`action-btn cs-liquid-button ${scanModeOpen ? 'cs-liquid-button--selected active' : ''}`}
                   onClick={() => {
                     setManualEntry(false);
                     setScanModeOpen(true);
@@ -3054,7 +3010,7 @@ export function AppRoot() {
                   Scan
                 </button>
                 <button
-                  className={`action-btn ${manualEntry ? 'active' : ''}`}
+                  className={`action-btn cs-liquid-button cs-liquid-button--secondary ${manualEntry ? 'cs-liquid-button--selected active' : ''}`}
                   onClick={() => {
                     setManualEntry(!manualEntry);
                   }}
@@ -3063,7 +3019,7 @@ export function AppRoot() {
                   Manual Entry
                 </button>
                 <button
-                  className="action-btn"
+                  className="action-btn cs-liquid-button cs-liquid-button--danger"
                   onClick={() => void handleClearSession()}
                   disabled={isSubmitting}
                 >
@@ -3073,12 +3029,16 @@ export function AppRoot() {
               </div>
 
               {manualEntry && (
-                <form className="manual-entry-form" onSubmit={(e) => void handleManualSubmit(e)}>
+                <form
+                  className="manual-entry-form cs-liquid-card"
+                  onSubmit={(e) => void handleManualSubmit(e)}
+                >
                   <div className="form-group">
                     <label htmlFor="customerName">Customer Name *</label>
                     <input
                       id="customerName"
                       type="text"
+                      className="cs-liquid-input"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       placeholder="Enter customer name"
@@ -3091,6 +3051,7 @@ export function AppRoot() {
                     <input
                       id="membershipNumber"
                       type="text"
+                      className="cs-liquid-input"
                       value={membershipNumber}
                       onChange={(e) => setMembershipNumber(e.target.value)}
                       placeholder="Enter membership number"
@@ -3100,14 +3061,14 @@ export function AppRoot() {
                   <div className="form-actions">
                     <button
                       type="submit"
-                      className="submit-btn"
+                      className="submit-btn cs-liquid-button"
                       disabled={isSubmitting || !customerName.trim()}
                     >
                       {isSubmitting ? 'Submitting...' : 'Update Session'}
                     </button>
                     <button
                       type="button"
-                      className="cancel-btn"
+                      className="cancel-btn cs-liquid-button cs-liquid-button--danger"
                       onClick={() => {
                         setManualEntry(false);
                         setCustomerName('');
@@ -3142,13 +3103,10 @@ export function AppRoot() {
 
               {/* Customer lookup (typeahead) */}
               <div
-                className="typeahead-section"
+                className="typeahead-section cs-liquid-card"
                 style={{
                   marginTop: '1rem',
-                  background: '#0f172a',
                   padding: '1rem',
-                  borderRadius: '8px',
-                  border: '1px solid #1e293b',
                 }}
               >
                 <div
@@ -3169,17 +3127,11 @@ export function AppRoot() {
                 <input
                   id="customer-search"
                   type="text"
+                  className="cs-liquid-input"
                   value={customerSearch}
                   onChange={(e) => setCustomerSearch(e.target.value)}
                   placeholder="Start typing name..."
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    borderRadius: '6px',
-                    border: '1px solid #1f2937',
-                    background: '#0b1220',
-                    color: '#e2e8f0',
-                  }}
+                  style={{ width: '100%' }}
                   disabled={isSubmitting}
                 />
                 {customerSearchLoading && (
@@ -3189,11 +3141,9 @@ export function AppRoot() {
                 )}
                 {customerSuggestions.length > 0 && (
                   <div
+                    className="cs-liquid-card"
                     style={{
                       marginTop: '0.5rem',
-                      background: '#0b1220',
-                      border: '1px solid #1f2937',
-                      borderRadius: '6px',
                       maxHeight: '180px',
                       overflowY: 'auto',
                     }}
@@ -3236,16 +3186,12 @@ export function AppRoot() {
                 <button
                   onClick={() => void handleConfirmCustomerSelection()}
                   disabled={!selectedCustomerId || isSubmitting}
+                  className="cs-liquid-button"
                   style={{
                     marginTop: '0.75rem',
                     width: '100%',
                     padding: '0.65rem',
-                    background: selectedCustomerId ? '#3b82f6' : '#1f2937',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
                     fontWeight: 600,
-                    cursor: !selectedCustomerId || isSubmitting ? 'not-allowed' : 'pointer',
                     opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
                   }}
                 >
@@ -3462,13 +3408,10 @@ export function AppRoot() {
                 <button
                   onClick={() => void handleCompleteTransaction()}
                   disabled={isSubmitting}
+                  className="cs-liquid-button"
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    background: '#10b981',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
                     fontSize: '1rem',
                     fontWeight: 600,
                     cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -3488,12 +3431,12 @@ export function AppRoot() {
             paymentStatus === 'DUE' &&
             !pastDueBlocked && (
               <div
+                className="cs-liquid-card"
                 style={{
                   position: 'fixed',
                   bottom: assignedResourceType ? '200px' : '0',
                   left: 0,
                   right: 0,
-                  background: '#1e293b',
                   borderTop: '2px solid #3b82f6',
                   padding: '1.5rem',
                   zIndex: 100,
@@ -3506,13 +3449,10 @@ export function AppRoot() {
                   <button
                     onClick={() => void handleDemoPayment('CREDIT_SUCCESS')}
                     disabled={isSubmitting}
+                    className="cs-liquid-button"
                     style={{
                       flex: 1,
                       padding: '0.75rem',
-                      background: '#3b82f6',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
                       fontSize: '1rem',
                       fontWeight: 600,
                       cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -3523,13 +3463,10 @@ export function AppRoot() {
                   <button
                     onClick={() => void handleDemoPayment('CASH_SUCCESS')}
                     disabled={isSubmitting}
+                    className="cs-liquid-button"
                     style={{
                       flex: 1,
                       padding: '0.75rem',
-                      background: '#10b981',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
                       fontSize: '1rem',
                       fontWeight: 600,
                       cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -3540,13 +3477,10 @@ export function AppRoot() {
                   <button
                     onClick={() => void handleDemoPayment('CREDIT_DECLINE', 'Card declined')}
                     disabled={isSubmitting}
+                    className="cs-liquid-button cs-liquid-button--danger"
                     style={{
                       flex: 1,
                       padding: '0.75rem',
-                      background: '#ef4444',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
                       fontSize: '1rem',
                       fontWeight: 600,
                       cursor: isSubmitting ? 'not-allowed' : 'pointer',

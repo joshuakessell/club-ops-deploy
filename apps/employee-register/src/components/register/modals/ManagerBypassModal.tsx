@@ -32,13 +32,10 @@ export function ManagerBypassModal({
         <select
           value={managerId}
           onChange={(e) => onChangeManagerId(e.target.value)}
+          className="cs-liquid-input"
           style={{
             width: '100%',
             padding: '0.75rem',
-            background: '#0f172a',
-            border: '1px solid #475569',
-            borderRadius: '6px',
-            color: 'white',
             fontSize: '1rem',
           }}
         >
@@ -62,13 +59,10 @@ export function ManagerBypassModal({
           maxLength={6}
           inputMode="numeric"
           pattern="[0-9]*"
+          className="cs-liquid-input"
           style={{
             width: '100%',
             padding: '0.75rem',
-            background: '#0f172a',
-            border: '1px solid #475569',
-            borderRadius: '6px',
-            color: 'white',
             fontSize: '1rem',
           }}
         />
@@ -77,30 +71,22 @@ export function ManagerBypassModal({
         <button
           onClick={onBypass}
           disabled={isSubmitting || !managerId || managerPin.trim().length !== 6}
+          className="cs-liquid-button"
           style={{
             flex: 1,
             padding: '0.75rem',
-            background: managerId && managerPin.trim().length === 6 ? '#3b82f6' : '#475569',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
             fontSize: '1rem',
             fontWeight: 600,
-            cursor:
-              managerId && managerPin.trim().length === 6 && !isSubmitting ? 'pointer' : 'not-allowed',
           }}
         >
           {isSubmitting ? 'Processing...' : 'Bypass'}
         </button>
         <button
           onClick={onCancel}
+          className="cs-liquid-button cs-liquid-button--danger"
           style={{
             flex: 1,
             padding: '0.75rem',
-            background: 'transparent',
-            color: '#94a3b8',
-            border: '1px solid #475569',
-            borderRadius: '6px',
             cursor: 'pointer',
           }}
         >

@@ -37,12 +37,9 @@ export function PastDuePaymentModal({
         <button
           onClick={() => onPayInSquare('CREDIT_SUCCESS')}
           disabled={isSubmitting}
+          className="cs-liquid-button"
           style={{
             padding: '0.75rem',
-            background: '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
             fontSize: '1rem',
             fontWeight: 600,
             cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -53,12 +50,9 @@ export function PastDuePaymentModal({
         <button
           onClick={() => onPayInSquare('CASH_SUCCESS')}
           disabled={isSubmitting}
+          className="cs-liquid-button"
           style={{
             padding: '0.75rem',
-            background: '#10b981',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
             fontSize: '1rem',
             fontWeight: 600,
             cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -69,12 +63,9 @@ export function PastDuePaymentModal({
         <button
           onClick={() => onPayInSquare('CREDIT_DECLINE', 'Card declined')}
           disabled={isSubmitting}
+          className="cs-liquid-button cs-liquid-button--danger"
           style={{
             padding: '0.75rem',
-            background: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
             fontSize: '1rem',
             fontWeight: 600,
             cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -85,12 +76,9 @@ export function PastDuePaymentModal({
         <button
           onClick={onManagerBypass}
           disabled={isSubmitting}
+          className="cs-liquid-button cs-liquid-button--secondary"
           style={{
             padding: '0.75rem',
-            background: 'transparent',
-            color: '#94a3b8',
-            border: '1px solid #475569',
-            borderRadius: '6px',
             fontSize: '1rem',
             fontWeight: 600,
             cursor: isSubmitting ? 'not-allowed' : 'pointer',
@@ -101,13 +89,10 @@ export function PastDuePaymentModal({
       </div>
       <button
         onClick={onClose}
+        className="cs-liquid-button cs-liquid-button--danger"
         style={{
           width: '100%',
           padding: '0.75rem',
-          background: 'transparent',
-          color: '#94a3b8',
-          border: '1px solid #475569',
-          borderRadius: '6px',
           cursor: 'pointer',
         }}
       >

@@ -68,7 +68,7 @@ body {
 .cs-kiosk-bg--steamroom1,
 .cs-kiosk-bg--steamroom2,
 .cs-kiosk-bg--none {
-  background-image: url('./assets/backgrounds/diamond_plate_background.png');
+  background-image: url('./assets/background.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
