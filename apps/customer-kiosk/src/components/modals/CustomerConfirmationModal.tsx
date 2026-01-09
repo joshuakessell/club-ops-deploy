@@ -23,7 +23,7 @@ export function CustomerConfirmationModal({
 
   return (
     <div className="modal-overlay" onClick={() => {}}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content cs-liquid-card" onClick={(e) => e.stopPropagation()}>
         <h2>{t(customerPrimaryLanguage, 'confirmDifferent.title')}</h2>
         <div className="disclaimer-text">
           <p>
@@ -42,15 +42,14 @@ export function CustomerConfirmationModal({
         </div>
         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
           <button
-            className="btn-liquid-glass modal-ok-btn"
+            className="cs-liquid-button modal-ok-btn"
             onClick={() => void onAccept()}
             disabled={isSubmitting}
           >
             {t(customerPrimaryLanguage, 'common.accept')}
           </button>
           <button
-            className="btn-liquid-glass modal-ok-btn"
-            style={{ backgroundColor: '#ef4444' }}
+            className="cs-liquid-button cs-liquid-button--danger modal-ok-btn"
             onClick={() => void onDecline()}
             disabled={isSubmitting}
           >

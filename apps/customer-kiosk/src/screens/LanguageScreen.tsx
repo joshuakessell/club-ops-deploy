@@ -28,14 +28,14 @@ export function LanguageScreen({
               <h1 className="language-title">{t(null, 'selectLanguage')}</h1>
               <div className="language-options">
                 <button
-                  className="language-option"
+                  className="language-option cs-liquid-button cs-liquid-button--pill"
                   onClick={() => void onSelectLanguage('EN')}
                   disabled={isSubmitting}
                 >
                   {t(null, 'english')}
                 </button>
                 <button
-                  className="language-option"
+                  className="language-option cs-liquid-button cs-liquid-button--pill"
                   onClick={() => void onSelectLanguage('ES')}
                   disabled={isSubmitting}
                 >

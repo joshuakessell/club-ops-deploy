@@ -21,7 +21,7 @@ export function MembershipModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content cs-liquid-card" onClick={(e) => e.stopPropagation()}>
         <h2>{t(customerPrimaryLanguage, 'membership.modal.title')}</h2>
         <div className="disclaimer-text">
           <p>
@@ -32,15 +32,14 @@ export function MembershipModal({
         </div>
         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
           <button
-            className="btn-liquid-glass modal-ok-btn"
+            className="cs-liquid-button modal-ok-btn"
             onClick={() => void onContinue()}
             disabled={isSubmitting}
           >
             {t(customerPrimaryLanguage, 'common.continue')}
           </button>
           <button
-            className="btn-liquid-glass modal-ok-btn"
-            style={{ backgroundColor: '#64748b' }}
+            className="cs-liquid-button cs-liquid-button--secondary modal-ok-btn"
             onClick={onClose}
             disabled={isSubmitting}
           >

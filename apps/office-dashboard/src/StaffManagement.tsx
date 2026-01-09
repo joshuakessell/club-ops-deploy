@@ -277,30 +277,13 @@ export function StaffManagement({ session }: StaffManagementProps) {
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button
             onClick={() => (window.location.href = '/admin')}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#374151',
-              border: 'none',
-              borderRadius: '6px',
-              color: '#f9fafb',
-              cursor: 'pointer',
-              fontSize: '1rem',
-            }}
+            className="cs-liquid-button cs-liquid-button--secondary"
           >
             ← Back to Admin
           </button>
           <button
             onClick={() => setShowCreateModal(true)}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#8b5cf6',
-              border: 'none',
-              borderRadius: '6px',
-              color: '#f9fafb',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              fontWeight: 600,
-            }}
+            className="cs-liquid-button"
           >
             + Create Staff
           </button>
@@ -312,22 +295,21 @@ export function StaffManagement({ session }: StaffManagementProps) {
         className="staff-filters"
         style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}
       >
-        <input
-          type="text"
-          placeholder="Search by name or ID..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            flex: 1,
-            minWidth: '200px',
-            padding: '0.75rem',
-            background: '#1f2937',
-            border: '1px solid #374151',
-            borderRadius: '6px',
-            color: '#f9fafb',
-            fontSize: '1rem',
-          }}
-        />
+        <div className="cs-liquid-search" style={{ flex: 1, minWidth: '200px' }}>
+          <input
+            className="cs-liquid-input cs-liquid-search__input"
+            type="text"
+            placeholder="Search by name or ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="cs-liquid-search__icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M14 14L11.1 11.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        </div>
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
@@ -431,29 +413,13 @@ export function StaffManagement({ session }: StaffManagementProps) {
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       <button
                         onClick={() => openStaffDetail(member)}
-                        style={{
-                          padding: '0.5rem 1rem',
-                          background: '#374151',
-                          border: 'none',
-                          borderRadius: '4px',
-                          color: '#f9fafb',
-                          cursor: 'pointer',
-                          fontSize: '0.875rem',
-                        }}
+                        className="cs-liquid-button cs-liquid-button--secondary"
                       >
                         View
                       </button>
                       <button
                         onClick={() => handleToggleActive(member.id, member.active)}
-                        style={{
-                          padding: '0.5rem 1rem',
-                          background: member.active ? '#ef4444' : '#10b981',
-                          border: 'none',
-                          borderRadius: '4px',
-                          color: '#f9fafb',
-                          cursor: 'pointer',
-                          fontSize: '0.875rem',
-                        }}
+                        className={member.active ? 'cs-liquid-button cs-liquid-button--danger' : 'cs-liquid-button'}
                       >
                         {member.active ? 'Deactivate' : 'Activate'}
                       </button>
@@ -668,30 +634,13 @@ function CreateStaffModal({
             <button
               type="button"
               onClick={onClose}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: '#374151',
-                border: 'none',
-                borderRadius: '6px',
-                color: '#f9fafb',
-                cursor: 'pointer',
-                fontSize: '1rem',
-              }}
+              className="cs-liquid-button cs-liquid-button--secondary"
             >
               Cancel
             </button>
             <button
               type="submit"
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: '#8b5cf6',
-                border: 'none',
-                borderRadius: '6px',
-                color: '#f9fafb',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                fontWeight: 600,
-              }}
+              className="cs-liquid-button"
             >
               Create
             </button>
@@ -915,21 +864,13 @@ function StaffDetailModal({
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
-              <button
-                onClick={onPinReset}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: '#374151',
-                  border: 'none',
-                  borderRadius: '6px',
-                  color: '#f9fafb',
-                  cursor: 'pointer',
-                  fontSize: '1rem',
-                  marginRight: '1rem',
-                }}
-              >
-                Reset PIN
-              </button>
+            <button
+              onClick={onPinReset}
+              className="cs-liquid-button cs-liquid-button--secondary"
+              style={{ marginRight: '1rem' }}
+            >
+              Reset PIN
+            </button>
             </div>
           </>
         )}
@@ -987,15 +928,7 @@ function StaffDetailModal({
                         {pk.isActive && (
                           <button
                             onClick={() => onRevokePasskey(pk.credentialId)}
-                            style={{
-                              padding: '0.5rem 1rem',
-                              background: '#ef4444',
-                              border: 'none',
-                              borderRadius: '4px',
-                              color: '#f9fafb',
-                              cursor: 'pointer',
-                              fontSize: '0.875rem',
-                            }}
+                            className="cs-liquid-button cs-liquid-button--danger"
                           >
                             Revoke
                           </button>
@@ -1022,16 +955,7 @@ function StaffDetailModal({
               <h3 style={{ fontSize: '1.25rem' }}>Documents</h3>
               <button
                 onClick={() => setShowUploadModal(true)}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: '#10b981',
-                  border: 'none',
-                  borderRadius: '6px',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                }}
+                className="cs-liquid-button"
               >
                 Upload Document
               </button>
@@ -1234,31 +1158,14 @@ function UploadDocumentModal({
           <button
             onClick={onClose}
             disabled={uploading}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#374151',
-              border: 'none',
-              borderRadius: '6px',
-              color: '#f9fafb',
-              cursor: uploading ? 'not-allowed' : 'pointer',
-              fontSize: '1rem',
-            }}
+            className="cs-liquid-button cs-liquid-button--secondary"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={uploading || !file}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: uploading || !file ? '#6b7280' : '#10b981',
-              border: 'none',
-              borderRadius: '6px',
-              color: '#fff',
-              cursor: uploading || !file ? 'not-allowed' : 'pointer',
-              fontSize: '1rem',
-              fontWeight: 600,
-            }}
+            className="cs-liquid-button"
           >
             {uploading ? 'Uploading...' : 'Upload'}
           </button>
@@ -1343,30 +1250,13 @@ function PinResetModal({
             <button
               type="button"
               onClick={onClose}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: '#374151',
-                border: 'none',
-                borderRadius: '6px',
-                color: '#f9fafb',
-                cursor: 'pointer',
-                fontSize: '1rem',
-              }}
+              className="cs-liquid-button cs-liquid-button--secondary"
             >
               Cancel
             </button>
             <button
               type="submit"
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: '#8b5cf6',
-                border: 'none',
-                borderRadius: '6px',
-                color: '#f9fafb',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                fontWeight: 600,
-              }}
+              className="cs-liquid-button"
             >
               Reset PIN
             </button>

@@ -35,7 +35,7 @@ export function WaitlistModal({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content cs-liquid-card" onClick={(e) => e.stopPropagation()}>
         <h2>{t(customerPrimaryLanguage, 'waitlist.modalTitle')}</h2>
         <div className="disclaimer-text">
           <p>
@@ -101,7 +101,7 @@ export function WaitlistModal({
                 return (
                   <button
                     key={rental}
-                    className="btn-liquid-glass modal-ok-btn"
+                    className="cs-liquid-button modal-ok-btn"
                     onClick={() => onBackupSelection(rental)}
                     disabled={!isAvailable || isSubmitting}
                     style={{
@@ -118,10 +118,10 @@ export function WaitlistModal({
           </div>
         </div>
         <button
-          className="btn-liquid-glass modal-ok-btn"
+          className="cs-liquid-button cs-liquid-button--secondary modal-ok-btn"
           onClick={onClose}
           disabled={isSubmitting}
-          style={{ marginTop: '1rem', backgroundColor: '#64748b' }}
+          style={{ marginTop: '1rem' }}
         >
           {t(customerPrimaryLanguage, 'common.cancel')}
         </button>

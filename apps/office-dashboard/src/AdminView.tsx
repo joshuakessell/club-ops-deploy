@@ -213,7 +213,7 @@ export function AdminView({ session }: AdminViewProps) {
         <div className="admin-unauthorized">
           <h1>Not authorized</h1>
           <p>You must be an administrator to access this page.</p>
-          <button onClick={() => navigate('/')} className="btn-primary">
+          <button onClick={() => navigate('/')} className="cs-liquid-button">
             Return to Dashboard
           </button>
         </div>

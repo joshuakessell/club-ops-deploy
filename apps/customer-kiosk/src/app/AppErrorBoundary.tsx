@@ -30,7 +30,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
           <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
             <h2 style={{ marginTop: 0 }}>Something went wrong</h2>
             <p>Please reload the page. If the issue persists, contact support.</p>
-            <button onClick={() => window.location.reload()}>Reload</button>
+            <button className="cs-liquid-button" onClick={() => window.location.reload()}>Reload</button>
           </div>
         )
       );

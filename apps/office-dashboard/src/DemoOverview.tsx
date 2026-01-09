@@ -84,7 +84,7 @@ export function DemoOverview({ session }: { session: StaffSession }) {
         </div>
       </section>
 
-      <section className="panel" style={{ marginBottom: '1.5rem' }}>
+      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
         <div className="panel-header">
           <h2>Administrative Demo Overview</h2>
         </div>
@@ -96,42 +96,42 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               gap: '1rem',
             }}
           >
-            <div className="csRaisedCard" style={{ padding: '1rem' }}>
+            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Live Lane Monitor</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Pick lane 1 or 2; see employee + customer mirrored state with live WS updates.
               </div>
-              <button className="btn-primary" onClick={() => navigate('/monitor')}>
+              <button className="cs-liquid-button" onClick={() => navigate('/monitor')}>
                 Open Monitor
               </button>
             </div>
 
-            <div className="csRaisedCard" style={{ padding: '1rem' }}>
+            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Waitlist Management</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Active / Offered lists, offer upgrades, complete or cancel, live refresh.
               </div>
-              <button className="btn-primary" onClick={() => navigate('/waitlist')}>
+              <button className="cs-liquid-button" onClick={() => navigate('/waitlist')}>
                 Manage Waitlist
               </button>
             </div>
 
-            <div className="csRaisedCard" style={{ padding: '1rem' }}>
+            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Customer Admin Tools</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Search customers; admin can clear notes and waive past-due balance.
               </div>
-              <button className="btn-primary" onClick={() => navigate('/customers')}>
+              <button className="cs-liquid-button" onClick={() => navigate('/customers')}>
                 Open Customer Tools
               </button>
             </div>
 
-            <div className="csRaisedCard" style={{ padding: '1rem' }}>
+            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Reports (Demo)</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Inventory summary + low-availability tiers; cash totals by method/register.
               </div>
-              <button className="btn-primary" onClick={() => navigate('/reports')}>
+              <button className="cs-liquid-button" onClick={() => navigate('/reports')}>
                 Open Reports
               </button>
             </div>
@@ -139,7 +139,7 @@ export function DemoOverview({ session }: { session: StaffSession }) {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel cs-liquid-card">
         <div className="panel-header">
           <h2>Low Availability (tiers &lt; 5 available)</h2>
         </div>
@@ -174,7 +174,7 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                     </td>
                     <td>
                       {row.available < 5 ? (
-                        <button className="btn-secondary" onClick={() => navigate('/monitor')}>
+                        <button className="cs-liquid-button cs-liquid-button--secondary" onClick={() => navigate('/monitor')}>
                           Monitor lanes
                         </button>
                       ) : (

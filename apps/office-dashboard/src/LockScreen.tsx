@@ -22,9 +22,6 @@ import {
   Schedule,
   Assessment,
 } from '@mui/icons-material';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
-
 const API_BASE = '/api';
 
 export interface StaffSession {
@@ -39,66 +36,6 @@ interface LockScreenProps {
   deviceType: 'tablet' | 'kiosk' | 'desktop';
   deviceId: string;
 }
-
-// Modern enterprise theme
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2',
-      light: '#42a5f5',
-      dark: '#1565c0',
-    },
-    secondary: {
-      main: '#9c27b0',
-    },
-    background: {
-      default: '#f5f7fa',
-      paper: '#ffffff',
-    },
-  },
-  typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-    h4: {
-      fontWeight: 600,
-      letterSpacing: '-0.02em',
-    },
-    h5: {
-      fontWeight: 600,
-      letterSpacing: '-0.01em',
-    },
-    button: {
-      textTransform: 'none',
-      fontWeight: 600,
-    },
-  },
-  shape: {
-    borderRadius: 12,
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          padding: '10px 24px',
-          fontSize: '0.9375rem',
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-          transition: 'all 0.2s ease-in-out',
-          '&:hover': {
-            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-            transform: 'translateY(-2px)',
-          },
-        },
-      },
-    },
-  },
-});
 
 // Employee definitions
 interface Employee {
@@ -219,9 +156,7 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
   };
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <Box
+    <Box
         sx={{
           minHeight: '100vh',
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -422,6 +357,5 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
           </Fade>
         </Container>
       </Box>
-    </ThemeProvider>
   );
 }
