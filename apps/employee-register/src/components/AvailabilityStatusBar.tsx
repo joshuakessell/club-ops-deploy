@@ -24,6 +24,7 @@ export function AvailabilityStatusBar(props: {
 
   return (
     <div className="availability-bar cs-liquid-card" aria-label="Availability">
+      <span className="availability-label">Availability:</span>
       {pill('LOCKER', 'Lockers', counts.lockers)}
       {pill('STANDARD', 'Standard', counts.STANDARD)}
       {pill('DOUBLE', 'Double', counts.DOUBLE)}
