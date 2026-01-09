@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 
@@ -135,14 +135,16 @@ describe('App', () => {
     });
   });
 
-  it('renders lock screen when not authenticated', () => {
-    render(
-      <MemoryRouter>
-        <App />
-      </MemoryRouter>
-    );
+  it('renders lock screen when not authenticated', async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <App />
+        </MemoryRouter>
+      );
+    });
     // When not authenticated, LockScreen is shown
-    expect(screen.getByText('Club Operations')).toBeDefined();
+    expect(await screen.findByText('Club Operations')).toBeDefined();
   });
 
   it('shows employee selection on the lock screen', async () => {
@@ -155,7 +157,7 @@ describe('App', () => {
     expect(await screen.findByText('Manager Club')).toBeDefined();
   });
 
-  it('renders dashboard when authenticated', () => {
+  it('renders dashboard when authenticated', async () => {
     // Mock a session in localStorage
     const mockSession = {
       staffId: '1',
@@ -165,11 +167,13 @@ describe('App', () => {
     };
     window.localStorage.setItem('staff_session', JSON.stringify(mockSession));
 
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <App />
-      </MemoryRouter>
-    );
-    expect(screen.getByText('Administrative Demo Overview')).toBeDefined();
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <App />
+        </MemoryRouter>
+      );
+    });
+    expect(await screen.findByText('Administrative Demo Overview')).toBeDefined();
   });
 });
