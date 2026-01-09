@@ -4,6 +4,20 @@ import { ScreenShell } from '../components/ScreenShell';
 import { getRentalDisplayName } from '../utils/display';
 import { getMembershipStatus, type SessionState } from '../utils/membership';
 
+const DISPLAY_PRICE_BY_RENTAL: Record<string, number> = {
+  LOCKER: 24,
+  GYM_LOCKER: 0,
+  STANDARD: 30,
+  DOUBLE: 40,
+  SPECIAL: 50,
+};
+
+const SIX_MONTH_MEMBERSHIP_PRICE = 43;
+
+function formatWholeDollars(amount: number): string {
+  return `$${Math.round(amount)}`;
+}
+
 export interface SelectionScreenProps {
   session: SessionState;
   inventory: {
@@ -20,7 +34,6 @@ export interface SelectionScreenProps {
   welcomeOverlay: ReactNode;
   onSelectRental: (rental: string) => void;
   onOpenMembershipModal: (intent: 'PURCHASE' | 'RENEW') => void;
-  onJoinWaitlist: () => void;
 }
 
 export function SelectionScreen({
@@ -36,7 +49,6 @@ export function SelectionScreen({
   welcomeOverlay,
   onSelectRental,
   onOpenMembershipModal,
-  onJoinWaitlist,
 }: SelectionScreenProps) {
   return (
     <I18nProvider lang={session.customerPrimaryLanguage}>
@@ -121,7 +133,8 @@ export function SelectionScreen({
                         onClick={() => onOpenMembershipModal('PURCHASE')}
                         disabled={isSubmitting}
                       >
-                        {t(lang, 'membership.purchase6Month')}
+                        {t(lang, 'membership.purchase6Month')} —{' '}
+                        {formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE)}
                       </button>
                     )}
 
@@ -131,7 +144,8 @@ export function SelectionScreen({
                         onClick={() => onOpenMembershipModal('RENEW')}
                         disabled={isSubmitting}
                       >
-                        {t(lang, 'membership.renewMembership')}
+                        {t(lang, 'membership.renewMembership')} —{' '}
+                        {formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE)}
                       </button>
                     )}
                   </div>
@@ -197,6 +211,11 @@ export function SelectionScreen({
                     const lang = session.customerPrimaryLanguage;
 
                     const displayName = getRentalDisplayName(rental, lang);
+                    const displayPrice = DISPLAY_PRICE_BY_RENTAL[rental];
+                    const displayNameWithPrice =
+                      typeof displayPrice === 'number'
+                        ? `${displayName} — ${formatWholeDollars(displayPrice)}`
+                        : displayName;
 
                     return (
                       <button
@@ -218,7 +237,7 @@ export function SelectionScreen({
                             alignItems: 'center',
                           }}
                         >
-                          <span>{displayName}</span>
+                          <span>{displayNameWithPrice}</span>
                           {showWarning && !isUnavailable && (
                             <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
                               {t(lang, 'availability.onlyAvailable', { count: availableCount })}
@@ -241,12 +260,6 @@ export function SelectionScreen({
               </div>
             </div>
 
-            {/* Waitlist button (shown when higher tier available) */}
-            {session.allowedRentals.includes('STANDARD') && (
-              <button className="cs-liquid-button waitlist-btn" onClick={onJoinWaitlist}>
-                {t(session.customerPrimaryLanguage, 'waitlist.joinUpgrade')}
-              </button>
-            )}
           </main>
         </div>
       </ScreenShell>

@@ -28,7 +28,6 @@ import { OfferUpgradeModal } from '../components/OfferUpgradeModal';
 import { CheckoutRequestsBanner } from '../components/register/CheckoutRequestsBanner';
 import { CheckoutVerificationModal } from '../components/register/CheckoutVerificationModal';
 import { RegisterHeader } from '../components/register/RegisterHeader';
-import { WaitlistPopover } from '../components/register/WaitlistPopover';
 import { WaitlistNoticeModal } from '../components/register/modals/WaitlistNoticeModal';
 import { CustomerConfirmationPendingModal } from '../components/register/modals/CustomerConfirmationPendingModal';
 import { PastDuePaymentModal } from '../components/register/modals/PastDuePaymentModal';
@@ -238,7 +237,6 @@ export function AppRoot() {
     offeredRoomNumber?: string | null;
     newRoomNumber?: string | null;
   } | null>(null);
-  const [waitlistWidgetOpen, setWaitlistWidgetOpen] = useState(false);
   const [showUpgradePulse, setShowUpgradePulse] = useState(false);
   const [offerUpgradeModal, setOfferUpgradeModal] = useState<{
     waitlistId: string;
@@ -383,6 +381,12 @@ export function AppRoot() {
       // Ensure RegisterSignIn re-runs status checks and clears any lingering client state immediately.
       window.location.reload();
     }
+  };
+
+  const handleCloseOut = async () => {
+    const confirmed = window.confirm('Close Out: this will sign you out of the register. Continue?');
+    if (!confirmed) return;
+    await handleLogout();
   };
   const runCustomerSearch = useCallback(
     debounce(async (query: string) => {
@@ -1060,14 +1064,33 @@ export function AppRoot() {
         allEntries.push(...(offeredData.entries || []));
       }
 
+      // De-dupe by id defensively (a record should not appear in both ACTIVE and OFFERED, but
+      // during transitions or partial server failures it could). Prefer OFFERED over ACTIVE.
+      const statusPriority = (status: string): number =>
+        status === 'OFFERED' ? 2 : status === 'ACTIVE' ? 1 : 0;
+
+      const byId = new Map<string, (typeof waitlistEntries)[number]>();
+      for (const entry of allEntries) {
+        const existing = byId.get(entry.id);
+        if (!existing) {
+          byId.set(entry.id, entry);
+          continue;
+        }
+        if (statusPriority(entry.status) >= statusPriority(existing.status)) {
+          byId.set(entry.id, entry);
+        }
+      }
+
+      const deduped = Array.from(byId.values());
+
       // Oldest first (createdAt ascending)
-      allEntries.sort((a, b) => {
+      deduped.sort((a, b) => {
         const at = new Date(a.createdAt).getTime();
         const bt = new Date(b.createdAt).getTime();
         return at - bt;
       });
 
-      setWaitlistEntries(allEntries);
+      setWaitlistEntries(deduped);
     } catch (error) {
       console.error('Failed to fetch waitlist:', error);
     }
@@ -1124,10 +1147,6 @@ export function AppRoot() {
     return () => window.clearInterval(interval);
   }, [session?.sessionToken]);
 
-  const topWaitlistEntry = waitlistEntries.find(
-    (e) => e.status === 'ACTIVE' || e.status === 'OFFERED'
-  );
-  const waitlistDisplayNumber = topWaitlistEntry?.displayIdentifier || '...';
   const sessionActive = !!currentSessionId;
 
   const offeredCountByTier = waitlistEntries.reduce<Record<string, number>>((acc, e) => {
@@ -1210,7 +1229,6 @@ export function AppRoot() {
     if (!confirm) return;
     setSelectedWaitlistEntry(entryId);
     setShowUpgradesPanel(true);
-    setWaitlistWidgetOpen(false);
   };
 
   const handleStartUpgradePayment = async (entry: (typeof waitlistEntries)[number]) => {
@@ -2300,37 +2318,7 @@ export function AppRoot() {
             staffName={session.name}
             staffRole={session.role}
             onSignOut={() => void handleLogout()}
-            waitlistInteractive={waitlistInteractive}
-            waitlistWidgetOpen={waitlistWidgetOpen}
-            waitlistDisplayNumber={waitlistDisplayNumber}
-            showUpgradePulse={showUpgradePulse}
-            hasEligibleEntries={hasEligibleEntries}
-            dismissUpgradePulse={dismissUpgradePulse}
-            onToggleWaitlistWidget={() => {
-              const nextOpen = !waitlistWidgetOpen;
-              if (nextOpen) dismissUpgradePulse();
-              setWaitlistWidgetOpen(nextOpen);
-            }}
-          />
-
-          <WaitlistPopover
-            open={waitlistWidgetOpen}
-            disabledReason={sessionActive ? 'Active session present — actions disabled' : null}
-            items={waitlistEntries.slice(0, 6).map((entry) => ({
-              id: entry.id,
-              title: entry.customerName || entry.displayIdentifier,
-              subtitle: `${entry.displayIdentifier} → ${entry.desiredTier}`,
-              eligible: isEntryOfferEligible(entry),
-              customerName: entry.customerName,
-            }))}
-            hasMore={waitlistEntries.length > 6}
-            onClose={() => setWaitlistWidgetOpen(false)}
-            onAction={(id, name) => handleWaitlistEntryAction(id, name ?? undefined)}
-            onMore={() => {
-              dismissUpgradePulse();
-              setShowUpgradesPanel(true);
-              setWaitlistWidgetOpen(false);
-            }}
+            onCloseOut={() => void handleCloseOut()}
           />
 
           <AvailabilityStatusBar
@@ -2504,7 +2492,7 @@ export function AppRoot() {
             {/* Waitlist/Upgrades Panel */}
             {showUpgradesPanel && (
               <section
-                className="cs-liquid-card"
+                className="cs-liquid-card er-surface"
                 style={{
                   marginBottom: '1rem',
                   padding: '1rem',
@@ -2542,10 +2530,9 @@ export function AppRoot() {
                           {entries.map((entry) => (
                             <div
                               key={entry.id}
+                              className="er-surface"
                               style={{
                                 padding: '1rem',
-                                background: '#0f172a',
-                                border: '1px solid #475569',
                                 borderRadius: '6px',
                                 marginBottom: '0.5rem',
                               }}
@@ -2573,10 +2560,9 @@ export function AppRoot() {
                                   <div style={{ marginTop: '0.5rem' }}>
                                     {upgradePaymentIntentId && entry.id === selectedWaitlistEntry ? (
                                       <div
+                                        className="er-surface-strong"
                                         style={{
                                           padding: '0.75rem',
-                                          background: '#0b1220',
-                                          border: '1px solid #334155',
                                           borderRadius: 6,
                                           display: 'flex',
                                           flexDirection: 'column',

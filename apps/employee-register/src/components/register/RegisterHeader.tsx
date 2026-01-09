@@ -11,14 +11,7 @@ export interface RegisterHeaderProps {
   staffName: string;
   staffRole: 'STAFF' | 'ADMIN';
   onSignOut: () => void;
-
-  waitlistInteractive: boolean;
-  waitlistWidgetOpen: boolean;
-  waitlistDisplayNumber: string;
-  showUpgradePulse: boolean;
-  hasEligibleEntries: boolean;
-  onToggleWaitlistWidget: () => void;
-  dismissUpgradePulse: () => void;
+  onCloseOut: () => void;
 }
 
 export function RegisterHeader({
@@ -28,27 +21,25 @@ export function RegisterHeader({
   staffName,
   staffRole,
   onSignOut,
-  waitlistInteractive,
-  waitlistWidgetOpen,
-  waitlistDisplayNumber,
-  showUpgradePulse,
-  hasEligibleEntries,
-  onToggleWaitlistWidget,
-  dismissUpgradePulse,
+  onCloseOut,
 }: RegisterHeaderProps) {
   return (
     <header
-      className="header"
+      className="header er-surface-strong"
       style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
         gap: '1rem',
-        flexWrap: 'wrap',
+        flexWrap: 'nowrap',
+        padding: '0.75rem 1.5rem',
+        marginBottom: '1.5rem',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0 }}>Employee Register</h1>
+        <h1 className="er-title" style={{ margin: 0 }}>
+          Employee Register
+        </h1>
         <div
           className="status-badges"
           style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
@@ -66,45 +57,22 @@ export function RegisterHeader({
             {staffName} ({staffRole})
           </span>
         </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
         <button
           onClick={() => void onSignOut()}
-          className="cs-liquid-button cs-liquid-button--danger"
-          style={{ padding: '0.375rem 0.75rem' }}
+          className="cs-liquid-button cs-liquid-button--secondary"
+          style={{ padding: '0.45rem 0.85rem', fontWeight: 700 }}
         >
           Sign Out
         </button>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <button
-          className={[
-            'cs-liquid-button',
-            'cs-liquid-button--secondary',
-            waitlistWidgetOpen ? 'cs-liquid-button--selected' : '',
-            showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-          onClick={() => {
-            if (!waitlistWidgetOpen) dismissUpgradePulse();
-            onToggleWaitlistWidget();
-          }}
-          disabled={!waitlistInteractive}
-          aria-label="Waitlist widget"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.45rem 0.75rem',
-            fontWeight: 700,
-            minWidth: '110px',
-            justifyContent: 'center',
-          }}
+          onClick={() => void onCloseOut()}
+          className="cs-liquid-button cs-liquid-button--danger"
+          style={{ padding: '0.45rem 0.85rem', fontWeight: 800 }}
         >
-          <span role="img" aria-label="waitlist clock">
-            ⏰
-          </span>
-          <span>{waitlistDisplayNumber}</span>
+          Close Out
         </button>
       </div>
     </header>

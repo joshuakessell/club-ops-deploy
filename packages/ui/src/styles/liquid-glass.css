@@ -4,7 +4,7 @@
 :root {
   --cs-lg-radius: 0.5rem; /* rounded-lg */
   --cs-lg-border: rgba(255, 255, 255, 0.5);
-  --cs-lg-shadow: inset 0 1px 0 rgba(255,255,255,0.75), 0 0 9px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.15);
+  --cs-lg-shadow: inset 0 1px 0 rgba(255,255,255,0.55), 0 0 9px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.15);
   --cs-lg-blur: 6px;
 }
 
@@ -57,11 +57,11 @@
 .cs-liquid-button::before {
   background: linear-gradient(
     to bottom right,
-    rgba(255,255,255,0.6),
+    rgba(255,255,255,0.45),
     rgba(255,255,255,0),
     rgba(255,255,255,0)
   );
-  opacity: 0.7;
+  opacity: 0.55;
 }
 
 .cs-liquid-button::after {
@@ -178,11 +178,11 @@
 .cs-liquid-search::before {
   background: linear-gradient(
     to bottom right,
-    rgba(255,255,255,0.6),
+    rgba(255,255,255,0.45),
     rgba(255,255,255,0),
     rgba(255,255,255,0)
   );
-  opacity: 0.35;
+  opacity: 0.25;
 }
 
 .cs-liquid-search::after {
@@ -244,11 +244,11 @@
 .cs-liquid-card::before {
   background: linear-gradient(
     to bottom right,
-    rgba(255,255,255,0.6),
+    rgba(255,255,255,0.45),
     rgba(255,255,255,0),
     rgba(255,255,255,0)
   );
-  opacity: 0.7;
+  opacity: 0.55;
 }
 
 .cs-liquid-card::after {

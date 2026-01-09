@@ -108,7 +108,6 @@ export const en = {
   'rental.specialDisplay': 'Special Dressing Room',
 
   // Waitlist
-  'waitlist.joinUpgrade': 'Join Waitlist for Upgrade',
   'waitlist.modalTitle': 'None Available - Join Waiting List?',
   'waitlist.currentlyUnavailable': '{rental} is currently unavailable.',
   'waitlist.infoTitle': 'Waitlist Information:',

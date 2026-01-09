@@ -555,11 +555,6 @@ export function AppRoot() {
     }
   };
 
-  const handleJoinWaitlist = () => {
-    setUpgradeAction('waitlist');
-    setShowUpgradeDisclaimer(true);
-  };
-
   const handleDisclaimerAcknowledge = async () => {
     if (!session.sessionId || !upgradeAction) return;
 
@@ -989,7 +984,6 @@ export function AppRoot() {
             welcomeOverlay={welcomeOverlayNode}
             onSelectRental={(rental) => void handleRentalSelection(rental)}
             onOpenMembershipModal={openMembershipModal}
-            onJoinWaitlist={handleJoinWaitlist}
           />
           <UpgradeDisclaimerModal
             isOpen={showUpgradeDisclaimer}
