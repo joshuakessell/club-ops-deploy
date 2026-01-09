@@ -92,12 +92,14 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
         let queryStr = `
         SELECT 
           w.*,
-          cb.room_id,
+          w.room_id AS offered_room_id,
+          cb.room_id AS current_room_id,
           cb.locker_id,
           cb.rental_type as current_rental_type,
           cb.starts_at as checkin_starts_at,
           cb.ends_at as checkin_ends_at,
-          r.number as room_number,
+          offered_room.number as offered_room_number,
+          current_room.number as current_room_number,
           l.number as locker_number,
           v.customer_id,
           c.name as customer_name,
@@ -106,7 +108,8 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
         JOIN checkin_blocks cb ON w.checkin_block_id = cb.id
         JOIN visits v ON w.visit_id = v.id
         LEFT JOIN customers c ON v.customer_id = c.id
-        LEFT JOIN rooms r ON cb.room_id = r.id
+        LEFT JOIN rooms offered_room ON w.room_id = offered_room.id
+        LEFT JOIN rooms current_room ON cb.room_id = current_room.id
         LEFT JOIN lockers l ON cb.locker_id = l.id
       `;
 
@@ -120,12 +123,14 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
 
         const result = await query<
           WaitlistRow & {
-            room_id: string | null;
+            offered_room_id: string | null;
+            current_room_id: string | null;
             locker_id: string | null;
             current_rental_type: string;
             checkin_starts_at: Date;
             checkin_ends_at: Date;
-            room_number: string | null;
+            offered_room_number: string | null;
+            current_room_number: string | null;
             locker_number: string | null;
             customer_id: string;
             customer_name: string;
@@ -146,9 +151,10 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           checkoutAt: row.checkin_ends_at,
           offeredAt: row.offered_at,
           completedAt: row.completed_at,
-            roomId: row.room_id,
+          roomId: row.offered_room_id,
+          offeredRoomNumber: row.offered_room_number,
           // Anonymous display: prefer locker number, fallback to room number, then masked ID
-          displayIdentifier: row.locker_number || row.room_number || `***${row.id.substring(0, 8)}`,
+          displayIdentifier: row.locker_number || row.current_room_number || `***${row.id.substring(0, 8)}`,
           currentRentalType: row.current_rental_type,
           customerName: row.customer_name || 'Customer',
         }));
