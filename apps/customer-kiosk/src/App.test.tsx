@@ -301,7 +301,7 @@ describe('App', () => {
     });
 
     expect(await screen.findByText('Non-Member')).toBeDefined();
-    expect(screen.getByText('Purchase 6 Month Membership')).toBeDefined();
+    expect(screen.getByText(/Purchase 6 Month Membership.*\$43/)).toBeDefined();
     expect(screen.queryByText('Renew Membership')).toBeNull();
   });
 
@@ -330,7 +330,39 @@ describe('App', () => {
 
     expect(await screen.findByText('Non-Member')).toBeDefined();
     expect(screen.getByText('Expired')).toBeDefined();
-    expect(screen.getByText('Renew Membership')).toBeDefined();
+    expect(screen.getByText(/Renew Membership.*\$43/)).toBeDefined();
+  });
+
+  it('shows whole-dollar prices next to rental options and never shows Join Waitlist for Upgrade', async () => {
+    await act(async () => {
+      render(<App />);
+    });
+
+    await act(async () => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: '123',
+            customerMembershipValidUntil: '2000-01-01',
+            allowedRentals: ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    expect(await screen.findByText('Locker — $24')).toBeDefined();
+    expect(screen.getByText('Private Dressing Room — $30')).toBeDefined();
+    expect(screen.getByText('Deluxe Dressing Room — $40')).toBeDefined();
+    expect(screen.getByText('Special Dressing Room — $50')).toBeDefined();
+    expect(screen.getByText(/Renew Membership.*\$43/)).toBeDefined();
+
+    expect(screen.queryByText(/Join Waitlist for Upgrade/i)).toBeNull();
   });
 
   it('translates membership CTA in Spanish', async () => {
@@ -356,7 +388,7 @@ describe('App', () => {
     });
 
     expect(await screen.findByText('No miembro')).toBeDefined();
-    expect(screen.getByText('Comprar membresía de 6 meses')).toBeDefined();
+    expect(screen.getByText(/Comprar membresía de 6 meses.*\$43/)).toBeDefined();
     // Guard: key screens should not leak obvious English CTAs when in Spanish.
     expect(screen.queryByText('Non-Member')).toBeNull();
     expect(screen.queryByText('Purchase 6 Month Membership')).toBeNull();
@@ -384,7 +416,7 @@ describe('App', () => {
       });
     });
 
-    const purchaseBtn = await screen.findByText('Comprar membresía de 6 meses');
+    const purchaseBtn = await screen.findByText(/Comprar membresía de 6 meses.*\$43/);
     act(() => {
       (purchaseBtn as HTMLButtonElement).click();
     });
@@ -421,7 +453,7 @@ describe('App', () => {
       });
     });
 
-    const purchaseBtn = await screen.findByText('Purchase 6 Month Membership');
+    const purchaseBtn = await screen.findByText(/Purchase 6 Month Membership.*\$43/);
     act(() => {
       (purchaseBtn as HTMLButtonElement).click();
     });

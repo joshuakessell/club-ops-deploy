@@ -179,7 +179,6 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   if (!registerSession) {
     return (
       <div className="register-sign-in-container">
-        <div className="register-sign-in-logo">Club Dallas</div>
         <button
           className="register-sign-in-button cs-liquid-button"
           onClick={() => setShowSignInModal(true)}
@@ -199,8 +198,6 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   // Signed in state
   return (
     <div className="register-sign-in-container">
-      <div className="register-sign-in-logo">Club Dallas</div>
-
       <div className="register-top-bar">
         <div style={{ width: '40px' }} />
         <div className="register-top-bar-center">

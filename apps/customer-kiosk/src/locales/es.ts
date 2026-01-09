@@ -105,7 +105,6 @@ export const es: Record<keyof typeof en, string> = {
   'rental.specialDisplay': 'Vestidor Especial',
 
   // Waitlist
-  'waitlist.joinUpgrade': 'Unirse a la lista de espera para mejora',
   'waitlist.modalTitle': 'No hay disponibilidad — ¿unirse a la lista de espera?',
   'waitlist.currentlyUnavailable': '{rental} no está disponible actualmente.',
   'waitlist.infoTitle': 'Información de la lista de espera:',

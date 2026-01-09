@@ -10,6 +10,39 @@
   --warning: var(--cs-warning);
   --error: var(--cs-error);
   --border: var(--cs-border);
+
+  /* Employee Register local surfaces (neutral dark glass; avoid legacy blue tint) */
+  --er-surface: rgba(18, 18, 18, 0.55);
+  --er-surface-strong: rgba(10, 10, 10, 0.72);
+  --er-border: rgba(255, 255, 255, 0.14);
+  --er-text: rgba(255, 255, 255, 0.92);
+  --er-text-muted: rgba(255, 255, 255, 0.72);
+}
+
+.er-surface {
+  background: var(--er-surface);
+  border: 1px solid var(--er-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.er-surface-strong {
+  background: var(--er-surface-strong);
+  border: 1px solid var(--er-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.er-title {
+  color: #fff;
+}
+
+.er-text {
+  color: var(--er-text);
+}
+
+.er-text-muted {
+  color: var(--er-text-muted);
 }
 
 /* Solid black background with very dark overlay */
@@ -26,7 +59,8 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  /* Let the background photo read while still keeping a dark, high-contrast UI */
+  background: rgba(0, 0, 0, 0.62);
   z-index: 0;
   pointer-events: none;
 }
@@ -57,10 +91,15 @@ body::before {
   border-bottom: 1px solid var(--border);
 }
 
+.header.er-surface-strong {
+  /* Narrow override: avoid pulling blue-tinted global border tokens into the top toolbar */
+  border-bottom: 1px solid var(--er-border);
+}
+
 .header h1 {
   font-size: 1.75rem;
   font-weight: 700;
-  color: var(--primary);
+  color: #fff;
 }
 
 .status-badges {
@@ -668,13 +707,18 @@ body::before {
   top: 60%;
   left: 50%;
   transform: translateX(-50%);
-  padding: 1rem 2rem;
+  padding: 1.25rem 2.5rem;
   color: var(--cs-text);
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   font-weight: 600;
   cursor: pointer;
   z-index: 3;
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
+}
+
+/* Preserve centering transform on press (cs-liquid-button:active sets transform and would override translateX(-50%)). */
+.register-sign-in-button:active:not(:disabled) {
+  transform: translateX(-50%) translateY(1px);
 }
 
 .register-top-bar {
@@ -683,13 +727,15 @@ body::before {
   left: 0;
   right: 0;
   height: 60px;
-  background: rgba(15, 23, 42, 0.9);
+  background: var(--er-surface-strong);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
   z-index: 100;
-  border-bottom: 1px solid var(--cs-border);
+  border-bottom: 1px solid var(--er-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .register-top-bar-center {

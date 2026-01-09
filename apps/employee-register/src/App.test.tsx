@@ -499,7 +499,7 @@ describe('App', () => {
     });
   });
 
-  it('disables waitlist widget actions when a session is active', async () => {
+  it('disables waitlist/upgrade actions when a session is active (no waitlist widget in header)', async () => {
     localStorage.setItem(
       'staff_session',
       JSON.stringify({
@@ -642,14 +642,18 @@ describe('App', () => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
 
-    const waitlistButton = await screen.findByLabelText('Waitlist widget');
-    const confirmSpy = vi.spyOn(window, 'confirm');
-    // With an active session, waitlist widget entry actions are disabled (widget button itself is disabled).
-    expect(waitlistButton).toHaveProperty('disabled', true);
+    // Header waitlist widget was removed; upgrades/waitlist are accessible via the panel below.
+    expect(screen.queryByLabelText('Waitlist widget')).toBeNull();
+
+    // Panel shows the "active session present" guard and disables action buttons.
+    const toggle = await screen.findByText(/Upgrades\s*\/\s*Waitlist/i);
     await act(async () => {
-      fireEvent.click(waitlistButton);
+      fireEvent.click(toggle);
     });
-    expect(screen.queryByText('Waitlist')).toBeNull();
-    expect(confirmSpy).not.toHaveBeenCalled();
+
+    expect(screen.getByText(/Active session present — waitlist actions are disabled/i)).toBeDefined();
+
+    const offerUpgrade = await screen.findByText('Offer Upgrade');
+    expect(offerUpgrade).toHaveProperty('disabled', true);
   });
 });
