@@ -22,17 +22,28 @@ export function RegisterSideDrawers({
   upgradesContent,
   inventoryContent,
 }: RegisterSideDrawersProps) {
+  // Keep the inventory drawer only as wide as it needs to be.
+  // The previous "45% of viewport" sizing made the panel too wide on large displays.
+  const INVENTORY_DRAWER_MIN_PX = 420;
+  const INVENTORY_DRAWER_IDEAL_PX = 520;
+  const VIEWPORT_EDGE_GAP_PX = 12;
+
+  const computeInventoryWidthPx = (vw: number) => {
+    // Ensure the drawer never exceeds the viewport width (leaves a small gap).
+    const maxAllowed = Math.max(0, vw - VIEWPORT_EDGE_GAP_PX);
+    const minAllowed = Math.min(INVENTORY_DRAWER_MIN_PX, maxAllowed);
+    const clamped = Math.min(INVENTORY_DRAWER_IDEAL_PX, maxAllowed);
+    return Math.max(minAllowed, clamped);
+  };
+
   const [inventoryWidthPx, setInventoryWidthPx] = useState<number>(() => {
-    if (typeof window === 'undefined') return 520;
-    return Math.max(420, Math.round(window.innerWidth * 0.45));
+    if (typeof window === 'undefined') return INVENTORY_DRAWER_IDEAL_PX;
+    return computeInventoryWidthPx(window.innerWidth);
   });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const update = () =>
-      setInventoryWidthPx(
-        Math.max(420, Math.min(window.innerWidth - 12, Math.round(window.innerWidth * 0.45)))
-      );
+    const update = () => setInventoryWidthPx(computeInventoryWidthPx(window.innerWidth));
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);

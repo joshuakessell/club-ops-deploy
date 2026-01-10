@@ -565,11 +565,15 @@ export function InventorySelector({
         className="cs-liquid-card"
         style={{
           padding: '1rem',
-          maxHeight: 'calc(100vh - 200px)',
-          overflowY: 'auto',
+          height: '100%',
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>Inventory</h2>
+        <h2 style={{ margin: 0, marginBottom: '0.75rem', fontSize: '1.25rem', fontWeight: 600 }}>
+          Inventory
+        </h2>
 
         {!occupancyLookupMode && !disableSelection && selectedItem && onClearSelection && (
           <button
@@ -581,59 +585,74 @@ export function InventorySelector({
           </button>
         )}
 
-        {/* Lockers */}
-        <LockerSection
-          lockers={filteredLockers}
-          isExpanded={expandedSection === 'LOCKER'}
-          onToggle={() => toggleSection('LOCKER')}
-          onSelectLocker={handleLockerClick}
-          selectedItem={selectedItem}
-          nowMs={nowMs}
-          disableSelection={disableSelection || selectionLockedToType === 'room'}
-          occupancyLookupMode={occupancyLookupMode}
-        />
+        {/*
+          The drawer panel itself should not scroll.
+          Instead, whichever category is expanded gets a scrollable viewport.
+        */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem',
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
+          }}
+        >
+          {/* Lockers */}
+          <LockerSection
+            lockers={filteredLockers}
+            isExpanded={expandedSection === 'LOCKER'}
+            onToggle={() => toggleSection('LOCKER')}
+            onSelectLocker={handleLockerClick}
+            selectedItem={selectedItem}
+            nowMs={nowMs}
+            disableSelection={disableSelection || selectionLockedToType === 'room'}
+            occupancyLookupMode={occupancyLookupMode}
+          />
 
-        {/* Standard */}
-        <InventorySection
-          title="Standard"
-          rooms={roomsByTier.STANDARD}
-          isExpanded={expandedSection === 'STANDARD'}
-          onToggle={() => toggleSection('STANDARD')}
-          onSelectRoom={handleRoomClick}
-          selectedItem={selectedItem}
-          waitlistEntries={waitlistEntries}
-          nowMs={nowMs}
-          disableSelection={disableSelection || selectionLockedToType === 'locker'}
-          occupancyLookupMode={occupancyLookupMode}
-        />
+          {/* Standard */}
+          <InventorySection
+            title="Standard"
+            rooms={roomsByTier.STANDARD}
+            isExpanded={expandedSection === 'STANDARD'}
+            onToggle={() => toggleSection('STANDARD')}
+            onSelectRoom={handleRoomClick}
+            selectedItem={selectedItem}
+            waitlistEntries={waitlistEntries}
+            nowMs={nowMs}
+            disableSelection={disableSelection || selectionLockedToType === 'locker'}
+            occupancyLookupMode={occupancyLookupMode}
+          />
 
-        {/* Double */}
-        <InventorySection
-          title="Double"
-          rooms={roomsByTier.DOUBLE}
-          isExpanded={expandedSection === 'DOUBLE'}
-          onToggle={() => toggleSection('DOUBLE')}
-          onSelectRoom={handleRoomClick}
-          selectedItem={selectedItem}
-          waitlistEntries={waitlistEntries}
-          nowMs={nowMs}
-          disableSelection={disableSelection || selectionLockedToType === 'locker'}
-          occupancyLookupMode={occupancyLookupMode}
-        />
+          {/* Double */}
+          <InventorySection
+            title="Double"
+            rooms={roomsByTier.DOUBLE}
+            isExpanded={expandedSection === 'DOUBLE'}
+            onToggle={() => toggleSection('DOUBLE')}
+            onSelectRoom={handleRoomClick}
+            selectedItem={selectedItem}
+            waitlistEntries={waitlistEntries}
+            nowMs={nowMs}
+            disableSelection={disableSelection || selectionLockedToType === 'locker'}
+            occupancyLookupMode={occupancyLookupMode}
+          />
 
-        {/* Special */}
-        <InventorySection
-          title="Special"
-          rooms={roomsByTier.SPECIAL}
-          isExpanded={expandedSection === 'SPECIAL'}
-          onToggle={() => toggleSection('SPECIAL')}
-          onSelectRoom={handleRoomClick}
-          selectedItem={selectedItem}
-          waitlistEntries={waitlistEntries}
-          nowMs={nowMs}
-          disableSelection={disableSelection || selectionLockedToType === 'locker'}
-          occupancyLookupMode={occupancyLookupMode}
-        />
+          {/* Special */}
+          <InventorySection
+            title="Special"
+            rooms={roomsByTier.SPECIAL}
+            isExpanded={expandedSection === 'SPECIAL'}
+            onToggle={() => toggleSection('SPECIAL')}
+            onSelectRoom={handleRoomClick}
+            selectedItem={selectedItem}
+            waitlistEntries={waitlistEntries}
+            nowMs={nowMs}
+            disableSelection={disableSelection || selectionLockedToType === 'locker'}
+            occupancyLookupMode={occupancyLookupMode}
+          />
+        </div>
       </div>
 
       <ModalFrame
@@ -707,7 +726,15 @@ function InventorySection({
   const allowAvailableSelection = !disableSelection && !occupancyLookupMode;
 
   return (
-    <div style={{ marginBottom: '1rem' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.5rem',
+        flex: isExpanded ? '1 1 0' : '0 0 auto',
+        minHeight: 0,
+      }}
+    >
       <button
         onClick={onToggle}
         className={`cs-liquid-button ${isExpanded ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary'}`}
@@ -732,12 +759,26 @@ function InventorySection({
         <div
           className="cs-liquid-card"
           style={{
-            marginTop: '0.5rem',
             padding: '0.5rem',
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
           }}
         >
-          {/* Single-column layout: Occupied → Dirty/Cleaning → Available */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {/*
+            Single-column layout: Occupied → Dirty/Cleaning → Available
+            Scroll happens within the expanded category, not the drawer panel.
+          */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+              height: '100%',
+              overflowY: 'auto',
+              paddingRight: '0.25rem',
+            }}
+          >
             {/* Occupied */}
             <div style={{ minWidth: 0 }}>
               <div style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>🔒 Occupied</div>
@@ -983,7 +1024,15 @@ function LockerSection({
   );
 
   return (
-    <div style={{ marginBottom: '1rem' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.5rem',
+        flex: isExpanded ? '1 1 0' : '0 0 auto',
+        minHeight: 0,
+      }}
+    >
       <button
         onClick={onToggle}
         className={`cs-liquid-button ${isExpanded ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary'}`}
@@ -1008,18 +1057,29 @@ function LockerSection({
         <div
           className="cs-liquid-card"
           style={{
-            marginTop: '0.5rem',
             padding: '0.5rem',
+            flex: 1,
+            minHeight: 0,
+            overflow: 'hidden',
           }}
         >
           {/* Single-column layout: Occupied → Available */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+              height: '100%',
+              overflowY: 'auto',
+              paddingRight: '0.25rem',
+            }}
+          >
             {/* Occupied */}
             <div style={{ minWidth: 0 }}>
               <div style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>🔒 Occupied</div>
 
               {occupiedLockers.length > 0 ? (
-                <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                <>
                   {occupiedLockers.map((locker) => {
                     const msUntil = getMsUntil(locker.checkoutAt, nowMs);
                     const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
@@ -1088,7 +1148,7 @@ function LockerSection({
                       </div>
                     );
                   })}
-                </div>
+                </>
               ) : (
                 <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
               )}
@@ -1104,8 +1164,6 @@ function LockerSection({
                     display: 'grid',
                     gridTemplateColumns: 'repeat(5, 1fr)',
                     gap: '0.5rem',
-                    maxHeight: '280px',
-                    overflowY: 'auto',
                   }}
                 >
                   {availableLockers.map((locker) => {
