@@ -129,23 +129,27 @@ export function SelectionScreen({
 
                     {isNonMember && (
                       <button
-                        className="cs-liquid-button"
+                        className="cs-liquid-button kiosk-option-button"
                         onClick={() => onOpenMembershipModal('PURCHASE')}
                         disabled={isSubmitting}
                       >
-                        {t(lang, 'membership.purchase6Month')} —{' '}
-                        {formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE)}
+                        <span className="kiosk-option-title">{t(lang, 'membership.purchase6Month')}</span>
+                        <span className="kiosk-option-price">
+                          {formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE)}
+                        </span>
                       </button>
                     )}
 
                     {isExpired && (
                       <button
-                        className="cs-liquid-button"
+                        className="cs-liquid-button kiosk-option-button"
                         onClick={() => onOpenMembershipModal('RENEW')}
                         disabled={isSubmitting}
                       >
-                        {t(lang, 'membership.renewMembership')} —{' '}
-                        {formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE)}
+                        <span className="kiosk-option-title">{t(lang, 'membership.renewMembership')}</span>
+                        <span className="kiosk-option-price">
+                          {formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE)}
+                        </span>
                       </button>
                     )}
                   </div>
@@ -212,15 +216,13 @@ export function SelectionScreen({
 
                     const displayName = getRentalDisplayName(rental, lang);
                     const displayPrice = DISPLAY_PRICE_BY_RENTAL[rental];
-                    const displayNameWithPrice =
-                      typeof displayPrice === 'number'
-                        ? `${displayName} — ${formatWholeDollars(displayPrice)}`
-                        : displayName;
+                    const displayPriceLabel =
+                      typeof displayPrice === 'number' ? formatWholeDollars(displayPrice) : '';
 
                     return (
                       <button
                         key={rental}
-                        className={`cs-liquid-button ${isSelected ? 'cs-liquid-button--selected' : ''} ${isStaffProposed ? 'cs-liquid-button--staff-proposed' : ''} ${isDisabled ? 'cs-liquid-button--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
+                        className={`cs-liquid-button kiosk-option-button ${isSelected ? 'cs-liquid-button--selected' : ''} ${isStaffProposed ? 'cs-liquid-button--staff-proposed' : ''} ${isDisabled ? 'cs-liquid-button--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
                         data-forced={isForced}
                         onClick={() => {
                           if (!isDisabled) {
@@ -237,7 +239,12 @@ export function SelectionScreen({
                             alignItems: 'center',
                           }}
                         >
-                          <span>{displayNameWithPrice}</span>
+                          <div className="kiosk-option-stack">
+                            <span className="kiosk-option-title">{displayName}</span>
+                            {displayPriceLabel && (
+                              <span className="kiosk-option-price">{displayPriceLabel}</span>
+                            )}
+                          </div>
                           {showWarning && !isUnavailable && (
                             <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
                               {t(lang, 'availability.onlyAvailable', { count: availableCount })}
