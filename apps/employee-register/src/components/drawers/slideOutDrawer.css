@@ -2,6 +2,7 @@
   position: fixed;
   top: var(--er-topbar-height, 60px);
   bottom: 0;
+  --sod-edge-gap: 12px;
   /* Avoid flex sizing so the panel can't shrink and "detach" from the screen edge. */
   display: block;
   pointer-events: none; /* allow clicks through except on interactive children */
@@ -47,9 +48,18 @@
     0 18px 40px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
+/*
+  Keep the tab vertically centered while pressed.
 
-.sod-tab:active:not(:disabled) {
-  transform: translateY(1px);
+  NOTE:
+  The tab is centered using transform: translateY(-50%). If we apply a generic
+  :active transform (e.g. translateY(1px)), it overrides the centering transform
+  and makes the tab jump down when pressed.
+*/
+.sod-left .sod-tab:active:not(:disabled),
+.sod-right .sod-tab:active:not(:disabled) {
+  transform: translateY(-50%);
+  filter: brightness(1.08);
 }
 
 .sod-tabLabel {
@@ -84,7 +94,8 @@
 
   height: 100%;
   width: 100%;
-  overflow-y: auto;
+  /* Panel itself should not scroll. Scroll happens inside drawer content. */
+  overflow: hidden;
 
   padding: 1rem;
   box-sizing: border-box;
@@ -95,18 +106,15 @@
 }
 
 .sod-left .sod-panel {
+  margin-left: var(--sod-edge-gap, 12px);
   margin-right: var(--sod-tab-width, 44px);
+  width: calc(100% - var(--sod-tab-width, 44px) - var(--sod-edge-gap, 12px));
 }
 
 .sod-right .sod-panel {
   margin-left: var(--sod-tab-width, 44px);
-  /*
-    Nudge the panel slightly offscreen so the right edge/border isn't visible.
-    This makes it feel like the drawer is extending out from beyond the viewport
-    instead of a floating card hovering over the main UI.
-  */
-  margin-right: -2px;
-  padding-right: 1rem;
+  margin-right: var(--sod-edge-gap, 12px);
+  width: calc(100% - var(--sod-tab-width, 44px) - var(--sod-edge-gap, 12px));
 }
 
 /* Reduce accidental text selection while dragging */

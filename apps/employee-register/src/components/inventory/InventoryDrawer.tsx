@@ -41,8 +41,42 @@ export function InventoryDrawer({
   const effectiveQuery = filterQuery !== undefined ? filterQuery : query;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-      <div className="cs-liquid-search">
+    <div
+      style={{
+        height: '100%',
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.75rem',
+        overflow: 'hidden',
+      }}
+    >
+      {/*
+        Main inventory content should never force the drawer itself to scroll.
+        Each expanded category is responsible for its own internal scrolling.
+      */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <InventorySelector
+          customerSelectedType={customerSelectedType}
+          waitlistDesiredTier={waitlistDesiredTier}
+          waitlistBackupType={waitlistBackupType}
+          onSelect={onSelect ?? (() => undefined)}
+          selectedItem={selectedItem}
+          sessionId={sessionId}
+          lane={lane}
+          sessionToken={sessionToken}
+          filterQuery={effectiveQuery}
+          forcedExpandedSection={expandedSection}
+          onExpandedSectionChange={(next) => {
+            onExpandedSectionChange?.(next);
+            if (forcedExpandedSection === undefined) setUncontrolledExpanded(next);
+          }}
+          disableSelection={disableSelection}
+        />
+      </div>
+
+      {/* Search stays pinned at the bottom of the inventory panel */}
+      <div className="cs-liquid-search" style={{ flexShrink: 0 }}>
         <input
           className="cs-liquid-input cs-liquid-search__input"
           type="text"
@@ -71,25 +105,6 @@ export function InventoryDrawer({
           </svg>
         </div>
       </div>
-
-      <InventorySelector
-        customerSelectedType={customerSelectedType}
-        waitlistDesiredTier={waitlistDesiredTier}
-        waitlistBackupType={waitlistBackupType}
-        onSelect={onSelect ?? (() => undefined)}
-        selectedItem={selectedItem}
-        onClearSelection={onClearSelection}
-        sessionId={sessionId}
-        lane={lane}
-        sessionToken={sessionToken}
-        filterQuery={effectiveQuery}
-        forcedExpandedSection={expandedSection}
-        onExpandedSectionChange={(next) => {
-          onExpandedSectionChange?.(next);
-          if (forcedExpandedSection === undefined) setUncontrolledExpanded(next);
-        }}
-        disableSelection={disableSelection}
-      />
     </div>
   );
 }
