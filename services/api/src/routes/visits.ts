@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { serializableTransaction, query } from '../db/index.js';
-import { requireReauth } from '../auth/middleware.js';
+import { requireAuth, requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding.js';
@@ -785,7 +785,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/visits/:visitId/final-extension',
     {
-      preHandler: [requireReauth],
+      preHandler: [requireAuth, requireReauth],
     },
     async (request, reply) => {
       const staff = request.staff;

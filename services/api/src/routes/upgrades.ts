@@ -666,7 +666,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/upgrades/complete',
     {
-      preHandler: [requireReauth],
+      preHandler: [requireAuth, requireReauth],
     },
     async (request, reply) => {
       const staff = request.staff;
@@ -681,6 +681,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           // 1. Verify payment is paid
           const intentResult = await client.query<{
             id: string;
+            amount: number | string;
             status: string;
             quote_json: unknown;
           }>(`SELECT * FROM payment_intents WHERE id = $1`, [paymentIntentId]);

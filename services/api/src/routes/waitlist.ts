@@ -404,7 +404,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/waitlist/:id/cancel',
     {
-      preHandler: [requireReauth],
+      preHandler: [requireAuth, requireReauth],
     },
     async (request, reply) => {
       const staff = request.staff;
