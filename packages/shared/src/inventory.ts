@@ -4,6 +4,9 @@ export const LOCKER_NUMBERS: string[] = Array.from({ length: 108 }, (_, idx) =>
   String(idx + 1).padStart(3, '0')
 );
 
+export const EXPECTED_LOCKER_COUNT = 108 as const;
+export const EXPECTED_ROOM_COUNT = 55 as const;
+
 // Nominal room range is 200..262 inclusive, but some rooms do NOT exist at all.
 export const NONEXISTENT_ROOM_NUMBERS = [
   247, 249, 251, 253, 255, 257, 259, 261,
@@ -41,9 +44,30 @@ export const ROOM_NUMBERS: number[] = Array.from({ length: 262 - 200 + 1 }, (_, 
   isExistingRoomNumber
 );
 
+// Convenience set (fast membership checks without re-allocating in callers)
+export const ROOM_NUMBER_SET: ReadonlySet<number> = new Set(ROOM_NUMBERS);
+
 export const ROOMS: Array<{ number: number; kind: RoomKind }> = ROOM_NUMBERS.map((n) => ({
   number: n,
   kind: getRoomKind(n),
 }));
+
+// ---------------------------------------------------------------------------
+// Contract sanity checks (throws at module load time if a constant is wrong)
+// ---------------------------------------------------------------------------
+if (LOCKER_NUMBERS.length !== EXPECTED_LOCKER_COUNT) {
+  throw new Error(`LOCKER_NUMBERS contract mismatch: expected ${EXPECTED_LOCKER_COUNT}, got ${LOCKER_NUMBERS.length}`);
+}
+if (ROOM_NUMBERS.length !== EXPECTED_ROOM_COUNT) {
+  throw new Error(`ROOM_NUMBERS contract mismatch: expected ${EXPECTED_ROOM_COUNT}, got ${ROOM_NUMBERS.length}`);
+}
+for (const n of DELUXE_ROOM_NUMBERS) {
+  if (!ROOM_NUMBER_SET.has(n)) throw new Error(`DELUXE_ROOM_NUMBERS contains non-existent room: ${n}`);
+  if (SPECIAL_ROOM_SET.has(n)) throw new Error(`Room ${n} cannot be both DELUXE and SPECIAL`);
+}
+for (const n of SPECIAL_ROOM_NUMBERS) {
+  if (!ROOM_NUMBER_SET.has(n)) throw new Error(`SPECIAL_ROOM_NUMBERS contains non-existent room: ${n}`);
+  if (DELUXE_ROOM_SET.has(n)) throw new Error(`Room ${n} cannot be both SPECIAL and DELUXE`);
+}
 
 

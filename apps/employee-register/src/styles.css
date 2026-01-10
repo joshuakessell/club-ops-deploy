@@ -219,9 +219,9 @@ body::before {
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  padding: 1.5rem;
+  padding: 1.25rem;
   color: var(--text);
-  font-size: 0.875rem;
+  font-size: 0.825rem;
   font-weight: 600;
   cursor: pointer;
   transition: transform var(--cs-transition-base) var(--cs-ease-standard);
@@ -232,7 +232,13 @@ body::before {
 }
 
 .btn-icon {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
+}
+
+/* Top action buttons: same size as Lane Session buttons, but not inside a bar/card */
+.register-top-actions {
+  margin-top: 0.75rem;
+  margin-bottom: 1rem; /* keep symmetric spacing around the Lane Session header */
 }
 
 .footer {

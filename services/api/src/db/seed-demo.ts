@@ -26,6 +26,11 @@ export async function seedDemoData(): Promise<void> {
       // Keep employees unchanged
       const staffCountBefore = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM staff');
 
+      // Reference timestamps:
+      // - now: actual seed run time
+      // - peak: deterministic "busy Saturday night" moment within last 24 hours
+      const peak = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+
       // Deterministic PRNG so the dataset is stable across runs
       function seededRng(seed: number): () => number {
         // Mulberry32
@@ -40,7 +45,11 @@ export async function seedDemoData(): Promise<void> {
 
       const rng = seededRng(0x53415455); // 'SATU' (arbitrary fixed seed)
 
-      // Choose one STANDARD room to remain available
+      function randInt(min: number, max: number): number {
+        return Math.floor(rng() * (max - min + 1)) + min;
+      }
+
+      // Choose one STANDARD room to remain free at PEAK (not necessarily at NOW)
       const freeRoomNumber =
         ROOM_NUMBERS.find((n) => {
           try {
@@ -51,7 +60,7 @@ export async function seedDemoData(): Promise<void> {
         }) ?? 200;
 
       const occupiedRoomNumbers = ROOM_NUMBERS.filter((n) => n !== freeRoomNumber);
-      const occupiedLockerNumbers = LOCKER_NUMBERS.slice(0, 88); // 88 occupied, 20 available
+      const occupiedLockerNumbers = LOCKER_NUMBERS.slice(0, 88); // 88 occupied at PEAK, 20 free at PEAK
 
       const firstNames = [
         'James',
@@ -99,8 +108,6 @@ export async function seedDemoData(): Promise<void> {
       ];
 
       const customerIds: string[] = [];
-      const checkedInCustomerIds: string[] = [];
-      const visitIdsByCustomer = new Map<string, string>();
 
       await transaction(async (client) => {
         // -------------------------------------------------------------------
@@ -218,7 +225,13 @@ export async function seedDemoData(): Promise<void> {
         const lockerIdByNumber = new Map<string, string>();
         for (const l of lockersRes.rows) lockerIdByNumber.set(l.number, l.id);
 
-        // Create exactly 100 customers ("members" in demo terms)
+        // -------------------------------------------------------------------
+        // Customers: seed 100 members + extra guests to satisfy PEAK overlap
+        // -------------------------------------------------------------------
+        const MEMBER_COUNT = 100;
+        const EXTRA_GUEST_COUNT = 60; // gives total customers 160 (>= 142 needed at peak)
+
+        // Create exactly 100 members (also mirrored into legacy members table)
         for (let i = 1; i <= 100; i++) {
           const idx = i - 1;
           const id = randomUUID();
@@ -244,147 +257,232 @@ export async function seedDemoData(): Promise<void> {
           customerIds.push(id);
         }
 
-        // Create ~90 active check-ins (visits + sessions + checkin_blocks)
-        const checkedInCount = 90;
-        for (let i = 0; i < checkedInCount; i++) {
-          const customerId = customerIds[i]!;
-          checkedInCustomerIds.push(customerId);
+        // Extra guests (customers only; membership_number is NULL)
+        for (let i = 1; i <= EXTRA_GUEST_COUNT; i++) {
+          const idx = MEMBER_COUNT + (i - 1);
+          const id = randomUUID();
+          const name = `${firstNames[idx % firstNames.length]} ${lastNames[(idx * 7) % lastNames.length]}`;
+          const dob = new Date(1985 + (idx % 20), (idx * 5) % 12, ((idx * 7) % 27) + 1);
+          await client.query(
+            `INSERT INTO customers
+             (id, name, dob, membership_number, membership_card_type, membership_valid_until, primary_language, past_due_balance, created_at, updated_at)
+             VALUES ($1, $2, $3, NULL, NULL, NULL, 'EN', 0, NOW(), NOW())`,
+            [id, name, dob]
+          );
+          customerIds.push(id);
+        }
 
-          // Distribute check-in times across last 24h, biased toward recent but includes older ones
-          const u = rng();
-          const biasRecent = u * u; // bias toward 0
-          const baseOffsetMs = biasRecent * 24 * 60 * 60 * 1000;
-          const forcedOlder = i % 10 === 0 ? (18 + rng() * 6) * 60 * 60 * 1000 : 0;
-          const offsetMs = Math.min(24 * 60 * 60 * 1000, baseOffsetMs + forcedOlder);
-          const checkInAt = new Date(now.getTime() - offsetMs);
+        // -------------------------------------------------------------------
+        // Peak occupancy (computed from checkin_blocks overlap with PEAK)
+        // - Rooms: 54 occupied, 1 free (must be STANDARD)
+        // - Lockers: 88 occupied, 20 free
+        // Exclusive assignment must hold: each stay is room OR locker.
+        // At NOW: exactly one active late stay remains (scheduled checkout = now - 15m).
+        // -------------------------------------------------------------------
 
+        const PEAK_ROOM_OCCUPANCY = 54;
+        const PEAK_LOCKER_OCCUPANCY = 88;
+
+        const roomCustomerIds = customerIds.slice(0, PEAK_ROOM_OCCUPANCY);
+        const lockerCustomerIds = customerIds.slice(PEAK_ROOM_OCCUPANCY, PEAK_ROOM_OCCUPANCY + PEAK_LOCKER_OCCUPANCY);
+        const extraCustomerIds = customerIds.slice(PEAK_ROOM_OCCUPANCY + PEAK_LOCKER_OCCUPANCY);
+
+        const lateActiveCustomerId = lockerCustomerIds[lockerCustomerIds.length - 1]!;
+        const lateScheduledCheckoutAt = new Date(now.getTime() - 15 * 60 * 1000);
+        const lateCheckInAt = new Date(now.getTime() - (6 * 60 + 15) * 60 * 1000); // 6h15m ago => overlaps peak
+
+        function rentalTypeForRoomNumber(roomNumber: number): RentalType {
+          const kind = getRoomKind(roomNumber);
+          return kind === 'SPECIAL'
+            ? RentalType.SPECIAL
+            : kind === 'DELUXE'
+              ? RentalType.DOUBLE
+              : RentalType.STANDARD;
+        }
+
+        async function createVisitStay(params: {
+          customerId: string;
+          checkInAt: Date;
+          scheduledCheckoutAt: Date;
+          checkedOutAt: Date | null; // null => active
+          roomId: string | null;
+          lockerId: string | null;
+          rentalType: RentalType;
+        }): Promise<{ visitId: string; sessionId: string }> {
           const visitId = randomUUID();
-          visitIdsByCustomer.set(customerId, visitId);
-
           await client.query(
             `INSERT INTO visits (id, started_at, ended_at, created_at, updated_at, customer_id)
-             VALUES ($1, $2, NULL, NOW(), NOW(), $3)`,
-            [visitId, checkInAt, customerId]
+             VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
+            [visitId, params.checkInAt, params.checkedOutAt, params.customerId]
           );
-
-          // Assign rooms (54/55) and lockers (88/108). Some customers will have both.
-          const roomNumber = i < occupiedRoomNumbers.length ? String(occupiedRoomNumbers[i]!) : null;
-          const lockerNumber = i < occupiedLockerNumbers.length ? occupiedLockerNumbers[i]! : null;
-          const room = roomNumber ? roomIdByNumber.get(roomNumber) : undefined;
-          const lockerId = lockerNumber ? lockerIdByNumber.get(lockerNumber) : undefined;
-
-          // Determine rental type: room tier if present, else locker, else STANDARD (waitlist-like)
-          let rentalType: RentalType = RentalType.STANDARD;
-          if (roomNumber) {
-            const kind = getRoomKind(parseInt(roomNumber, 10));
-            rentalType =
-              kind === 'SPECIAL'
-                ? RentalType.SPECIAL
-                : kind === 'DELUXE'
-                  ? RentalType.DOUBLE
-                  : RentalType.STANDARD;
-          } else if (lockerNumber) {
-            rentalType = RentalType.LOCKER;
-          }
-
-          // Ensure we only reference existing inventory rows
-          const roomId = room?.id ?? null;
-          const lockerIdFinal = lockerId ?? null;
-
-          const sessionId = randomUUID();
-
-          // Blocks are 6-hour multiples; choose enough blocks so the last one ends in the future.
-          const hoursSinceCheckin = Math.max(0, (now.getTime() - checkInAt.getTime()) / (60 * 60 * 1000));
-          const blocksNeeded = Math.floor(hoursSinceCheckin / 6) + 1; // ensures last ends after now
-          const checkoutAt = new Date(checkInAt.getTime() + blocksNeeded * 6 * 60 * 60 * 1000);
 
           const customerRow = await client.query<{ name: string; membership_number: string | null }>(
             `SELECT name, membership_number FROM customers WHERE id = $1`,
-            [customerId]
+            [params.customerId]
           );
           const memberName = customerRow.rows[0]!.name;
           const membershipNumber = customerRow.rows[0]!.membership_number;
 
+          const sessionId = randomUUID();
           await client.query(
             `INSERT INTO sessions
-             (id, customer_id, member_name, membership_number, room_id, locker_id, check_in_time, checkout_at, expected_duration, status, lane, checkin_type, visit_id, agreement_signed, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', 'DEMO', 'INITIAL', $10, false, NOW(), NOW())`,
+             (id, customer_id, member_name, membership_number, room_id, locker_id, check_in_time, checkout_at, check_out_time, expected_duration, status, lane, checkin_type, visit_id, agreement_signed, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 360, $10, 'DEMO', 'INITIAL', $11, false, NOW(), NOW())`,
             [
               sessionId,
-              customerId,
+              params.customerId,
               memberName,
               membershipNumber,
-              roomId,
-              lockerIdFinal,
-              checkInAt,
-              checkoutAt,
-              blocksNeeded * 6 * 60, // minutes
+              params.roomId,
+              params.lockerId,
+              params.checkInAt,
+              params.scheduledCheckoutAt,
+              params.checkedOutAt,
+              params.checkedOutAt ? 'COMPLETED' : 'ACTIVE',
               visitId,
             ]
           );
 
-          // Create blocks (INITIAL + RENEWALs) and track first block id for optional waitlist linkage
-          let firstBlockId: string | null = null;
-          for (let b = 0; b < blocksNeeded; b++) {
-            const blockId = randomUUID();
-            if (b === 0) firstBlockId = blockId;
-            const startsAt = new Date(checkInAt.getTime() + b * 6 * 60 * 60 * 1000);
-            const endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000);
-            const blockType = b === 0 ? BlockType.INITIAL : BlockType.RENEWAL;
+          const blockId = randomUUID();
+          await client.query(
+            `INSERT INTO checkin_blocks
+             (id, visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, session_id, agreement_signed, agreement_signed_at, created_at, updated_at, has_tv_remote, waitlist_id)
+             VALUES ($1, $2, 'INITIAL', $3, $4, $5, $6, $7, NULL, false, NULL, NOW(), NOW(), false, NULL)`,
+            [blockId, visitId, params.checkInAt, params.scheduledCheckoutAt, params.rentalType, params.roomId, params.lockerId]
+          );
 
-            await client.query(
-              `INSERT INTO checkin_blocks
-               (id, visit_id, block_type, starts_at, ends_at, room_id, locker_id, session_id, agreement_signed, agreement_signed_at, created_at, updated_at, has_tv_remote, waitlist_id, rental_type)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, false, NULL, NOW(), NOW(), $8, NULL, $9)`,
-              [blockId, visitId, blockType, startsAt, endsAt, roomId, lockerIdFinal, false, rentalType]
-            );
-          }
+          return { visitId, sessionId };
+        }
 
-          // Optionally place a couple unassigned check-ins on waitlist to simulate busy conditions
-          if (!roomId && !lockerIdFinal && firstBlockId) {
-            const waitlistId = randomUUID();
-            await client.query(
-              `INSERT INTO waitlist
-               (id, visit_id, checkin_block_id, desired_tier, backup_tier, locker_or_room_assigned_initially, room_id, status, created_at, updated_at)
-               VALUES ($1, $2, $3, 'STANDARD', 'LOCKER', NULL, NULL, 'ACTIVE', $4, NOW())`,
-              [waitlistId, visitId, firstBlockId, checkInAt]
-            );
-            await client.query(`UPDATE checkin_blocks SET waitlist_id = $1, updated_at = NOW() WHERE id = $2`, [
-              waitlistId,
-              firstBlockId,
-            ]);
-          }
+        function makeCheckoutDeltaMinutes(isMajorityGood: boolean): number {
+          return isMajorityGood ? randInt(0, 15) : randInt(16, 90);
+        }
 
-          // Mark inventory assignments/statuses for occupied resources
-          if (roomNumber && roomId) {
-            await client.query(
-              `UPDATE rooms
-               SET status = $1,
-                   assigned_to_customer_id = $2,
-                   last_status_change = NOW(),
-                   updated_at = NOW()
-               WHERE id = $3`,
-              [RoomStatus.OCCUPIED, customerId, roomId]
-            );
-          }
-          if (lockerNumber && lockerIdFinal) {
-            await client.query(
-              `UPDATE lockers
-               SET status = $1,
-                   assigned_to_customer_id = $2,
-                   updated_at = NOW()
-               WHERE id = $3`,
-              [RoomStatus.OCCUPIED, customerId, lockerIdFinal]
-            );
+        // 1) Room stays overlapping PEAK (all completed by NOW)
+        for (let i = 0; i < PEAK_ROOM_OCCUPANCY; i++) {
+          const customerId = roomCustomerIds[i]!;
+          const roomNumber = occupiedRoomNumbers[i]!;
+          const roomMeta = roomIdByNumber.get(String(roomNumber));
+          if (!roomMeta) throw new Error(`Missing room inventory row for ${roomNumber}`);
+
+          const minutesBeforePeak = randInt(15, 5 * 60); // between 15m and 5h before peak
+          const checkInAt = new Date(peak.getTime() - minutesBeforePeak * 60 * 1000);
+          const scheduledCheckoutAt = new Date(checkInAt.getTime() + 6 * 60 * 60 * 1000);
+
+          const isGood = rng() < 0.88; // target >= 85% overall
+          const checkedOutAt = new Date(scheduledCheckoutAt.getTime() - makeCheckoutDeltaMinutes(isGood) * 60 * 1000);
+
+          await createVisitStay({
+            customerId,
+            checkInAt,
+            scheduledCheckoutAt,
+            checkedOutAt,
+            roomId: roomMeta.id,
+            lockerId: null,
+            rentalType: rentalTypeForRoomNumber(roomNumber),
+          });
+        }
+
+        // 2) Locker stays overlapping PEAK (87 completed + 1 late ACTIVE at NOW)
+        for (let i = 0; i < PEAK_LOCKER_OCCUPANCY; i++) {
+          const customerId = lockerCustomerIds[i]!;
+          const lockerNumber = occupiedLockerNumbers[i]!;
+          const lockerId = lockerIdByNumber.get(lockerNumber);
+          if (!lockerId) throw new Error(`Missing locker inventory row for ${lockerNumber}`);
+
+          const isLateActive = customerId === lateActiveCustomerId;
+
+          if (isLateActive) {
+            await createVisitStay({
+              customerId,
+              checkInAt: lateCheckInAt,
+              scheduledCheckoutAt: lateScheduledCheckoutAt,
+              checkedOutAt: null,
+              roomId: null,
+              lockerId,
+              rentalType: RentalType.LOCKER,
+            });
+          } else {
+            const minutesBeforePeak = randInt(15, 5 * 60);
+            const checkInAt = new Date(peak.getTime() - minutesBeforePeak * 60 * 1000);
+            const scheduledCheckoutAt = new Date(checkInAt.getTime() + 6 * 60 * 60 * 1000);
+
+            const isGood = rng() < 0.88;
+            const checkedOutAt = new Date(scheduledCheckoutAt.getTime() - makeCheckoutDeltaMinutes(isGood) * 60 * 1000);
+
+            await createVisitStay({
+              customerId,
+              checkInAt,
+              scheduledCheckoutAt,
+              checkedOutAt,
+              roomId: null,
+              lockerId,
+              rentalType: RentalType.LOCKER,
+            });
           }
         }
 
-        // Ensure the free room is available (clean + unassigned)
+        // 3) Extra completed stays spread across the last 24h (do NOT overlap PEAK)
+        // These help make "last 24h" reporting look more natural while preserving PEAK counts.
+        for (let i = 0; i < extraCustomerIds.length; i++) {
+          const customerId = extraCustomerIds[i]!;
+          const isRoom = i % 2 === 0;
+          const minutesAgo = randInt(12 * 60, 23 * 60); // 12h..23h ago
+          const checkInAt = new Date(now.getTime() - minutesAgo * 60 * 1000);
+          const scheduledCheckoutAt = new Date(checkInAt.getTime() + 6 * 60 * 60 * 1000);
+
+          // Ensure these are fully before peak (no overlap)
+          if (scheduledCheckoutAt.getTime() >= peak.getTime() - 60 * 1000) {
+            // shift earlier by 6 hours if needed
+            checkInAt.setTime(checkInAt.getTime() - 6 * 60 * 60 * 1000);
+            scheduledCheckoutAt.setTime(checkInAt.getTime() + 6 * 60 * 60 * 1000);
+          }
+
+          const isGood = rng() < 0.88;
+          const checkedOutAt = new Date(scheduledCheckoutAt.getTime() - makeCheckoutDeltaMinutes(isGood) * 60 * 1000);
+
+          if (isRoom) {
+            // Use freeRoomNumber for some historical stays (fine since it's free at PEAK)
+            const roomNumber = freeRoomNumber;
+            const roomMeta = roomIdByNumber.get(String(roomNumber));
+            if (!roomMeta) throw new Error(`Missing room inventory row for ${roomNumber}`);
+            await createVisitStay({
+              customerId,
+              checkInAt,
+              scheduledCheckoutAt,
+              checkedOutAt,
+              roomId: roomMeta.id,
+              lockerId: null,
+              rentalType: rentalTypeForRoomNumber(roomNumber),
+            });
+          } else {
+            const lockerNumber = LOCKER_NUMBERS[PEAK_LOCKER_OCCUPANCY + (i % (LOCKER_NUMBERS.length - PEAK_LOCKER_OCCUPANCY))]!;
+            const lockerId = lockerIdByNumber.get(lockerNumber);
+            if (!lockerId) throw new Error(`Missing locker inventory row for ${lockerNumber}`);
+            await createVisitStay({
+              customerId,
+              checkInAt,
+              scheduledCheckoutAt,
+              checkedOutAt,
+              roomId: null,
+              lockerId,
+              rentalType: RentalType.LOCKER,
+            });
+          }
+        }
+
+        // Inventory at NOW should reflect the single active late stay only.
+        // Everything else is checked out (clean + unassigned).
+        const lateLockerId = lockerIdByNumber.get(occupiedLockerNumbers[PEAK_LOCKER_OCCUPANCY - 1]!);
+        if (!lateLockerId) throw new Error('Missing late locker id');
+
         await client.query(
-          `UPDATE rooms
-           SET status = 'CLEAN', assigned_to_customer_id = NULL, last_status_change = NOW(), updated_at = NOW()
-           WHERE number = $1`,
-          [String(freeRoomNumber)]
+          `UPDATE lockers
+           SET status = $1,
+               assigned_to_customer_id = $2,
+               updated_at = NOW()
+           WHERE id = $3`,
+          [RoomStatus.OCCUPIED, lateActiveCustomerId, lateLockerId]
         );
       });
 
@@ -406,57 +504,130 @@ export async function seedDemoData(): Promise<void> {
         [NONEXISTENT_ROOM_NUMBERS.map(String)]
       );
 
-      const occupiedRooms = await query<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM rooms WHERE status = 'OCCUPIED' AND assigned_to_customer_id IS NOT NULL`
+      // XOR violations (must be zero)
+      const bothInSessions = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM sessions WHERE room_id IS NOT NULL AND locker_id IS NOT NULL`
       );
-      const availableRooms = await query<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM rooms WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL`
-      );
-      const freeRoom = await query<{ number: string; type: string }>(
-        `SELECT number, type::text as type FROM rooms WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL ORDER BY number LIMIT 1`
+      const bothInBlocks = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM checkin_blocks WHERE room_id IS NOT NULL AND locker_id IS NOT NULL`
       );
 
-      const occupiedLockers = await query<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM lockers WHERE status = 'OCCUPIED' AND assigned_to_customer_id IS NOT NULL`
+      // Peak occupancy computed from time overlap (not from current inventory status)
+      const peakRoomOcc = await query<{ count: string }>(
+        `SELECT COUNT(DISTINCT room_id)::text as count
+         FROM checkin_blocks
+         WHERE room_id IS NOT NULL
+           AND starts_at <= $1
+           AND ends_at > $1`,
+        [peak]
       );
-      const availableLockers = await query<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM lockers WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL`
+      const peakLockerOcc = await query<{ count: string }>(
+        `SELECT COUNT(DISTINCT locker_id)::text as count
+         FROM checkin_blocks
+         WHERE locker_id IS NOT NULL
+           AND starts_at <= $1
+           AND ends_at > $1`,
+        [peak]
       );
 
-      const checkinBounds = await query<{ min: Date | null; max: Date | null }>(
-        `SELECT MIN(check_in_time) as min, MAX(check_in_time) as max FROM sessions WHERE status = 'ACTIVE'`
+      const freeRoomsAtPeak = await query<{ number: string; type: string }>(
+        `SELECT r.number, r.type::text as type
+         FROM rooms r
+         WHERE r.id NOT IN (
+           SELECT cb.room_id
+           FROM checkin_blocks cb
+           WHERE cb.room_id IS NOT NULL
+             AND cb.starts_at <= $1
+             AND cb.ends_at > $1
+         )
+         ORDER BY r.number`,
+        [peak]
       );
-      const minCheckin = checkinBounds.rows[0]!.min ? new Date(checkinBounds.rows[0]!.min) : null;
-      const maxCheckin = checkinBounds.rows[0]!.max ? new Date(checkinBounds.rows[0]!.max) : null;
+
+      // NOW: exactly one active late stay remains
+      const activeSessionsNow = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM sessions WHERE status = 'ACTIVE' AND check_out_time IS NULL`
+      );
+      const activeSessionRow = await query<{
+        id: string;
+        checkout_at: Date | null;
+        room_id: string | null;
+        locker_id: string | null;
+        customer_id: string;
+      }>(
+        `SELECT id, checkout_at, room_id, locker_id, customer_id
+         FROM sessions
+         WHERE status = 'ACTIVE'
+         ORDER BY created_at DESC
+         LIMIT 2`
+      );
+
+      // Checkout quality: >= 85% of completed stays have (checkout_at - check_out_time) in [0, 15m]
+      const checkoutQuality = await query<{ total: string; good: string }>(
+        `SELECT
+           COUNT(*)::text as total,
+           COUNT(*) FILTER (
+             WHERE EXTRACT(EPOCH FROM (checkout_at - check_out_time)) BETWEEN 0 AND (15 * 60)
+           )::text as good
+         FROM sessions
+         WHERE status = 'COMPLETED'
+           AND checkout_at IS NOT NULL
+           AND check_out_time IS NOT NULL`
+      );
 
       function asInt(row: { count: string }): number {
         return parseInt(row.count, 10);
       }
 
-      if (asInt(customerCount.rows[0]!) !== 100) throw new Error(`Expected 100 customers, got ${customerCount.rows[0]!.count}`);
       if (asInt(memberCount.rows[0]!) !== 100) throw new Error(`Expected 100 members, got ${memberCount.rows[0]!.count}`);
+      if (asInt(customerCount.rows[0]!) < 142)
+        throw new Error(`Expected at least 142 customers to satisfy peak overlap, got ${customerCount.rows[0]!.count}`);
       if (asInt(roomCount.rows[0]!) !== 55) throw new Error(`Expected 55 rooms, got ${roomCount.rows[0]!.count}`);
       if (asInt(nonExistentRoomsPresent.rows[0]!) !== 0)
         throw new Error(`Non-existent rooms present in DB (${nonExistentRoomsPresent.rows[0]!.count})`);
-      if (asInt(occupiedRooms.rows[0]!) !== 54) throw new Error(`Expected 54 occupied rooms, got ${occupiedRooms.rows[0]!.count}`);
-      if (asInt(availableRooms.rows[0]!) !== 1) throw new Error(`Expected 1 available room, got ${availableRooms.rows[0]!.count}`);
-      if (!freeRoom.rows[0] || freeRoom.rows[0]!.type !== 'STANDARD')
-        throw new Error(`Expected the free room to be STANDARD, got ${freeRoom.rows[0]?.number ?? 'none'} (${freeRoom.rows[0]?.type ?? 'n/a'})`);
       if (asInt(lockerCount.rows[0]!) !== 108) throw new Error(`Expected 108 lockers, got ${lockerCount.rows[0]!.count}`);
-      if (asInt(occupiedLockers.rows[0]!) !== 88) throw new Error(`Expected 88 occupied lockers, got ${occupiedLockers.rows[0]!.count}`);
-      if (asInt(availableLockers.rows[0]!) !== 20) throw new Error(`Expected 20 available lockers, got ${availableLockers.rows[0]!.count}`);
+      if (asInt(bothInSessions.rows[0]!) !== 0)
+        throw new Error(`Exclusive assignment violated in sessions (${bothInSessions.rows[0]!.count})`);
+      if (asInt(bothInBlocks.rows[0]!) !== 0)
+        throw new Error(`Exclusive assignment violated in checkin_blocks (${bothInBlocks.rows[0]!.count})`);
 
-      const lowerBound = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      if (!minCheckin || !maxCheckin) throw new Error('Expected active sessions with check_in_time bounds');
-      if (minCheckin.getTime() < lowerBound.getTime() - 60_000) {
-        throw new Error(`Oldest check-in is too old: ${minCheckin.toISOString()} (min allowed ~${lowerBound.toISOString()})`);
+      if (asInt(peakRoomOcc.rows[0]!) !== 54) throw new Error(`Expected 54 occupied rooms at peak, got ${peakRoomOcc.rows[0]!.count}`);
+      if (asInt(peakLockerOcc.rows[0]!) !== 88)
+        throw new Error(`Expected 88 occupied lockers at peak, got ${peakLockerOcc.rows[0]!.count}`);
+
+      if (freeRoomsAtPeak.rows.length !== 1)
+        throw new Error(`Expected 1 free room at peak, got ${freeRoomsAtPeak.rows.length}`);
+      if (freeRoomsAtPeak.rows[0]!.type !== 'STANDARD')
+        throw new Error(
+          `Expected the free room at peak to be STANDARD, got ${freeRoomsAtPeak.rows[0]!.number} (${freeRoomsAtPeak.rows[0]!.type})`
+        );
+
+      if (asInt(activeSessionsNow.rows[0]!) !== 1)
+        throw new Error(`Expected exactly 1 active stay at now, got ${activeSessionsNow.rows[0]!.count}`);
+      if (activeSessionRow.rows.length !== 1) throw new Error(`Expected 1 active session row, got ${activeSessionRow.rows.length}`);
+      const active = activeSessionRow.rows[0]!;
+      const expectedLateMs = now.getTime() - 15 * 60 * 1000;
+      if (!active.checkout_at) throw new Error('Active late session missing checkout_at');
+      if (Math.abs(new Date(active.checkout_at).getTime() - expectedLateMs) > 2_000) {
+        throw new Error(
+          `Active late session scheduled checkout mismatch: got ${new Date(active.checkout_at).toISOString()} expected ~${new Date(expectedLateMs).toISOString()}`
+        );
       }
-      if (maxCheckin.getTime() > now.getTime() + 5_000) {
-        throw new Error(`Newest check-in is in the future: ${maxCheckin.toISOString()} (now ${now.toISOString()})`);
+      if (active.room_id && active.locker_id) throw new Error('Active late session has both room and locker set');
+      if (!active.room_id && !active.locker_id) throw new Error('Active late session must have either room or locker');
+
+      const totalCompleted = parseInt(checkoutQuality.rows[0]!.total, 10);
+      const goodCompleted = parseInt(checkoutQuality.rows[0]!.good, 10);
+      const ratio = totalCompleted === 0 ? 0 : goodCompleted / totalCompleted;
+      if (ratio < 0.85) {
+        throw new Error(
+          `Checkout timing quality too low: ${goodCompleted}/${totalCompleted} (${Math.round(ratio * 100)}%) within 0..15m`
+        );
       }
 
+      const assignmentType = active.room_id ? 'room' : 'locker';
       console.log(
-        `✅ Busy Saturday seed complete: 100 members/customers, ${checkedInCustomerIds.length} active check-ins, 54 rooms occupied (free room: ${freeRoom.rows[0]!.number}), 88 lockers occupied`
+        `✅ Busy Saturday seed complete (peak=${peak.toISOString()}, now=${now.toISOString()}): members=100, customers=${customerCount.rows[0]!.count}, stays=${totalCompleted + 1}, peak rooms=54 (free STANDARD room: ${freeRoomsAtPeak.rows[0]!.number}), peak lockers=88, now active late stay=${active.id} (${assignmentType})`
       );
     }
 

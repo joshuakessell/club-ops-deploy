@@ -21,6 +21,50 @@ const CreateVisitSchema = z.object({
   roomId: z.string().uuid().optional(),
   lockerId: z.string().uuid().optional(),
   lane: z.string().min(1).optional(),
+}).superRefine((v, ctx) => {
+  const hasRoom = Boolean(v.roomId);
+  const hasLocker = Boolean(v.lockerId);
+  if (hasRoom && hasLocker) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide either roomId or lockerId, not both',
+      path: ['roomId'],
+    });
+    return;
+  }
+
+  const isLockerRental = v.rentalType === 'LOCKER' || v.rentalType === 'GYM_LOCKER';
+  if (isLockerRental) {
+    if (!hasLocker) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `lockerId is required for rentalType ${v.rentalType}`,
+        path: ['lockerId'],
+      });
+    }
+    if (hasRoom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `roomId must not be provided for rentalType ${v.rentalType}`,
+        path: ['roomId'],
+      });
+    }
+  } else {
+    if (!hasRoom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `roomId is required for rentalType ${v.rentalType}`,
+        path: ['roomId'],
+      });
+    }
+    if (hasLocker) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `lockerId must not be provided for rentalType ${v.rentalType}`,
+        path: ['lockerId'],
+      });
+    }
+  }
 });
 
 type CreateVisitInput = z.infer<typeof CreateVisitSchema>;
@@ -33,6 +77,50 @@ const RenewVisitSchema = z.object({
   roomId: z.string().uuid().optional(),
   lockerId: z.string().uuid().optional(),
   lane: z.string().min(1).optional(),
+}).superRefine((v, ctx) => {
+  const hasRoom = Boolean(v.roomId);
+  const hasLocker = Boolean(v.lockerId);
+  if (hasRoom && hasLocker) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide either roomId or lockerId, not both',
+      path: ['roomId'],
+    });
+    return;
+  }
+
+  const isLockerRental = v.rentalType === 'LOCKER' || v.rentalType === 'GYM_LOCKER';
+  if (isLockerRental) {
+    if (!hasLocker) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `lockerId is required for rentalType ${v.rentalType}`,
+        path: ['lockerId'],
+      });
+    }
+    if (hasRoom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `roomId must not be provided for rentalType ${v.rentalType}`,
+        path: ['roomId'],
+      });
+    }
+  } else {
+    if (!hasRoom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `roomId is required for rentalType ${v.rentalType}`,
+        path: ['roomId'],
+      });
+    }
+    if (hasLocker) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `lockerId must not be provided for rentalType ${v.rentalType}`,
+        path: ['lockerId'],
+      });
+    }
+  }
 });
 
 type RenewVisitInput = z.infer<typeof RenewVisitSchema>;

@@ -13,6 +13,7 @@ export interface InventoryDrawerProps {
   waitlistDesiredTier?: string | null;
   waitlistBackupType?: string | null;
   onSelect?: (type: 'room' | 'locker', id: string, number: string, tier: string) => void;
+  onClearSelection?: () => void;
   selectedItem?: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
   sessionId?: string | null;
   disableSelection?: boolean;
@@ -28,6 +29,7 @@ export function InventoryDrawer({
   waitlistDesiredTier = null,
   waitlistBackupType = null,
   onSelect,
+  onClearSelection,
   selectedItem = null,
   sessionId = null,
   disableSelection = true,
@@ -76,6 +78,7 @@ export function InventoryDrawer({
         waitlistBackupType={waitlistBackupType}
         onSelect={onSelect ?? (() => undefined)}
         selectedItem={selectedItem}
+        onClearSelection={onClearSelection}
         sessionId={sessionId}
         lane={lane}
         sessionToken={sessionToken}
