@@ -14,6 +14,23 @@ const CreateSessionSchema = z.object({
   lockerId: z.string().uuid().optional(),
   expectedDuration: z.number().int().positive().default(360), // in minutes (6 hours default)
   checkinType: z.enum(['INITIAL', 'RENEWAL', 'UPGRADE']).optional().default('INITIAL'),
+}).superRefine((v, ctx) => {
+  const hasRoom = Boolean(v.roomId);
+  const hasLocker = Boolean(v.lockerId);
+  if (hasRoom && hasLocker) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide either roomId or lockerId, not both',
+      path: ['roomId'],
+    });
+  }
+  if (!hasRoom && !hasLocker) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide exactly one of roomId or lockerId',
+      path: ['roomId'],
+    });
+  }
 });
 
 type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
@@ -167,7 +184,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 409, message: 'Customer already has an active session' };
           }
 
-          // 3. Handle room assignment if requested
+          // 3. Handle room OR locker assignment (mutually exclusive)
           let assignedRoomId: string | null = null;
           if (body.roomId) {
             const roomResult = await client.query<RoomRow>(

@@ -101,6 +101,7 @@ interface InventorySelectorProps {
   waitlistBackupType?: string | null;
   onSelect: (type: 'room' | 'locker', id: string, number: string, tier: string) => void;
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
+  onClearSelection?: () => void;
   sessionId: string | null;
   lane: string;
   sessionToken: string;
@@ -225,6 +226,7 @@ export function InventorySelector({
   waitlistBackupType,
   onSelect,
   selectedItem,
+  onClearSelection,
   sessionId: _sessionId,
   lane,
   sessionToken,
@@ -555,6 +557,8 @@ export function InventorySelector({
     return null;
   }
 
+  const selectionLockedToType: 'room' | 'locker' | null = selectedItem?.type ?? null;
+
   return (
     <>
       <div
@@ -567,6 +571,16 @@ export function InventorySelector({
       >
         <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>Inventory</h2>
 
+        {!occupancyLookupMode && !disableSelection && selectedItem && onClearSelection && (
+          <button
+            className="cs-liquid-button cs-liquid-button--secondary"
+            onClick={onClearSelection}
+            style={{ width: '100%', marginBottom: '0.75rem', padding: '0.6rem', fontWeight: 800 }}
+          >
+            Clear selection (currently {selectedItem.type === 'room' ? 'Room' : 'Locker'} {selectedItem.number})
+          </button>
+        )}
+
         {/* Lockers */}
         <LockerSection
           lockers={filteredLockers}
@@ -575,7 +589,7 @@ export function InventorySelector({
           onSelectLocker={handleLockerClick}
           selectedItem={selectedItem}
           nowMs={nowMs}
-          disableSelection={disableSelection}
+          disableSelection={disableSelection || selectionLockedToType === 'room'}
           occupancyLookupMode={occupancyLookupMode}
         />
 
@@ -589,7 +603,7 @@ export function InventorySelector({
           selectedItem={selectedItem}
           waitlistEntries={waitlistEntries}
           nowMs={nowMs}
-          disableSelection={disableSelection}
+          disableSelection={disableSelection || selectionLockedToType === 'locker'}
           occupancyLookupMode={occupancyLookupMode}
         />
 
@@ -603,7 +617,7 @@ export function InventorySelector({
           selectedItem={selectedItem}
           waitlistEntries={waitlistEntries}
           nowMs={nowMs}
-          disableSelection={disableSelection}
+          disableSelection={disableSelection || selectionLockedToType === 'locker'}
           occupancyLookupMode={occupancyLookupMode}
         />
 
@@ -617,7 +631,7 @@ export function InventorySelector({
           selectedItem={selectedItem}
           waitlistEntries={waitlistEntries}
           nowMs={nowMs}
-          disableSelection={disableSelection}
+          disableSelection={disableSelection || selectionLockedToType === 'locker'}
           occupancyLookupMode={occupancyLookupMode}
         />
       </div>

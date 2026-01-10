@@ -29,7 +29,7 @@
     "spec:check": "node scripts/spec-compliance.mjs",
     "demo:seed": "DEMO_MODE=true pnpm db:reset && DEMO_MODE=true pnpm --filter @club-ops/api db:migrate && DEMO_MODE=true pnpm --filter @club-ops/api seed && DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts",
     "demo:dev": "pnpm demo:seed && DEMO_MODE=true pnpm dev",
-    "demo:test": "DEMO_MODE=true pnpm db:reset && DEMO_MODE=true pnpm --filter @club-ops/api db:migrate && DEMO_MODE=true pnpm --filter @club-ops/api seed && DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts && pnpm --filter @club-ops/api exec vitest run tests/demo-seed.test.ts"
+    "demo:test": "DEMO_MODE=true pnpm db:reset && DEMO_MODE=true pnpm --filter @club-ops/api db:migrate && DEMO_MODE=true pnpm --filter @club-ops/api seed && DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts && DEMO_MODE=true pnpm --filter @club-ops/api exec vitest run tests/demo-seed.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

@@ -2322,6 +2322,7 @@ export function AppRoot() {
                 waitlistDesiredTier={waitlistDesiredTier}
                 waitlistBackupType={waitlistBackupType}
                 onSelect={handleInventorySelect}
+                onClearSelection={() => setSelectedInventoryItem(null)}
                 selectedItem={selectedInventoryItem}
                 sessionId={currentSessionId}
                 disableSelection={false}
@@ -2807,114 +2808,13 @@ export function AppRoot() {
 
             <section className="actions-panel">
               <h2>Lane Session</h2>
-              <div className="action-buttons">
-                <button
-                  className={`action-btn cs-liquid-button ${scanModeOpen ? 'cs-liquid-button--selected active' : ''}`}
-                  onClick={() => {
-                    setManualEntry(false);
-                    setScanModeOpen(true);
-                  }}
-                >
-                  <span className="btn-icon">📡</span>
-                  Scan
-                </button>
-                <button
-                  className={`action-btn cs-liquid-button cs-liquid-button--secondary ${manualEntry ? 'cs-liquid-button--selected active' : ''}`}
-                  onClick={() => {
-                    setManualEntry(!manualEntry);
-                  }}
-                >
-                  <span className="btn-icon">✏️</span>
-                  Manual Entry
-                </button>
-                <button
-                  className="action-btn cs-liquid-button cs-liquid-button--danger"
-                  onClick={() => void handleClearSession()}
-                  disabled={isSubmitting}
-                >
-                  <span className="btn-icon">🗑️</span>
-                  Clear Session
-                </button>
-              </div>
-
-              {manualEntry && (
-                <form
-                  className="manual-entry-form cs-liquid-card"
-                  onSubmit={(e) => void handleManualSubmit(e)}
-                >
-                  <div className="form-group">
-                    <label htmlFor="customerName">Customer Name *</label>
-                    <input
-                      id="customerName"
-                      type="text"
-                      className="cs-liquid-input"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Enter customer name"
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="membershipNumber">Membership Number (optional)</label>
-                    <input
-                      id="membershipNumber"
-                      type="text"
-                      className="cs-liquid-input"
-                      value={membershipNumber}
-                      onChange={(e) => setMembershipNumber(e.target.value)}
-                      placeholder="Enter membership number"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                  <div className="form-actions">
-                    <button
-                      type="submit"
-                      className="submit-btn cs-liquid-button"
-                      disabled={isSubmitting || !customerName.trim()}
-                    >
-                      {isSubmitting ? 'Submitting...' : 'Update Session'}
-                    </button>
-                    <button
-                      type="button"
-                      className="cancel-btn cs-liquid-button cs-liquid-button--danger"
-                      onClick={() => {
-                        setManualEntry(false);
-                        setCustomerName('');
-                        setMembershipNumber('');
-                      }}
-                      disabled={isSubmitting}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {(customerName || membershipNumber) && !manualEntry && (
-                <div className="current-session">
-                  <p>
-                    <strong>Current Session:</strong>
-                  </p>
-                  <p>Name: {customerName || 'Not set'}</p>
-                  {membershipNumber && <p>Membership: {membershipNumber}</p>}
-                  {currentSessionId && (
-                    <p
-                      className={
-                        agreementSigned ? 'agreement-status signed' : 'agreement-status unsigned'
-                      }
-                    >
-                      {agreementSigned ? 'Agreement signed ✓' : 'Agreement pending'}
-                    </p>
-                  )}
-                </div>
-              )}
 
               {/* Customer lookup (typeahead) */}
               <div
                 className="typeahead-section cs-liquid-card"
                 style={{
-                  marginTop: '1rem',
+                  marginTop: 0,
+                  marginBottom: '1rem',
                   padding: '1rem',
                 }}
               >
@@ -3007,6 +2907,109 @@ export function AppRoot() {
                   {selectedCustomerLabel ? `Confirm ${selectedCustomerLabel}` : 'Confirm'}
                 </button>
               </div>
+
+              <div className="action-buttons">
+                <button
+                  className={`action-btn cs-liquid-button ${scanModeOpen ? 'cs-liquid-button--selected active' : ''}`}
+                  onClick={() => {
+                    setManualEntry(false);
+                    setScanModeOpen(true);
+                  }}
+                >
+                  <span className="btn-icon">📡</span>
+                  Scan
+                </button>
+                <button
+                  className={`action-btn cs-liquid-button cs-liquid-button--secondary ${manualEntry ? 'cs-liquid-button--selected active' : ''}`}
+                  onClick={() => {
+                    setManualEntry(!manualEntry);
+                  }}
+                >
+                  <span className="btn-icon">✏️</span>
+                  First Time Customer
+                </button>
+                <button
+                  className="action-btn cs-liquid-button cs-liquid-button--danger"
+                  onClick={() => void handleClearSession()}
+                  disabled={isSubmitting}
+                >
+                  <span className="btn-icon">🗑️</span>
+                  Clear Session
+                </button>
+              </div>
+
+              {manualEntry && (
+                <form
+                  className="manual-entry-form cs-liquid-card"
+                  onSubmit={(e) => void handleManualSubmit(e)}
+                >
+                  <div className="form-group">
+                    <label htmlFor="customerName">Customer Name *</label>
+                    <input
+                      id="customerName"
+                      type="text"
+                      className="cs-liquid-input"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Enter customer name"
+                      disabled={isSubmitting}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="membershipNumber">Membership Number (optional)</label>
+                    <input
+                      id="membershipNumber"
+                      type="text"
+                      className="cs-liquid-input"
+                      value={membershipNumber}
+                      onChange={(e) => setMembershipNumber(e.target.value)}
+                      placeholder="Enter membership number"
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button
+                      type="submit"
+                      className="submit-btn cs-liquid-button"
+                      disabled={isSubmitting || !customerName.trim()}
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Update Session'}
+                    </button>
+                    <button
+                      type="button"
+                      className="cancel-btn cs-liquid-button cs-liquid-button--danger"
+                      onClick={() => {
+                        setManualEntry(false);
+                        setCustomerName('');
+                        setMembershipNumber('');
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {(customerName || membershipNumber) && !manualEntry && (
+                <div className="current-session">
+                  <p>
+                    <strong>Current Session:</strong>
+                  </p>
+                  <p>Name: {customerName || 'Not set'}</p>
+                  {membershipNumber && <p>Membership: {membershipNumber}</p>}
+                  {currentSessionId && (
+                    <p
+                      className={
+                        agreementSigned ? 'agreement-status signed' : 'agreement-status unsigned'
+                      }
+                    >
+                      {agreementSigned ? 'Agreement signed ✓' : 'Agreement pending'}
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
           </main>
 
