@@ -54,8 +54,23 @@ export async function seedDemoData(): Promise<void> {
         //   (e.g., agreement_signatures, charges, sessions), which Postgres blocks on TRUNCATE.
         //
         // So we use ordered DELETEs which respect ON DELETE behaviors.
-        await client.query(`UPDATE rooms SET assigned_to_customer_id = NULL, updated_at = NOW()`);
-        await client.query(`UPDATE lockers SET assigned_to_customer_id = NULL, updated_at = NOW()`);
+        // Clear assignments from inventory. Also clean up any stale OCCUPIED statuses so we don't
+        // show "occupied" units without an assigned customer after reseeding.
+        //
+        // Important: preserve DIRTY/CLEANING/CLEAN statuses to keep demo variety; only normalize OCCUPIED.
+        await client.query(
+          `UPDATE rooms
+           SET assigned_to_customer_id = NULL,
+               status = CASE WHEN status = 'OCCUPIED' THEN 'CLEAN' ELSE status END,
+               last_status_change = CASE WHEN status = 'OCCUPIED' THEN NOW() ELSE last_status_change END,
+               updated_at = NOW()`
+        );
+        await client.query(
+          `UPDATE lockers
+           SET assigned_to_customer_id = NULL,
+               status = CASE WHEN status = 'OCCUPIED' THEN 'CLEAN' ELSE status END,
+               updated_at = NOW()`
+        );
         await client.query('DELETE FROM waitlist');
         await client.query('DELETE FROM agreement_signatures');
         await client.query('DELETE FROM charges');
