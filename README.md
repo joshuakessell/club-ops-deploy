@@ -152,9 +152,13 @@ pnpm db:reset
 pnpm db:seed
 ```
 
-### Demo seed (rich customers/visits)
+### Demo seed (busy Saturday stress test)
 
-- After a reset/migrate (`pnpm db:reset && pnpm db:migrate`), start the API with `DEMO_MODE=true` to auto-seed 100–200 demo customers, historical visits (6-hour blocks, ≤3 starts/week, no overlaps), a handful of active assignments, and a waitlist list long enough to exercise the UI. Shift/timeclock/demo documents still seed when shift data is absent.
+- In `DEMO_MODE=true`, the API seeds a deterministic “busy Saturday night” dataset designed to stress the inventory/assignment UI:
+  - **Customers/Members**: 100
+  - **Rooms**: 55 total (200–262 excluding non-existent 247,249,251,253,255,257,259,261) with **54 occupied** and **1 STANDARD available**
+  - **Lockers**: 108 total (001–108) with **88 occupied** and **20 available**
+  - **Check-ins**: ~90 active, with `check_in_time` distributed across the last 24 hours (no hardcoded timestamps)
 
 ### One-step demo test run
 

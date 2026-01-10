@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
+import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -106,21 +107,12 @@ The full upgrade fee applies even if limited time remains.`;
 function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
   const num = parseInt(roomNumber, 10);
 
-  // Special: rooms 201, 232, 256
-  if (num === 201 || num === 232 || num === 256) {
+  if (isSpecialRoom(num)) {
     return 'SPECIAL';
   }
 
-  // Double: even rooms 216, 218, 232, 252, 256, 262 and odd room 225
-  if (
-    num === 216 ||
-    num === 218 ||
-    num === 232 ||
-    num === 252 ||
-    num === 256 ||
-    num === 262 ||
-    num === 225
-  ) {
+  // "Deluxe" rooms in the facility contract map to DB tier/type "DOUBLE"
+  if (isDeluxeRoom(num)) {
     return 'DOUBLE';
   }
 

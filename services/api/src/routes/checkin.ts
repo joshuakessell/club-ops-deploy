@@ -18,7 +18,7 @@ import type {
   SelectionAcknowledgedPayload,
 } from '@club-ops/shared';
 import { calculatePriceQuote, type PricingInput } from '../pricing/engine.js';
-import { IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
+import { IdScanPayloadSchema, type IdScanPayload, isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
 import crypto from 'crypto';
 import { Parse as ParseAamva } from 'aamva-parser';
 
@@ -595,21 +595,12 @@ function calculateAge(dob: Date | string | null): number | undefined {
 function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
   const num = parseInt(roomNumber, 10);
 
-  // Special: rooms 201, 232, 256
-  if (num === 201 || num === 232 || num === 256) {
+  if (isSpecialRoom(num)) {
     return 'SPECIAL';
   }
 
-  // Double: even rooms 216, 218, 232, 252, 256, 262 and odd room 225
-  if (
-    num === 216 ||
-    num === 218 ||
-    num === 232 ||
-    num === 252 ||
-    num === 256 ||
-    num === 262 ||
-    num === 225
-  ) {
+  // "Deluxe" rooms in the facility contract map to DB tier/type "DOUBLE"
+  if (isDeluxeRoom(num)) {
     return 'DOUBLE';
   }
 

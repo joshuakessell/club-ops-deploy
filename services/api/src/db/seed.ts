@@ -1,106 +1,44 @@
 import { query, initializeDatabase, closeDatabase } from './index.js';
 import { RoomStatus, RoomType } from '@club-ops/shared';
+import { LOCKER_NUMBERS, ROOMS } from '@club-ops/shared';
 import { hashQrToken, hashPin } from '../auth/utils.js';
 
 interface RoomSeed {
   number: string;
   type: RoomType;
-  status: RoomStatus;
   floor: number;
   tagCode: string;
 }
 
 interface LockerSeed {
   number: string; // 3-digit "001".."108"
-  status: RoomStatus;
   tagCode: string;
 }
 
 /**
  * Seed data for development and testing.
- * Inserts rooms/lockers with various statuses and key tags with QR scan tokens.
+ *
+ * IMPORTANT (facility inventory contract):
+ * - Lockers: 001..108
+ * - Rooms: existing rooms only (nominal 200..262 minus non-existent odd 247..261)
+ *
+ * This seed enforces inventory presence and removes any invalid legacy rooms/lockers.
  */
-const seedRooms: RoomSeed[] = [
-  // DIRTY rooms
-  {
-    number: '101',
-    type: RoomType.STANDARD,
-    status: RoomStatus.DIRTY,
-    floor: 1,
-    tagCode: 'ROOM-101',
-  },
-  {
-    number: '102',
-    type: RoomType.STANDARD,
-    status: RoomStatus.DIRTY,
-    floor: 1,
-    tagCode: 'ROOM-102',
-  },
-
-  // CLEANING rooms
-  {
-    number: '103',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEANING,
-    floor: 1,
-    tagCode: 'ROOM-103',
-  },
-  {
-    number: '216',
-    type: RoomType.DOUBLE,
-    status: RoomStatus.CLEANING,
-    floor: 2,
-    tagCode: 'ROOM-216',
-  },
-
-  // CLEAN rooms - intentionally low counts for demo
-  // STANDARD rooms
-  {
-    number: '104',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEAN,
-    floor: 1,
-    tagCode: 'ROOM-104',
-  },
-  {
-    number: '105',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEAN,
-    floor: 1,
-    tagCode: 'ROOM-105',
-  },
-  {
-    number: '106',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEAN,
-    floor: 1,
-    tagCode: 'ROOM-106',
-  },
-  {
-    number: '107',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEAN,
-    floor: 1,
-    tagCode: 'ROOM-107',
-  },
-
-  // DOUBLE rooms - <5 available (only 2 clean)
-  { number: '218', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-218' },
-  { number: '225', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-225' },
-
-  // SPECIAL rooms - 0 available (none seeded as CLEAN)
-  // Note: Room 201, 232, 256 are SPECIAL but not seeded as CLEAN
-];
-
-// Seed lockers 001–108 (Club Dallas contract / employee register grid)
-const seedLockers: LockerSeed[] = Array.from({ length: 108 }, (_, idx) => {
-  const n = String(idx + 1).padStart(3, '0');
+const seedRooms: RoomSeed[] = ROOMS.map((r) => {
+  const type: RoomType =
+    r.kind === 'DELUXE' ? RoomType.DOUBLE : r.kind === 'SPECIAL' ? RoomType.SPECIAL : RoomType.STANDARD;
   return {
-    number: n,
-    status: RoomStatus.CLEAN,
-    tagCode: `LOCKER-${n}`,
+    number: String(r.number),
+    type,
+    floor: Math.floor(r.number / 100),
+    tagCode: `ROOM-${r.number}`,
   };
 });
+
+const seedLockers: LockerSeed[] = LOCKER_NUMBERS.map((n) => ({
+  number: n,
+  tagCode: `LOCKER-${n}`,
+}));
 
 async function seed() {
   try {
@@ -109,69 +47,96 @@ async function seed() {
 
     console.log('Starting seed process...');
 
-    // Check if rooms already exist
-    const existingRooms = await query<{ count: string }>('SELECT COUNT(*) as count FROM rooms');
-
-    if (parseInt(existingRooms.rows[0]?.count || '0', 10) > 0) {
-      console.log('⚠️  Rooms already exist in database. Skipping room seed.');
-      console.log('   To reseed rooms, clear the database first: pnpm db:reset && pnpm db:migrate');
-    } else {
-      for (const roomSeed of seedRooms) {
-        const roomResult = await query<{ id: string }>(
-          `INSERT INTO rooms (number, type, status, floor, last_status_change)
-           VALUES ($1, $2, $3, $4, NOW())
-           RETURNING id`,
-          [roomSeed.number, roomSeed.type, roomSeed.status, roomSeed.floor]
-        );
-
-        const roomId = roomResult.rows[0]!.id;
-
-        await query(
-          `INSERT INTO key_tags (room_id, tag_type, tag_code, is_active)
-           VALUES ($1, 'QR', $2, true)`,
-          [roomId, roomSeed.tagCode]
-        );
-
-        console.log(
-          `✓ Seeded room ${roomSeed.number} (${roomSeed.status}) with tag ${roomSeed.tagCode}`
-        );
-      }
-
-      console.log(`\n✅ Successfully seeded ${seedRooms.length} rooms with key tags`);
+    // Enforce facility inventory contract (delete any invalid legacy rooms)
+    const desiredRoomNumbers = seedRooms.map((r) => r.number);
+    const deletedRooms = await query<{ count: string }>(
+      `WITH del AS (
+         DELETE FROM rooms
+         WHERE NOT (number = ANY($1::text[]))
+         RETURNING 1
+       )
+       SELECT COUNT(*)::text as count FROM del`,
+      [desiredRoomNumbers]
+    );
+    if (parseInt(deletedRooms.rows[0]?.count || '0', 10) > 0) {
+      console.log(`🧹 Removed ${deletedRooms.rows[0]!.count} invalid legacy room(s) from inventory`);
     }
 
-    // Seed lockers (001–108) and their key tags
-    const existingLockers = await query<{ count: string }>('SELECT COUNT(*) as count FROM lockers');
+    for (const roomSeed of seedRooms) {
+      const roomResult = await query<{ id: string }>(
+        `INSERT INTO rooms (number, type, status, floor, last_status_change)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (number) DO UPDATE
+           SET type = EXCLUDED.type,
+               floor = EXCLUDED.floor,
+               updated_at = NOW()
+         RETURNING id`,
+        [roomSeed.number, roomSeed.type, RoomStatus.CLEAN, roomSeed.floor]
+      );
 
-    if (parseInt(existingLockers.rows[0]?.count || '0', 10) > 0) {
-      console.log('⚠️  Lockers already exist in database. Skipping locker seed.');
-    } else {
-      for (const lockerSeed of seedLockers) {
-        const lockerResult = await query<{ id: string }>(
-          `INSERT INTO lockers (number, status)
-           VALUES ($1, $2)
-           RETURNING id`,
-          [lockerSeed.number, lockerSeed.status]
-        );
+      const roomId = roomResult.rows[0]!.id;
 
-        const lockerId = lockerResult.rows[0]!.id;
-
-        await query(
-          `INSERT INTO key_tags (locker_id, tag_type, tag_code, is_active)
-           VALUES ($1, 'QR', $2, true)`,
-          [lockerId, lockerSeed.tagCode]
-        );
-      }
-
-      console.log(`\n✅ Successfully seeded ${seedLockers.length} lockers with key tags (001–108)`);
+      await query(
+        `INSERT INTO key_tags (room_id, tag_type, tag_code, is_active)
+         VALUES ($1, 'QR', $2, true)
+         ON CONFLICT (tag_code) DO UPDATE
+           SET room_id = EXCLUDED.room_id,
+               locker_id = NULL,
+               is_active = true,
+               updated_at = NOW()`,
+        [roomId, roomSeed.tagCode]
+      );
     }
+
+    console.log(`\n✅ Rooms inventory ensured (${seedRooms.length} rooms)`);
+
+    // Enforce facility inventory contract (delete any invalid legacy lockers)
+    const desiredLockerNumbers = seedLockers.map((l) => l.number);
+    const deletedLockers = await query<{ count: string }>(
+      `WITH del AS (
+         DELETE FROM lockers
+         WHERE NOT (number = ANY($1::text[]))
+         RETURNING 1
+       )
+       SELECT COUNT(*)::text as count FROM del`,
+      [desiredLockerNumbers]
+    );
+    if (parseInt(deletedLockers.rows[0]?.count || '0', 10) > 0) {
+      console.log(`🧹 Removed ${deletedLockers.rows[0]!.count} invalid legacy locker(s) from inventory`);
+    }
+
+    for (const lockerSeed of seedLockers) {
+      const lockerResult = await query<{ id: string }>(
+        `INSERT INTO lockers (number, status)
+         VALUES ($1, $2)
+         ON CONFLICT (number) DO UPDATE
+           SET updated_at = NOW()
+         RETURNING id`,
+        [lockerSeed.number, RoomStatus.CLEAN]
+      );
+
+      const lockerId = lockerResult.rows[0]!.id;
+
+      await query(
+        `INSERT INTO key_tags (locker_id, tag_type, tag_code, is_active)
+         VALUES ($1, 'QR', $2, true)
+         ON CONFLICT (tag_code) DO UPDATE
+           SET locker_id = EXCLUDED.locker_id,
+               room_id = NULL,
+               is_active = true,
+               updated_at = NOW()`,
+        [lockerId, lockerSeed.tagCode]
+      );
+    }
+
+    console.log(`\n✅ Lockers inventory ensured (${seedLockers.length} lockers, 001–108)`);
 
     console.log('\nScan tokens for testing (sample):');
     seedRooms.slice(0, 5).forEach((room) => {
-      console.log(`  - ${room.tagCode} → Room ${room.number} (${room.status})`);
+      console.log(`  - ${room.tagCode} → Room ${room.number}`);
     });
     seedLockers.slice(0, 5).forEach((locker) => {
-      console.log(`  - ${locker.tagCode} → Locker ${locker.number} (${locker.status})`);
+      console.log(`  - ${locker.tagCode} → Locker ${locker.number}`);
     });
 
     // Seed staff users

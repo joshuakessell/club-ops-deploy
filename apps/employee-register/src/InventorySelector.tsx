@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, type CSSProperties } from 'react';
 import { RoomStatus } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import { getRoomTier } from './utils/getRoomTier';
+import { ModalFrame } from './components/register/modals/ModalFrame';
 
 const INVENTORY_COLUMN_HEADER_STYLE: CSSProperties = {
   fontSize: '0.875rem',
@@ -40,6 +41,29 @@ function formatCountdownHMM5Min(msUntil: number): { label: string; isOverdue: bo
   const minutes = minutesTotal % 60;
   const hmm = `${String(hours)}${String(minutes).padStart(2, '0')}`;
   return { label: hmm, isOverdue };
+}
+
+function formatDurationHuman(msUntil: number): { label: string; isOverdue: boolean } {
+  const isOverdue = msUntil < 0;
+  const minutesTotalRaw = Math.max(0, Math.ceil(Math.abs(msUntil) / (60 * 1000)));
+  const minutesTotal = minutesTotalRaw; // Do not round; show exact minutes (based on tick cadence).
+  const hours = Math.floor(minutesTotal / 60);
+  const minutes = minutesTotal % 60;
+
+  if (hours <= 0) {
+    return { label: `${minutesTotal} mins`, isOverdue };
+  }
+  if (minutes === 0) {
+    return { label: `${hours} hr`, isOverdue };
+  }
+  return { label: `${hours} hr ${minutes} mins`, isOverdue };
+}
+
+function formatTimeOfDay(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (!Number.isFinite(d.getTime())) return null;
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
 interface DetailedRoom {
@@ -209,6 +233,10 @@ export function InventorySelector({
   onExpandedSectionChange,
   disableSelection = false,
 }: InventorySelectorProps) {
+  // When there's no active lane session, treat inventory as a lookup tool (occupied-only details),
+  // not an assignment picker.
+  const occupancyLookupMode = !_sessionId;
+
   const [inventory, setInventory] = useState<DetailedInventory | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [uncontrolledExpandedSection, setUncontrolledExpandedSection] = useState<
@@ -217,6 +245,12 @@ export function InventorySelector({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [occupancyDetails, setOccupancyDetails] = useState<{
+    type: 'room' | 'locker';
+    number: string;
+    checkinAt?: string;
+    checkoutAt?: string;
+  } | null>(null);
   const waitlistEntries: Array<{ desiredTier: string; status: string }> = useMemo(() => [], []);
 
   const API_BASE = '/api';
@@ -359,6 +393,7 @@ export function InventorySelector({
 
   // Auto-select first available when customer selects type
   useEffect(() => {
+    if (occupancyLookupMode) return;
     if (!inventory || !customerSelectedType || selectedItem) return;
 
     const sectionToUse = waitlistBackupType || customerSelectedType;
@@ -412,6 +447,7 @@ export function InventorySelector({
     onSelect,
     waitlistEntries,
     nowMs,
+    occupancyLookupMode,
   ]);
 
   // Group rooms by tier (must be before conditional returns to follow React hooks rules)
@@ -466,6 +502,47 @@ export function InventorySelector({
     setExpandedSection(expandedSection === section ? null : section);
   };
 
+  const openOccupancyDetails = (payload: {
+    type: 'room' | 'locker';
+    number: string;
+    checkinAt?: string;
+    checkoutAt?: string;
+  }) => {
+    setOccupancyDetails(payload);
+  };
+
+  const handleRoomClick = (room: DetailedRoom) => {
+    const isOccupied = !!room.assignedTo || room.status === RoomStatus.OCCUPIED;
+    if (isOccupied) {
+      openOccupancyDetails({
+        type: 'room',
+        number: room.number,
+        checkinAt: room.checkinAt,
+        checkoutAt: room.checkoutAt,
+      });
+      return;
+    }
+    if (occupancyLookupMode) return;
+    if (disableSelection) return;
+    onSelect('room', room.id, room.number, room.tier);
+  };
+
+  const handleLockerClick = (locker: DetailedLocker) => {
+    const isOccupied = !!locker.assignedTo || locker.status === RoomStatus.OCCUPIED;
+    if (isOccupied) {
+      openOccupancyDetails({
+        type: 'locker',
+        number: locker.number,
+        checkinAt: locker.checkinAt,
+        checkoutAt: locker.checkoutAt,
+      });
+      return;
+    }
+    if (occupancyLookupMode) return;
+    if (disableSelection) return;
+    onSelect('locker', locker.id, locker.number, 'LOCKER');
+  };
+
   if (loading) {
     return <div style={{ padding: '1rem', textAlign: 'center' }}>Loading inventory...</div>;
   }
@@ -479,78 +556,102 @@ export function InventorySelector({
   }
 
   return (
-    <div
-      className="cs-liquid-card"
-      style={{
-        padding: '1rem',
-        maxHeight: 'calc(100vh - 200px)',
-        overflowY: 'auto',
-      }}
-    >
-      <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>Inventory</h2>
-
-      {/* Lockers */}
-      <LockerSection
-        lockers={filteredLockers}
-        isExpanded={expandedSection === 'LOCKER'}
-        onToggle={() => toggleSection('LOCKER')}
-        onSelectLocker={(locker) => {
-          if (disableSelection) return;
-          onSelect('locker', locker.id, locker.number, 'LOCKER');
+    <>
+      <div
+        className="cs-liquid-card"
+        style={{
+          padding: '1rem',
+          maxHeight: 'calc(100vh - 200px)',
+          overflowY: 'auto',
         }}
-        selectedItem={selectedItem}
-        nowMs={nowMs}
-        disableSelection={disableSelection}
-      />
+      >
+        <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>Inventory</h2>
 
-      {/* Standard */}
-      <InventorySection
-        title="Standard"
-        rooms={roomsByTier.STANDARD}
-        isExpanded={expandedSection === 'STANDARD'}
-        onToggle={() => toggleSection('STANDARD')}
-        onSelectRoom={(room) => {
-          if (disableSelection) return;
-          onSelect('room', room.id, room.number, 'STANDARD');
-        }}
-        selectedItem={selectedItem}
-        waitlistEntries={waitlistEntries}
-        nowMs={nowMs}
-        disableSelection={disableSelection}
-      />
+        {/* Lockers */}
+        <LockerSection
+          lockers={filteredLockers}
+          isExpanded={expandedSection === 'LOCKER'}
+          onToggle={() => toggleSection('LOCKER')}
+          onSelectLocker={handleLockerClick}
+          selectedItem={selectedItem}
+          nowMs={nowMs}
+          disableSelection={disableSelection}
+          occupancyLookupMode={occupancyLookupMode}
+        />
 
-      {/* Double */}
-      <InventorySection
-        title="Double"
-        rooms={roomsByTier.DOUBLE}
-        isExpanded={expandedSection === 'DOUBLE'}
-        onToggle={() => toggleSection('DOUBLE')}
-        onSelectRoom={(room) => {
-          if (disableSelection) return;
-          onSelect('room', room.id, room.number, 'DOUBLE');
-        }}
-        selectedItem={selectedItem}
-        waitlistEntries={waitlistEntries}
-        nowMs={nowMs}
-        disableSelection={disableSelection}
-      />
+        {/* Standard */}
+        <InventorySection
+          title="Standard"
+          rooms={roomsByTier.STANDARD}
+          isExpanded={expandedSection === 'STANDARD'}
+          onToggle={() => toggleSection('STANDARD')}
+          onSelectRoom={handleRoomClick}
+          selectedItem={selectedItem}
+          waitlistEntries={waitlistEntries}
+          nowMs={nowMs}
+          disableSelection={disableSelection}
+          occupancyLookupMode={occupancyLookupMode}
+        />
 
-      {/* Special */}
-      <InventorySection
-        title="Special"
-        rooms={roomsByTier.SPECIAL}
-        isExpanded={expandedSection === 'SPECIAL'}
-        onToggle={() => toggleSection('SPECIAL')}
-        onSelectRoom={(room) => {
-          if (disableSelection) return;
-          onSelect('room', room.id, room.number, 'SPECIAL');
-        }}
-        selectedItem={selectedItem}
-        waitlistEntries={waitlistEntries}
-        nowMs={nowMs}
-        disableSelection={disableSelection}
-      />
-    </div>
+        {/* Double */}
+        <InventorySection
+          title="Double"
+          rooms={roomsByTier.DOUBLE}
+          isExpanded={expandedSection === 'DOUBLE'}
+          onToggle={() => toggleSection('DOUBLE')}
+          onSelectRoom={handleRoomClick}
+          selectedItem={selectedItem}
+          waitlistEntries={waitlistEntries}
+          nowMs={nowMs}
+          disableSelection={disableSelection}
+          occupancyLookupMode={occupancyLookupMode}
+        />
+
+        {/* Special */}
+        <InventorySection
+          title="Special"
+          rooms={roomsByTier.SPECIAL}
+          isExpanded={expandedSection === 'SPECIAL'}
+          onToggle={() => toggleSection('SPECIAL')}
+          onSelectRoom={handleRoomClick}
+          selectedItem={selectedItem}
+          waitlistEntries={waitlistEntries}
+          nowMs={nowMs}
+          disableSelection={disableSelection}
+          occupancyLookupMode={occupancyLookupMode}
+        />
+      </div>
+
+      <ModalFrame
+        isOpen={!!occupancyDetails}
+        title={
+          occupancyDetails
+            ? `${occupancyDetails.type === 'room' ? 'Room' : 'Locker'} ${occupancyDetails.number}`
+            : 'Occupancy'
+        }
+        onClose={() => setOccupancyDetails(null)}
+        maxWidth="420px"
+        maxHeight="50vh"
+      >
+        {occupancyDetails && (
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Check-in</div>
+              <div style={{ fontWeight: 800 }}>
+                {occupancyDetails.checkinAt ? new Date(occupancyDetails.checkinAt).toLocaleString() : '—'}
+              </div>
+            </div>
+
+            <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
+              <div style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Checkout</div>
+              <div style={{ fontWeight: 800 }}>
+                {occupancyDetails.checkoutAt ? new Date(occupancyDetails.checkoutAt).toLocaleString() : '—'}
+              </div>
+            </div>
+          </div>
+        )}
+      </ModalFrame>
+    </>
   );
 }
 
@@ -563,6 +664,7 @@ interface InventorySectionProps {
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
   nowMs: number;
   disableSelection?: boolean;
+  occupancyLookupMode?: boolean;
 }
 
 function InventorySection({
@@ -575,6 +677,7 @@ function InventorySection({
   waitlistEntries = [],
   nowMs,
   disableSelection = false,
+  occupancyLookupMode = false,
 }: InventorySectionProps & { waitlistEntries?: Array<{ desiredTier: string; status: string }> }) {
   const grouped = useMemo(() => {
     const groupedRooms = groupRooms(rooms, waitlistEntries, nowMs);
@@ -587,6 +690,7 @@ function InventorySection({
   const cleaning = grouped.filter((g) => g.group === 'cleaning');
   const dirty = grouped.filter((g) => g.group === 'dirty');
   const availableForDisplay = [...upgradeRequests, ...available];
+  const allowAvailableSelection = !disableSelection && !occupancyLookupMode;
 
   return (
     <div style={{ marginBottom: '1rem' }}>
@@ -618,33 +722,53 @@ function InventorySection({
             padding: '0.5rem',
           }}
         >
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-              gap: '0.75rem',
-            }}
-          >
-            {/* Left column: Available (includes upgrade-request matches) */}
+          {/* Single-column layout: Occupied → Dirty/Cleaning → Available */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {/* Occupied */}
             <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  color: '#10b981',
-                  ...INVENTORY_COLUMN_HEADER_STYLE,
-                }}
-              >
-                ✓ Available
-              </div>
+              <div style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>🔒 Occupied</div>
+              {occupied.length > 0 ? (
+                occupied.map(({ room }) => (
+                  <RoomItem
+                    key={room.id}
+                    room={room}
+                    isSelectable={true}
+                    isSelected={false}
+                    onClick={() => onSelectRoom(room)}
+                    nowMs={nowMs}
+                  />
+                ))
+              ) : (
+                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+              )}
+            </div>
 
+            {/* Dirty / Cleaning */}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>🧹 Dirty / Cleaning</div>
+              {cleaning.map(({ room }) => (
+                <RoomItem key={room.id} room={room} isSelectable={false} isSelected={false} nowMs={nowMs} />
+              ))}
+              {dirty.map(({ room }) => (
+                <RoomItem key={room.id} room={room} isSelectable={false} isSelected={false} nowMs={nowMs} />
+              ))}
+              {cleaning.length === 0 && dirty.length === 0 && (
+                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+              )}
+            </div>
+
+            {/* Available */}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}>✓ Available</div>
               {availableForDisplay.length > 0 ? (
                 availableForDisplay.map(({ room, isWaitlistMatch }) => (
                   <RoomItem
                     key={room.id}
                     room={room}
-                    isSelectable={!disableSelection}
+                    isSelectable={allowAvailableSelection}
                     isSelected={selectedItem?.type === 'room' && selectedItem.id === room.id}
                     onClick={() => {
-                      if (disableSelection) return;
+                      if (!allowAvailableSelection) return;
                       onSelectRoom(room);
                     }}
                     isWaitlistMatch={isWaitlistMatch}
@@ -652,56 +776,7 @@ function InventorySection({
                   />
                 ))
               ) : (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
-                  None
-                </div>
-              )}
-            </div>
-
-            {/* Middle column: Occupied */}
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  color: '#94a3b8',
-                  ...INVENTORY_COLUMN_HEADER_STYLE,
-                }}
-              >
-                🔒 Occupied
-              </div>
-              {occupied.length > 0 ? (
-                occupied.map(({ room }) => (
-                  <RoomItem key={room.id} room={room} isSelectable={false} isSelected={false} nowMs={nowMs} />
-                ))
-              ) : (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
-                  None
-                </div>
-              )}
-            </div>
-
-            {/* Right column: Dirty + Cleaning */}
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  color: '#94a3b8',
-                  ...INVENTORY_COLUMN_HEADER_STYLE,
-                }}
-              >
-                🧹 Dirty / Cleaning
-              </div>
-
-              {cleaning.map(({ room }) => (
-                <RoomItem key={room.id} room={room} isSelectable={false} isSelected={false} nowMs={nowMs} />
-              ))}
-
-              {dirty.map(({ room }) => (
-                <RoomItem key={room.id} room={room} isSelectable={false} isSelected={false} nowMs={nowMs} />
-              ))}
-
-              {cleaning.length === 0 && dirty.length === 0 && (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
-                  None
-                </div>
+                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
               )}
             </div>
           </div>
@@ -732,7 +807,9 @@ function RoomItem({
   const isCleaning = room.status === RoomStatus.CLEANING;
   const isDirty = room.status === RoomStatus.DIRTY;
   const msUntil = isOccupied ? getMsUntil(room.checkoutAt, nowMs) : null;
-  const countdown = msUntil !== null ? formatCountdownHMM5Min(msUntil) : null;
+  const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
+  const checkoutTime = isOccupied ? formatTimeOfDay(room.checkoutAt) : null;
+  const customerLabel = room.assignedMemberName || room.assignedTo || null;
 
   return (
     <div
@@ -762,46 +839,88 @@ function RoomItem({
         }
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: '1rem' }}>Room {room.number}</div>
-          {!isOccupied && !isCleaning && !isDirty && isWaitlistMatch && (
-            <div style={{ fontSize: '0.875rem', color: '#f59e0b', marginTop: '0.25rem' }}>
-              Upgrade Request
-            </div>
-          )}
-          {isOccupied && (
-            <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}>Occupied</div>
-          )}
-          {!isOccupied && isCleaning && (
-            <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-              Cleaning
-            </div>
-          )}
-          {!isOccupied && !isCleaning && isDirty && (
-            <div style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.25rem' }}>
-              Dirty
-            </div>
-          )}
+      {isOccupied ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.25rem 0.75rem' }}>
+          <div
+            style={{
+              fontWeight: 800,
+              fontSize: '1rem',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            Room {room.number}
+          </div>
+          <div
+            style={{
+              fontSize: '0.9rem',
+              fontWeight: 800,
+              color: '#94a3b8',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Checkout: {checkoutTime ?? '—'}
+          </div>
+
+          <div
+            style={{
+              fontSize: '0.9rem',
+              color: '#94a3b8',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {customerLabel ?? '—'}
+          </div>
+          <div
+            style={{
+              fontSize: '0.9rem',
+              fontWeight: 800,
+              color: duration?.isOverdue ? '#ef4444' : '#94a3b8',
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ({duration ? (duration.isOverdue ? `Overdue ${duration.label}` : duration.label) : '—'})
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {isOccupied && countdown && (
+      ) : (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ minWidth: 0, overflow: 'hidden' }}>
             <div
               style={{
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                color: countdown.isOverdue ? '#ef4444' : '#94a3b8',
-                fontVariantNumeric: 'tabular-nums',
+                fontWeight: 600,
+                fontSize: '1rem',
                 whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
             >
-              {countdown.isOverdue ? 'Overdue ' : 'Checkout in '}
-              {countdown.label}
+              Room {room.number}
             </div>
-          )}
-          {isSelected && <span style={{ fontSize: '1.5rem' }}>✓</span>}
+            {!isCleaning && !isDirty && isWaitlistMatch && (
+              <div style={{ fontSize: '0.875rem', color: '#f59e0b', marginTop: '0.25rem' }}>
+                Upgrade Request
+              </div>
+            )}
+            {isCleaning && (
+              <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                Cleaning
+              </div>
+            )}
+            {!isCleaning && isDirty && (
+              <div style={{ fontSize: '0.875rem', color: '#ef4444', marginTop: '0.25rem' }}>
+                Dirty
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            {isSelected && <span style={{ fontSize: '1.5rem' }}>✓</span>}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -814,6 +933,7 @@ interface LockerSectionProps {
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
   nowMs: number;
   disableSelection?: boolean;
+  occupancyLookupMode?: boolean;
 }
 
 function LockerSection({
@@ -824,6 +944,7 @@ function LockerSection({
   selectedItem,
   nowMs,
   disableSelection = false,
+  occupancyLookupMode = false,
 }: LockerSectionProps) {
   const availableCount = lockers.filter(
     (l) => l.status === RoomStatus.CLEAN && !l.assignedTo
@@ -877,23 +998,97 @@ function LockerSection({
             padding: '0.5rem',
           }}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem' }}>
-            {/* Left column: Available */}
+          {/* Single-column layout: Occupied → Available */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {/* Occupied */}
             <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  color: '#10b981',
-                  ...INVENTORY_COLUMN_HEADER_STYLE,
-                }}
-              >
-                ✓ Available
-              </div>
+              <div style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>🔒 Occupied</div>
+
+              {occupiedLockers.length > 0 ? (
+                <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                  {occupiedLockers.map((locker) => {
+                    const msUntil = getMsUntil(locker.checkoutAt, nowMs);
+                    const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
+                    const checkoutTime = formatTimeOfDay(locker.checkoutAt);
+                    const customerLabel = locker.assignedMemberName || locker.assignedTo || null;
+                    return (
+                      <div
+                        key={locker.id}
+                        onClick={() => onSelectLocker(locker)}
+                        style={{
+                          padding: '0.75rem',
+                          marginBottom: '0.5rem',
+                          background: '#1e293b',
+                          border: '1px solid #475569',
+                          borderRadius: '6px',
+                          opacity: 0.7,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.25rem 0.75rem' }}>
+                          <div
+                            style={{
+                              fontWeight: 800,
+                              fontSize: '1rem',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            Locker {locker.number}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.9rem',
+                              fontWeight: 800,
+                              color: '#94a3b8',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            Checkout: {checkoutTime ?? '—'}
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: '0.9rem',
+                              color: '#94a3b8',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}
+                          >
+                            {customerLabel ?? '—'}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: '0.9rem',
+                              fontWeight: 800,
+                              color: duration?.isOverdue ? '#ef4444' : '#94a3b8',
+                              fontVariantNumeric: 'tabular-nums',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            ({duration ? (duration.isOverdue ? `Overdue ${duration.label}` : duration.label) : '—'})
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+              )}
+            </div>
+
+            {/* Available */}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}>✓ Available</div>
 
               {availableLockers.length > 0 ? (
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(12, 1fr)',
+                    gridTemplateColumns: 'repeat(5, 1fr)',
                     gap: '0.5rem',
                     maxHeight: '280px',
                     overflowY: 'auto',
@@ -905,7 +1100,7 @@ function LockerSection({
                       <div
                         key={locker.id}
                         onClick={() => {
-                          if (disableSelection) return;
+                          if (disableSelection || occupancyLookupMode) return;
                           onSelectLocker(locker);
                         }}
                         style={{
@@ -915,7 +1110,7 @@ function LockerSection({
                           borderRadius: '4px',
                           textAlign: 'center',
                           fontSize: '0.875rem',
-                          cursor: disableSelection ? 'default' : 'pointer',
+                          cursor: disableSelection || occupancyLookupMode ? 'default' : 'pointer',
                           minHeight: '44px',
                           display: 'flex',
                           alignItems: 'center',
@@ -930,71 +1125,7 @@ function LockerSection({
                   })}
                 </div>
               ) : (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
-                  None
-                </div>
-              )}
-            </div>
-
-            {/* Right column: Occupied */}
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  color: '#94a3b8',
-                  ...INVENTORY_COLUMN_HEADER_STYLE,
-                }}
-              >
-                🔒 Occupied
-              </div>
-
-              {occupiedLockers.length > 0 ? (
-                <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                  {occupiedLockers.map((locker) => {
-                    const msUntil = getMsUntil(locker.checkoutAt, nowMs);
-                    const countdown = msUntil !== null ? formatCountdownHMM5Min(msUntil) : null;
-                    return (
-                      <div
-                        key={locker.id}
-                        style={{
-                          padding: '0.75rem',
-                          marginBottom: '0.5rem',
-                          background: '#1e293b',
-                          border: '1px solid #475569',
-                          borderRadius: '6px',
-                          opacity: 0.7,
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 600 }}>Locker {locker.number}</div>
-                            <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                              Occupied
-                            </div>
-                          </div>
-                          {countdown && (
-                            <div
-                              style={{
-                                fontSize: '0.875rem',
-                                fontWeight: 700,
-                                color: countdown.isOverdue ? '#ef4444' : '#94a3b8',
-                                fontVariantNumeric: 'tabular-nums',
-                                whiteSpace: 'nowrap',
-                                alignSelf: 'center',
-                              }}
-                            >
-                              {countdown.isOverdue ? 'Overdue ' : 'Checkout in '}
-                              {countdown.label}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>
-                  None
-                </div>
+                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
               )}
             </div>
           </div>

@@ -43,7 +43,7 @@ export function CheckoutVerificationModal({
           padding: '2rem',
           maxWidth: '600px',
           width: '100%',
-          maxHeight: '90vh',
+          maxHeight: '80vh',
           overflowY: 'auto',
         }}
       >

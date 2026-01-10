@@ -147,7 +147,7 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
 
   return (
     <>
-      <ModalFrame isOpen={isOpen} title="Checkout" onClose={attemptClose} maxWidth="760px">
+      <ModalFrame isOpen={isOpen} title="Checkout" onClose={attemptClose} maxWidth="760px" maxHeight="80vh">
         {candidatesError && (
           <div
             style={{

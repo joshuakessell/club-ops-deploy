@@ -54,7 +54,11 @@ export function AgreementScreen({
     // Ensure a clean canvas each time the signature modal opens.
     // (Canvas mounts only when modal is open.)
     onClearSignature();
-  }, [signatureModalOpen, onClearSignature]);
+    // Intentionally *not* dependent on onClearSignature: the parent recreates handlers on each render,
+    // and including it here would clear the canvas immediately after signatureData updates while
+    // the modal is still open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signatureModalOpen]);
 
   return (
     <I18nProvider lang={customerPrimaryLanguage}>

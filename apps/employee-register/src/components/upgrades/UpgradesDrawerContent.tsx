@@ -47,7 +47,10 @@ export function UpgradesDrawerContent({
   const offered = waitlistEntries.filter((e) => e.status === 'OFFERED');
 
   return (
-    <div className="er-surface" style={{ padding: '1rem', borderRadius: 8 }}>
+    <div
+      className="er-surface"
+      style={{ padding: '1rem', borderRadius: 8, height: '100%', display: 'flex', flexDirection: 'column' }}
+    >
       <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: '1rem' }}>
         <div>
           <h2 style={{ margin: 0, marginBottom: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
@@ -62,9 +65,22 @@ export function UpgradesDrawerContent({
         {headerRightSlot}
       </div>
 
-      <div style={{ marginTop: '1rem' }}>
+      <div
+        style={{
+          marginTop: '1rem',
+          flex: 1,
+          overflowY: 'auto',
+          display: waitlistEntries.length === 0 ? 'flex' : 'block',
+          alignItems: waitlistEntries.length === 0 ? 'center' : undefined,
+          justifyContent: waitlistEntries.length === 0 ? 'center' : undefined,
+        }}
+      >
         {waitlistEntries.length === 0 ? (
-          <p style={{ color: '#94a3b8', margin: 0 }}>No active waitlist entries</p>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ color: '#94a3b8', fontWeight: 800, fontSize: '1.05rem' }}>
+              No active waitlist entries
+            </div>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {([

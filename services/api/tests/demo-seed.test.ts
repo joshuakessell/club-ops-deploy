@@ -1,117 +1,87 @@
-import { describe, it, expect } from 'vitest';
-import { generateDemoData } from '../src/db/demo-data.js';
-import { RoomStatus, RoomType, RentalType } from '@club-ops/shared';
-import { calculatePriceQuote } from '../src/pricing/engine.js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import pg from 'pg';
+import {
+  DELUXE_ROOM_NUMBERS,
+  SPECIAL_ROOM_NUMBERS,
+  NONEXISTENT_ROOM_NUMBERS,
+  ROOM_NUMBERS,
+} from '@club-ops/shared';
 
-const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+describe('demo seed (busy Saturday) database assertions', () => {
+  let pool: pg.Pool;
 
-const mockRooms = [
-  { id: 'room-1', number: '101', type: RoomType.STANDARD, status: RoomStatus.CLEAN },
-  { id: 'room-2', number: '102', type: RoomType.STANDARD, status: RoomStatus.CLEAN },
-  { id: 'room-3', number: '201', type: RoomType.SPECIAL, status: RoomStatus.CLEAN },
-  { id: 'room-4', number: '216', type: RoomType.DOUBLE, status: RoomStatus.CLEAN },
-  { id: 'room-5', number: '225', type: RoomType.DOUBLE, status: RoomStatus.CLEAN },
-  { id: 'room-6', number: '232', type: RoomType.SPECIAL, status: RoomStatus.CLEANING },
-  { id: 'room-7', number: '104', type: RoomType.STANDARD, status: RoomStatus.DIRTY },
-  { id: 'room-8', number: '105', type: RoomType.STANDARD, status: RoomStatus.CLEAN },
-] as const;
-
-const mockLockers = Array.from({ length: 20 }, (_, idx) => ({
-  id: `locker-${idx + 1}`,
-  number: String(idx + 1).padStart(3, '0'),
-  status: RoomStatus.CLEAN,
-}));
-
-function weekKey(date: Date): string {
-  const d = new Date(date);
-  const day = (d.getDay() + 6) % 7; // Monday = 0
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - day);
-  monday.setHours(0, 0, 0, 0);
-  return monday.toISOString().slice(0, 10);
-}
-
-describe('demo seed generator', () => {
-  const now = new Date('2024-12-31T12:00:00Z');
-  const demo = generateDemoData({
-    now,
-    rooms: [...mockRooms],
-    lockers: mockLockers,
-    minCustomers: 120,
-    maxCustomers: 120,
-  });
-
-  it('produces 100-200 customers', () => {
-    expect(demo.customers.length).toBeGreaterThanOrEqual(100);
-    expect(demo.customers.length).toBeLessThanOrEqual(200);
-  });
-
-  it('uses curated male names (no random gender mix)', () => {
-    const sample = demo.customers.slice(0, 5).map((c) => c.name);
-    sample.forEach((name) => {
-      expect(name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+  beforeAll(async () => {
+    pool = new pg.Pool({
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5433', 10),
+      database: process.env.DB_NAME || 'club_operations',
+      user: process.env.DB_USER || 'clubops',
+      password: process.env.DB_PASSWORD || 'clubops_dev',
     });
   });
 
-  it('creates check-in blocks in 6-hour multiples', () => {
-    for (const visit of demo.visits) {
-      for (const block of visit.blocks) {
-        const duration = block.ends_at.getTime() - block.starts_at.getTime();
-        expect(duration % SIX_HOURS_MS).toBe(0);
-      }
-    }
+  afterAll(async () => {
+    await pool.end();
   });
 
-  it('limits visits to 3 starts per week per customer and no overlaps', () => {
-    const visitsByCustomer = new Map<string, typeof demo.visits>();
-    for (const visit of demo.visits) {
-      const list = visitsByCustomer.get(visit.customer_id) ?? [];
-      list.push(visit);
-      visitsByCustomer.set(visit.customer_id, list);
+  it('seeds 100 members/customers and preserves inventory contract + occupancy targets', async () => {
+    const now = new Date();
+    const lowerBound = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    const customers = await pool.query<{ count: string }>('SELECT COUNT(*)::text as count FROM customers');
+    const members = await pool.query<{ count: string }>('SELECT COUNT(*)::text as count FROM members');
+    expect(parseInt(customers.rows[0]!.count, 10)).toBe(100);
+    expect(parseInt(members.rows[0]!.count, 10)).toBe(100);
+
+    const rooms = await pool.query<{ number: string; type: string; status: string; assigned: string | null }>(
+      `SELECT number, type::text as type, status::text as status, assigned_to_customer_id as assigned
+       FROM rooms
+       ORDER BY number`
+    );
+    const roomNumbers = rooms.rows.map((r) => parseInt(r.number, 10));
+    expect(rooms.rows.length).toBe(55);
+
+    // Ensure inventory is exactly the contract set (no extras, no missing)
+    expect(new Set(roomNumbers)).toEqual(new Set(ROOM_NUMBERS));
+    expect(NONEXISTENT_ROOM_NUMBERS.every((n) => !roomNumbers.includes(n))).toBe(true);
+
+    const occupiedRooms = rooms.rows.filter((r) => r.status === 'OCCUPIED' && r.assigned);
+    const availableRooms = rooms.rows.filter((r) => r.status === 'CLEAN' && !r.assigned);
+    expect(occupiedRooms.length).toBe(54);
+    expect(availableRooms.length).toBe(1);
+    expect(availableRooms[0]!.type).toBe('STANDARD');
+
+    // Deluxe + Special rooms must be occupied
+    for (const n of DELUXE_ROOM_NUMBERS) {
+      const row = rooms.rows.find((r) => r.number === String(n));
+      expect(row?.status).toBe('OCCUPIED');
+    }
+    for (const n of SPECIAL_ROOM_NUMBERS) {
+      const row = rooms.rows.find((r) => r.number === String(n));
+      expect(row?.status).toBe('OCCUPIED');
     }
 
-    for (const [, visits] of visitsByCustomer) {
-      visits.sort((a, b) => a.started_at.getTime() - b.started_at.getTime());
+    const lockers = await pool.query<{ number: string; status: string; assigned: string | null }>(
+      `SELECT number, status::text as status, assigned_to_customer_id as assigned
+       FROM lockers
+       ORDER BY number`
+    );
+    expect(lockers.rows.length).toBe(108);
+    const occupiedLockers = lockers.rows.filter((l) => l.status === 'OCCUPIED' && l.assigned);
+    const availableLockers = lockers.rows.filter((l) => l.status === 'CLEAN' && !l.assigned);
+    expect(occupiedLockers.length).toBe(88);
+    expect(availableLockers.length).toBe(20);
 
-      const weekCounts = new Map<string, number>();
-      let lastEnd: Date | null = null;
+    const bounds = await pool.query<{ min: Date | null; max: Date | null }>(
+      `SELECT MIN(check_in_time) as min, MAX(check_in_time) as max FROM sessions WHERE status = 'ACTIVE'`
+    );
+    expect(bounds.rows[0]!.min).not.toBeNull();
+    expect(bounds.rows[0]!.max).not.toBeNull();
+    const min = new Date(bounds.rows[0]!.min!);
+    const max = new Date(bounds.rows[0]!.max!);
 
-      for (const visit of visits) {
-        const wk = weekKey(visit.started_at);
-        weekCounts.set(wk, (weekCounts.get(wk) || 0) + 1);
-        expect(weekCounts.get(wk)).toBeLessThanOrEqual(3);
-
-        const visitEnd = visit.ended_at ?? visit.blocks[visit.blocks.length - 1]!.ends_at;
-        if (lastEnd) {
-          expect(visit.started_at.getTime()).toBeGreaterThanOrEqual(lastEnd.getTime());
-        }
-        lastEnd = visitEnd;
-      }
-    }
-  });
-
-  it('creates a waitlist long enough to show "More.."', () => {
-    expect(demo.waitlistEntries.length).toBeGreaterThanOrEqual(7);
-  });
-
-  it('does not surface any late room charge line items in demo pricing', () => {
-    const rentals = [
-      RentalType.LOCKER,
-      RentalType.GYM_LOCKER,
-      RentalType.STANDARD,
-      RentalType.DOUBLE,
-      RentalType.SPECIAL,
-    ];
-
-    for (const rentalType of rentals) {
-      const quote = calculatePriceQuote({
-        rentalType,
-        checkInTime: now,
-        customerAge: 30,
-      });
-      expect(quote.lineItems.some((li) => li.description.toLowerCase().includes('late'))).toBe(
-        false
-      );
-    }
+    // Allow small clock drift between seed time and test time
+    expect(min.getTime()).toBeGreaterThanOrEqual(lowerBound.getTime() - 60_000);
+    expect(max.getTime()).toBeLessThanOrEqual(now.getTime() + 5_000);
   });
 });

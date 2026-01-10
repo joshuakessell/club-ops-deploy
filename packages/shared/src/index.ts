@@ -58,3 +58,18 @@ export {
   type BatchStatusUpdateInput,
   type IdScanPayload,
 } from './schemas';
+
+// Facility inventory contract (rooms + lockers)
+export {
+  LOCKER_NUMBERS,
+  NONEXISTENT_ROOM_NUMBERS,
+  ROOM_NUMBERS,
+  ROOMS,
+  DELUXE_ROOM_NUMBERS,
+  SPECIAL_ROOM_NUMBERS,
+  isDeluxeRoom,
+  isSpecialRoom,
+  isExistingRoomNumber,
+  getRoomKind,
+  type RoomKind,
+} from './inventory';

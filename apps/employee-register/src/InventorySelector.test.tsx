@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { InventorySelector } from './InventorySelector';
 
 // Mock fetch
@@ -125,5 +125,65 @@ describe('InventorySelector', () => {
 
     // onSelect should be called with the first available room
     expect(onSelect).toHaveBeenCalledWith('room', 'room-1', '101', 'STANDARD');
+  });
+
+  it('in lookup mode (no sessionId), only occupied items open the details modal and available items are not selectable', async () => {
+    const onSelect = vi.fn();
+    const occupiedCheckin = '2026-01-01T12:00:00.000Z';
+    const occupiedCheckout = '2026-01-01T18:00:00.000Z';
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          rooms: [
+            { id: 'room-avail', number: '101', status: 'CLEAN', assignedTo: null, checkoutAt: null },
+            {
+              id: 'room-occ',
+              number: '102',
+              status: 'OCCUPIED',
+              assignedTo: 'visit-1',
+              checkinAt: occupiedCheckin,
+              checkoutAt: occupiedCheckout,
+            },
+          ],
+          lockers: [],
+        }),
+    });
+
+    render(
+      <InventorySelector
+        customerSelectedType="STANDARD"
+        waitlistDesiredTier={null}
+        waitlistBackupType={null}
+        onSelect={onSelect}
+        selectedItem={null}
+        sessionId={null}
+        lane="lane-1"
+        sessionToken="test-token"
+      />
+    );
+
+    // Wait for the section content to render.
+    await screen.findByText(/standard/i);
+    await screen.findByText('Room 101');
+
+    // Should not auto-select anything in lookup mode.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(onSelect).not.toHaveBeenCalled();
+
+    // Available item: clicking should do nothing (no select, no modal).
+    fireEvent.click(screen.getByText('Room 101'));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: /room 102/i })).toBeNull();
+
+    // Occupied item: clicking opens details modal with check-in/out timestamps.
+    fireEvent.click(screen.getByText('Room 102'));
+    expect(await screen.findByRole('heading', { name: /room 102/i })).toBeDefined();
+
+    const expectedCheckin = new Date(occupiedCheckin).toLocaleString();
+    const expectedCheckout = new Date(occupiedCheckout).toLocaleString();
+    expect(screen.getByText(expectedCheckin)).toBeDefined();
+    expect(screen.getByText(expectedCheckout)).toBeDefined();
   });
 });

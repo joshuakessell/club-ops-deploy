@@ -17,6 +17,9 @@
   --er-border: rgba(255, 255, 255, 0.14);
   --er-text: rgba(255, 255, 255, 0.92);
   --er-text-muted: rgba(255, 255, 255, 0.72);
+
+  /* Fixed top bar (employee + register number) */
+  --er-topbar-height: 60px;
 }
 
 .er-surface {
@@ -726,7 +729,7 @@ body::before {
   top: 0;
   left: 0;
   right: 0;
-  height: 60px;
+  height: var(--er-topbar-height);
   background: var(--er-surface-strong);
   display: flex;
   align-items: center;
@@ -764,10 +767,10 @@ body::before {
 
 .register-menu {
   position: fixed;
-  top: 60px;
+  top: var(--er-topbar-height);
   right: 0;
   width: 300px;
-  height: calc(100vh - 60px);
+  height: calc(100vh - var(--er-topbar-height));
   background: rgba(15, 23, 42, 0.96);
   border-left: 1px solid var(--cs-border);
   z-index: 99;

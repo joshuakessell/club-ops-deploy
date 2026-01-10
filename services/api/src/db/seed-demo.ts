@@ -1,7 +1,7 @@
 import { query, transaction } from './index.js';
 import { randomUUID } from 'crypto';
-import { generateDemoData, type DemoRoom, type DemoLocker } from './demo-data.js';
-import { RoomStatus } from '@club-ops/shared';
+import { BlockType, LOCKER_NUMBERS, NONEXISTENT_ROOM_NUMBERS, ROOM_NUMBERS, ROOMS } from '@club-ops/shared';
+import { RentalType, RoomStatus, RoomType, getRoomKind } from '@club-ops/shared';
 import { pathToFileURL } from 'url';
 
 /**
@@ -18,171 +18,445 @@ export async function seedDemoData(): Promise<void> {
     const now = new Date();
 
     // -----------------------------------------------------------------------
-    // Customer / visit / waitlist demo seeding (rich dataset for kiosk/register)
+    // Busy Saturday Night demo seeding (stress-test-friendly dataset)
     // -----------------------------------------------------------------------
-    // Always reseed demo customers in DEMO_MODE to guarantee availability for searches
     {
-      console.log('🌱 Seeding demo customers, visits, waitlist (resetting existing demo data)...');
+      console.log('🌱 Seeding busy Saturday demo dataset (resetting member/customer data)...');
 
-      const roomRows = await query<DemoRoom>(
-        `SELECT id, number, type::text as type, status::text as status FROM rooms ORDER BY number`
-      );
-      const lockerRows = await query<DemoLocker>(
-        `SELECT id, number, status::text as status FROM lockers ORDER BY number`
-      );
+      // Keep employees unchanged
+      const staffCountBefore = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM staff');
 
-      const demoData = generateDemoData({
-        now,
-        rooms: roomRows.rows.map((r) => ({
-          ...r,
-          type: r.type as DemoRoom['type'],
-          status: r.status as DemoRoom['status'],
-        })),
-        lockers: lockerRows.rows.map((l) => ({
-          ...l,
-          status: l.status as DemoLocker['status'],
-        })),
-      });
+      // Deterministic PRNG so the dataset is stable across runs
+      function seededRng(seed: number): () => number {
+        // Mulberry32
+        return () => {
+          seed |= 0;
+          seed = (seed + 0x6d2b79f5) | 0;
+          let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      const rng = seededRng(0x53415455); // 'SATU' (arbitrary fixed seed)
+
+      // Choose one STANDARD room to remain available
+      const freeRoomNumber =
+        ROOM_NUMBERS.find((n) => {
+          try {
+            return getRoomKind(n) === 'STANDARD';
+          } catch {
+            return false;
+          }
+        }) ?? 200;
+
+      const occupiedRoomNumbers = ROOM_NUMBERS.filter((n) => n !== freeRoomNumber);
+      const occupiedLockerNumbers = LOCKER_NUMBERS.slice(0, 88); // 88 occupied, 20 available
+
+      const firstNames = [
+        'James',
+        'Michael',
+        'Robert',
+        'John',
+        'David',
+        'William',
+        'Richard',
+        'Joseph',
+        'Thomas',
+        'Charles',
+        'Christopher',
+        'Daniel',
+        'Matthew',
+        'Anthony',
+        'Mark',
+        'Steven',
+        'Paul',
+        'Andrew',
+        'Joshua',
+        'Kevin',
+      ];
+      const lastNames = [
+        'Smith',
+        'Johnson',
+        'Williams',
+        'Brown',
+        'Jones',
+        'Garcia',
+        'Miller',
+        'Davis',
+        'Rodriguez',
+        'Martinez',
+        'Hernandez',
+        'Lopez',
+        'Gonzalez',
+        'Wilson',
+        'Anderson',
+        'Thomas',
+        'Taylor',
+        'Moore',
+        'Jackson',
+        'Martin',
+      ];
+
+      const customerIds: string[] = [];
+      const checkedInCustomerIds: string[] = [];
+      const visitIdsByCustomer = new Map<string, string>();
 
       await transaction(async (client) => {
-        // Reset demo-related rows to ensure deterministic state.
-        //
-        // IMPORTANT:
-        // - Do NOT use TRUNCATE ... CASCADE because rooms/lockers can be cascaded due to
-        //   assigned_to_customer_id FKs, wiping inventory and causing FK insert failures.
-        // - Do NOT use TRUNCATE without CASCADE because other tables reference checkin_blocks/visits
-        //   (e.g., agreement_signatures, charges, sessions), which Postgres blocks on TRUNCATE.
-        //
-        // So we use ordered DELETEs which respect ON DELETE behaviors.
-        // Clear assignments from inventory. Also clean up any stale OCCUPIED statuses so we don't
-        // show "occupied" units without an assigned customer after reseeding.
-        //
-        // Important: preserve DIRTY/CLEANING/CLEAN statuses to keep demo variety; only normalize OCCUPIED.
+        // -------------------------------------------------------------------
+        // Inventory: enforce facility contract (permanent beyond demo)
+        // -------------------------------------------------------------------
+        // 1) Ensure non-existent rooms are not present
+        const nonExistentRoomNumbers = NONEXISTENT_ROOM_NUMBERS.map(String);
+        if (nonExistentRoomNumbers.length > 0) {
+          await client.query(`DELETE FROM rooms WHERE number = ANY($1::text[])`, [nonExistentRoomNumbers]);
+        }
+
+        // 2) Remove any invalid legacy inventory rows not in the contract
+        await client.query(`DELETE FROM rooms WHERE NOT (number = ANY($1::text[]))`, [
+          ROOM_NUMBERS.map(String),
+        ]);
+        await client.query(`DELETE FROM lockers WHERE NOT (number = ANY($1::text[]))`, [LOCKER_NUMBERS]);
+
+        // 3) Upsert rooms + lockers (idempotent)
+        for (const r of ROOMS) {
+          const type: RoomType =
+            r.kind === 'DELUXE' ? RoomType.DOUBLE : r.kind === 'SPECIAL' ? RoomType.SPECIAL : RoomType.STANDARD;
+          await client.query(
+            `INSERT INTO rooms (number, type, status, floor, last_status_change)
+             VALUES ($1, $2, 'CLEAN', $3, NOW())
+             ON CONFLICT (number) DO UPDATE
+               SET type = EXCLUDED.type,
+                   floor = EXCLUDED.floor,
+                   updated_at = NOW()`,
+            [String(r.number), type, Math.floor(r.number / 100)]
+          );
+        }
+
+        for (const n of LOCKER_NUMBERS) {
+          await client.query(
+            `INSERT INTO lockers (number, status)
+             VALUES ($1, 'CLEAN')
+             ON CONFLICT (number) DO UPDATE
+               SET updated_at = NOW()`,
+            [n]
+          );
+        }
+
+        // 4) Upsert key tags (needed for QR scans in checkout kiosk)
+        const roomIdsForTags = await client.query<{ id: string; number: string }>(
+          `SELECT id, number FROM rooms ORDER BY number`
+        );
+        for (const row of roomIdsForTags.rows) {
+          await client.query(
+            `INSERT INTO key_tags (room_id, tag_type, tag_code, is_active)
+             VALUES ($1, 'QR', $2, true)
+             ON CONFLICT (tag_code) DO UPDATE
+               SET room_id = EXCLUDED.room_id,
+                   locker_id = NULL,
+                   is_active = true,
+                   updated_at = NOW()`,
+            [row.id, `ROOM-${row.number}`]
+          );
+        }
+
+        const lockerIdsForTags = await client.query<{ id: string; number: string }>(
+          `SELECT id, number FROM lockers ORDER BY number`
+        );
+        for (const row of lockerIdsForTags.rows) {
+          await client.query(
+            `INSERT INTO key_tags (locker_id, tag_type, tag_code, is_active)
+             VALUES ($1, 'QR', $2, true)
+             ON CONFLICT (tag_code) DO UPDATE
+               SET locker_id = EXCLUDED.locker_id,
+                   room_id = NULL,
+                   is_active = true,
+                   updated_at = NOW()`,
+            [row.id, `LOCKER-${row.number}`]
+          );
+        }
+
+        // Reset assignments/statuses on inventory
         await client.query(
           `UPDATE rooms
            SET assigned_to_customer_id = NULL,
-               status = CASE WHEN status = 'OCCUPIED' THEN 'CLEAN' ELSE status END,
-               last_status_change = CASE WHEN status = 'OCCUPIED' THEN NOW() ELSE last_status_change END,
+               status = 'CLEAN',
+               last_status_change = NOW(),
                updated_at = NOW()`
         );
         await client.query(
           `UPDATE lockers
            SET assigned_to_customer_id = NULL,
-               status = CASE WHEN status = 'OCCUPIED' THEN 'CLEAN' ELSE status END,
+               status = 'CLEAN',
                updated_at = NOW()`
         );
+
+        // Wipe member/customer-related data (keep staff/employees)
+        await client.query('DELETE FROM checkout_requests');
+        await client.query('DELETE FROM late_checkout_events');
         await client.query('DELETE FROM waitlist');
         await client.query('DELETE FROM agreement_signatures');
         await client.query('DELETE FROM charges');
         await client.query('DELETE FROM checkin_blocks');
+        await client.query('DELETE FROM sessions');
+        await client.query('DELETE FROM payment_intents');
+        await client.query('DELETE FROM lane_sessions');
         await client.query('DELETE FROM visits');
         await client.query('DELETE FROM customers');
+        await client.query('DELETE FROM members');
 
-        // Customers
-        for (const customer of demoData.customers) {
+        // Inventory maps (after any deletes)
+        const roomsRes = await client.query<{ id: string; number: string; type: string }>(
+          `SELECT id, number, type::text as type FROM rooms ORDER BY number`
+        );
+        const lockersRes = await client.query<{ id: string; number: string }>(
+          `SELECT id, number FROM lockers ORDER BY number`
+        );
+
+        const roomIdByNumber = new Map<string, { id: string; type: string }>();
+        for (const r of roomsRes.rows) roomIdByNumber.set(r.number, { id: r.id, type: r.type });
+        const lockerIdByNumber = new Map<string, string>();
+        for (const l of lockersRes.rows) lockerIdByNumber.set(l.number, l.id);
+
+        // Create exactly 100 customers ("members" in demo terms)
+        for (let i = 1; i <= 100; i++) {
+          const idx = i - 1;
+          const id = randomUUID();
+          const membershipNumber = String(i).padStart(6, '0');
+          const name = `${firstNames[idx % firstNames.length]} ${lastNames[(idx * 7) % lastNames.length]}`;
+          const email = `member${membershipNumber}@demo.local`;
+          const phone = `555${String(i).padStart(7, '0')}`; // 10-digit-ish, deterministic
+          const dob = new Date(1980 + (idx % 25), (idx * 3) % 12, ((idx * 5) % 27) + 1);
+
           await client.query(
             `INSERT INTO customers
              (id, name, dob, membership_number, membership_card_type, membership_valid_until, primary_language, past_due_balance, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())`,
-            [
-              customer.id,
-              customer.name,
-              customer.dob || null,
-              customer.membership_number || null,
-              customer.membership_card_type || null,
-              customer.membership_valid_until || null,
-              customer.primary_language || null,
-              customer.past_due_balance,
-            ]
+             VALUES ($1, $2, $3, $4, NULL, NULL, 'EN', 0, NOW(), NOW())`,
+            [id, name, dob, membershipNumber]
           );
+
+          await client.query(
+            `INSERT INTO members (id, membership_number, name, email, phone, dob, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())`,
+            [randomUUID(), membershipNumber, name, email, phone, dob]
+          );
+
+          customerIds.push(id);
         }
 
-        // Visits and check-in blocks
-        for (const visit of demoData.visits) {
+        // Create ~90 active check-ins (visits + sessions + checkin_blocks)
+        const checkedInCount = 90;
+        for (let i = 0; i < checkedInCount; i++) {
+          const customerId = customerIds[i]!;
+          checkedInCustomerIds.push(customerId);
+
+          // Distribute check-in times across last 24h, biased toward recent but includes older ones
+          const u = rng();
+          const biasRecent = u * u; // bias toward 0
+          const baseOffsetMs = biasRecent * 24 * 60 * 60 * 1000;
+          const forcedOlder = i % 10 === 0 ? (18 + rng() * 6) * 60 * 60 * 1000 : 0;
+          const offsetMs = Math.min(24 * 60 * 60 * 1000, baseOffsetMs + forcedOlder);
+          const checkInAt = new Date(now.getTime() - offsetMs);
+
+          const visitId = randomUUID();
+          visitIdsByCustomer.set(customerId, visitId);
+
           await client.query(
             `INSERT INTO visits (id, started_at, ended_at, created_at, updated_at, customer_id)
-             VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
-            [visit.id, visit.started_at, visit.ended_at, visit.customer_id]
+             VALUES ($1, $2, NULL, NOW(), NOW(), $3)`,
+            [visitId, checkInAt, customerId]
           );
 
-          for (const block of visit.blocks) {
+          // Assign rooms (54/55) and lockers (88/108). Some customers will have both.
+          const roomNumber = i < occupiedRoomNumbers.length ? String(occupiedRoomNumbers[i]!) : null;
+          const lockerNumber = i < occupiedLockerNumbers.length ? occupiedLockerNumbers[i]! : null;
+          const room = roomNumber ? roomIdByNumber.get(roomNumber) : undefined;
+          const lockerId = lockerNumber ? lockerIdByNumber.get(lockerNumber) : undefined;
+
+          // Determine rental type: room tier if present, else locker, else STANDARD (waitlist-like)
+          let rentalType: RentalType = RentalType.STANDARD;
+          if (roomNumber) {
+            const kind = getRoomKind(parseInt(roomNumber, 10));
+            rentalType =
+              kind === 'SPECIAL'
+                ? RentalType.SPECIAL
+                : kind === 'DELUXE'
+                  ? RentalType.DOUBLE
+                  : RentalType.STANDARD;
+          } else if (lockerNumber) {
+            rentalType = RentalType.LOCKER;
+          }
+
+          // Ensure we only reference existing inventory rows
+          const roomId = room?.id ?? null;
+          const lockerIdFinal = lockerId ?? null;
+
+          const sessionId = randomUUID();
+
+          // Blocks are 6-hour multiples; choose enough blocks so the last one ends in the future.
+          const hoursSinceCheckin = Math.max(0, (now.getTime() - checkInAt.getTime()) / (60 * 60 * 1000));
+          const blocksNeeded = Math.floor(hoursSinceCheckin / 6) + 1; // ensures last ends after now
+          const checkoutAt = new Date(checkInAt.getTime() + blocksNeeded * 6 * 60 * 60 * 1000);
+
+          const customerRow = await client.query<{ name: string; membership_number: string | null }>(
+            `SELECT name, membership_number FROM customers WHERE id = $1`,
+            [customerId]
+          );
+          const memberName = customerRow.rows[0]!.name;
+          const membershipNumber = customerRow.rows[0]!.membership_number;
+
+          await client.query(
+            `INSERT INTO sessions
+             (id, customer_id, member_name, membership_number, room_id, locker_id, check_in_time, checkout_at, expected_duration, status, lane, checkin_type, visit_id, agreement_signed, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ACTIVE', 'DEMO', 'INITIAL', $10, false, NOW(), NOW())`,
+            [
+              sessionId,
+              customerId,
+              memberName,
+              membershipNumber,
+              roomId,
+              lockerIdFinal,
+              checkInAt,
+              checkoutAt,
+              blocksNeeded * 6 * 60, // minutes
+              visitId,
+            ]
+          );
+
+          // Create blocks (INITIAL + RENEWALs) and track first block id for optional waitlist linkage
+          let firstBlockId: string | null = null;
+          for (let b = 0; b < blocksNeeded; b++) {
+            const blockId = randomUUID();
+            if (b === 0) firstBlockId = blockId;
+            const startsAt = new Date(checkInAt.getTime() + b * 6 * 60 * 60 * 1000);
+            const endsAt = new Date(startsAt.getTime() + 6 * 60 * 60 * 1000);
+            const blockType = b === 0 ? BlockType.INITIAL : BlockType.RENEWAL;
+
             await client.query(
               `INSERT INTO checkin_blocks
                (id, visit_id, block_type, starts_at, ends_at, room_id, locker_id, session_id, agreement_signed, agreement_signed_at, created_at, updated_at, has_tv_remote, waitlist_id, rental_type)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, NOW(), NOW(), $10, $11, $12)`,
-              [
-                block.id,
-                block.visit_id,
-                block.block_type,
-                block.starts_at,
-                block.ends_at,
-                block.room_id || null,
-                block.locker_id || null,
-                block.agreement_signed,
-                block.agreement_signed ? block.ends_at : null,
-                block.has_tv_remote,
-                // Waitlist <-> checkin_blocks is a cycle:
-                // - waitlist.checkin_block_id references checkin_blocks
-                // - checkin_blocks.waitlist_id references waitlist
-                // So insert blocks with NULL waitlist_id and backfill after inserting waitlist rows.
-                null,
-                block.rental_type,
-              ]
+               VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, false, NULL, NOW(), NOW(), $8, NULL, $9)`,
+              [blockId, visitId, blockType, startsAt, endsAt, roomId, lockerIdFinal, false, rentalType]
+            );
+          }
+
+          // Optionally place a couple unassigned check-ins on waitlist to simulate busy conditions
+          if (!roomId && !lockerIdFinal && firstBlockId) {
+            const waitlistId = randomUUID();
+            await client.query(
+              `INSERT INTO waitlist
+               (id, visit_id, checkin_block_id, desired_tier, backup_tier, locker_or_room_assigned_initially, room_id, status, created_at, updated_at)
+               VALUES ($1, $2, $3, 'STANDARD', 'LOCKER', NULL, NULL, 'ACTIVE', $4, NOW())`,
+              [waitlistId, visitId, firstBlockId, checkInAt]
+            );
+            await client.query(`UPDATE checkin_blocks SET waitlist_id = $1, updated_at = NOW() WHERE id = $2`, [
+              waitlistId,
+              firstBlockId,
+            ]);
+          }
+
+          // Mark inventory assignments/statuses for occupied resources
+          if (roomNumber && roomId) {
+            await client.query(
+              `UPDATE rooms
+               SET status = $1,
+                   assigned_to_customer_id = $2,
+                   last_status_change = NOW(),
+                   updated_at = NOW()
+               WHERE id = $3`,
+              [RoomStatus.OCCUPIED, customerId, roomId]
+            );
+          }
+          if (lockerNumber && lockerIdFinal) {
+            await client.query(
+              `UPDATE lockers
+               SET status = $1,
+                   assigned_to_customer_id = $2,
+                   updated_at = NOW()
+               WHERE id = $3`,
+              [RoomStatus.OCCUPIED, customerId, lockerIdFinal]
             );
           }
         }
 
-        // Waitlist entries (link back into blocks)
-        for (const entry of demoData.waitlistEntries) {
-          await client.query(
-            `INSERT INTO waitlist
-             (id, visit_id, checkin_block_id, desired_tier, backup_tier, locker_or_room_assigned_initially, room_id, status, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
-            [
-              entry.id,
-              entry.visit_id,
-              entry.checkin_block_id,
-              entry.desired_tier,
-              entry.backup_tier,
-              entry.locker_or_room_assigned_initially,
-              entry.room_id,
-              entry.status,
-              entry.created_at,
-            ]
-          );
-        }
-
-        // Backfill checkin_blocks.waitlist_id now that waitlist rows exist
-        for (const entry of demoData.waitlistEntries) {
-          await client.query(
-            `UPDATE checkin_blocks SET waitlist_id = $1, updated_at = NOW() WHERE id = $2`,
-            [entry.id, entry.checkin_block_id]
-          );
-        }
+        // Ensure the free room is available (clean + unassigned)
+        await client.query(
+          `UPDATE rooms
+           SET status = 'CLEAN', assigned_to_customer_id = NULL, last_status_change = NOW(), updated_at = NOW()
+           WHERE number = $1`,
+          [String(freeRoomNumber)]
+        );
       });
 
-      // Mark active assignments on inventory (rooms/lockers)
-      const activeBlocks = demoData.visits
-        .filter((v) => v.ended_at === null)
-        .flatMap((v) => v.blocks.map((b) => ({ block: b, visit: v })));
+      // Post-seed assertions + concise summary (throw on failure)
+      const staffCountAfter = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM staff');
+      if (staffCountBefore.rows[0]!.count !== staffCountAfter.rows[0]!.count) {
+        throw new Error(
+          `Staff count changed unexpectedly (${staffCountBefore.rows[0]!.count} -> ${staffCountAfter.rows[0]!.count})`
+        );
+      }
 
-      for (const { block, visit } of activeBlocks) {
-        if (block.room_id) {
-          await query(
-            `UPDATE rooms SET status = $1, assigned_to_customer_id = $2, updated_at = NOW() WHERE id = $3`,
-            [RoomStatus.OCCUPIED, visit.customer_id, block.room_id]
-          );
-        }
-        if (block.locker_id) {
-          await query(
-            `UPDATE lockers SET status = $1, assigned_to_customer_id = $2, updated_at = NOW() WHERE id = $3`,
-            [RoomStatus.OCCUPIED, visit.customer_id, block.locker_id]
-          );
-        }
+      const customerCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM customers');
+      const memberCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM members');
+      const roomCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM rooms');
+      const lockerCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM lockers');
+
+      const nonExistentRoomsPresent = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM rooms WHERE number = ANY($1::text[])`,
+        [NONEXISTENT_ROOM_NUMBERS.map(String)]
+      );
+
+      const occupiedRooms = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM rooms WHERE status = 'OCCUPIED' AND assigned_to_customer_id IS NOT NULL`
+      );
+      const availableRooms = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM rooms WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL`
+      );
+      const freeRoom = await query<{ number: string; type: string }>(
+        `SELECT number, type::text as type FROM rooms WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL ORDER BY number LIMIT 1`
+      );
+
+      const occupiedLockers = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM lockers WHERE status = 'OCCUPIED' AND assigned_to_customer_id IS NOT NULL`
+      );
+      const availableLockers = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM lockers WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL`
+      );
+
+      const checkinBounds = await query<{ min: Date | null; max: Date | null }>(
+        `SELECT MIN(check_in_time) as min, MAX(check_in_time) as max FROM sessions WHERE status = 'ACTIVE'`
+      );
+      const minCheckin = checkinBounds.rows[0]!.min ? new Date(checkinBounds.rows[0]!.min) : null;
+      const maxCheckin = checkinBounds.rows[0]!.max ? new Date(checkinBounds.rows[0]!.max) : null;
+
+      function asInt(row: { count: string }): number {
+        return parseInt(row.count, 10);
+      }
+
+      if (asInt(customerCount.rows[0]!) !== 100) throw new Error(`Expected 100 customers, got ${customerCount.rows[0]!.count}`);
+      if (asInt(memberCount.rows[0]!) !== 100) throw new Error(`Expected 100 members, got ${memberCount.rows[0]!.count}`);
+      if (asInt(roomCount.rows[0]!) !== 55) throw new Error(`Expected 55 rooms, got ${roomCount.rows[0]!.count}`);
+      if (asInt(nonExistentRoomsPresent.rows[0]!) !== 0)
+        throw new Error(`Non-existent rooms present in DB (${nonExistentRoomsPresent.rows[0]!.count})`);
+      if (asInt(occupiedRooms.rows[0]!) !== 54) throw new Error(`Expected 54 occupied rooms, got ${occupiedRooms.rows[0]!.count}`);
+      if (asInt(availableRooms.rows[0]!) !== 1) throw new Error(`Expected 1 available room, got ${availableRooms.rows[0]!.count}`);
+      if (!freeRoom.rows[0] || freeRoom.rows[0]!.type !== 'STANDARD')
+        throw new Error(`Expected the free room to be STANDARD, got ${freeRoom.rows[0]?.number ?? 'none'} (${freeRoom.rows[0]?.type ?? 'n/a'})`);
+      if (asInt(lockerCount.rows[0]!) !== 108) throw new Error(`Expected 108 lockers, got ${lockerCount.rows[0]!.count}`);
+      if (asInt(occupiedLockers.rows[0]!) !== 88) throw new Error(`Expected 88 occupied lockers, got ${occupiedLockers.rows[0]!.count}`);
+      if (asInt(availableLockers.rows[0]!) !== 20) throw new Error(`Expected 20 available lockers, got ${availableLockers.rows[0]!.count}`);
+
+      const lowerBound = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      if (!minCheckin || !maxCheckin) throw new Error('Expected active sessions with check_in_time bounds');
+      if (minCheckin.getTime() < lowerBound.getTime() - 60_000) {
+        throw new Error(`Oldest check-in is too old: ${minCheckin.toISOString()} (min allowed ~${lowerBound.toISOString()})`);
+      }
+      if (maxCheckin.getTime() > now.getTime() + 5_000) {
+        throw new Error(`Newest check-in is in the future: ${maxCheckin.toISOString()} (now ${now.toISOString()})`);
       }
 
       console.log(
-        `✅ Demo customers seeded (${demoData.customers.length}), visits: ${demoData.visits.length}, waitlist entries: ${demoData.waitlistEntries.length}`
+        `✅ Busy Saturday seed complete: 100 members/customers, ${checkedInCustomerIds.length} active check-ins, 54 rooms occupied (free room: ${freeRoom.rows[0]!.number}), 88 lockers occupied`
       );
     }
 
@@ -454,7 +728,7 @@ export async function seedDemoData(): Promise<void> {
     console.log(`   - ${documentsCreated.length} employee documents created`);
   } catch (error) {
     console.error('❌ Demo seed failed:', error);
-    // Don't throw - allow server to start even if demo seed fails
+    throw error;
   }
 }
 

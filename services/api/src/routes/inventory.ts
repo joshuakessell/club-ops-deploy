@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
+import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
 
 /**
  * Map room number to tier (Special, Double, or Standard).
@@ -8,21 +9,12 @@ import { requireAuth } from '../auth/middleware.js';
 function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
   const num = parseInt(roomNumber, 10);
 
-  // Special: rooms 201, 232, 256
-  if (num === 201 || num === 232 || num === 256) {
+  if (isSpecialRoom(num)) {
     return 'SPECIAL';
   }
 
-  // Double: even rooms 216, 218, 232, 252, 256, 262 and odd room 225
-  if (
-    num === 216 ||
-    num === 218 ||
-    num === 232 ||
-    num === 252 ||
-    num === 256 ||
-    num === 262 ||
-    num === 225
-  ) {
+  // "Deluxe" rooms in the facility contract map to DB tier/type "DOUBLE"
+  if (isDeluxeRoom(num)) {
     return 'DOUBLE';
   }
 

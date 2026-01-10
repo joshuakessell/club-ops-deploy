@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { SlideOutDrawer } from './SlideOutDrawer';
 
 export interface RegisterSideDrawersProps {
@@ -22,6 +22,22 @@ export function RegisterSideDrawers({
   upgradesContent,
   inventoryContent,
 }: RegisterSideDrawersProps) {
+  const [inventoryWidthPx, setInventoryWidthPx] = useState<number>(() => {
+    if (typeof window === 'undefined') return 520;
+    return Math.max(420, Math.round(window.innerWidth * 0.45));
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const update = () =>
+      setInventoryWidthPx(
+        Math.max(420, Math.min(window.innerWidth - 12, Math.round(window.innerWidth * 0.45)))
+      );
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
   return (
     <>
       <SlideOutDrawer
@@ -46,6 +62,7 @@ export function RegisterSideDrawers({
           onInventoryOpenChange(next);
         }}
         attention={inventoryAttention}
+        widthPx={inventoryWidthPx}
       >
         {inventoryContent}
       </SlideOutDrawer>
