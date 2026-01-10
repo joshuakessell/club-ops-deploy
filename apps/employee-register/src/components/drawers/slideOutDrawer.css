@@ -1,0 +1,102 @@
+.sod-root {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+  pointer-events: none; /* allow clicks through except on interactive children */
+  will-change: transform;
+}
+
+.sod-root.sod-left {
+  left: 0;
+}
+
+.sod-root.sod-right {
+  right: 0;
+}
+
+.sod-root:not(.sod-dragging) {
+  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.sod-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+}
+
+.sod-tab {
+  pointer-events: auto;
+  align-self: center;
+
+  width: var(--sod-tab-width, 44px);
+  min-height: 160px;
+
+  padding: 0.5rem 0.25rem;
+  border-radius: 9999px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.sod-tab:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.sod-tabLabel {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 800;
+  font-size: 0.8rem;
+}
+
+/* Make label read top-to-bottom on left side */
+.sod-tab--left .sod-tabLabel {
+  transform: rotate(180deg);
+}
+
+.sod-left .sod-tab {
+  position: absolute;
+  right: 0;
+}
+
+.sod-right .sod-tab {
+  position: absolute;
+  left: 0;
+}
+
+.sod-panel {
+  pointer-events: auto;
+
+  height: 100%;
+  overflow-y: auto;
+
+  padding: 1rem;
+
+  /* Keep content readable against backdrop */
+  background: rgba(10, 10, 10, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.sod-left .sod-panel {
+  margin-right: var(--sod-tab-width, 44px);
+}
+
+.sod-right .sod-panel {
+  margin-left: var(--sod-tab-width, 44px);
+}
+
+/* Reduce accidental text selection while dragging */
+.sod-dragging,
+.sod-dragging * {
+  user-select: none;
+}
+
+

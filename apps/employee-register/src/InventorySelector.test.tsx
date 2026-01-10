@@ -87,10 +87,10 @@ describe('InventorySelector', () => {
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
     // Wait for data to load
-    await screen.findByText(/standard rooms/i);
+    await screen.findByText(/standard/i);
 
     // Check that sections are rendered
-    expect(screen.getByText(/standard rooms/i)).toBeDefined();
+    expect(screen.getByText(/standard/i)).toBeDefined();
   });
 
   it('should auto-expand section when customer selects type', async () => {
@@ -101,7 +101,7 @@ describe('InventorySelector', () => {
 
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
-    await screen.findByText(/standard rooms/i);
+    await screen.findByText(/standard/i);
 
     // Section should be expanded (we can check by looking for room numbers)
     // This is a basic test - in a real scenario, we'd check the expanded state
@@ -118,7 +118,7 @@ describe('InventorySelector', () => {
       <InventorySelector {...mockProps} customerSelectedType="STANDARD" onSelect={onSelect} />
     );
 
-    await screen.findByText(/standard rooms/i);
+    await screen.findByText(/standard/i);
 
     // Auto-selection happens in useEffect, so we wait a bit
     await new Promise((resolve) => setTimeout(resolve, 100));

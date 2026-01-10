@@ -80,6 +80,10 @@ interface InventorySelectorProps {
   sessionId: string | null;
   lane: string;
   sessionToken: string;
+  filterQuery?: string;
+  forcedExpandedSection?: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null;
+  onExpandedSectionChange?: (next: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null) => void;
+  disableSelection?: boolean;
 }
 
 // Map room types to display names
@@ -200,10 +204,16 @@ export function InventorySelector({
   sessionId: _sessionId,
   lane,
   sessionToken,
+  filterQuery,
+  forcedExpandedSection,
+  onExpandedSectionChange,
+  disableSelection = false,
 }: InventorySelectorProps) {
   const [inventory, setInventory] = useState<DetailedInventory | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [uncontrolledExpandedSection, setUncontrolledExpandedSection] = useState<
+    'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -243,8 +253,20 @@ export function InventorySelector({
     if (!customerSelectedType) return;
 
     const sectionToExpand = waitlistBackupType || customerSelectedType;
-    setExpandedSections(new Set([sectionToExpand]));
-  }, [customerSelectedType, waitlistBackupType]);
+    if (
+      sectionToExpand === 'LOCKER' ||
+      sectionToExpand === 'STANDARD' ||
+      sectionToExpand === 'DOUBLE' ||
+      sectionToExpand === 'SPECIAL'
+    ) {
+      if (forcedExpandedSection !== undefined) {
+        onExpandedSectionChange?.(sectionToExpand);
+      } else {
+        setUncontrolledExpandedSection(sectionToExpand);
+        onExpandedSectionChange?.(sectionToExpand);
+      }
+    }
+  }, [customerSelectedType, waitlistBackupType, forcedExpandedSection, onExpandedSectionChange]);
 
   // Fetch inventory
   useEffect(() => {
@@ -393,6 +415,17 @@ export function InventorySelector({
   ]);
 
   // Group rooms by tier (must be before conditional returns to follow React hooks rules)
+  const query = (filterQuery ?? '').trim().toLowerCase();
+
+  const matchesQuery = useMemo(() => {
+    if (!query) return () => true;
+    return (number: string, assignedMemberName?: string) => {
+      const num = String(number ?? '').toLowerCase();
+      const name = String(assignedMemberName ?? '').toLowerCase();
+      return num.includes(query) || name.includes(query);
+    };
+  }, [query]);
+
   const roomsByTier = useMemo(() => {
     if (!inventory) {
       return { SPECIAL: [], DOUBLE: [], STANDARD: [] };
@@ -405,23 +438,32 @@ export function InventorySelector({
 
     for (const room of inventory.rooms) {
       if (room.tier === 'SPECIAL' || room.tier === 'DOUBLE' || room.tier === 'STANDARD') {
-        grouped[room.tier].push(room);
+        if (matchesQuery(room.number, room.assignedMemberName)) {
+          grouped[room.tier].push(room);
+        }
       }
     }
 
     return grouped;
-  }, [inventory?.rooms]);
+  }, [inventory?.rooms, matchesQuery]);
 
-  const toggleSection = (section: string) => {
-    setExpandedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(section)) {
-        next.delete(section);
-      } else {
-        next.add(section);
-      }
-      return next;
-    });
+  const filteredLockers = useMemo(() => {
+    if (!inventory) return [];
+    return inventory.lockers.filter((l) => matchesQuery(l.number, l.assignedMemberName));
+  }, [inventory?.lockers, matchesQuery]);
+
+  const expandedSection =
+    forcedExpandedSection !== undefined ? forcedExpandedSection : uncontrolledExpandedSection;
+
+  const setExpandedSection = (next: typeof expandedSection) => {
+    onExpandedSectionChange?.(next);
+    if (forcedExpandedSection === undefined) {
+      setUncontrolledExpandedSection(next);
+    }
+  };
+
+  const toggleSection = (section: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+    setExpandedSection(expandedSection === section ? null : section);
   };
 
   if (loading) {
@@ -447,50 +489,66 @@ export function InventorySelector({
     >
       <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>Inventory</h2>
 
-      {/* Special Rooms */}
-      <InventorySection
-        title="Special Rooms"
-        rooms={roomsByTier.SPECIAL}
-        isExpanded={expandedSections.has('SPECIAL')}
-        onToggle={() => toggleSection('SPECIAL')}
-        onSelectRoom={(room) => onSelect('room', room.id, room.number, 'SPECIAL')}
-        selectedItem={selectedItem}
-        waitlistEntries={waitlistEntries}
-        nowMs={nowMs}
-      />
-
-      {/* Double Rooms */}
-      <InventorySection
-        title="Double Rooms"
-        rooms={roomsByTier.DOUBLE}
-        isExpanded={expandedSections.has('DOUBLE')}
-        onToggle={() => toggleSection('DOUBLE')}
-        onSelectRoom={(room) => onSelect('room', room.id, room.number, 'DOUBLE')}
-        selectedItem={selectedItem}
-        waitlistEntries={waitlistEntries}
-        nowMs={nowMs}
-      />
-
-      {/* Standard Rooms */}
-      <InventorySection
-        title="Standard Rooms"
-        rooms={roomsByTier.STANDARD}
-        isExpanded={expandedSections.has('STANDARD')}
-        onToggle={() => toggleSection('STANDARD')}
-        onSelectRoom={(room) => onSelect('room', room.id, room.number, 'STANDARD')}
-        selectedItem={selectedItem}
-        waitlistEntries={waitlistEntries}
-        nowMs={nowMs}
-      />
-
       {/* Lockers */}
       <LockerSection
-        lockers={inventory.lockers}
-        isExpanded={expandedSections.has('LOCKER')}
+        lockers={filteredLockers}
+        isExpanded={expandedSection === 'LOCKER'}
         onToggle={() => toggleSection('LOCKER')}
-        onSelectLocker={(locker) => onSelect('locker', locker.id, locker.number, 'LOCKER')}
+        onSelectLocker={(locker) => {
+          if (disableSelection) return;
+          onSelect('locker', locker.id, locker.number, 'LOCKER');
+        }}
         selectedItem={selectedItem}
         nowMs={nowMs}
+        disableSelection={disableSelection}
+      />
+
+      {/* Standard */}
+      <InventorySection
+        title="Standard"
+        rooms={roomsByTier.STANDARD}
+        isExpanded={expandedSection === 'STANDARD'}
+        onToggle={() => toggleSection('STANDARD')}
+        onSelectRoom={(room) => {
+          if (disableSelection) return;
+          onSelect('room', room.id, room.number, 'STANDARD');
+        }}
+        selectedItem={selectedItem}
+        waitlistEntries={waitlistEntries}
+        nowMs={nowMs}
+        disableSelection={disableSelection}
+      />
+
+      {/* Double */}
+      <InventorySection
+        title="Double"
+        rooms={roomsByTier.DOUBLE}
+        isExpanded={expandedSection === 'DOUBLE'}
+        onToggle={() => toggleSection('DOUBLE')}
+        onSelectRoom={(room) => {
+          if (disableSelection) return;
+          onSelect('room', room.id, room.number, 'DOUBLE');
+        }}
+        selectedItem={selectedItem}
+        waitlistEntries={waitlistEntries}
+        nowMs={nowMs}
+        disableSelection={disableSelection}
+      />
+
+      {/* Special */}
+      <InventorySection
+        title="Special"
+        rooms={roomsByTier.SPECIAL}
+        isExpanded={expandedSection === 'SPECIAL'}
+        onToggle={() => toggleSection('SPECIAL')}
+        onSelectRoom={(room) => {
+          if (disableSelection) return;
+          onSelect('room', room.id, room.number, 'SPECIAL');
+        }}
+        selectedItem={selectedItem}
+        waitlistEntries={waitlistEntries}
+        nowMs={nowMs}
+        disableSelection={disableSelection}
       />
     </div>
   );
@@ -504,6 +562,7 @@ interface InventorySectionProps {
   onSelectRoom: (room: DetailedRoom) => void;
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
   nowMs: number;
+  disableSelection?: boolean;
 }
 
 function InventorySection({
@@ -515,6 +574,7 @@ function InventorySection({
   selectedItem,
   waitlistEntries = [],
   nowMs,
+  disableSelection = false,
 }: InventorySectionProps & { waitlistEntries?: Array<{ desiredTier: string; status: string }> }) {
   const grouped = useMemo(() => {
     const groupedRooms = groupRooms(rooms, waitlistEntries, nowMs);
@@ -581,9 +641,12 @@ function InventorySection({
                   <RoomItem
                     key={room.id}
                     room={room}
-                    isSelectable={true}
+                    isSelectable={!disableSelection}
                     isSelected={selectedItem?.type === 'room' && selectedItem.id === room.id}
-                    onClick={() => onSelectRoom(room)}
+                    onClick={() => {
+                      if (disableSelection) return;
+                      onSelectRoom(room);
+                    }}
                     isWaitlistMatch={isWaitlistMatch}
                     nowMs={nowMs}
                   />
@@ -750,6 +813,7 @@ interface LockerSectionProps {
   onSelectLocker: (locker: DetailedLocker) => void;
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
   nowMs: number;
+  disableSelection?: boolean;
 }
 
 function LockerSection({
@@ -759,6 +823,7 @@ function LockerSection({
   onSelectLocker,
   selectedItem,
   nowMs,
+  disableSelection = false,
 }: LockerSectionProps) {
   const availableCount = lockers.filter(
     (l) => l.status === RoomStatus.CLEAN && !l.assignedTo
@@ -839,7 +904,10 @@ function LockerSection({
                     return (
                       <div
                         key={locker.id}
-                        onClick={() => onSelectLocker(locker)}
+                        onClick={() => {
+                          if (disableSelection) return;
+                          onSelectLocker(locker);
+                        }}
                         style={{
                           padding: '0.5rem',
                           background: isSelected ? '#3b82f6' : '#0f172a',
@@ -847,7 +915,7 @@ function LockerSection({
                           borderRadius: '4px',
                           textAlign: 'center',
                           fontSize: '0.875rem',
-                          cursor: 'pointer',
+                          cursor: disableSelection ? 'default' : 'pointer',
                           minHeight: '44px',
                           display: 'flex',
                           alignItems: 'center',

@@ -20,7 +20,6 @@ import {
 } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { RegisterSignIn } from '../RegisterSignIn';
-import { InventorySelector } from '../InventorySelector';
 import type { IdScanPayload } from '@club-ops/shared';
 import { ScanMode, type ScanModeResult } from '../ScanMode';
 import { debounce } from '../utils/debounce';
@@ -28,6 +27,7 @@ import { OfferUpgradeModal } from '../components/OfferUpgradeModal';
 import { CheckoutRequestsBanner } from '../components/register/CheckoutRequestsBanner';
 import { CheckoutVerificationModal } from '../components/register/CheckoutVerificationModal';
 import { RegisterHeader } from '../components/register/RegisterHeader';
+import { RegisterTopActionsBar } from '../components/register/RegisterTopActionsBar';
 import { WaitlistNoticeModal } from '../components/register/modals/WaitlistNoticeModal';
 import { CustomerConfirmationPendingModal } from '../components/register/modals/CustomerConfirmationPendingModal';
 import { PastDuePaymentModal } from '../components/register/modals/PastDuePaymentModal';
@@ -36,8 +36,11 @@ import { UpgradePaymentModal } from '../components/register/modals/UpgradePaymen
 import { AddNoteModal } from '../components/register/modals/AddNoteModal';
 import { MembershipIdPromptModal } from '../components/register/modals/MembershipIdPromptModal';
 import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclineToast';
-import { AvailabilityStatusBar } from '../components/AvailabilityStatusBar';
-import { AvailabilityModal, type AvailabilityModalType } from '../components/AvailabilityModal';
+import { RegisterSideDrawers } from '../components/drawers/RegisterSideDrawers';
+import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerContent';
+import { InventoryDrawer, type InventoryDrawerSection } from '../components/inventory/InventoryDrawer';
+import { InventorySummaryBar } from '../components/inventory/InventorySummaryBar';
+import { useRegisterTopActionsOverlays } from '../components/register/useRegisterTopActionsOverlays';
 
 interface HealthStatus {
   status: string;
@@ -104,6 +107,9 @@ export function AppRoot() {
   const [wsConnected, setWsConnected] = useState(false);
   const [scanModeOpen, setScanModeOpen] = useState(false);
   const [manualEntry, setManualEntry] = useState(false);
+  const [isUpgradesDrawerOpen, setIsUpgradesDrawerOpen] = useState(false);
+  const [isInventoryDrawerOpen, setIsInventoryDrawerOpen] = useState(false);
+  const [inventoryForcedSection, setInventoryForcedSection] = useState<InventoryDrawerSection>(null);
   const [customerName, setCustomerName] = useState('');
   const [membershipNumber, setMembershipNumber] = useState('');
   const [pendingCreateFromScan, setPendingCreateFromScan] = useState<{
@@ -220,8 +226,6 @@ export function AppRoot() {
     waitlistDemand: Record<string, number>;
     lockers: number;
   }>(null);
-  const [availabilityModalType, setAvailabilityModalType] = useState<AvailabilityModalType>(null);
-  const [showUpgradesPanel, setShowUpgradesPanel] = useState(false);
   const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<string | null>(null);
   const [upgradePaymentIntentId, setUpgradePaymentIntentId] = useState<string | null>(null);
   const [upgradeFee, setUpgradeFee] = useState<number | null>(null);
@@ -1157,7 +1161,6 @@ export function AppRoot() {
   }, {});
 
   const isEntryOfferEligible = (entry: (typeof waitlistEntries)[number]): boolean => {
-    if (sessionActive) return false;
     if (entry.status === 'OFFERED') return true;
     if (entry.status !== 'ACTIVE') return false;
     if (!inventoryAvailable) return false;
@@ -1169,7 +1172,6 @@ export function AppRoot() {
 
   const eligibleEntryCount = waitlistEntries.filter(isEntryOfferEligible).length;
   const hasEligibleEntries = eligibleEntryCount > 0;
-  const waitlistInteractive = hasEligibleEntries && !sessionActive;
   const prevSessionActiveRef = useRef<boolean>(false);
   const pulseCandidateRef = useRef<boolean>(false);
 
@@ -1189,7 +1191,6 @@ export function AppRoot() {
   };
 
   const openOfferUpgradeModal = (entry: (typeof waitlistEntries)[number]) => {
-    if (sessionActive) return;
     if (entry.desiredTier !== 'STANDARD' && entry.desiredTier !== 'DOUBLE' && entry.desiredTier !== 'SPECIAL') {
       alert('Only STANDARD/DOUBLE/SPECIAL upgrades can be offered.');
       return;
@@ -1218,18 +1219,6 @@ export function AppRoot() {
       pulseCandidateRef.current = false;
     }
   }, [hasEligibleEntries, sessionActive]);
-
-  const handleWaitlistEntryAction = (entryId: string, customerName?: string) => {
-    if (sessionActive) {
-      return;
-    }
-    dismissUpgradePulse();
-    const label = customerName || 'customer';
-    const confirm = window.confirm(`Begin upgrading ${label}?`);
-    if (!confirm) return;
-    setSelectedWaitlistEntry(entryId);
-    setShowUpgradesPanel(true);
-  };
 
   const handleStartUpgradePayment = async (entry: (typeof waitlistEntries)[number]) => {
     if (!session?.sessionToken) {
@@ -1291,7 +1280,7 @@ export function AppRoot() {
         newRoomNumber: payload.newRoomNumber ?? entry.offeredRoomNumber ?? null,
       });
       dismissUpgradePulse();
-      setShowUpgradesPanel(true);
+      setIsUpgradesDrawerOpen(true);
       setShowUpgradePaymentModal(true);
     } catch (error) {
       console.error('Failed to start upgrade:', error);
@@ -2271,6 +2260,11 @@ export function AppRoot() {
     }
   }, [showManagerBypassModal, session?.sessionToken]);
 
+  const topActions = useRegisterTopActionsOverlays({
+    sessionToken: session?.sessionToken ?? null,
+    staffId: session?.staffId ?? null,
+  });
+
   return (
     <RegisterSignIn deviceId={deviceId} onSignedIn={handleRegisterSignIn}>
       {!registerSession ? (
@@ -2279,6 +2273,62 @@ export function AppRoot() {
         <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading...</div>
       ) : (
         <div className="container" style={{ marginTop: '60px', padding: '1.5rem' }}>
+          <RegisterSideDrawers
+            upgradesOpen={isUpgradesDrawerOpen}
+            onUpgradesOpenChange={(next) => {
+              if (next) dismissUpgradePulse();
+              setIsUpgradesDrawerOpen(next);
+            }}
+            inventoryOpen={isInventoryDrawerOpen}
+            onInventoryOpenChange={setIsInventoryDrawerOpen}
+            upgradesAttention={showUpgradePulse && hasEligibleEntries}
+            upgradesContent={
+              <UpgradesDrawerContent
+                waitlistEntries={waitlistEntries}
+                hasEligibleEntries={hasEligibleEntries}
+                isEntryOfferEligible={(entryId, status, desiredTier) => {
+                  const entry = waitlistEntries.find((e) => e.id === entryId);
+                  if (!entry) return false;
+                  if (entry.status !== status) return false;
+                  if (entry.desiredTier !== desiredTier) return false;
+                  return isEntryOfferEligible(entry);
+                }}
+                onOffer={(entryId) => {
+                  const entry = waitlistEntries.find((e) => e.id === entryId);
+                  if (!entry) return;
+                  openOfferUpgradeModal(entry);
+                  setIsUpgradesDrawerOpen(true);
+                }}
+                onStartPayment={(entry) => {
+                  resetUpgradeState();
+                  setSelectedWaitlistEntry(entry.id);
+                  void handleStartUpgradePayment(entry);
+                }}
+                onOpenPaymentQuote={(entry) => openUpgradePaymentQuote(entry)}
+                onCancelOffer={(entryId) => {
+                  // Cancellation endpoint not yet implemented in this demo UI.
+                  alert(`Cancel offer not implemented yet (waitlistId=${entryId}).`);
+                }}
+                isSubmitting={isSubmitting}
+              />
+            }
+            inventoryContent={
+              <InventoryDrawer
+                lane={lane}
+                sessionToken={session.sessionToken}
+                forcedExpandedSection={inventoryForcedSection}
+                onExpandedSectionChange={setInventoryForcedSection}
+                customerSelectedType={customerSelectedType}
+                waitlistDesiredTier={waitlistDesiredTier}
+                waitlistBackupType={waitlistBackupType}
+                onSelect={handleInventorySelect}
+                selectedItem={selectedInventoryItem}
+                sessionId={currentSessionId}
+                disableSelection={false}
+              />
+            }
+          />
+
           {/* Checkout Request Notifications */}
           {checkoutRequests.size > 0 && !selectedCheckoutRequest && (
             <CheckoutRequestsBanner
@@ -2321,14 +2371,9 @@ export function AppRoot() {
             onCloseOut={() => void handleCloseOut()}
           />
 
-          <AvailabilityStatusBar
-            counts={{
-              lockers: inventoryAvailable?.lockers,
-              STANDARD: inventoryAvailable?.rawRooms?.STANDARD,
-              DOUBLE: inventoryAvailable?.rawRooms?.DOUBLE,
-              SPECIAL: inventoryAvailable?.rawRooms?.SPECIAL,
-            }}
-            onOpen={(type) => setAvailabilityModalType(type)}
+          <RegisterTopActionsBar
+            onCheckout={topActions.openCheckout}
+            onRoomCleaning={topActions.openRoomCleaning}
           />
 
           <main className="main">
@@ -2457,225 +2502,6 @@ export function AppRoot() {
               </section>
             )}
 
-            {/* Waitlist/Upgrades Panel Toggle */}
-            <section style={{ marginBottom: '1rem' }}>
-              <button
-                className={[
-                  'cs-liquid-button',
-                  showUpgradesPanel ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
-                  showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                onClick={() => {
-                  const nextOpen = !showUpgradesPanel;
-                  if (nextOpen) dismissUpgradePulse();
-                  setShowUpgradesPanel(nextOpen);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {showUpgradesPanel ? '▼' : '▶'} Upgrades / Waitlist (
-                {
-                  waitlistEntries.filter((e) => e.status === 'ACTIVE' || e.status === 'OFFERED')
-                    .length
-                }
-                )
-              </button>
-            </section>
-
-            {/* Waitlist/Upgrades Panel */}
-            {showUpgradesPanel && (
-              <section
-                className="cs-liquid-card er-surface"
-                style={{
-                  marginBottom: '1rem',
-                  padding: '1rem',
-                }}
-              >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
-                  Waitlist & Upgrades
-                </h2>
-                {sessionActive && (
-                  <div style={{ marginBottom: '0.75rem', color: '#f59e0b', fontSize: '0.875rem' }}>
-                    Active session present — waitlist actions are disabled
-                  </div>
-                )}
-
-                {waitlistEntries.length === 0 ? (
-                  <p style={{ color: '#94a3b8' }}>No active waitlist entries</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {['ACTIVE', 'OFFERED'].map((status) => {
-                      const entries = waitlistEntries.filter((e) => e.status === status);
-                      if (entries.length === 0) return null;
-
-                      return (
-                        <div key={status} style={{ marginBottom: '1rem' }}>
-                          <h3
-                            style={{
-                              marginBottom: '0.5rem',
-                              fontSize: '1rem',
-                              fontWeight: 600,
-                              color: status === 'OFFERED' ? '#f59e0b' : '#94a3b8',
-                            }}
-                          >
-                            {status === 'OFFERED' ? '⚠️ Offered' : '⏳ Active'} ({entries.length})
-                          </h3>
-                          {entries.map((entry) => (
-                            <div
-                              key={entry.id}
-                              className="er-surface"
-                              style={{
-                                padding: '1rem',
-                                borderRadius: '6px',
-                                marginBottom: '0.5rem',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'start',
-                                  marginBottom: '0.5rem',
-                                }}
-                              >
-                                <div>
-                                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
-                                    {entry.displayIdentifier} → {entry.desiredTier}
-                                  </div>
-                                  <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                                    Current: {entry.currentRentalType} • Check-in:{' '}
-                                    {entry.checkinAt ? new Date(entry.checkinAt).toLocaleTimeString() : '—'} •
-                                    Checkout:{' '}
-                                    {entry.checkoutAt ? new Date(entry.checkoutAt).toLocaleTimeString() : '—'}
-                                  </div>
-                                </div>
-                                {status === 'OFFERED' && (
-                                  <div style={{ marginTop: '0.5rem' }}>
-                                    {upgradePaymentIntentId && entry.id === selectedWaitlistEntry ? (
-                                      <div
-                                        className="er-surface-strong"
-                                        style={{
-                                          padding: '0.75rem',
-                                          borderRadius: 6,
-                                          display: 'flex',
-                                          flexDirection: 'column',
-                                          gap: '0.5rem',
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                          }}
-                                        >
-                                          <div style={{ fontSize: '0.875rem', color: '#f8fafc' }}>
-                                            Payment quote ready{upgradeFee !== null ? ` • $${upgradeFee.toFixed(2)}` : ''}
-                                          </div>
-                                          <div
-                                            style={{
-                                              fontSize: '0.75rem',
-                                              color: upgradePaymentStatus === 'PAID' ? '#10b981' : '#f59e0b',
-                                              fontWeight: 600,
-                                            }}
-                                          >
-                                            {upgradePaymentStatus === 'PAID' ? 'Paid' : 'Payment Due'}
-                                          </div>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                          <button
-                                            onClick={() => openUpgradePaymentQuote(entry)}
-                                            className="cs-liquid-button cs-liquid-button--secondary"
-                                            style={{
-                                              padding: '0.5rem 0.75rem',
-                                              fontSize: '0.85rem',
-                                              fontWeight: 600,
-                                              cursor: 'pointer',
-                                            }}
-                                          >
-                                            View Payment Quote
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              dismissUpgradePulse();
-                                              if (upgradePaymentIntentId) {
-                                                void handleUpgradePaymentFlow('CREDIT');
-                                              }
-                                            }}
-                                            className="cs-liquid-button"
-                                            disabled={
-                                              !isEntryOfferEligible(entry) ||
-                                              upgradePaymentStatus !== 'PAID' ||
-                                              isSubmitting ||
-                                              !upgradePaymentIntentId
-                                            }
-                                            style={{
-                                              padding: '0.5rem 0.75rem',
-                                              fontSize: '0.85rem',
-                                              fontWeight: 600,
-                                            }}
-                                          >
-                                            Complete Upgrade
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <button
-                                        onClick={() => {
-                                          dismissUpgradePulse();
-                                          resetUpgradeState();
-                                          setSelectedWaitlistEntry(entry.id);
-                                          void handleStartUpgradePayment(entry);
-                                        }}
-                                        className="cs-liquid-button"
-                                        disabled={!isEntryOfferEligible(entry) || isSubmitting}
-                                        style={{
-                                          padding: '0.5rem 1rem',
-                                          fontSize: '0.875rem',
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        Upgrade Room
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                              {status === 'ACTIVE' && (
-                                <button
-                                  onClick={() => {
-                                    dismissUpgradePulse();
-                                    openOfferUpgradeModal(entry);
-                                  }}
-                                  className="cs-liquid-button cs-liquid-button--secondary"
-                                  disabled={!isEntryOfferEligible(entry)}
-                                  style={{
-                                    padding: '0.5rem 1rem',
-                                    fontSize: '0.875rem',
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  Offer Upgrade
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            )}
-
             {/* Waitlist Banner */}
             {waitlistDesiredTier && waitlistBackupType && (
               <div
@@ -2782,15 +2608,12 @@ export function AppRoot() {
 
             {/* Inventory Selector */}
             {currentSessionId && customerName && !pastDueBlocked && (
-              <InventorySelector
-                customerSelectedType={customerSelectedType}
-                waitlistDesiredTier={waitlistDesiredTier}
-                waitlistBackupType={waitlistBackupType}
-                onSelect={handleInventorySelect}
-                selectedItem={selectedInventoryItem}
-                sessionId={currentSessionId}
-                lane={lane}
-                sessionToken={session.sessionToken}
+              <InventorySummaryBar
+                counts={inventoryAvailable}
+                onOpenInventorySection={(section) => {
+                  setInventoryForcedSection(section);
+                  setIsInventoryDrawerOpen(true);
+                }}
               />
             )}
 
@@ -3198,13 +3021,6 @@ export function AppRoot() {
             onClose={() => setShowWaitlistModal(false)}
           />
 
-          <AvailabilityModal
-            isOpen={availabilityModalType !== null}
-            type={availabilityModalType}
-            onClose={() => setAvailabilityModalType(null)}
-            sessionToken={session.sessionToken}
-          />
-
           {offerUpgradeModal && session?.sessionToken && (
             <OfferUpgradeModal
               isOpen={true}
@@ -3213,7 +3029,6 @@ export function AppRoot() {
               waitlistId={offerUpgradeModal.waitlistId}
               desiredTier={offerUpgradeModal.desiredTier}
               customerLabel={offerUpgradeModal.customerLabel}
-              disabled={sessionActive}
               onOffered={() => {
                 void fetchWaitlistRef.current?.();
                 void fetchInventoryAvailableRef.current?.();
@@ -3338,6 +3153,7 @@ export function AppRoot() {
           />
 
           <PaymentDeclineToast message={paymentDeclineError} onDismiss={() => setPaymentDeclineError(null)} />
+          {topActions.overlays}
 
           {/* Agreement + Assignment Display */}
           {currentSessionId && customerName && (agreementSigned || assignedResourceType) && (

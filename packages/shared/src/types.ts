@@ -334,6 +334,34 @@ export interface CheckoutCompletedPayload {
   success: boolean;
 }
 
+export type ManualCheckoutResourceType = 'ROOM' | 'LOCKER';
+
+export interface ManualCheckoutCandidate {
+  occupancyId: string;
+  resourceType: ManualCheckoutResourceType;
+  number: string;
+  customerName: string;
+  checkinAt: Date | string;
+  scheduledCheckoutAt: Date | string;
+  isOverdue: boolean;
+}
+
+export interface ManualCheckoutResolveResponse {
+  occupancyId: string;
+  resourceType: ManualCheckoutResourceType;
+  number: string;
+  customerName: string;
+  checkinAt: Date | string;
+  scheduledCheckoutAt: Date | string;
+  lateMinutes: number;
+  fee: number;
+  banApplied: boolean;
+}
+
+export interface ManualCheckoutCompleteResponse extends ManualCheckoutResolveResponse {
+  alreadyCheckedOut?: boolean;
+}
+
 /**
  * Register session updated event payload.
  * Emitted when a register session is created, signed out, force signed out, or expires.

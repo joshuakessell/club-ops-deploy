@@ -137,6 +137,32 @@ interface WaitlistStatusRow {
   status: 'ACTIVE' | 'OFFERED';
 }
 
+type ManualCheckoutResourceType = 'ROOM' | 'LOCKER';
+
+interface ManualCheckoutCandidateRow {
+  occupancy_id: string;
+  resource_type: ManualCheckoutResourceType;
+  number: string;
+  customer_name: string;
+  checkin_at: Date;
+  scheduled_checkout_at: Date;
+  is_overdue: boolean;
+}
+
+interface ManualResolveRow {
+  occupancy_id: string;
+  visit_id: string;
+  customer_id: string;
+  customer_name: string;
+  checkin_at: Date;
+  scheduled_checkout_at: Date;
+  room_id: string | null;
+  room_number: string | null;
+  locker_id: string | null;
+  locker_number: string | null;
+  session_id: string | null;
+}
+
 function looksLikeUuid(value: string): boolean {
   // Good enough for deciding whether to write staff_id; DB will still enforce UUID shape.
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -149,6 +175,534 @@ function looksLikeUuid(value: string): boolean {
  */
 // eslint-disable-next-line @typescript-eslint/require-await
 export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
+  /**
+   * GET /v1/checkout/manual-candidates
+   *
+   * Staff-only endpoint for manual checkout candidates:
+   * - overdue (past scheduled checkout time) OR
+   * - within 60 minutes of scheduled checkout time
+   */
+  fastify.get(
+    '/v1/checkout/manual-candidates',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+
+      try {
+        const result = await query<ManualCheckoutCandidateRow>(
+          `
+          WITH room_candidates AS (
+            SELECT DISTINCT ON (cb.room_id)
+              cb.id as occupancy_id,
+              'ROOM'::text as resource_type,
+              r.number as number,
+              c.name as customer_name,
+              cb.starts_at as checkin_at,
+              cb.ends_at as scheduled_checkout_at,
+              (cb.ends_at < NOW()) as is_overdue
+            FROM checkin_blocks cb
+            JOIN visits v ON cb.visit_id = v.id
+            JOIN customers c ON v.customer_id = c.id
+            JOIN rooms r ON cb.room_id = r.id
+            WHERE cb.room_id IS NOT NULL
+              AND v.ended_at IS NULL
+              AND cb.ends_at <= NOW() + INTERVAL '60 minutes'
+            ORDER BY cb.room_id, cb.ends_at DESC
+          ),
+          locker_candidates AS (
+            SELECT DISTINCT ON (cb.locker_id)
+              cb.id as occupancy_id,
+              'LOCKER'::text as resource_type,
+              l.number as number,
+              c.name as customer_name,
+              cb.starts_at as checkin_at,
+              cb.ends_at as scheduled_checkout_at,
+              (cb.ends_at < NOW()) as is_overdue
+            FROM checkin_blocks cb
+            JOIN visits v ON cb.visit_id = v.id
+            JOIN customers c ON v.customer_id = c.id
+            JOIN lockers l ON cb.locker_id = l.id
+            WHERE cb.locker_id IS NOT NULL
+              AND v.ended_at IS NULL
+              AND cb.ends_at <= NOW() + INTERVAL '60 minutes'
+            ORDER BY cb.locker_id, cb.ends_at DESC
+          )
+          SELECT * FROM room_candidates
+          UNION ALL
+          SELECT * FROM locker_candidates
+          ORDER BY is_overdue DESC, scheduled_checkout_at ASC
+          `
+        );
+
+        return reply.send({
+          candidates: result.rows.map((r) => ({
+            occupancyId: r.occupancy_id,
+            resourceType: r.resource_type,
+            number: r.number,
+            customerName: r.customer_name,
+            checkinAt: r.checkin_at,
+            scheduledCheckoutAt: r.scheduled_checkout_at,
+            isOverdue: r.is_overdue,
+          })),
+        });
+      } catch (error) {
+        fastify.log.error(error, 'Failed to list manual checkout candidates');
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  const ManualResolveSchema = z
+    .object({
+      number: z.string().min(1).optional(),
+      occupancyId: z.string().uuid().optional(),
+    })
+    .refine((v) => Boolean(v.number || v.occupancyId), {
+      message: 'Either number or occupancyId is required',
+    });
+
+  /**
+   * POST /v1/checkout/manual-resolve
+   *
+   * Staff-only endpoint to resolve a room/locker number or occupancyId
+   * into checkout timing + computed late fee/ban.
+   */
+  fastify.post<{ Body: z.infer<typeof ManualResolveSchema> }>(
+    '/v1/checkout/manual-resolve',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+
+      let body: z.infer<typeof ManualResolveSchema>;
+      try {
+        body = ManualResolveSchema.parse(request.body);
+      } catch (error) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+        });
+      }
+
+      try {
+        const loadByOccupancyId = async (occupancyId: string) => {
+          const res = await query<ManualResolveRow>(
+            `
+            SELECT
+              cb.id as occupancy_id,
+              cb.visit_id,
+              v.customer_id,
+              c.name as customer_name,
+              cb.starts_at as checkin_at,
+              cb.ends_at as scheduled_checkout_at,
+              cb.room_id,
+              r.number as room_number,
+              cb.locker_id,
+              l.number as locker_number,
+              cb.session_id
+            FROM checkin_blocks cb
+            JOIN visits v ON cb.visit_id = v.id
+            JOIN customers c ON v.customer_id = c.id
+            LEFT JOIN rooms r ON cb.room_id = r.id
+            LEFT JOIN lockers l ON cb.locker_id = l.id
+            WHERE cb.id = $1 AND v.ended_at IS NULL
+            `,
+            [occupancyId]
+          );
+          return res.rows[0] ?? null;
+        };
+
+        const loadLatestByRoomId = async (roomId: string) => {
+          const res = await query<ManualResolveRow>(
+            `
+            SELECT
+              cb.id as occupancy_id,
+              cb.visit_id,
+              v.customer_id,
+              c.name as customer_name,
+              cb.starts_at as checkin_at,
+              cb.ends_at as scheduled_checkout_at,
+              cb.room_id,
+              r.number as room_number,
+              cb.locker_id,
+              l.number as locker_number,
+              cb.session_id
+            FROM checkin_blocks cb
+            JOIN visits v ON cb.visit_id = v.id
+            JOIN customers c ON v.customer_id = c.id
+            JOIN rooms r ON cb.room_id = r.id
+            LEFT JOIN lockers l ON cb.locker_id = l.id
+            WHERE cb.room_id = $1 AND v.ended_at IS NULL
+            ORDER BY cb.ends_at DESC
+            LIMIT 1
+            `,
+            [roomId]
+          );
+          return res.rows[0] ?? null;
+        };
+
+        const loadLatestByLockerId = async (lockerId: string) => {
+          const res = await query<ManualResolveRow>(
+            `
+            SELECT
+              cb.id as occupancy_id,
+              cb.visit_id,
+              v.customer_id,
+              c.name as customer_name,
+              cb.starts_at as checkin_at,
+              cb.ends_at as scheduled_checkout_at,
+              cb.room_id,
+              r.number as room_number,
+              cb.locker_id,
+              l.number as locker_number,
+              cb.session_id
+            FROM checkin_blocks cb
+            JOIN visits v ON cb.visit_id = v.id
+            JOIN customers c ON v.customer_id = c.id
+            JOIN lockers l ON cb.locker_id = l.id
+            LEFT JOIN rooms r ON cb.room_id = r.id
+            WHERE cb.locker_id = $1 AND v.ended_at IS NULL
+            ORDER BY cb.ends_at DESC
+            LIMIT 1
+            `,
+            [lockerId]
+          );
+          return res.rows[0] ?? null;
+        };
+
+        let row: ManualResolveRow | null = null;
+        if (body.occupancyId) {
+          row = await loadByOccupancyId(body.occupancyId);
+        } else if (body.number) {
+          // Try locker first, then room.
+          const lockerRes = await query<{ id: string }>(`SELECT id FROM lockers WHERE number = $1`, [
+            body.number,
+          ]);
+          if (lockerRes.rows[0]?.id) {
+            row = await loadLatestByLockerId(lockerRes.rows[0].id);
+          } else {
+            const roomRes = await query<{ id: string }>(`SELECT id FROM rooms WHERE number = $1`, [
+              body.number,
+            ]);
+            if (roomRes.rows[0]?.id) {
+              row = await loadLatestByRoomId(roomRes.rows[0].id);
+            }
+          }
+        }
+
+        if (!row) return reply.status(404).send({ error: 'Active occupancy not found' });
+
+        const now = new Date();
+        const scheduledCheckoutAt =
+          row.scheduled_checkout_at instanceof Date
+            ? row.scheduled_checkout_at
+            : new Date(row.scheduled_checkout_at);
+        const lateMinutes = Math.max(0, Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60)));
+        const { feeAmount, banApplied } = calculateLateFee(lateMinutes);
+
+        const resourceType: ManualCheckoutResourceType = row.locker_id ? 'LOCKER' : 'ROOM';
+        const number = resourceType === 'LOCKER' ? row.locker_number : row.room_number;
+
+        if (!number) return reply.status(404).send({ error: 'Resource not found for occupancy' });
+
+        return reply.send({
+          occupancyId: row.occupancy_id,
+          resourceType,
+          number,
+          customerName: row.customer_name,
+          checkinAt: row.checkin_at,
+          scheduledCheckoutAt,
+          lateMinutes,
+          fee: feeAmount,
+          banApplied,
+        });
+      } catch (error) {
+        fastify.log.error(error, 'Failed to resolve manual checkout');
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  const ManualCompleteSchema = z.object({
+    occupancyId: z.string().uuid(),
+  });
+
+  /**
+   * POST /v1/checkout/manual-complete
+   *
+   * Staff-only endpoint to complete checkout manually (no checkout_request_id).
+   * Must be idempotent using a serializable transaction + visit row lock.
+   */
+  fastify.post<{ Body: z.infer<typeof ManualCompleteSchema> }>(
+    '/v1/checkout/manual-complete',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+      const staffId = request.staff.staffId;
+
+      let body: z.infer<typeof ManualCompleteSchema>;
+      try {
+        body = ManualCompleteSchema.parse(request.body);
+      } catch (error) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+        });
+      }
+
+      try {
+        const result = await serializableTransaction(async (client) => {
+          const occRes = await client.query<ManualResolveRow & { visit_ended_at: Date | null }>(
+            `
+            SELECT
+              cb.id as occupancy_id,
+              cb.visit_id,
+              v.customer_id,
+              c.name as customer_name,
+              cb.starts_at as checkin_at,
+              cb.ends_at as scheduled_checkout_at,
+              cb.room_id,
+              r.number as room_number,
+              cb.locker_id,
+              l.number as locker_number,
+              cb.session_id,
+              v.ended_at as visit_ended_at
+            FROM checkin_blocks cb
+            JOIN visits v ON cb.visit_id = v.id
+            JOIN customers c ON v.customer_id = c.id
+            LEFT JOIN rooms r ON cb.room_id = r.id
+            LEFT JOIN lockers l ON cb.locker_id = l.id
+            WHERE cb.id = $1
+            FOR UPDATE OF v
+            `,
+            [body.occupancyId]
+          );
+
+          if (occRes.rows.length === 0) {
+            throw { statusCode: 404, message: 'Occupancy not found' };
+          }
+
+          const row = occRes.rows[0]!;
+          if (row.visit_ended_at) {
+            return { alreadyCheckedOut: true, row };
+          }
+
+          const now = new Date();
+          const scheduledCheckoutAt =
+            row.scheduled_checkout_at instanceof Date
+              ? row.scheduled_checkout_at
+              : new Date(row.scheduled_checkout_at);
+          const lateMinutes = Math.max(
+            0,
+            Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60))
+          );
+          const { feeAmount, banApplied } = calculateLateFee(lateMinutes);
+
+          // Cancel active waitlist entries for this visit (system cancel on checkout)
+          const waitlistResult = await client.query<WaitlistStatusRow>(
+            `SELECT id, status
+             FROM waitlist
+             WHERE visit_id = $1 AND status IN ('ACTIVE','OFFERED')
+             FOR UPDATE`,
+            [row.visit_id]
+          );
+
+          if (waitlistResult.rows.length > 0) {
+            const waitlistIds = waitlistResult.rows.map((r) => r.id);
+
+            await client.query(
+              `UPDATE waitlist
+               SET status = 'CANCELLED',
+                   cancelled_at = NOW(),
+                   cancelled_by_staff_id = NULL,
+                   updated_at = NOW()
+               WHERE id = ANY($1::uuid[])`,
+              [waitlistIds]
+            );
+
+            const auditStaffId = looksLikeUuid(staffId) ? staffId : null;
+            for (const wl of waitlistResult.rows) {
+              await client.query(
+                `INSERT INTO audit_log
+                 (staff_id, action, entity_type, entity_id, old_value, new_value)
+                 VALUES ($1, 'WAITLIST_CANCELLED', 'waitlist', $2, $3, $4)`,
+                [
+                  auditStaffId,
+                  wl.id,
+                  JSON.stringify({ status: wl.status }),
+                  JSON.stringify({ status: 'CANCELLED', reason: 'CHECKED_OUT' }),
+                ]
+              );
+            }
+          }
+
+          // Update room to DIRTY or locker to CLEAN and unassign
+          if (row.room_id) {
+            await client.query(
+              `UPDATE rooms SET status = $1, assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $2`,
+              [RoomStatus.DIRTY, row.room_id]
+            );
+          }
+          if (row.locker_id) {
+            await client.query(
+              `UPDATE lockers SET status = $1, assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $2`,
+              [RoomStatus.CLEAN, row.locker_id]
+            );
+          }
+
+          // End the visit
+          await client.query(`UPDATE visits SET ended_at = NOW(), updated_at = NOW() WHERE id = $1`, [
+            row.visit_id,
+          ]);
+
+          // Update session status if exists (legacy sessions table; mirrors existing checkout flow)
+          if (row.session_id) {
+            await client.query(
+              `UPDATE sessions SET status = 'COMPLETED', check_out_time = NOW(), updated_at = NOW() WHERE id = $1`,
+              [row.session_id]
+            );
+          }
+
+          // Apply ban if needed
+          if (banApplied) {
+            const banUntil = new Date();
+            banUntil.setDate(banUntil.getDate() + 30);
+            await client.query(`UPDATE customers SET banned_until = $1, updated_at = NOW() WHERE id = $2`, [
+              banUntil,
+              row.customer_id,
+            ]);
+          }
+
+          // Update past due balance if fee > 0
+          if (feeAmount > 0) {
+            await client.query(
+              `UPDATE customers
+               SET past_due_balance = past_due_balance + $1,
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [feeAmount, row.customer_id]
+            );
+          }
+
+          // Append note to customers.notes with expected vs actual and fee/ban
+          const noteLine = `[${now.toISOString()}] Manual checkout: expected=${scheduledCheckoutAt.toISOString()} actual=${now.toISOString()} lateMinutes=${lateMinutes} fee=$${feeAmount.toFixed(
+            2
+          )} banApplied=${banApplied}`;
+          await client.query(
+            `UPDATE customers
+             SET notes = CASE
+               WHEN notes IS NULL OR notes = '' THEN $1
+               ELSE notes || E'\\n' || $1
+             END,
+             updated_at = NOW()
+             WHERE id = $2`,
+            [noteLine, row.customer_id]
+          );
+
+          // Log late checkout event if late >= 30 minutes
+          if (lateMinutes >= 30) {
+            await client.query(
+              `INSERT INTO late_checkout_events (customer_id, occupancy_id, checkout_request_id, late_minutes, fee_amount, ban_applied)
+               VALUES ($1, $2, NULL, $3, $4, $5)`,
+              [row.customer_id, row.occupancy_id, lateMinutes, feeAmount, banApplied]
+            );
+          }
+
+          return {
+            alreadyCheckedOut: false,
+            row,
+            lateMinutes,
+            feeAmount,
+            banApplied,
+            cancelledWaitlistIds: waitlistResult.rows.map((r) => r.id),
+            visitId: row.visit_id,
+          };
+        });
+
+        const row = 'row' in result ? result.row : (result as any).row;
+        const alreadyCheckedOut = (result as any).alreadyCheckedOut === true;
+
+        const resourceType: ManualCheckoutResourceType = row.locker_id ? 'LOCKER' : 'ROOM';
+        const number = resourceType === 'LOCKER' ? row.locker_number : row.room_number;
+        const scheduledCheckoutAt =
+          row.scheduled_checkout_at instanceof Date
+            ? row.scheduled_checkout_at
+            : new Date(row.scheduled_checkout_at);
+
+        if (!number) return reply.status(500).send({ error: 'Resource not found for occupancy' });
+
+        // Broadcast inventory updates (same event types as existing checkout completion)
+        if (fastify.broadcaster && !alreadyCheckedOut) {
+          const { broadcastInventoryUpdate } = await import('./sessions.js');
+          await broadcastInventoryUpdate(fastify.broadcaster);
+
+          if (row.room_id) {
+            fastify.broadcaster.broadcastRoomStatusChanged({
+              roomId: row.room_id,
+              previousStatus: RoomStatus.CLEAN,
+              newStatus: RoomStatus.DIRTY,
+              changedBy: staffId,
+              override: false,
+            });
+          }
+        }
+
+        // Broadcast WAITLIST_UPDATED for system-cancelled waitlist entries (after commit)
+        if (
+          fastify.broadcaster &&
+          !alreadyCheckedOut &&
+          Array.isArray((result as any).cancelledWaitlistIds) &&
+          (result as any).cancelledWaitlistIds.length > 0
+        ) {
+          for (const waitlistId of (result as any).cancelledWaitlistIds) {
+            fastify.broadcaster.broadcast({
+              type: 'WAITLIST_UPDATED',
+              payload: {
+                waitlistId,
+                status: 'CANCELLED',
+                visitId: (result as any).visitId,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+
+        const now = new Date();
+        const lateMinutes =
+          alreadyCheckedOut && typeof (result as any).lateMinutes !== 'number'
+            ? Math.max(0, Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60)))
+            : (result as any).lateMinutes ?? Math.max(0, Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60)));
+        const fee = (result as any).feeAmount ?? calculateLateFee(lateMinutes).feeAmount;
+        const banApplied = (result as any).banApplied ?? calculateLateFee(lateMinutes).banApplied;
+
+        return reply.send({
+          occupancyId: row.occupancy_id,
+          resourceType,
+          number,
+          customerName: row.customer_name,
+          checkinAt: row.checkin_at,
+          scheduledCheckoutAt,
+          lateMinutes,
+          fee,
+          banApplied,
+          alreadyCheckedOut,
+        });
+      } catch (error) {
+        if (error && typeof error === 'object' && 'statusCode' in error) {
+          const err = error as { statusCode: number; message: string };
+          return reply.status(err.statusCode).send({ error: err.message });
+        }
+        fastify.log.error(error, 'Failed to complete manual checkout');
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
   /**
    * POST /v1/checkout/resolve-key - Resolve a key tag to checkout information
    *

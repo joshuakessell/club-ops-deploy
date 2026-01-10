@@ -499,7 +499,7 @@ describe('App', () => {
     });
   });
 
-  it('disables waitlist/upgrade actions when a session is active (no waitlist widget in header)', async () => {
+  it('keeps upgrades/waitlist accessible even when a check-in session is active', async () => {
     localStorage.setItem(
       'staff_session',
       JSON.stringify({
@@ -642,18 +642,16 @@ describe('App', () => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
 
-    // Header waitlist widget was removed; upgrades/waitlist are accessible via the panel below.
-    expect(screen.queryByLabelText('Waitlist widget')).toBeNull();
-
-    // Panel shows the "active session present" guard and disables action buttons.
-    const toggle = await screen.findByText(/Upgrades\s*\/\s*Waitlist/i);
+    // Upgrades now live in the left drawer; they should remain accessible during an active session.
+    const upgradesTab = await screen.findByRole('button', { name: 'Upgrades' });
     await act(async () => {
-      fireEvent.click(toggle);
+      fireEvent.click(upgradesTab);
     });
 
-    expect(screen.getByText(/Active session present — waitlist actions are disabled/i)).toBeDefined();
+    expect(await screen.findByText(/Upgrade Waitlist Entries/i)).toBeDefined();
+    expect(screen.queryByText(/Active session present — waitlist actions are disabled/i)).toBeNull();
 
-    const offerUpgrade = await screen.findByText('Offer Upgrade');
-    expect(offerUpgrade).toHaveProperty('disabled', true);
+    const offerUpgrade = await screen.findByRole('button', { name: 'Offer Upgrade' });
+    expect(offerUpgrade).toHaveProperty('disabled', false);
   });
 });
