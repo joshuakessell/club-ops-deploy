@@ -565,6 +565,8 @@ async function buildFullSessionUpdatedPayload(
     assignedResourceType: assignedResourceType || undefined,
     assignedResourceNumber,
     visitId: blockForSession?.visit_id || activeVisitId,
+    waitlistDesiredType: session.waitlist_desired_type || undefined,
+    backupRentalType: session.backup_rental_type || undefined,
     blockEndsAt: blockForSession?.ends_at
       ? blockForSession.ends_at.toISOString()
       : activeBlockEndsAt,
@@ -843,11 +845,15 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             }
           }
 
-          // Determine mode (auto-detect renewal if active visit exists or explicit visitId provided)
+          // Determine mode (explicit renewal only). If an active visit exists and no explicit visitId
+          // is provided, treat as "already checked in" (lookup-only) and block a new check-in flow.
           let computedMode: 'INITIAL' | 'RENEWAL' = 'INITIAL';
           let visitIdForSession: string | null = null;
           let blockEndsAtDate: Date | null = null;
           let currentTotalHours = 0;
+          let activeAssignedResourceType: 'room' | 'locker' | null = null;
+          let activeAssignedResourceNumber: string | null = null;
+          let activeRentalType: string | null = null;
 
           const resolveVisitBlocks = async (activeVisitId: string) => {
             const blocksResult = await client.query<{
@@ -865,6 +871,33 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   (block.ends_at.getTime() - block.starts_at.getTime()) / (1000 * 60 * 60);
                 currentTotalHours += hours;
               }
+            }
+          };
+
+          const resolveActiveAssignment = async (activeVisitId: string) => {
+            const activeBlock = await client.query<{
+              rental_type: string;
+              room_number: string | null;
+              locker_number: string | null;
+            }>(
+              `SELECT cb.rental_type, r.number as room_number, l.number as locker_number
+               FROM checkin_blocks cb
+               LEFT JOIN rooms r ON cb.room_id = r.id
+               LEFT JOIN lockers l ON cb.locker_id = l.id
+               WHERE cb.visit_id = $1
+               ORDER BY cb.ends_at DESC
+               LIMIT 1`,
+              [activeVisitId]
+            );
+            const row = activeBlock.rows[0];
+            if (!row) return;
+            activeRentalType = row.rental_type;
+            if (row.room_number) {
+              activeAssignedResourceType = 'room';
+              activeAssignedResourceNumber = row.room_number;
+            } else if (row.locker_number) {
+              activeAssignedResourceType = 'locker';
+              activeAssignedResourceNumber = row.locker_number;
             }
           };
 
@@ -886,16 +919,78 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             visitIdForSession = visit.id;
             computedMode = 'RENEWAL';
             await resolveVisitBlocks(visit.id);
+            await resolveActiveAssignment(visit.id);
           } else if (customerId) {
-            // Auto-detect active visit for this customer
             const activeVisit = await client.query<{ id: string }>(
               `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
               [customerId]
             );
             if (activeVisit.rows.length > 0) {
-              visitIdForSession = activeVisit.rows[0]!.id;
-              computedMode = 'RENEWAL';
-              await resolveVisitBlocks(activeVisit.rows[0]!.id);
+              const activeVisitId = activeVisit.rows[0]!.id;
+
+              const activeBlock = await client.query<{
+                starts_at: Date;
+                ends_at: Date;
+                rental_type: string;
+                room_number: string | null;
+                locker_number: string | null;
+              }>(
+                `SELECT cb.starts_at, cb.ends_at, cb.rental_type, r.number as room_number, l.number as locker_number
+                 FROM checkin_blocks cb
+                 LEFT JOIN rooms r ON cb.room_id = r.id
+                 LEFT JOIN lockers l ON cb.locker_id = l.id
+                 WHERE cb.visit_id = $1
+                 ORDER BY cb.ends_at DESC
+                 LIMIT 1`,
+                [activeVisitId]
+              );
+
+              const block = activeBlock.rows[0];
+              const assignedResourceType: 'room' | 'locker' | null = block?.room_number
+                ? 'room'
+                : block?.locker_number
+                  ? 'locker'
+                  : null;
+              const assignedResourceNumber: string | null =
+                block?.room_number ?? block?.locker_number ?? null;
+
+              const waitlistResult = await client.query<{
+                id: string;
+                desired_tier: string;
+                backup_tier: string;
+                status: string;
+              }>(
+                `SELECT id, desired_tier, backup_tier, status
+                 FROM waitlist
+                 WHERE visit_id = $1 AND status IN ('ACTIVE', 'OFFERED')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [activeVisitId]
+              );
+              const wl = waitlistResult.rows[0];
+
+              throw {
+                statusCode: 409,
+                code: 'ALREADY_CHECKED_IN',
+                message: 'Customer is currently checked in',
+                activeCheckin: {
+                  visitId: activeVisitId,
+                  rentalType: block?.rental_type ?? null,
+                  assignedResourceType,
+                  assignedResourceNumber,
+                  checkinAt: block?.starts_at ? block.starts_at.toISOString() : null,
+                  checkoutAt: block?.ends_at ? block.ends_at.toISOString() : null,
+                  overdue: block?.ends_at ? block.ends_at.getTime() < Date.now() : null,
+                  waitlist: wl
+                    ? {
+                        id: wl.id,
+                        desiredTier: wl.desired_tier,
+                        backupTier: wl.backup_tier,
+                        status: wl.status,
+                      }
+                    : null,
+                },
+              };
             }
           }
 
@@ -973,6 +1068,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             currentTotalHours: computedMode === 'RENEWAL' ? currentTotalHours : undefined,
             pastDueBalance,
             pastDueBlocked,
+            activeAssignedResourceType: activeAssignedResourceType || undefined,
+            activeAssignedResourceNumber: activeAssignedResourceNumber || undefined,
+            activeRentalType: activeRentalType || undefined,
           };
         });
 
@@ -988,8 +1086,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (error && typeof error === 'object' && 'statusCode' in error) {
           const statusCode = (error as { statusCode: number }).statusCode;
           const message = (error as { message?: string }).message;
+          const code = (error as { code?: unknown }).code;
+          const activeCheckin = (error as { activeCheckin?: unknown }).activeCheckin;
           return reply.status(statusCode).send({
             error: message ?? 'Failed to start session',
+            code: typeof code === 'string' ? code : undefined,
+            activeCheckin: activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
           });
         }
         return reply.status(500).send({
@@ -1374,6 +1476,84 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             };
           }
 
+          // If customer already has an active (not-ended) visit, block a new lane check-in session.
+          // Renewal/extension must be started explicitly via /start with visitId.
+          if (customerId) {
+            const activeVisit = await client.query<{ id: string }>(
+              `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+              [customerId]
+            );
+            if (activeVisit.rows.length > 0) {
+              const activeVisitId = activeVisit.rows[0]!.id;
+
+              const activeBlock = await client.query<{
+                starts_at: Date;
+                ends_at: Date;
+                rental_type: string;
+                room_number: string | null;
+                locker_number: string | null;
+              }>(
+                `SELECT cb.starts_at, cb.ends_at, cb.rental_type, r.number as room_number, l.number as locker_number
+                 FROM checkin_blocks cb
+                 LEFT JOIN rooms r ON cb.room_id = r.id
+                 LEFT JOIN lockers l ON cb.locker_id = l.id
+                 WHERE cb.visit_id = $1
+                 ORDER BY cb.ends_at DESC
+                 LIMIT 1`,
+                [activeVisitId]
+              );
+
+              const block = activeBlock.rows[0];
+              const assignedResourceType: 'room' | 'locker' | null = block?.room_number
+                ? 'room'
+                : block?.locker_number
+                  ? 'locker'
+                  : null;
+              const assignedResourceNumber: string | null =
+                block?.room_number ?? block?.locker_number ?? null;
+
+              const waitlistResult = await client.query<{
+                id: string;
+                desired_tier: string;
+                backup_tier: string;
+                status: string;
+              }>(
+                `SELECT id, desired_tier, backup_tier, status
+                 FROM waitlist
+                 WHERE visit_id = $1 AND status IN ('ACTIVE', 'OFFERED')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [activeVisitId]
+              );
+              const wl = waitlistResult.rows[0];
+
+              throw {
+                statusCode: 409,
+                code: 'ALREADY_CHECKED_IN',
+                message: 'Customer is currently checked in',
+                activeCheckin: {
+                  visitId: activeVisitId,
+                  rentalType: block?.rental_type ?? null,
+                  assignedResourceType,
+                  assignedResourceNumber,
+                  checkinAt: block?.starts_at ? block.starts_at.toISOString() : null,
+                  checkoutAt: block?.ends_at ? block.ends_at.toISOString() : null,
+                  overdue: block?.ends_at ? block.ends_at.getTime() < Date.now() : null,
+                  waitlist: wl
+                    ? {
+                        id: wl.id,
+                        desiredTier: wl.desired_tier,
+                        backupTier: wl.backup_tier,
+                        status: wl.status,
+                      }
+                    : null,
+                },
+              };
+            }
+          }
+
+          const computedMode: 'INITIAL' | 'RENEWAL' = 'INITIAL';
+
           // Determine allowed rentals (no membership yet, so just basic options)
           const allowedRentals = getAllowedRentals(null);
 
@@ -1396,11 +1576,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                  customer_display_name = $2,
                  status = 'ACTIVE',
                  staff_id = $3,
-                 checkin_mode = COALESCE(checkin_mode, 'INITIAL'),
+                 checkin_mode = $4,
                  updated_at = NOW()
-             WHERE id = $4
+             WHERE id = $5
              RETURNING *`,
-              [customerId, customerName, staffId, existingSession.rows[0]!.id]
+              [customerId, customerName, staffId, computedMode, existingSession.rows[0]!.id]
             );
             session = updateResult.rows[0]!;
           } else {
@@ -1408,9 +1588,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             const newSessionResult = await client.query<LaneSessionRow>(
               `INSERT INTO lane_sessions 
              (lane_id, status, staff_id, customer_id, customer_display_name, checkin_mode)
-             VALUES ($1, 'ACTIVE', $2, $3, $4, 'INITIAL')
+             VALUES ($1, 'ACTIVE', $2, $3, $4, $5)
              RETURNING *`,
-              [laneId, staffId, customerId, customerName]
+              [laneId, staffId, customerId, customerName, computedMode]
             );
             session = newSessionResult.rows[0]!;
           }
@@ -1446,7 +1626,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             customerId: session.customer_id,
             customerName: session.customer_display_name,
             allowedRentals,
-            mode: session.checkin_mode || 'INITIAL',
+            mode: computedMode,
             pastDueBalance,
             pastDueBlocked,
             customerNotes,
@@ -1467,7 +1647,13 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (error && typeof error === 'object' && 'statusCode' in error) {
           const statusCode = (error as { statusCode: number }).statusCode;
           const message = (error as { message?: string }).message;
-          return reply.status(statusCode).send({ error: message ?? 'Failed to scan ID' });
+          const code = (error as { code?: unknown }).code;
+          const activeCheckin = (error as { activeCheckin?: unknown }).activeCheckin;
+          return reply.status(statusCode).send({
+            error: message ?? 'Failed to scan ID',
+            code: typeof code === 'string' ? code : undefined,
+            activeCheckin: activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
+          });
         }
         return reply.status(500).send({ error: 'Internal server error' });
       }
@@ -2875,6 +3061,41 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const checkinBlockId = blockResult.rows[0]!.id;
 
+          // If customer elected a waitlist/upgrade path (desired tier + backup tier), persist waitlist entry now.
+          if (session.waitlist_desired_type && session.backup_rental_type) {
+            const waitlistResult = await client.query<{ id: string }>(
+              `INSERT INTO waitlist
+               (visit_id, checkin_block_id, desired_tier, backup_tier, locker_or_room_assigned_initially, status)
+               VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+               RETURNING id`,
+              [
+                visitId,
+                checkinBlockId,
+                session.waitlist_desired_type,
+                session.backup_rental_type,
+                assignedResourceId,
+              ]
+            );
+            const waitlistId = waitlistResult.rows[0]!.id;
+
+            await client.query(`UPDATE checkin_blocks SET waitlist_id = $1 WHERE id = $2`, [
+              waitlistId,
+              checkinBlockId,
+            ]);
+
+            // Broadcast waitlist update (employee register will refetch list)
+            fastify.broadcaster.broadcast({
+              type: 'WAITLIST_UPDATED',
+              payload: {
+                waitlistId,
+                status: 'ACTIVE',
+                visitId,
+                desiredTier: session.waitlist_desired_type,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          }
+
           // Part A: server-side assertion (same TX) that assignment persisted and the resource
           // cannot qualify as "available" immediately after successful check-in creation.
           await assertAssignedResourcePersistedAndUnavailable({
@@ -3232,6 +3453,40 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           const blockId = blockResult.rows[0]!.id;
+
+          // If customer elected a waitlist/upgrade path (desired tier + backup tier), persist waitlist entry now.
+          if (session.waitlist_desired_type && session.backup_rental_type) {
+            const waitlistResult = await client.query<{ id: string }>(
+              `INSERT INTO waitlist
+               (visit_id, checkin_block_id, desired_tier, backup_tier, locker_or_room_assigned_initially, status)
+               VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+               RETURNING id`,
+              [
+                visitId,
+                blockId,
+                session.waitlist_desired_type,
+                session.backup_rental_type,
+                assignedResourceId,
+              ]
+            );
+            const waitlistId = waitlistResult.rows[0]!.id;
+
+            await client.query(`UPDATE checkin_blocks SET waitlist_id = $1 WHERE id = $2`, [
+              waitlistId,
+              blockId,
+            ]);
+
+            fastify.broadcaster.broadcast({
+              type: 'WAITLIST_UPDATED',
+              payload: {
+                waitlistId,
+                status: 'ACTIVE',
+                visitId,
+                desiredTier: session.waitlist_desired_type,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          }
 
           // Part A: server-side assertion (same TX) that assignment persisted and the resource
           // cannot qualify as "available" immediately after successful check-in creation.

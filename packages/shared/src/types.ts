@@ -141,6 +141,12 @@ export interface SessionUpdatedPayload {
   mode?: 'INITIAL' | 'RENEWAL';
   blockEndsAt?: string;
   visitId?: string;
+  /**
+   * If present, customer requested a higher tier (unavailable) and selected a backup tier.
+   * This represents the customer's pending upgrade intent for this visit.
+   */
+  waitlistDesiredType?: string;
+  backupRentalType?: string;
   status?: string;
   proposedRentalType?: string;
   proposedBy?: 'CUSTOMER' | 'EMPLOYEE';

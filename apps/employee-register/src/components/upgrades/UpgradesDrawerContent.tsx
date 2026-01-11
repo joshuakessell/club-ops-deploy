@@ -129,10 +129,11 @@ export function UpgradesDrawerContent({
                           >
                             <div>
                               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
-                                {entry.displayIdentifier} → {entry.desiredTier}
+                                {customerLabel} → {entry.desiredTier}
                               </div>
                               <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                                Current: {entry.currentRentalType} • Check-in:{' '}
+                                Assigned: {entry.displayIdentifier} • Backup: {entry.backupTier} • Current:{' '}
+                                {entry.currentRentalType} • Check-in:{' '}
                                 {entry.checkinAt ? new Date(entry.checkinAt).toLocaleTimeString() : '—'} • Checkout:{' '}
                                 {entry.checkoutAt ? new Date(entry.checkoutAt).toLocaleTimeString() : '—'}
                               </div>

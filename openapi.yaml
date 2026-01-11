@@ -224,6 +224,57 @@ paths:
           description: Lane session created/updated
         '401':
           description: Unauthorized
+        '409':
+          description: Customer already checked in (active visit exists)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum: [ALREADY_CHECKED_IN]
+                  activeCheckin:
+                    type: object
+                    nullable: true
+                    properties:
+                      visitId:
+                        type: string
+                        format: uuid
+                      rentalType:
+                        type: string
+                        nullable: true
+                      assignedResourceType:
+                        type: string
+                        nullable: true
+                        enum: [room, locker]
+                      assignedResourceNumber:
+                        type: string
+                        nullable: true
+                      checkinAt:
+                        type: string
+                        nullable: true
+                      checkoutAt:
+                        type: string
+                        nullable: true
+                      overdue:
+                        type: boolean
+                        nullable: true
+                      waitlist:
+                        type: object
+                        nullable: true
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          desiredTier:
+                            type: string
+                          backupTier:
+                            type: string
+                          status:
+                            type: string
 
   /v1/checkin/scan:
     post:
@@ -462,6 +513,57 @@ paths:
           description: Unauthorized
         '403':
           description: Customer is banned
+        '409':
+          description: Customer already checked in (active visit exists)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum: [ALREADY_CHECKED_IN]
+                  activeCheckin:
+                    type: object
+                    nullable: true
+                    properties:
+                      visitId:
+                        type: string
+                        format: uuid
+                      rentalType:
+                        type: string
+                        nullable: true
+                      assignedResourceType:
+                        type: string
+                        nullable: true
+                        enum: [room, locker]
+                      assignedResourceNumber:
+                        type: string
+                        nullable: true
+                      checkinAt:
+                        type: string
+                        nullable: true
+                      checkoutAt:
+                        type: string
+                        nullable: true
+                      overdue:
+                        type: boolean
+                        nullable: true
+                      waitlist:
+                        type: object
+                        nullable: true
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          desiredTier:
+                            type: string
+                          backupTier:
+                            type: string
+                          status:
+                            type: string
 
   /v1/checkin/lane/{laneId}/select-rental:
     post:

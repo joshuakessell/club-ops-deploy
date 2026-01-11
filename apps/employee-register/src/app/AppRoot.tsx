@@ -29,6 +29,10 @@ import { CheckoutVerificationModal } from '../components/register/CheckoutVerifi
 import { RegisterHeader } from '../components/register/RegisterHeader';
 import { RegisterTopActionsBar } from '../components/register/RegisterTopActionsBar';
 import { WaitlistNoticeModal } from '../components/register/modals/WaitlistNoticeModal';
+import {
+  AlreadyCheckedInModal,
+  type ActiveCheckinDetails,
+} from '../components/register/modals/AlreadyCheckedInModal';
 import { CustomerConfirmationPendingModal } from '../components/register/modals/CustomerConfirmationPendingModal';
 import { PastDuePaymentModal } from '../components/register/modals/PastDuePaymentModal';
 import { ManagerBypassModal } from '../components/register/modals/ManagerBypassModal';
@@ -101,6 +105,70 @@ function generateUUID(): string {
 }
 
 export function AppRoot() {
+  const tryOpenAlreadyCheckedInModal = (payload: unknown, customerLabel?: string | null): boolean => {
+    if (!isRecord(payload)) return false;
+    if (payload['code'] !== 'ALREADY_CHECKED_IN') return false;
+    const ac = payload['activeCheckin'];
+    if (!isRecord(ac)) return false;
+
+    const visitId = ac['visitId'];
+    if (typeof visitId !== 'string') return false;
+
+    const rentalTypeRaw = ac['rentalType'];
+    const rentalType = typeof rentalTypeRaw === 'string' ? rentalTypeRaw : null;
+
+    const assignedResourceTypeRaw = ac['assignedResourceType'];
+    const assignedResourceType =
+      assignedResourceTypeRaw === 'room' || assignedResourceTypeRaw === 'locker'
+        ? assignedResourceTypeRaw
+        : null;
+
+    const assignedResourceNumberRaw = ac['assignedResourceNumber'];
+    const assignedResourceNumber =
+      typeof assignedResourceNumberRaw === 'string' ? assignedResourceNumberRaw : null;
+
+    const checkinAtRaw = ac['checkinAt'];
+    const checkinAt = typeof checkinAtRaw === 'string' ? checkinAtRaw : null;
+
+    const checkoutAtRaw = ac['checkoutAt'];
+    const checkoutAt = typeof checkoutAtRaw === 'string' ? checkoutAtRaw : null;
+
+    const overdueRaw = ac['overdue'];
+    const overdue = typeof overdueRaw === 'boolean' ? overdueRaw : null;
+
+    const wlRaw = ac['waitlist'];
+    let waitlist: ActiveCheckinDetails['waitlist'] = null;
+    if (isRecord(wlRaw)) {
+      const id = wlRaw['id'];
+      const desiredTier = wlRaw['desiredTier'];
+      const backupTier = wlRaw['backupTier'];
+      const status = wlRaw['status'];
+      if (
+        typeof id === 'string' &&
+        typeof desiredTier === 'string' &&
+        typeof backupTier === 'string' &&
+        typeof status === 'string'
+      ) {
+        waitlist = { id, desiredTier, backupTier, status };
+      }
+    }
+
+    setAlreadyCheckedIn({
+      customerLabel: customerLabel || null,
+      activeCheckin: {
+        visitId,
+        rentalType,
+        assignedResourceType,
+        assignedResourceNumber,
+        checkinAt,
+        checkoutAt,
+        overdue,
+        waitlist,
+      },
+    });
+    return true;
+  };
+
   const [session, setSession] = useState<StaffSession | null>(() => {
     // Load session from localStorage on mount
     const stored = localStorage.getItem('staff_session');
@@ -169,6 +237,10 @@ export function AppRoot() {
   );
   const [selectionAcknowledged, setSelectionAcknowledged] = useState(true);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [alreadyCheckedIn, setAlreadyCheckedIn] = useState<null | {
+    customerLabel: string | null;
+    activeCheckin: ActiveCheckinDetails;
+  }>(null);
   const [showCustomerConfirmationPending, setShowCustomerConfirmationPending] = useState(false);
   const [customerConfirmationType, setCustomerConfirmationType] = useState<{
     requested: string;
@@ -467,6 +539,7 @@ export function AppRoot() {
     if (!session?.sessionToken || !selectedCustomerId) return;
     setIsSubmitting(true);
     try {
+      setAlreadyCheckedIn(null);
       // Customer search selection should attach to the *check-in lane session* system
       // (lane_sessions), not legacy sessions, so downstream kiosk endpoints (set-language, etc.)
       // can resolve the active session.
@@ -481,19 +554,34 @@ export function AppRoot() {
         }),
       });
 
+      const payload: unknown = await response.json().catch(() => null);
       if (!response.ok) {
-        const payload: unknown = await response.json().catch(() => null);
+        if (
+          response.status === 409 &&
+          tryOpenAlreadyCheckedInModal(payload, selectedCustomerLabel || selectedCustomerId)
+        ) {
+          return;
+        }
         throw new Error(getErrorMessage(payload) || 'Failed to start session');
       }
 
-      const data = (await response.json()) as {
+      const data = payload as {
         sessionId?: string;
         customerName?: string;
         membershipNumber?: string;
+        mode?: 'INITIAL' | 'RENEWAL';
+        blockEndsAt?: string;
+        activeAssignedResourceType?: 'room' | 'locker';
+        activeAssignedResourceNumber?: string;
       };
       if (data.customerName) setCustomerName(data.customerName);
       if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
       if (data.sessionId) setCurrentSessionId(data.sessionId);
+      if (data.mode === 'RENEWAL' && typeof data.blockEndsAt === 'string') {
+        if (data.activeAssignedResourceType) setAssignedResourceType(data.activeAssignedResourceType);
+        if (data.activeAssignedResourceNumber) setAssignedResourceNumber(data.activeAssignedResourceNumber);
+        setCheckoutAt(data.blockEndsAt);
+      }
 
       // Clear search UI
       setCustomerSearch('');
@@ -556,6 +644,7 @@ export function AppRoot() {
 
     setIsSubmitting(true);
     try {
+      setAlreadyCheckedIn(null);
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/scan-id`, {
         method: 'POST',
         headers: {
@@ -567,6 +656,9 @@ export function AppRoot() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
+        if (response.status === 409 && tryOpenAlreadyCheckedInModal(errorPayload, customerName || null)) {
+          return { outcome: 'matched' };
+        }
         const msg = getErrorMessage(errorPayload) || 'Failed to scan ID';
         if (!opts?.suppressAlerts) alert(msg);
         // Treat 400 as "no match / invalid ID data", keep scan mode open.
@@ -578,6 +670,10 @@ export function AppRoot() {
         customerName?: string;
         membershipNumber?: string;
         sessionId?: string;
+        mode?: 'INITIAL' | 'RENEWAL';
+        blockEndsAt?: string;
+        activeAssignedResourceType?: 'room' | 'locker';
+        activeAssignedResourceNumber?: string;
       }>(response);
       console.log('ID scanned, session updated:', data);
 
@@ -585,6 +681,11 @@ export function AppRoot() {
       if (data.customerName) setCustomerName(data.customerName);
       if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
       if (data.sessionId) setCurrentSessionId(data.sessionId);
+      if (data.mode === 'RENEWAL' && typeof data.blockEndsAt === 'string') {
+        if (data.activeAssignedResourceType) setAssignedResourceType(data.activeAssignedResourceType);
+        if (data.activeAssignedResourceNumber) setAssignedResourceNumber(data.activeAssignedResourceNumber);
+        setCheckoutAt(data.blockEndsAt);
+      }
 
       return { outcome: 'matched' };
     } catch (error) {
@@ -619,6 +720,7 @@ export function AppRoot() {
 
     setIsSubmitting(true);
     try {
+      setAlreadyCheckedIn(null);
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/start`, {
         method: 'POST',
         headers: {
@@ -633,6 +735,9 @@ export function AppRoot() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
+        if (response.status === 409 && tryOpenAlreadyCheckedInModal(errorPayload, idScanValue)) {
+          return { outcome: 'matched' };
+        }
         const msg = getErrorMessage(errorPayload) || 'Failed to start session';
         if (!opts?.suppressAlerts) alert(msg);
         return { outcome: 'error', message: msg };
@@ -642,6 +747,10 @@ export function AppRoot() {
         customerName?: string;
         membershipNumber?: string;
         sessionId?: string;
+        mode?: 'INITIAL' | 'RENEWAL';
+        blockEndsAt?: string;
+        activeAssignedResourceType?: 'room' | 'locker';
+        activeAssignedResourceNumber?: string;
       }>(response);
       console.log('Session started:', data);
 
@@ -649,6 +758,11 @@ export function AppRoot() {
       if (data.customerName) setCustomerName(data.customerName);
       if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
       if (data.sessionId) setCurrentSessionId(data.sessionId);
+      if (data.mode === 'RENEWAL' && typeof data.blockEndsAt === 'string') {
+        if (data.activeAssignedResourceType) setAssignedResourceType(data.activeAssignedResourceType);
+        if (data.activeAssignedResourceNumber) setAssignedResourceNumber(data.activeAssignedResourceNumber);
+        setCheckoutAt(data.blockEndsAt);
+      }
 
       // Clear manual entry mode if active
       if (manualEntry) {
@@ -677,6 +791,7 @@ export function AppRoot() {
 
     setIsSubmitting(true);
     try {
+      setAlreadyCheckedIn(null);
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/start`, {
         method: 'POST',
         headers: {
@@ -688,6 +803,9 @@ export function AppRoot() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
+        if (response.status === 409 && tryOpenAlreadyCheckedInModal(errorPayload, null)) {
+          return { outcome: 'matched' };
+        }
         const msg = getErrorMessage(errorPayload) || 'Failed to start session';
         if (!opts?.suppressAlerts) alert(msg);
         return { outcome: 'error', message: msg };
@@ -697,11 +815,20 @@ export function AppRoot() {
         sessionId?: string;
         customerName?: string;
         membershipNumber?: string;
+        mode?: 'INITIAL' | 'RENEWAL';
+        blockEndsAt?: string;
+        activeAssignedResourceType?: 'room' | 'locker';
+        activeAssignedResourceNumber?: string;
       }>(response);
 
       if (data.customerName) setCustomerName(data.customerName);
       if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
       if (data.sessionId) setCurrentSessionId(data.sessionId);
+      if (data.mode === 'RENEWAL' && typeof data.blockEndsAt === 'string') {
+        if (data.activeAssignedResourceType) setAssignedResourceType(data.activeAssignedResourceType);
+        if (data.activeAssignedResourceNumber) setAssignedResourceNumber(data.activeAssignedResourceNumber);
+        setCheckoutAt(data.blockEndsAt);
+      }
 
       if (manualEntry) setManualEntry(false);
       return { outcome: 'matched' };
@@ -1555,6 +1682,13 @@ export function AppRoot() {
               setCustomerSelectedType(payload.proposedRentalType || null);
             }
           }
+          // Waitlist intent (customer requested unavailable tier + backup choice)
+          if (payload.waitlistDesiredType !== undefined) {
+            setWaitlistDesiredTier(payload.waitlistDesiredType || null);
+          }
+          if (payload.backupRentalType !== undefined) {
+            setWaitlistBackupType(payload.backupRentalType || null);
+          }
           // Update customer info
           if (payload.customerPrimaryLanguage !== undefined) {
             setCustomerPrimaryLanguage(payload.customerPrimaryLanguage);
@@ -1628,6 +1762,9 @@ export function AppRoot() {
             setSelectionConfirmed(false);
             setSelectionConfirmedBy(null);
             setSelectionAcknowledged(true);
+            setWaitlistDesiredTier(null);
+            setWaitlistBackupType(null);
+            setShowWaitlistModal(false);
           }
         } else if (message.type === 'WAITLIST_UPDATED') {
           // Refresh waitlist when updated
@@ -3092,6 +3229,13 @@ export function AppRoot() {
             onClose={() => setShowWaitlistModal(false)}
           />
 
+          <AlreadyCheckedInModal
+            isOpen={!!alreadyCheckedIn}
+            customerLabel={alreadyCheckedIn?.customerLabel || null}
+            activeCheckin={alreadyCheckedIn?.activeCheckin || null}
+            onClose={() => setAlreadyCheckedIn(null)}
+          />
+
           {offerUpgradeModal && session?.sessionToken && (
             <OfferUpgradeModal
               isOpen={true}
@@ -3240,7 +3384,7 @@ export function AppRoot() {
                 zIndex: 100,
               }}
             >
-              {!agreementSigned && (
+              {!agreementSigned && selectionConfirmed && paymentStatus === 'PAID' && (
                 <div
                   style={{
                     marginBottom: '1rem',
