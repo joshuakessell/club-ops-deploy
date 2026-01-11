@@ -4,6 +4,7 @@ import { serializableTransaction, query } from '../db/index.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding.js';
+import { computeInventoryAvailable } from '../inventory/available.js';
 
 /**
  * Schema for creating a new session.
@@ -287,19 +288,19 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
           return newSession;
         });
 
-        // Broadcast room assignment if applicable
-        if (body.roomId && fastify.broadcaster) {
-          fastify.broadcaster.broadcast({
-            type: 'ROOM_ASSIGNED',
-            payload: {
-              roomId: body.roomId,
-              sessionId: session.id,
-              customerId: body.customerId,
-            },
-            timestamp: new Date().toISOString(),
-          });
-
-          // Also broadcast inventory update
+        // Broadcast assignment and inventory update (room or locker)
+        if (fastify.broadcaster) {
+          if (body.roomId) {
+            fastify.broadcaster.broadcast({
+              type: 'ROOM_ASSIGNED',
+              payload: {
+                roomId: body.roomId,
+                sessionId: session.id,
+                customerId: body.customerId,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          }
           await broadcastInventoryUpdate(fastify.broadcaster);
         }
 
@@ -631,13 +632,14 @@ async function broadcastInventoryUpdate(broadcaster: Broadcaster): Promise<void>
       byType[row.room_type] = { clean: 0, cleaning: 0, dirty: 0, total: 0 };
     }
     const count = parseInt(row.count, 10);
-    const status = row.status.toLowerCase() as 'clean' | 'cleaning' | 'dirty';
-    byType[row.room_type]![status] = count;
-    byType[row.room_type]!.total += count;
-
-    if (status === 'clean') overallClean += count;
-    else if (status === 'cleaning') overallCleaning += count;
-    else if (status === 'dirty') overallDirty += count;
+    const status = row.status.toLowerCase();
+    if (status === 'clean' || status === 'cleaning' || status === 'dirty') {
+      byType[row.room_type]![status] = count;
+      byType[row.room_type]!.total += count;
+      if (status === 'clean') overallClean += count;
+      else if (status === 'cleaning') overallCleaning += count;
+      else overallDirty += count;
+    }
   }
 
   let lockerClean = 0,
@@ -645,10 +647,17 @@ async function broadcastInventoryUpdate(broadcaster: Broadcaster): Promise<void>
     lockerDirty = 0;
   for (const row of lockerResult.rows) {
     const count = parseInt(row.count, 10);
-    const status = row.status.toLowerCase() as 'clean' | 'cleaning' | 'dirty';
+    const status = row.status.toLowerCase();
     if (status === 'clean') lockerClean = count;
     else if (status === 'cleaning') lockerCleaning = count;
     else if (status === 'dirty') lockerDirty = count;
+  }
+
+  let available: Awaited<ReturnType<typeof computeInventoryAvailable>> | undefined;
+  try {
+    available = await computeInventoryAvailable(query);
+  } catch {
+    available = undefined;
   }
 
   broadcaster.broadcast({
@@ -669,6 +678,7 @@ async function broadcastInventoryUpdate(broadcaster: Broadcaster): Promise<void>
           total: lockerClean + lockerCleaning + lockerDirty,
         },
       },
+      available,
     },
     timestamp: new Date().toISOString(),
   });

@@ -3,6 +3,13 @@
 
 Write-Host "Starting demo services..." -ForegroundColor Cyan
 
+# Ensure we run from repo root (this script lives in /scripts)
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Set-Location $repoRoot
+
+Write-Host "Seeding demo data (pnpm demo:seed)..." -ForegroundColor Cyan
+pnpm demo:seed
+
 # Start API server
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd services/api; `$env:DEMO_MODE='true'; pnpm dev" -WindowStyle Minimized
 

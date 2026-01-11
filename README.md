@@ -154,7 +154,7 @@ pnpm db:seed
 
 ### Demo seed (busy Saturday stress test)
 
-- In `DEMO_MODE=true`, the API seeds a deterministic “busy Saturday night” dataset designed to stress the inventory/assignment UI:
+- In `DEMO_MODE=true`, you can seed a deterministic “busy Saturday night” dataset designed to stress the inventory/assignment UI:
   - **Customers/Members**: 100
   - **Rooms**: 55 total (200–262 excluding non-existent 247,249,251,253,255,257,259,261) with **54 occupied** and **1 STANDARD available**
   - **Lockers**: 108 total (001–108) with **88 occupied** and **20 available**
@@ -167,6 +167,7 @@ pnpm db:seed
 ### One-step demo seed + run the full stack
 
 - `pnpm demo:dev` will seed demo data and then start the full dev stack (API + all apps). Use this when you want to browse the apps locally (e.g. **Employee Register** at `http://localhost:5175`).
+- If you explicitly want the API to seed during boot, start the stack with `DEMO_MODE=true SEED_ON_STARTUP=true` (see `pnpm demo:dev:seedOnBoot`).
 
 **Database Configuration:**
 

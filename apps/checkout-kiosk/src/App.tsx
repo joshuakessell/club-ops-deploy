@@ -110,7 +110,7 @@ function App() {
   );
 
   useReconnectingWebSocket({
-    url: `ws://${window.location.hostname}:3001/ws`,
+    url: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
     onMessage: onWsMessage,
     onOpenSendJson: [{ type: 'subscribe', events: ['CHECKOUT_COMPLETED'] }],
   });

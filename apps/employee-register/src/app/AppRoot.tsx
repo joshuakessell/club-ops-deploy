@@ -35,6 +35,7 @@ import { ManagerBypassModal } from '../components/register/modals/ManagerBypassM
 import { UpgradePaymentModal } from '../components/register/modals/UpgradePaymentModal';
 import { AddNoteModal } from '../components/register/modals/AddNoteModal';
 import { MembershipIdPromptModal } from '../components/register/modals/MembershipIdPromptModal';
+import { ModalFrame } from '../components/register/modals/ModalFrame';
 import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclineToast';
 import { RegisterSideDrawers } from '../components/drawers/RegisterSideDrawers';
 import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerContent';
@@ -47,6 +48,16 @@ interface HealthStatus {
   timestamp: string;
   uptime: number;
 }
+
+type SessionDocument = {
+  id: string;
+  doc_type: string;
+  mime_type: string;
+  created_at: string;
+  has_signature: boolean;
+  signature_hash_prefix?: string;
+  has_pdf?: boolean;
+};
 
 const API_BASE = '/api';
 
@@ -175,6 +186,12 @@ export function AppRoot() {
     null
   );
   const [customerMembershipValidUntil, setCustomerMembershipValidUntil] = useState<string | null>(null);
+
+  // Agreement/PDF verification (staff-only)
+  const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentsForSession, setDocumentsForSession] = useState<SessionDocument[] | null>(null);
 
   // Keep WebSocket handlers stable while still reading the latest values.
   const selectedCheckoutRequestRef = useRef<string | null>(null);
@@ -1130,6 +1147,49 @@ export function AppRoot() {
     }
   };
 
+  const fetchDocumentsBySession = useCallback(
+    async (laneSessionId: string) => {
+      if (!session?.sessionToken) return;
+      setDocumentsLoading(true);
+      setDocumentsError(null);
+      try {
+        const res = await fetch(`${API_BASE}/v1/documents/by-session/${laneSessionId}`, {
+          headers: { Authorization: `Bearer ${session.sessionToken}` },
+        });
+        if (!res.ok) {
+          const errPayload: unknown = await res.json().catch(() => null);
+          throw new Error(getErrorMessage(errPayload) || 'Failed to load documents');
+        }
+        const data = (await res.json()) as { documents?: SessionDocument[] };
+        setDocumentsForSession(Array.isArray(data.documents) ? data.documents : []);
+      } catch (e) {
+        setDocumentsForSession(null);
+        setDocumentsError(e instanceof Error ? e.message : 'Failed to load documents');
+      } finally {
+        setDocumentsLoading(false);
+      }
+    },
+    [session?.sessionToken]
+  );
+
+  const downloadAgreementPdf = useCallback(
+    async (documentId: string) => {
+      if (!session?.sessionToken) return;
+      const res = await fetch(`${API_BASE}/v1/documents/${documentId}/download`, {
+        headers: { Authorization: `Bearer ${session.sessionToken}` },
+      });
+      if (!res.ok) {
+        const errPayload: unknown = await res.json().catch(() => null);
+        throw new Error(getErrorMessage(errPayload) || 'Failed to download PDF');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    [session?.sessionToken]
+  );
+
   fetchWaitlistRef.current = fetchWaitlist;
   fetchInventoryAvailableRef.current = fetchInventoryAvailable;
 
@@ -1141,13 +1201,13 @@ export function AppRoot() {
     }
   }, [session?.sessionToken]);
 
-  // 30s live refresh for waitlist + availability
+  // 60s polling fallback for waitlist + availability (WebSocket is primary)
   useEffect(() => {
     if (!session?.sessionToken) return;
     const interval = window.setInterval(() => {
       void fetchWaitlistRef.current?.();
       void fetchInventoryAvailableRef.current?.();
-    }, 30000);
+    }, 60000);
     return () => window.clearInterval(interval);
   }, [session?.sessionToken]);
 
@@ -1369,11 +1429,14 @@ export function AppRoot() {
   };
 
   useEffect(() => {
-    // Check API health
-    fetch('/api/health')
-      .then((res) => res.json())
-      .then((data: unknown) => {
+    // Check API health (avoid JSON parse crashes on empty/non-JSON responses)
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await readJson<unknown>(res);
         if (
+          !cancelled &&
           isRecord(data) &&
           typeof data.status === 'string' &&
           typeof data.timestamp === 'string' &&
@@ -1381,8 +1444,13 @@ export function AppRoot() {
         ) {
           setHealth({ status: data.status, timestamp: data.timestamp, uptime: data.uptime });
         }
-      })
-      .catch(console.error);
+      } catch (err) {
+        console.error('Health check failed:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [lane]);
 
   const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -3207,6 +3275,21 @@ export function AppRoot() {
                       Checkout: {new Date(checkoutAt).toLocaleString()}
                     </div>
                   )}
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <button
+                      onClick={() => {
+                        const sid = currentSessionIdRef.current;
+                        if (!sid) return;
+                        setDocumentsModalOpen(true);
+                        void fetchDocumentsBySession(sid);
+                      }}
+                      className="cs-liquid-button cs-liquid-button--secondary"
+                      style={{ width: '100%', padding: '0.6rem', fontWeight: 700 }}
+                      disabled={!session?.sessionToken || !currentSessionIdRef.current}
+                    >
+                      Verify agreement PDF + signature saved
+                    </button>
+                  </div>
                 </div>
               )}
               {agreementSigned && assignedResourceType && (
@@ -3298,6 +3381,91 @@ export function AppRoot() {
             )}
         </div>
       )}
+      <ModalFrame
+        isOpen={documentsModalOpen}
+        title="Agreement artifacts"
+        onClose={() => setDocumentsModalOpen(false)}
+        maxWidth="720px"
+        maxHeight="70vh"
+      >
+        <div style={{ display: 'grid', gap: '0.75rem' }}>
+          <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+            Session: <span style={{ fontFamily: 'monospace' }}>{currentSessionIdRef.current || '—'}</span>
+          </div>
+
+          {documentsError && (
+            <div
+              style={{
+                padding: '0.75rem',
+                background: 'rgba(239, 68, 68, 0.18)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                borderRadius: 12,
+                color: '#fecaca',
+                fontWeight: 700,
+              }}
+            >
+              {documentsError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              className="cs-liquid-button cs-liquid-button--secondary"
+              disabled={documentsLoading || !currentSessionIdRef.current}
+              onClick={() => {
+                const sid = currentSessionIdRef.current;
+                if (!sid) return;
+                void fetchDocumentsBySession(sid);
+              }}
+            >
+              {documentsLoading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+
+          {documentsForSession === null ? (
+            <div style={{ color: '#94a3b8' }}>No data loaded yet.</div>
+          ) : documentsForSession.length === 0 ? (
+            <div style={{ color: '#94a3b8' }}>No documents found for this session.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              {documentsForSession.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="er-surface"
+                  style={{ padding: '0.75rem', borderRadius: 12, display: 'grid', gap: '0.35rem' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 900 }}>
+                      {doc.doc_type}{' '}
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#94a3b8' }}>
+                        {doc.id}
+                      </span>
+                    </div>
+                    <div style={{ color: '#94a3b8' }}>{new Date(doc.created_at).toLocaleString()}</div>
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                    PDF stored: {doc.has_pdf ? 'yes' : 'no'} • Signature stored: {doc.has_signature ? 'yes' : 'no'}
+                    {doc.signature_hash_prefix ? ` • sig hash: ${doc.signature_hash_prefix}…` : ''}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      className="cs-liquid-button"
+                      disabled={!doc.has_pdf}
+                      onClick={() => {
+                        void downloadAgreementPdf(doc.id).catch((e) => {
+                          setDocumentsError(e instanceof Error ? e.message : 'Failed to download PDF');
+                        });
+                      }}
+                    >
+                      Download PDF
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </ModalFrame>
     </RegisterSignIn>
   );
 }

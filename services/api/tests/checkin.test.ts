@@ -6,6 +6,8 @@ import { query, initializeDatabase, closeDatabase } from '../src/db/index.js';
 import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaster.js';
 import { checkinRoutes } from '../src/routes/checkin.js';
 import { customerRoutes } from '../src/routes/customers.js';
+import { inventoryRoutes } from '../src/routes/inventory.js';
+import { sessionDocumentsRoutes } from '../src/routes/session-documents.js';
 import { hashPin, generateSessionToken } from '../src/auth/utils.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { truncateAllTables } from './testDb.js';
@@ -60,6 +62,8 @@ describe('Check-in Flow', () => {
     // Note: Tests will need to properly authenticate or we'll mock requireAuth
     await app.register(checkinRoutes);
     await app.register(customerRoutes);
+    await app.register(inventoryRoutes);
+    await app.register(sessionDocumentsRoutes);
 
     await app.ready();
   });
@@ -1285,10 +1289,16 @@ describe('Check-in Flow', () => {
         // Setup: create session, lock selection, create payment intent, demo-take-payment, then sign agreement
         const roomResult = await query<{ id: string }>(
           `INSERT INTO rooms (number, type, status, floor)
-         VALUES ('104', 'STANDARD', 'CLEAN', 1)
+         VALUES ('200', 'STANDARD', 'CLEAN', 2)
          RETURNING id`
         );
         const roomId = roomResult.rows[0]!.id;
+
+        // Sanity: room 200 is available before check-in completion
+        const beforeAvail = await app.inject({ method: 'GET', url: '/v1/inventory/available' });
+        expect(beforeAvail.statusCode).toBe(200);
+        const beforeAvailBody = JSON.parse(beforeAvail.body);
+        expect(beforeAvailBody.rawRooms?.STANDARD).toBe(1);
 
         const startResponse = await app.inject({
           method: 'POST',
@@ -1415,6 +1425,34 @@ describe('Check-in Flow', () => {
           [roomId]
         );
         expect(roomAssignedResult.rows[0]!.assigned_to_customer_id).toBe(customerId);
+
+        // Expected outcome: /v1/inventory/available must no longer count room 200 immediately after completion
+        const afterAvail = await app.inject({ method: 'GET', url: '/v1/inventory/available' });
+        expect(afterAvail.statusCode).toBe(200);
+        const afterAvailBody = JSON.parse(afterAvail.body);
+        expect(afterAvailBody.rawRooms?.STANDARD).toBe(0);
+
+        // Document verification: employee/office can prove agreement PDF + signature artifacts exist
+        const docsRes = await app.inject({
+          method: 'GET',
+          url: `/v1/documents/by-session/${startData.sessionId}`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+        expect(docsRes.statusCode).toBe(200);
+        const docsBody = JSON.parse(docsRes.body) as { documents?: any[] };
+        expect(Array.isArray(docsBody.documents)).toBe(true);
+        expect(docsBody.documents!.length).toBeGreaterThan(0);
+        expect(docsBody.documents![0]!.has_signature).toBe(true);
+        expect(docsBody.documents![0]!.has_pdf).toBe(true);
+
+        const downloadRes = await app.inject({
+          method: 'GET',
+          url: `/v1/documents/${docsBody.documents![0]!.id}/download`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+        expect(downloadRes.statusCode).toBe(200);
+        expect(downloadRes.headers['content-type']).toContain('application/pdf');
+        expect(downloadRes.body.length).toBeGreaterThan(100);
       })
     );
 

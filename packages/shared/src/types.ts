@@ -91,10 +91,27 @@ export interface RoomStatusChangedPayload {
 }
 
 /**
+ * Snapshot of effective availability (rooms supply minus active/offered waitlist demand),
+ * matching GET /v1/inventory/available.
+ */
+export interface InventoryAvailableSnapshot {
+  rooms: Record<'SPECIAL' | 'DOUBLE' | 'STANDARD', number>;
+  rawRooms: Record<'SPECIAL' | 'DOUBLE' | 'STANDARD', number>;
+  waitlistDemand: Record<'SPECIAL' | 'DOUBLE' | 'STANDARD', number>;
+  lockers: number;
+  total: number;
+}
+
+/**
  * Inventory update event payload.
  */
 export interface InventoryUpdatedPayload {
   inventory: DetailedInventory;
+  /**
+   * Optional: includes effective availability snapshot so UIs can update counts immediately
+   * without refetching. Clients may ignore this and just refetch endpoints on the event.
+   */
+  available?: InventoryAvailableSnapshot;
 }
 
 /**

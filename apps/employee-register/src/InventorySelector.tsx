@@ -257,9 +257,9 @@ export function InventorySelector({
 
   const API_BASE = '/api';
 
-  // Live countdown tick (HH:MM resolution is fine at 30s granularity)
+  // Live countdown tick (UI-only; does not refetch)
   useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 5 * 60_000);
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
     return () => window.clearInterval(id);
   }, []);
 

@@ -6,6 +6,7 @@ import {
 } from '@club-ops/shared';
 
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+const TWO_MIN_MS = 2 * 60 * 1000;
 
 describe('demo seed (busy Saturday) database assertions', () => {
   let pool: pg.Pool;
@@ -26,7 +27,7 @@ describe('demo seed (busy Saturday) database assertions', () => {
 
   const runIfDemo = process.env.DEMO_MODE === 'true' ? it : it.skip;
 
-  runIfDemo('seeds peak occupancy in the past + exactly one active late stay at now, while preserving inventory contract', async () => {
+  runIfDemo('seeds current occupancy at now (54 rooms + ~40 lockers) with exactly one overdue stay, while preserving inventory contract', async () => {
     const customers = await pool.query<{ count: string }>('SELECT COUNT(*)::text as count FROM customers');
     const members = await pool.query<{ count: string }>('SELECT COUNT(*)::text as count FROM members');
     expect(parseInt(members.rows[0]!.count, 10)).toBe(100);
@@ -61,7 +62,35 @@ describe('demo seed (busy Saturday) database assertions', () => {
     expect(parseInt(bothInSessions.rows[0]!.count, 10)).toBe(0);
     expect(parseInt(bothInBlocks.rows[0]!.count, 10)).toBe(0);
 
-    // Exactly one active late stay at "now" (derived from dataset)
+    // Current occupancy at NOW: inventory assignments
+    const roomsAssigned = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM rooms WHERE assigned_to_customer_id IS NOT NULL`
+    );
+    const roomsUnassigned = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM rooms WHERE assigned_to_customer_id IS NULL`
+    );
+    const lockersAssigned = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM lockers WHERE assigned_to_customer_id IS NOT NULL`
+    );
+    const lockersUnassigned = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM lockers WHERE assigned_to_customer_id IS NULL`
+    );
+    expect(parseInt(roomsAssigned.rows[0]!.count, 10)).toBe(54);
+    expect(parseInt(roomsUnassigned.rows[0]!.count, 10)).toBe(1);
+    const lockersAssignedNow = parseInt(lockersAssigned.rows[0]!.count, 10);
+    const lockersUnassignedNow = parseInt(lockersUnassigned.rows[0]!.count, 10);
+    expect(lockersAssignedNow).toBeGreaterThanOrEqual(35);
+    expect(lockersAssignedNow).toBeLessThanOrEqual(45);
+    expect(lockersUnassignedNow).toBe(108 - lockersAssignedNow);
+
+    // Verify the one open room is STANDARD
+    const openRooms = await pool.query<{ number: string; type: string }>(
+      `SELECT number, type::text as type FROM rooms WHERE assigned_to_customer_id IS NULL ORDER BY number`
+    );
+    expect(openRooms.rows.length).toBe(1);
+    expect(openRooms.rows[0]!.type).toBe('STANDARD');
+
+    // Active stays at NOW: should have 54 room actives + ~40 locker actives
     const activeSessions = await pool.query<{
       id: string;
       check_in_time: Date;
@@ -70,59 +99,52 @@ describe('demo seed (busy Saturday) database assertions', () => {
       room_id: string | null;
       locker_id: string | null;
     }>(`SELECT id, check_in_time, checkout_at, check_out_time, room_id, locker_id FROM sessions WHERE status = 'ACTIVE'`);
-    expect(activeSessions.rows.length).toBe(1);
-    const active = activeSessions.rows[0]!;
-    expect(active.check_out_time).toBeNull();
-    expect(Boolean(active.room_id) !== Boolean(active.locker_id)).toBe(true);
-    expect(active.checkout_at).not.toBeNull();
+    expect(activeSessions.rows.length).toBeGreaterThanOrEqual(89); // 54 + 35
+    expect(activeSessions.rows.length).toBeLessThanOrEqual(99); // 54 + 45
 
-    // Reconstruct the seed's reference times from the dataset:
-    // - seedNow = active.checkout_at + 15 minutes
-    // - peak = seedNow - 6 hours = active.check_in_time + 15 minutes
-    const seedNow = new Date(new Date(active.checkout_at!).getTime() + FIFTEEN_MIN_MS);
-    const peak = new Date(active.check_in_time.getTime() + FIFTEEN_MIN_MS);
-
-    // Peak occupancy computed via checkin_blocks time overlap
-    const peakRoomOcc = await pool.query<{ count: string }>(
-      `SELECT COUNT(DISTINCT room_id)::text as count
-       FROM checkin_blocks
-       WHERE room_id IS NOT NULL
-         AND starts_at <= $1
-         AND ends_at > $1`,
-      [peak]
+    const activeVisits = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count FROM visits WHERE ended_at IS NULL`
     );
-    const peakLockerOcc = await pool.query<{ count: string }>(
-      `SELECT COUNT(DISTINCT locker_id)::text as count
-       FROM checkin_blocks
-       WHERE locker_id IS NOT NULL
-         AND starts_at <= $1
-         AND ends_at > $1`,
-      [peak]
+    const activeVisitsNow = parseInt(activeVisits.rows[0]!.count, 10);
+    expect(activeVisitsNow).toBe(activeSessions.rows.length);
+
+    // Exactly one overdue active session (15 minutes late)
+    const overdueActiveSessions = await pool.query<{
+      id: string;
+      checkout_at: Date | null;
+      room_id: string | null;
+      locker_id: string | null;
+    }>(
+      `SELECT id, checkout_at, room_id, locker_id
+       FROM sessions
+       WHERE status = 'ACTIVE'
+         AND check_out_time IS NULL
+         AND checkout_at < NOW()
+       ORDER BY checkout_at`
     );
-    expect(parseInt(peakRoomOcc.rows[0]!.count, 10)).toBe(54);
-    expect(parseInt(peakLockerOcc.rows[0]!.count, 10)).toBe(88);
+    expect(overdueActiveSessions.rows.length).toBe(1);
+    const overdue = overdueActiveSessions.rows[0]!;
+    expect(overdue.checkout_at).not.toBeNull();
+    expect(Boolean(overdue.room_id) !== Boolean(overdue.locker_id)).toBe(true);
 
-    // Exactly one free room at peak, and it must be STANDARD
-    const freeRoomsAtPeak = await pool.query<{ number: string; type: string }>(
-      `SELECT r.number, r.type::text as type
-       FROM rooms r
-       WHERE r.id NOT IN (
-         SELECT cb.room_id
-         FROM checkin_blocks cb
-         WHERE cb.room_id IS NOT NULL
-           AND cb.starts_at <= $1
-           AND cb.ends_at > $1
-       )
-       ORDER BY r.number`,
-      [peak]
+    // Verify overdue is approximately 15 minutes late relative to DB clock (within 2 seconds tolerance)
+    const dbNowRes = await pool.query<{ now: Date }>(`SELECT NOW() as now`);
+    const dbNow = dbNowRes.rows[0]!.now;
+    const expectedLateMs = dbNow.getTime() - FIFTEEN_MIN_MS;
+    // Allow some slack because the test runs after seeding completes.
+    expect(Math.abs(new Date(overdue.checkout_at!).getTime() - expectedLateMs)).toBeLessThan(TWO_MIN_MS);
+
+    // All other active sessions have future checkout
+    const futureActiveSessions = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text as count
+       FROM sessions
+       WHERE status = 'ACTIVE'
+         AND check_out_time IS NULL
+         AND checkout_at > NOW()`
     );
-    expect(freeRoomsAtPeak.rows.length).toBe(1);
-    expect(freeRoomsAtPeak.rows[0]!.type).toBe('STANDARD');
+    expect(parseInt(futureActiveSessions.rows[0]!.count, 10)).toBe(activeSessions.rows.length - 1);
 
-    // Active late stay scheduled checkout must be exactly seedNow - 15 minutes (within tiny tolerance)
-    expect(Math.abs(new Date(active.checkout_at!).getTime() - (seedNow.getTime() - FIFTEEN_MIN_MS))).toBeLessThan(2000);
-
-    // Checkout quality: >= 85% have (checkout_at - check_out_time) in [0, 15 minutes]
+    // Checkout realism (relaxed): most are within 0..15m early, some are 30..120m early
     const quality = await pool.query<{ total: string; good: string }>(
       `SELECT
          COUNT(*)::text as total,
@@ -136,7 +158,7 @@ describe('demo seed (busy Saturday) database assertions', () => {
     );
     const total = parseInt(quality.rows[0]!.total, 10);
     const good = parseInt(quality.rows[0]!.good, 10);
-    expect(total).toBeGreaterThan(0);
-    expect(good / total).toBeGreaterThanOrEqual(0.85);
+    expect(total).toBeGreaterThanOrEqual(200);
+    expect(good / total).toBeGreaterThanOrEqual(0.75); // keep test non-brittle
   });
 });

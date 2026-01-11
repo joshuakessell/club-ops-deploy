@@ -6,6 +6,7 @@ import { verifyPin } from '../auth/utils.js';
 import { generateAgreementPdf } from '../utils/pdf-generator.js';
 import { roundUpToQuarterHour } from '../time/rounding.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
+import { broadcastInventoryUpdate } from './sessions.js';
 import type {
   SessionUpdatedPayload,
   CustomerConfirmationRequiredPayload,
@@ -107,6 +108,68 @@ interface PaymentIntentRow {
 type PoolClient = Parameters<Parameters<typeof transaction>[0]>[0];
 
 type RoomRentalType = 'STANDARD' | 'DOUBLE' | 'SPECIAL';
+
+async function assertAssignedResourcePersistedAndUnavailable(params: {
+  client: PoolClient;
+  sessionId: string;
+  customerId: string;
+  resourceType: 'room' | 'locker';
+  resourceId: string;
+  resourceNumber?: string;
+}): Promise<void> {
+  const { client, sessionId, customerId, resourceType, resourceId, resourceNumber } = params;
+
+  if (resourceType === 'room') {
+    const row = (
+      await client.query<{
+        id: string;
+        number: string;
+        status: string;
+        assigned_to_customer_id: string | null;
+      }>(
+        `SELECT id, number, status, assigned_to_customer_id
+         FROM rooms
+         WHERE id = $1`,
+        [resourceId]
+      )
+    ).rows[0];
+
+    const number = resourceNumber ?? row?.number ?? '(unknown)';
+    const assignedOk = row?.assigned_to_customer_id === customerId;
+    const qualifiesForAvailable = row?.status === 'CLEAN' && row?.assigned_to_customer_id === null;
+    if (!assignedOk || qualifiesForAvailable) {
+      throw {
+        statusCode: 500,
+        message: `Check-in persistence assertion failed (room): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`,
+      };
+    }
+    return;
+  }
+
+  const row = (
+    await client.query<{
+      id: string;
+      number: string;
+      status: string;
+      assigned_to_customer_id: string | null;
+    }>(
+      `SELECT id, number, status, assigned_to_customer_id
+       FROM lockers
+       WHERE id = $1`,
+      [resourceId]
+    )
+  ).rows[0];
+
+  const number = resourceNumber ?? row?.number ?? '(unknown)';
+  const assignedOk = row?.assigned_to_customer_id === customerId;
+  const qualifiesForAvailable = row?.status === 'CLEAN' && row?.assigned_to_customer_id === null;
+  if (!assignedOk || qualifiesForAvailable) {
+    throw {
+      statusCode: 500,
+      message: `Check-in persistence assertion failed (locker): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`,
+    };
+  }
+}
 
 async function selectRoomForNewCheckin(
   client: PoolClient,
@@ -2812,6 +2875,17 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const checkinBlockId = blockResult.rows[0]!.id;
 
+          // Part A: server-side assertion (same TX) that assignment persisted and the resource
+          // cannot qualify as "available" immediately after successful check-in creation.
+          await assertAssignedResourcePersistedAndUnavailable({
+            client,
+            sessionId: session.id,
+            customerId: session.customer_id,
+            resourceType: assignedResourceType === 'room' ? 'room' : 'locker',
+            resourceId: assignedResourceId,
+            resourceNumber: assignedResourceNumber,
+          });
+
           // Store signature as immutable audit artifact
           await client.query(
             `INSERT INTO agreement_signatures
@@ -2856,6 +2930,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           buildFullSessionUpdatedPayload(client, result.sessionId)
         );
         fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+        await broadcastInventoryUpdate(fastify.broadcaster);
 
         return reply.send(result);
       } catch (error: unknown) {
@@ -3158,6 +3233,17 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const blockId = blockResult.rows[0]!.id;
 
+          // Part A: server-side assertion (same TX) that assignment persisted and the resource
+          // cannot qualify as "available" immediately after successful check-in creation.
+          await assertAssignedResourcePersistedAndUnavailable({
+            client,
+            sessionId: session.id,
+            customerId: session.customer_id,
+            resourceType: assignedResourceType === 'room' ? 'room' : 'locker',
+            resourceId: assignedResourceId,
+            resourceNumber: assignedResourceNumber,
+          });
+
           // Update lane session status to COMPLETED
           await client.query(
             `UPDATE lane_sessions
@@ -3201,6 +3287,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           buildFullSessionUpdatedPayload(client, result.sessionId)
         );
         fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+        await broadcastInventoryUpdate(fastify.broadcaster);
 
         return reply.send(result);
       } catch (error: unknown) {
@@ -3405,20 +3492,25 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
     const blockId = blockResult.rows[0]!.id;
 
-    // Transition room/locker to OCCUPIED status
+    // Transition room/locker to OCCUPIED status + persist assignment (server-authoritative)
     if (session.assigned_resource_type === 'room') {
       await client.query(
         `UPDATE rooms 
-         SET status = 'OCCUPIED', last_status_change = NOW(), updated_at = NOW()
-         WHERE id = $1`,
-        [session.assigned_resource_id]
+         SET status = 'OCCUPIED',
+             assigned_to_customer_id = $1,
+             last_status_change = NOW(),
+             updated_at = NOW()
+         WHERE id = $2`,
+        [session.customer_id, session.assigned_resource_id]
       );
     } else if (session.assigned_resource_type === 'locker') {
       await client.query(
         `UPDATE lockers 
-         SET status = 'OCCUPIED', updated_at = NOW()
-         WHERE id = $1`,
-        [session.assigned_resource_id]
+         SET status = 'OCCUPIED',
+             assigned_to_customer_id = $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [session.customer_id, session.assigned_resource_id]
       );
     }
 
@@ -3475,12 +3567,25 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         blockId,
       ]);
 
-      // Log waitlist created
+      // Log waitlist created (include desired+backup and the assigned resource number for debugging)
       if (
         staffId &&
         staffId !== 'system' &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(staffId)
       ) {
+        let assignedResourceNumber: string | null = null;
+        if (session.assigned_resource_type === 'room') {
+          const r = await client.query<{ number: string }>(`SELECT number FROM rooms WHERE id = $1`, [
+            session.assigned_resource_id,
+          ]);
+          assignedResourceNumber = r.rows[0]?.number ?? null;
+        } else if (session.assigned_resource_type === 'locker') {
+          const l = await client.query<{ number: string }>(`SELECT number FROM lockers WHERE id = $1`, [
+            session.assigned_resource_id,
+          ]);
+          assignedResourceNumber = l.rows[0]?.number ?? null;
+        }
+
         await client.query(
           `INSERT INTO audit_log 
            (staff_id, action, entity_type, entity_id, old_value, new_value)
@@ -3495,6 +3600,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               desired_tier: session.waitlist_desired_type,
               backup_tier: session.backup_rental_type,
               initial_resource_id: session.assigned_resource_id,
+              initial_resource_number: assignedResourceNumber,
             }),
           ]
         );

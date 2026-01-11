@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { query } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
 import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
+import { computeInventoryAvailable } from '../inventory/available.js';
 
 /**
  * Map room number to tier (Special, Double, or Standard).
@@ -144,77 +145,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/inventory/available', async (_request, reply) => {
     try {
-      const result = await query<{
-        number: string;
-        status: string;
-        assigned_to_customer_id: string | null;
-      }>(
-        `SELECT number, status, assigned_to_customer_id
-         FROM rooms
-         WHERE status = 'CLEAN'
-           AND assigned_to_customer_id IS NULL
-           AND type != 'LOCKER'`
-      );
-
-      const lockerResult = await query<{ count: string }>(
-        `SELECT COUNT(*) as count
-         FROM lockers
-         WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL`
-      );
-
-      // Part A: raw room availability by tier using room number mapping
-      const rawRooms: Record<RoomTier, number> = {
-        SPECIAL: 0,
-        DOUBLE: 0,
-        STANDARD: 0,
-      };
-
-      for (const row of result.rows) {
-        const tier: RoomTier = getRoomTier(row.number);
-        rawRooms[tier]++;
-      }
-
-      const lockers = parseInt(lockerResult.rows[0]?.count ?? '0', 10);
-
-      // Part B: active waitlist demand by desired tier (only ACTIVE/OFFERED, only while visit/block active)
-      const waitlistDemandRows = await query<WaitlistDemandRow>(
-        `SELECT w.desired_tier::text as tier, COUNT(*) as count
-         FROM waitlist w
-         JOIN checkin_blocks cb ON cb.id = w.checkin_block_id
-         JOIN visits v ON v.id = w.visit_id
-         WHERE w.status IN ('ACTIVE','OFFERED')
-           AND v.ended_at IS NULL
-           AND cb.ends_at > NOW()
-         GROUP BY w.desired_tier`
-      );
-
-      const waitlistDemand: Record<RoomTier, number> = {
-        SPECIAL: 0,
-        DOUBLE: 0,
-        STANDARD: 0,
-      };
-
-      for (const row of waitlistDemandRows.rows) {
-        const tier = row.tier as RoomTier;
-        if (tier === 'SPECIAL' || tier === 'DOUBLE' || tier === 'STANDARD') {
-          waitlistDemand[tier] = parseInt(row.count, 10);
-        }
-      }
-
-      // Part C: effective availability = raw - demand (clamped to 0)
-      const rooms: Record<RoomTier, number> = {
-        SPECIAL: Math.max(0, rawRooms.SPECIAL - waitlistDemand.SPECIAL),
-        DOUBLE: Math.max(0, rawRooms.DOUBLE - waitlistDemand.DOUBLE),
-        STANDARD: Math.max(0, rawRooms.STANDARD - waitlistDemand.STANDARD),
-      };
-
-      return reply.send({
-        rooms, // effective (for clients)
-        rawRooms,
-        waitlistDemand,
-        lockers,
-        total: rooms.SPECIAL + rooms.DOUBLE + rooms.STANDARD,
-      });
+      const payload = await computeInventoryAvailable(query);
+      return reply.send(payload);
     } catch (error) {
       fastify.log.error(error, 'Failed to fetch available inventory');
       return reply.status(500).send({ error: 'Internal server error' });

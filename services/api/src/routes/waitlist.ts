@@ -307,18 +307,6 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             ]
           );
 
-          // Broadcast waitlist update
-          fastify.broadcaster.broadcast({
-            type: 'WAITLIST_UPDATED',
-            payload: {
-              waitlistId: id,
-              status: 'OFFERED',
-              roomId: body.roomId,
-              roomNumber: room.number,
-            },
-            timestamp: new Date().toISOString(),
-          });
-
           return {
             waitlistId: id,
             status: 'OFFERED',
@@ -326,6 +314,20 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             roomNumber: room.number,
           };
         });
+
+        // Broadcast AFTER commit so refetch-on-event sees the updated DB row immediately.
+        if (fastify.broadcaster) {
+          fastify.broadcaster.broadcast({
+            type: 'WAITLIST_UPDATED',
+            payload: {
+              waitlistId: result.waitlistId,
+              status: 'OFFERED',
+              roomId: result.roomId,
+              roomNumber: result.roomNumber,
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         return reply.send(result);
       } catch (error: unknown) {
@@ -466,21 +468,23 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             ]
           );
 
-          // Broadcast update
-          fastify.broadcaster.broadcast({
-            type: 'WAITLIST_UPDATED',
-            payload: {
-              waitlistId: id,
-              status: 'CANCELLED',
-            },
-            timestamp: new Date().toISOString(),
-          });
-
           return {
             waitlistId: id,
             status: 'CANCELLED',
           };
         });
+
+        // Broadcast AFTER commit so refetch-on-event sees the updated DB row immediately.
+        if (fastify.broadcaster) {
+          fastify.broadcaster.broadcast({
+            type: 'WAITLIST_UPDATED',
+            payload: {
+              waitlistId: result.waitlistId,
+              status: 'CANCELLED',
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         return reply.send(result);
       } catch (error: unknown) {

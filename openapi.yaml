@@ -43,6 +43,8 @@ tags:
     description: Operational metrics and analytics
   - name: Keys
     description: Key tag resolution
+  - name: Documents
+    description: Agreement PDF + signature verification endpoints
 
 paths:
   /v1/health:
@@ -1411,6 +1413,74 @@ paths:
       responses:
         '200':
           description: Cash totals
+
+  /v1/documents/by-session/{sessionId}:
+    get:
+      tags: [Documents]
+      summary: List agreement documents by lane session (verification)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Documents for the session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        doc_type: { type: string, example: AGREEMENT_PDF }
+                        mime_type: { type: string, example: application/pdf }
+                        created_at: { type: string, format: date-time }
+                        has_signature: { type: boolean }
+                        signature_hash_prefix: { type: string, nullable: true }
+                        has_pdf: { type: boolean, nullable: true }
+        '401':
+          description: Unauthorized
+
+  /v1/documents/{documentId}/download:
+    get:
+      tags: [Documents]
+      summary: Download agreement PDF bytes (verification)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Agreement PDF bytes
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Document not found / PDF not stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+        '401':
+          description: Unauthorized
 
 components:
   securitySchemes:

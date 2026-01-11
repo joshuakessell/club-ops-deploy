@@ -26,6 +26,7 @@ import {
   shiftsRoutes,
   timeclockRoutes,
   documentsRoutes,
+  sessionDocumentsRoutes,
   scheduleRoutes,
   timeoffRoutes,
 } from './routes/index.js';
@@ -39,6 +40,7 @@ import { expireWaitlistEntries } from './waitlist/expireWaitlist.js';
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const SKIP_DB = process.env.SKIP_DB === 'true';
+const SEED_ON_STARTUP = process.env.SEED_ON_STARTUP === 'true';
 
 function isWebSocketEventType(value: unknown): value is WebSocketEventType {
   if (typeof value !== 'string') return false;
@@ -142,8 +144,14 @@ async function main() {
 
       // Seed demo data if DEMO_MODE is enabled
       if (process.env.DEMO_MODE === 'true') {
-        fastify.log.info('DEMO_MODE enabled, seeding demo data...');
-        await seedDemoData();
+        if (SEED_ON_STARTUP) {
+          fastify.log.info('DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...');
+          await seedDemoData();
+        } else {
+          fastify.log.info(
+            'DEMO_MODE enabled; skipping demo seed on startup. Run `pnpm demo:seed` or set SEED_ON_STARTUP=true to seed during boot.'
+          );
+        }
       }
     } catch (err) {
       fastify.log.error(err, 'Failed to initialize database');
@@ -174,6 +182,7 @@ async function main() {
   await fastify.register(shiftsRoutes);
   await fastify.register(timeclockRoutes);
   await fastify.register(documentsRoutes);
+  await fastify.register(sessionDocumentsRoutes);
   await fastify.register(scheduleRoutes);
   await fastify.register(timeoffRoutes);
 

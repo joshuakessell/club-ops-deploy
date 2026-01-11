@@ -5,6 +5,7 @@ import { requireAuth, requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding.js';
+import { broadcastInventoryUpdate } from './sessions.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -437,6 +438,11 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
         fastify.broadcaster.broadcastSessionUpdated(payload, body.lane);
       }
 
+      // Broadcast inventory update AFTER commit for immediate UI refresh.
+      if (fastify.broadcaster) {
+        await broadcastInventoryUpdate(fastify.broadcaster);
+      }
+
       return reply.status(201).send(result);
     } catch (error) {
       if (error && typeof error === 'object' && 'statusCode' in error) {
@@ -726,6 +732,11 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           };
 
           fastify.broadcaster.broadcastSessionUpdated(payload, body.lane);
+        }
+
+        // Broadcast inventory update AFTER commit for immediate UI refresh.
+        if (fastify.broadcaster) {
+          await broadcastInventoryUpdate(fastify.broadcaster);
         }
 
         return reply.status(201).send(result);

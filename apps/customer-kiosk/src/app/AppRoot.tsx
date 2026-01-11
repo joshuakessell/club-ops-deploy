@@ -9,7 +9,7 @@ import type {
   SelectionLockedPayload,
   SelectionForcedPayload,
 } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage } from '@club-ops/ui';
+import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { t, type Language } from '../i18n';
 import { type SessionState } from '../utils/membership';
 import { IdleScreen } from '../screens/IdleScreen';
@@ -357,7 +357,9 @@ export function AppRoot() {
     }
   }, []);
 
-  const wsUrl = `ws://${window.location.hostname}:3001/ws?lane=${encodeURIComponent(lane)}`;
+  // Use the local Vite origin + proxy (/ws -> API) so dev/prod behavior stays consistent.
+  const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
   const ws = useReconnectingWebSocket({
     url: wsUrl,
     onMessage: onWsMessage,
@@ -383,11 +385,14 @@ export function AppRoot() {
   }, [ws.connected]);
 
   useEffect(() => {
-    // Check API health
-    fetch(`${API_BASE}/health`)
-      .then((res) => res.json())
-      .then((data: unknown) => {
+    // Check API health (avoid JSON parse crashes on empty/non-JSON responses)
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await readJson<unknown>(res);
         if (
+          !cancelled &&
           isRecord(data) &&
           typeof data.status === 'string' &&
           typeof data.timestamp === 'string' &&
@@ -395,8 +400,10 @@ export function AppRoot() {
         ) {
           setHealth({ status: data.status, timestamp: data.timestamp, uptime: data.uptime });
         }
-      })
-      .catch(console.error);
+      } catch (err) {
+        console.error('Health check failed:', err);
+      }
+    })();
 
     // Fetch initial inventory
     fetch(`${API_BASE}/v1/inventory/available`)
@@ -408,6 +415,9 @@ export function AppRoot() {
       })
       .catch(console.error);
 
+    return () => {
+      cancelled = true;
+    };
   }, [lane]);
 
   // Show a brief welcome overlay when a new session becomes active

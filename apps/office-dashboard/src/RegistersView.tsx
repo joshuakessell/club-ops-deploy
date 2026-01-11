@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { RegisterSessionUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { wsBaseUrl } from './api';
 
 const API_BASE = '/api';
 
@@ -54,7 +55,7 @@ export function RegistersView({ session }: RegistersViewProps) {
   }, []);
 
   useReconnectingWebSocket({
-    url: `ws://${window.location.hostname}:3001/ws`,
+    url: wsBaseUrl(),
     onOpenSendJson: [{ type: 'subscribe', events: ['REGISTER_SESSION_UPDATED'] }],
     onMessage: (event) => {
       const message = safeJsonParse<WebSocketEvent>(String(event.data));

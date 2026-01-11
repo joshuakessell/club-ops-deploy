@@ -4,6 +4,7 @@ import { transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
+import { broadcastInventoryUpdate } from './sessions.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -845,17 +846,6 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
             ]
           );
 
-          // 10. Broadcast inventory and waitlist updates
-          fastify.broadcaster.broadcastInventoryUpdated({ inventory: {} as any }); // Will be refreshed by inventory route
-          fastify.broadcaster.broadcast({
-            type: 'WAITLIST_UPDATED',
-            payload: {
-              waitlistId,
-              status: 'COMPLETED',
-            },
-            timestamp: new Date().toISOString(),
-          });
-
           return {
             waitlistId,
             success: true,
@@ -867,6 +857,19 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
             blockEndsAt: block.ends_at, // Checkout time unchanged
           };
         });
+
+        // Broadcast AFTER commit so refetch-on-event sees updated DB rows immediately.
+        if (fastify.broadcaster) {
+          await broadcastInventoryUpdate(fastify.broadcaster);
+          fastify.broadcaster.broadcast({
+            type: 'WAITLIST_UPDATED',
+            payload: {
+              waitlistId: result.waitlistId,
+              status: 'COMPLETED',
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         return reply.send(result);
       } catch (error: unknown) {

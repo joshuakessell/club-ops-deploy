@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { WebSocketEvent } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { wsBaseUrl } from './api';
 
 const API_BASE = '/api';
 
@@ -762,7 +763,7 @@ function AdminWs({
   onConnectedChange: (connected: boolean) => void;
 }) {
   const ws = useReconnectingWebSocket({
-    url: `ws://${window.location.hostname}:3001/ws`,
+    url: wsBaseUrl(),
     onOpenSendJson: [
       { type: 'subscribe', events: ['INVENTORY_UPDATED', 'ROOM_STATUS_CHANGED', 'SESSION_UPDATED'] },
     ],
