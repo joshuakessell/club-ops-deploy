@@ -251,7 +251,7 @@ describe('Manual Checkout APIs', () => {
     );
     expect(parseFloat(String(customer.rows[0]!.past_due_balance))).toBe(35);
     expect(customer.rows[0]!.banned_until).not.toBeNull();
-    expect(String(customer.rows[0]!.notes || '')).toContain('Manual checkout');
+    expect(String(customer.rows[0]!.notes || '')).toContain('[SYSTEM_LATE_FEE_PENDING]');
 
     const waitlist = await pool.query<{ status: string }>(`SELECT status FROM waitlist WHERE id = $1`, [
       testWaitlistId,

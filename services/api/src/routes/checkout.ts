@@ -12,6 +12,7 @@ import type {
   CheckoutRequestSummary,
 } from '@club-ops/shared';
 import { RoomStatus } from '@club-ops/shared';
+import { buildSystemLateFeeNote } from '../utils/lateFeeNotes.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -162,6 +163,8 @@ interface ManualResolveRow {
   locker_number: string | null;
   session_id: string | null;
 }
+
+type VisitDateRow = { started_at: Date };
 
 function looksLikeUuid(value: string): boolean {
   // Good enough for deciding whether to write staff_id; DB will still enforce UUID shape.
@@ -578,7 +581,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
             ]);
           }
 
-          // Update past due balance if fee > 0
+          // Update past due balance + itemized charge + system note if fee > 0
           if (feeAmount > 0) {
             await client.query(
               `UPDATE customers
@@ -587,22 +590,43 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
                WHERE id = $2`,
               [feeAmount, row.customer_id]
             );
-          }
+            // Record as an itemized charge tied to the visit/block (idempotent per occupancy).
+            const existingLate = await client.query<{ id: string }>(
+              `SELECT id FROM charges WHERE checkin_block_id = $1 AND type = 'LATE_FEE' LIMIT 1`,
+              [row.occupancy_id]
+            );
+            if (existingLate.rows.length === 0) {
+              await client.query(
+                `INSERT INTO charges (visit_id, checkin_block_id, type, amount, payment_intent_id)
+                 VALUES ($1, $2, 'LATE_FEE', $3, NULL)`,
+                [row.visit_id, row.occupancy_id, feeAmount]
+              );
+            }
 
-          // Append note to customers.notes with expected vs actual and fee/ban
-          const noteLine = `[${now.toISOString()}] Manual checkout: expected=${scheduledCheckoutAt.toISOString()} actual=${now.toISOString()} lateMinutes=${lateMinutes} fee=$${feeAmount.toFixed(
-            2
-          )} banApplied=${banApplied}`;
-          await client.query(
-            `UPDATE customers
-             SET notes = CASE
-               WHEN notes IS NULL OR notes = '' THEN $1
-               ELSE notes || E'\\n' || $1
-             END,
-             updated_at = NOW()
-             WHERE id = $2`,
-            [noteLine, row.customer_id]
-          );
+            // System note: visible on next visit, then auto-archived during next successful check-in.
+            const visitRow = await client.query<VisitDateRow>(
+              `SELECT started_at FROM visits WHERE id = $1 LIMIT 1`,
+              [row.visit_id]
+            );
+            const visitDate = visitRow.rows[0]?.started_at
+              ? visitRow.rows[0]!.started_at.toISOString().slice(0, 10)
+              : now.toISOString().slice(0, 10);
+            const noteLine = buildSystemLateFeeNote({
+              lateMinutes,
+              visitDate,
+              feeAmount,
+            });
+            await client.query(
+              `UPDATE customers
+               SET notes = CASE
+                 WHEN notes IS NULL OR notes = '' THEN $1
+                 ELSE notes || E'\\n' || $1
+               END,
+               updated_at = NOW()
+               WHERE id = $2`,
+              [noteLine, row.customer_id]
+            );
+          }
 
           // Log late checkout event if late >= 30 minutes
           if (lateMinutes >= 30) {
@@ -1486,6 +1510,63 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
             await client.query(
               `UPDATE customers SET banned_until = $1, updated_at = NOW() WHERE id = $2`,
               [banUntil, checkoutRequest.customer_id]
+            );
+          }
+
+          // 6b. Late fee bookkeeping (NO amount/rate changes):
+          // - itemize as a charges row
+          // - increment past_due_balance
+          // - append system note (auto-archived on next successful check-in)
+          const feeAmount = Number(checkoutRequest.late_fee_amount) || 0;
+          if (feeAmount > 0) {
+            await client.query(
+              `UPDATE customers
+               SET past_due_balance = past_due_balance + $1,
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [feeAmount, checkoutRequest.customer_id]
+            );
+
+            const existingLate = await client.query<{ id: string }>(
+              `SELECT id FROM charges WHERE checkin_block_id = $1 AND type = 'LATE_FEE' LIMIT 1`,
+              [block.id]
+            );
+            if (existingLate.rows.length === 0) {
+              await client.query(
+                `INSERT INTO charges (visit_id, checkin_block_id, type, amount, payment_intent_id)
+                 VALUES ($1, $2, 'LATE_FEE', $3, NULL)`,
+                [block.visit_id, block.id, feeAmount]
+              );
+            }
+
+            const now = new Date();
+            const scheduledCheckoutAt =
+              block.ends_at instanceof Date ? block.ends_at : new Date(block.ends_at);
+            const lateMinutesActual = Math.max(
+              0,
+              Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60))
+            );
+            const visitRow = await client.query<VisitDateRow>(
+              `SELECT started_at FROM visits WHERE id = $1 LIMIT 1`,
+              [block.visit_id]
+            );
+            const visitDate = visitRow.rows[0]?.started_at
+              ? visitRow.rows[0]!.started_at.toISOString().slice(0, 10)
+              : now.toISOString().slice(0, 10);
+            const noteLine = buildSystemLateFeeNote({
+              lateMinutes: lateMinutesActual,
+              visitDate,
+              feeAmount,
+            });
+            await client.query(
+              `UPDATE customers
+               SET notes = CASE
+                 WHEN notes IS NULL OR notes = '' THEN $1
+                 ELSE notes || E'\\n' || $1
+               END,
+               updated_at = NOW()
+               WHERE id = $2`,
+              [noteLine, checkoutRequest.customer_id]
             );
           }
 

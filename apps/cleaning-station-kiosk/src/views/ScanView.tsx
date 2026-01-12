@@ -52,11 +52,11 @@ export function ScanView({
 }: ScanViewProps) {
   return (
     <div className="app-container">
-    <div className="camera-container" data-camera-mode={cameraFacingMode}>
+      <div className="camera-container" data-camera-mode={cameraFacingMode}>
         <video ref={videoRef} className="camera-preview" autoPlay playsInline muted />
         <canvas ref={canvasRef} className="camera-canvas" style={{ display: 'none' }} />
         {cameraError && (
-          <div className="camera-error">
+          <div className="camera-error glass-effect">
             <p>Camera Error: {cameraError}</p>
             <button className="button-secondary" onClick={onToggleFacingMode}>
               Switch Camera
@@ -74,7 +74,7 @@ export function ScanView({
         )}
       </div>
 
-      <div className="content-panel">
+      <div className="content-panel glass-effect">
         <h1 className="panel-title">Scanned Rooms</h1>
 
         {scannedItems.length === 0 ? (
@@ -85,7 +85,7 @@ export function ScanView({
           <>
             <div className="scanned-list">
               {scannedItems.map((item) => (
-                <div key={item.tagCode} className="scanned-item">
+                <div key={item.tagCode} className="scanned-item glass-effect">
                   <div className="scanned-info">
                     <div className="scanned-room-number">Room {item.room.roomNumber}</div>
                     <div className={`scanned-status status-${item.room.status.toLowerCase()}`}>

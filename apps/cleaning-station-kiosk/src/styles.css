@@ -68,8 +68,6 @@ body {
   transform: translate(-50%, -50%);
   text-align: center;
   padding: 2rem;
-  background: rgba(0, 0, 0, 0.8);
-  border: 2px solid var(--border);
   border-radius: 8px;
 }
 
@@ -98,8 +96,8 @@ body {
 /* Content Panel */
 .content-panel {
   width: 400px;
-  background: var(--bg);
-  border-left: 2px solid var(--border);
+  background: transparent;
+  border-left: none;
   padding: 2rem;
   display: flex;
   flex-direction: column;
@@ -135,8 +133,6 @@ body {
   justify-content: space-between;
   padding: 1rem;
   margin-bottom: 0.75rem;
-  background: var(--cs-bg-card);
-  border: 1px solid var(--border);
   border-radius: var(--cs-radius-lg);
   box-shadow: var(--cs-elevation-1);
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
@@ -144,7 +140,7 @@ body {
 
 .scanned-item:hover {
   box-shadow: var(--cs-elevation-2);
-  border-color: var(--cs-border-light);
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .scanned-info {
@@ -214,47 +210,44 @@ body {
   padding: 1rem;
   font-size: 1.125rem;
   font-weight: 600;
-  border: none;
   border-radius: var(--cs-radius-lg);
   cursor: pointer;
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
   min-height: 48px;
-  box-shadow: var(--cs-elevation-2);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  box-shadow: var(--cs-lg-shadow);
 }
 
 .button-primary {
-  background: var(--button-bg);
-  color: var(--button-text);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 .button-primary:hover:not(:disabled) {
-  background: var(--button-hover);
-  box-shadow: var(--cs-elevation-3);
-  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .button-primary:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: var(--cs-elevation-1);
+  transform: translateY(1px);
 }
 
 .button-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  box-shadow: none;
 }
 
 .button-secondary {
-  background: var(--button-secondary-bg);
-  color: var(--button-secondary-text);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .button-secondary:hover:not(:disabled) {
-  background: var(--cs-bg-hover);
-  border-color: var(--cs-primary);
-  box-shadow: var(--cs-elevation-2);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .button-large {
@@ -633,19 +626,23 @@ body {
 .pin-input {
   width: 100%;
   padding: 1.5rem;
-  background: var(--bg);
-  border: 3px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   border-radius: 0.75rem;
   color: var(--text);
   font-size: 1.5rem;
   text-align: center;
   letter-spacing: 0.5em;
   font-family: monospace;
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  box-shadow: var(--cs-lg-shadow);
 }
 
 .pin-input:focus {
   outline: none;
-  border-color: var(--text);
+  border-color: rgba(255, 255, 255, 0.6);
+  box-shadow: var(--cs-lg-shadow), 0 0 0 2px rgba(255, 255, 255, 0.22);
 }
 
 .pin-input:disabled {
@@ -656,26 +653,25 @@ body {
 .pin-submit-button {
   width: 100%;
   padding: 1.5rem;
-  background: var(--button-bg);
-  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: var(--cs-radius-lg);
-  color: var(--button-text);
+  color: var(--text);
   font-size: 1.25rem;
   font-weight: 600;
   cursor: pointer;
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
-  box-shadow: var(--cs-elevation-2);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  box-shadow: var(--cs-lg-shadow);
 }
 
 .pin-submit-button:hover:not(:disabled) {
-  background: var(--button-hover);
-  box-shadow: var(--cs-elevation-3);
-  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .pin-submit-button:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: var(--cs-elevation-1);
+  transform: translateY(1px);
 }
 
 .pin-submit-button:disabled {

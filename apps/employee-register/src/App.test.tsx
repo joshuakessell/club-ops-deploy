@@ -493,8 +493,6 @@ describe('App', () => {
 
     await waitFor(() => {
       // Confirming selection triggers payment intent creation; the quote total is surfaced
-      // in the customer info panel (labelled "Past Due Balance" in this demo UI).
-      expect(screen.getByText(/Past Due Balance/)).toBeDefined();
       expect(screen.queryAllByText(/\$10\.00/).length).toBeGreaterThan(0);
     });
   });

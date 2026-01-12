@@ -1634,5 +1634,93 @@ describe('Check-in Flow', () => {
         expect(offeredRoom.rows[0]!.assigned_to_customer_id).toBeNull();
       })
     );
+
+    it(
+      'archives system late-fee notes after they are shown on the next visit (manual notes persist)',
+      runIfDbAvailable(async () => {
+        // Seed customer notes: one manual note + one system late-fee note
+        const manual = `[2026-01-01T00:00:00.000Z] Staff: Manual note should persist`;
+        const system = `[SYSTEM_LATE_FEE_PENDING] Late fee ($35.00): customer was 1h 0m late on last visit on 2026-01-12.`;
+        await query(`UPDATE customers SET notes = $1, past_due_balance = 35 WHERE id = $2`, [
+          `${manual}\n${system}`,
+          customerId,
+        ]);
+
+        // Setup room for assignment
+        const roomResult = await query<{ id: string }>(
+          `INSERT INTO rooms (number, type, status, floor)
+           VALUES ('201', 'STANDARD', 'CLEAN', 2)
+           RETURNING id`
+        );
+        const roomId = roomResult.rows[0]!.id;
+
+        // Start lane session
+        const startResponse = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { idScanValue: 'ID123456', membershipScanValue: '12345' },
+        });
+        expect(startResponse.statusCode).toBe(200);
+        const startData = JSON.parse(startResponse.body);
+
+        // Ensure the note is visible on this next visit (via broadcasted SESSION_UPDATED payload)
+        const startEvents = sessionUpdatedEvents.filter((e) => e.lane === laneId);
+        expect(startEvents.length).toBeGreaterThan(0);
+        const last = startEvents[startEvents.length - 1]!;
+        expect(String(last.payload.customerNotes || '')).toContain('[SYSTEM_LATE_FEE_PENDING]');
+        expect(String(last.payload.customerNotes || '')).toContain('Manual note should persist');
+
+        // Complete flow through sign-agreement (successful check-in) which should auto-archive system note
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { confirmedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/assign`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { resourceType: 'room', resourceId: roomId },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/demo-take-payment`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { outcome: 'CASH_SUCCESS' },
+        });
+
+        const sign = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          payload: {
+            signaturePayload:
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            sessionId: startData.sessionId,
+          },
+        });
+        expect(sign.statusCode).toBe(200);
+
+        const notesAfter = await query<{ notes: string | null }>(
+          `SELECT notes FROM customers WHERE id = $1`,
+          [customerId]
+        );
+        const finalNotes = String(notesAfter.rows[0]!.notes || '');
+        expect(finalNotes).toContain('Manual note should persist');
+        expect(finalNotes).not.toContain('[SYSTEM_LATE_FEE_PENDING]');
+      })
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   type ActiveVisit,
   type CheckoutRequestSummary,
@@ -28,6 +28,9 @@ import { CheckoutRequestsBanner } from '../components/register/CheckoutRequestsB
 import { CheckoutVerificationModal } from '../components/register/CheckoutVerificationModal';
 import { RegisterHeader } from '../components/register/RegisterHeader';
 import { RegisterTopActionsBar } from '../components/register/RegisterTopActionsBar';
+import { useEmployeeRegisterTabletUiTweaks } from '../hooks/useEmployeeRegisterTabletUiTweaks';
+import { MeasuredHalfWidthSearchInput } from '../components/register/MeasuredHalfWidthSearchInput';
+import { RequiredTenderOutcomeModal } from '../components/register/modals/RequiredTenderOutcomeModal';
 import { WaitlistNoticeModal } from '../components/register/modals/WaitlistNoticeModal';
 import {
   AlreadyCheckedInModal,
@@ -105,6 +108,8 @@ function generateUUID(): string {
 }
 
 export function AppRoot() {
+  // Tablet usability tweaks (Employee Register ONLY): measure baseline typography before applying CSS bumps.
+  useEmployeeRegisterTabletUiTweaks();
   const tryOpenAlreadyCheckedInModal = (payload: unknown, customerLabel?: string | null): boolean => {
     if (!isRecord(payload)) return false;
     if (payload['code'] !== 'ALREADY_CHECKED_IN') return false;
@@ -290,6 +295,7 @@ export function AppRoot() {
     null
   );
   const [pastDueBlocked, setPastDueBlocked] = useState(false);
+  const [pastDueBalance, setPastDueBalance] = useState<number>(0);
   const [waitlistEntries, setWaitlistEntries] = useState<
     Array<{
       id: string;
@@ -1734,6 +1740,9 @@ export function AppRoot() {
           // Update past-due blocking
           if (payload.pastDueBlocked !== undefined) {
             setPastDueBlocked(payload.pastDueBlocked);
+            if (payload.pastDueBalance !== undefined) {
+              setPastDueBalance(payload.pastDueBalance || 0);
+            }
             if (payload.pastDueBlocked && payload.pastDueBalance && payload.pastDueBalance > 0) {
               setShowPastDueModal(true);
             }
@@ -2281,6 +2290,31 @@ export function AppRoot() {
     }
   };
 
+  const pastDueLineItems = useMemo(() => {
+    const items: Array<{ description: string; amount: number }> = [];
+    const notes = customerNotes || '';
+    for (const line of notes.split('\n')) {
+      const m = line.match(
+        /^\[SYSTEM_LATE_FEE_PENDING\]\s+Late fee\s+\(\$(\d+(?:\.\d{2})?)\):\s+customer was\s+(.+)\s+late on last visit on\s+(\d{4}-\d{2}-\d{2})\./
+      );
+      if (!m) continue;
+      const amount = Number.parseFloat(m[1]!);
+      const dur = m[2]!.trim();
+      const date = m[3]!;
+      if (!Number.isFinite(amount)) continue;
+      items.push({
+        description: `Late fee (last visit ${date}, ${dur} late)`,
+        amount,
+      });
+    }
+
+    if (items.length === 0 && pastDueBalance > 0) {
+      items.push({ description: 'Past due balance', amount: pastDueBalance });
+    }
+
+    return items;
+  }, [customerNotes, pastDueBalance]);
+
   const handleManagerBypass = async () => {
     if (!session?.sessionToken || !currentSessionId || !managerId || !managerPin) {
       alert('Please select manager and enter PIN');
@@ -2646,7 +2680,7 @@ export function AppRoot() {
                       </div>
                     </div>
                   )}
-                  {paymentQuote && paymentQuote.total > 0 && (
+                  {pastDueBalance > 0 && (
                     <div>
                       <div
                         style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
@@ -2657,10 +2691,10 @@ export function AppRoot() {
                         style={{
                           fontWeight: 600,
                           fontSize: '1rem',
-                          color: paymentQuote.total > 0 ? '#f59e0b' : 'inherit',
+                          color: pastDueBalance > 0 ? '#f59e0b' : 'inherit',
                         }}
                       >
-                        ${paymentQuote.total.toFixed(2)}
+                        ${pastDueBalance.toFixed(2)}
                       </div>
                     </div>
                   )}
@@ -3029,23 +3063,21 @@ export function AppRoot() {
                     gap: '0.5rem',
                     alignItems: 'center',
                     marginBottom: '0.5rem',
+                    flexWrap: 'wrap',
                   }}
                 >
                   <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
                     Search Customer
                   </label>
-                  <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                  <span className="er-search-help" style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
                     (type at least 3 letters)
                   </span>
                 </div>
-                <input
+                <MeasuredHalfWidthSearchInput
                   id="customer-search"
-                  type="text"
-                  className="cs-liquid-input"
                   value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  onChange={(next) => setCustomerSearch(next)}
                   placeholder="Start typing name..."
-                  style={{ width: '100%' }}
                   disabled={isSubmitting}
                 />
                 {customerSearchLoading && (
@@ -3276,10 +3308,14 @@ export function AppRoot() {
             onCreateFromNoMatch={handleCreateFromNoMatch}
           />
 
-          {paymentQuote && paymentQuote.total > 0 && (
+          {pastDueBalance > 0 && (
             <PastDuePaymentModal
               isOpen={showPastDueModal}
-              quote={paymentQuote}
+              quote={{
+                total: pastDueBalance,
+                lineItems: pastDueLineItems,
+                messages: [],
+              }}
               onPayInSquare={(outcome, reason) => void handlePastDuePayment(outcome, reason)}
               onManagerBypass={() => {
                 setShowPastDueModal(false);
@@ -3462,66 +3498,16 @@ export function AppRoot() {
             paymentQuote &&
             paymentStatus === 'DUE' &&
             !pastDueBlocked && (
-              <div
-                className="cs-liquid-card"
-                style={{
-                  position: 'fixed',
-                  bottom: assignedResourceType ? '200px' : '0',
-                  left: 0,
-                  right: 0,
-                  borderTop: '2px solid #3b82f6',
-                  padding: '1.5rem',
-                  zIndex: 100,
+              <RequiredTenderOutcomeModal
+                isOpen={true}
+                totalLabel={`Total: $${paymentQuote.total.toFixed(2)}`}
+                isSubmitting={isSubmitting}
+                onConfirm={(choice) => {
+                  if (choice === 'CREDIT_SUCCESS') void handleDemoPayment('CREDIT_SUCCESS');
+                  if (choice === 'CASH_SUCCESS') void handleDemoPayment('CASH_SUCCESS');
+                  if (choice === 'CREDIT_DECLINE') void handleDemoPayment('CREDIT_DECLINE', 'Card declined');
                 }}
-              >
-                <div style={{ marginBottom: '1rem', fontWeight: 600, fontSize: '1.125rem' }}>
-                  Total: ${paymentQuote.total.toFixed(2)}
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => void handleDemoPayment('CREDIT_SUCCESS')}
-                    disabled={isSubmitting}
-                    className="cs-liquid-button"
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Credit Success
-                  </button>
-                  <button
-                    onClick={() => void handleDemoPayment('CASH_SUCCESS')}
-                    disabled={isSubmitting}
-                    className="cs-liquid-button"
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Cash Success
-                  </button>
-                  <button
-                    onClick={() => void handleDemoPayment('CREDIT_DECLINE', 'Card declined')}
-                    disabled={isSubmitting}
-                    className="cs-liquid-button cs-liquid-button--danger"
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Credit Decline
-                  </button>
-                </div>
-              </div>
+              />
             )}
         </div>
       )}

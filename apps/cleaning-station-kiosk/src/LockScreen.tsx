@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { LiquidGlassPinInput } from '@club-ops/ui';
 import {
   isWebAuthnSupported,
   requestAuthenticationOptions,
@@ -104,8 +105,8 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
     }
   };
 
-  const handlePinSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handlePinSubmit = async (e?: FormEvent) => {
+    e?.preventDefault();
 
     if (!staffLookup.trim() || !pin.trim()) {
       setError('Please enter your name/ID and PIN');
@@ -215,7 +216,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             </button>
           </div>
         ) : (
-          <form className="lock-screen-pin" onSubmit={(e) => void handlePinSubmit(e)}>
+          <div className="lock-screen-pin">
             <input
               type="text"
               className="staff-lookup-input"
@@ -225,22 +226,16 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
               disabled={isLoading}
               autoFocus
             />
-            <input
-              type="password"
-              className="pin-input"
-              placeholder="Enter PIN"
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              disabled={isLoading}
+            <LiquidGlassPinInput
               maxLength={10}
+              value={pin}
+              onChange={(next) => setPin(next)}
+              onSubmit={() => void handlePinSubmit()}
+              submitLabel={isLoading ? 'Logging in…' : 'Login'}
+              submitDisabled={isLoading || !staffLookup.trim()}
+              disabled={isLoading}
+              displayAriaLabel="Staff PIN"
             />
-            <button
-              type="submit"
-              className="pin-submit-button"
-              disabled={isLoading || !pin.trim() || !staffLookup.trim()}
-            >
-              {isLoading ? 'Logging in...' : 'Login'}
-            </button>
             {webauthnSupported && (
               <button
                 type="button"
@@ -254,7 +249,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
                 Use fingerprint instead
               </button>
             )}
-          </form>
+          </div>
         )}
       </div>
     </div>

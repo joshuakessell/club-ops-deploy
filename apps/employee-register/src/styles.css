@@ -22,6 +22,138 @@
   --er-topbar-height: 60px;
 }
 
+/* ------------------------------------------------------------
+   Employee Register ONLY: Tablet usability tweaks (runtime-gated)
+
+   We add `.er-ui-tweaks` to `#root` only after measuring baseline
+   computed font sizes (see `useEmployeeRegisterTabletUiTweaks`).
+------------------------------------------------------------ */
+
+.er-ui-tweaks .cs-liquid-button {
+  /* Primary buttons: +10px (~7.5pt) */
+  font-size: calc(var(--er-font-btn-primary-base, 14px) + 10px) !important;
+  line-height: 1.15 !important;
+  padding: 0.85rem 1.15rem !important;
+  min-height: 56px !important;
+  white-space: nowrap;
+  gap: 0.65rem !important;
+}
+
+.er-ui-tweaks .cs-liquid-button.cs-liquid-button--secondary {
+  /* Secondary: slightly smaller bump to keep dense toolbars fitting */
+  font-size: calc(var(--er-font-btn-secondary-base, 14px) + 8px) !important;
+}
+
+.er-ui-tweaks label {
+  /* Labels: +6px (~4.5pt) */
+  font-size: calc(var(--er-font-label-base, 14px) + 6px) !important;
+  line-height: 1.2 !important;
+}
+
+/* Search Customer bar text: input + helper text */
+.er-ui-tweaks #customer-search {
+  font-size: calc(var(--er-font-search-base, 14px) + 10px) !important;
+  line-height: 1.2 !important;
+  padding: 0.9rem 1.15rem !important;
+}
+
+.er-ui-tweaks .typeahead-section span {
+  line-height: 1.2;
+}
+
+/* Search helper text is treated as part of "Search Customer bar text" */
+.er-ui-tweaks .er-search-help {
+  font-size: calc(0.875rem + 6px) !important;
+}
+
+/* Action buttons (icon + label) */
+.er-ui-tweaks .action-buttons {
+  /* Prevent long single-line labels from wrapping by giving more room */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.er-ui-tweaks .action-btn {
+  /* Uses column layout; keep text on one line */
+  white-space: nowrap;
+  font-size: calc(var(--er-font-btn-secondary-base, 14px) + 8px) !important;
+  padding: 1.5rem !important;
+  gap: 0.75rem !important;
+}
+
+.er-ui-tweaks .btn-icon {
+  font-size: calc(var(--er-font-btn-icon-base, 22px) + 8px) !important;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.er-ui-tweaks .cs-liquid-button svg {
+  width: 1.35em;
+  height: 1.35em;
+}
+
+/* Search Customer bar: exactly 50% baseline width, centered (measurement clone) */
+.er-search-half {
+  position: relative;
+  width: 100%;
+}
+
+.er-search-half__measure {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.er-search-half__center {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* Required tender outcome modal (replaces bottom toolbar) */
+.er-required-modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.er-required-modal {
+  width: min(720px, 92vw);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.er-required-modal__title {
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  font-size: 1.6rem;
+}
+
+.er-required-modal__subtitle {
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.er-required-modal__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.er-required-modal__continue {
+  width: 100%;
+}
+
 .er-surface {
   background: var(--er-surface);
   border: 1px solid var(--er-border);

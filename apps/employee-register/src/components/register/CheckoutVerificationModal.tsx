@@ -1,4 +1,6 @@
 import type { CheckoutRequestSummary } from '@club-ops/shared';
+import { computeCheckoutDelta, formatCheckoutDelta } from '@club-ops/shared';
+import { useEffect, useMemo, useState } from 'react';
 
 export interface CheckoutVerificationModalProps {
   request: CheckoutRequestSummary;
@@ -21,6 +23,19 @@ export function CheckoutVerificationModal({
   onComplete,
   onCancel,
 }: CheckoutVerificationModalProps) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const scheduled = useMemo(() => new Date(request.scheduledCheckoutAt), [request.scheduledCheckoutAt]);
+  const delta = useMemo(() => computeCheckoutDelta(now, scheduled), [now, scheduled]);
+  const deltaLabel = useMemo(() => formatCheckoutDelta(delta), [delta]);
+
+  const number = request.roomNumber || request.lockerNumber || 'N/A';
+  const numberLabel = request.roomNumber ? 'Room' : request.lockerNumber ? 'Locker' : 'Rental';
+
   return (
     <div
       style={{
@@ -52,23 +67,37 @@ export function CheckoutVerificationModal({
         </h2>
 
         <div style={{ marginBottom: '1.5rem' }}>
-          <div style={{ marginBottom: '0.5rem' }}>
-            <strong>Customer:</strong> {request.customerName}
-            {request.membershipNumber && ` (${request.membershipNumber})`}
-          </div>
-          <div style={{ marginBottom: '0.5rem' }}>
-            <strong>Rental:</strong> {request.rentalType} •{' '}
-            {request.roomNumber || request.lockerNumber || 'N/A'}
-          </div>
-          <div style={{ marginBottom: '0.5rem' }}>
-            <strong>Scheduled Checkout:</strong>{' '}
-            {new Date(request.scheduledCheckoutAt).toLocaleString()}
-          </div>
-          {request.lateMinutes > 0 && (
-            <div style={{ marginBottom: '0.5rem', color: '#f59e0b' }}>
-              <strong>Late:</strong> {request.lateMinutes} minutes
+          {/* Display order (required):
+              1) Room/Locker Number
+              2) Customer name
+              3) Expected Check Out time
+              4) Delta (remaining/late) with 15-min floor rounding
+          */}
+          <div className="cs-liquid-card glass-effect" style={{ padding: '1rem', marginBottom: '1rem' }}>
+            <div style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '0.01em' }}>
+              {numberLabel} {number}
             </div>
-          )}
+            <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
+              {request.customerName}
+              {request.membershipNumber && (
+                <span style={{ fontWeight: 700, color: '#94a3b8' }}> ({request.membershipNumber})</span>
+              )}
+            </div>
+            <div style={{ marginTop: '0.5rem', color: '#cbd5e1', fontWeight: 700 }}>
+              Expected Check Out:{' '}
+              <span style={{ fontWeight: 800 }}>{scheduled.toLocaleString()}</span>
+            </div>
+            <div
+              style={{
+                marginTop: '0.35rem',
+                fontWeight: 900,
+                color: delta.status === 'late' ? '#f59e0b' : '#10b981',
+              }}
+            >
+              {deltaLabel}
+            </div>
+          </div>
+
           {request.lateFeeAmount > 0 && (
             <div style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
               <strong>Late Fee:</strong> ${request.lateFeeAmount.toFixed(2)}

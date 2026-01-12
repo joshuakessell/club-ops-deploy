@@ -4,6 +4,9 @@ export { RoomStatus, RoomType, BlockType, CheckinMode, RentalType } from './enum
 // Transition validation
 export { isAdjacentTransition, validateTransition, type TransitionResult } from './transitions';
 
+// Checkout display helpers
+export { computeCheckoutDelta, formatCheckoutDelta, type CheckoutDelta, type CheckoutDeltaStatus } from './checkoutDelta';
+
 // Types
 export type {
   Room,

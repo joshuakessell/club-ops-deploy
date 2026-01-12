@@ -4,6 +4,7 @@ import { query, transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, optionalAuth } from '../auth/middleware.js';
 import { verifyPin } from '../auth/utils.js';
 import { generateAgreementPdf } from '../utils/pdf-generator.js';
+import { stripSystemLateFeeNotes } from '../utils/lateFeeNotes.js';
 import { roundUpToQuarterHour } from '../time/rounding.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import { broadcastInventoryUpdate } from './sessions.js';
@@ -3126,6 +3127,23 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               request.ip || null,
             ]
           );
+
+          // Auto-archive system late-fee notes after they have been shown on the next visit.
+          // Manual notes (staff-entered) must persist and are never auto-archived.
+          if (session.customer_id) {
+            const notesRes = await client.query<{ notes: string | null }>(
+              `SELECT notes FROM customers WHERE id = $1 LIMIT 1`,
+              [session.customer_id]
+            );
+            const existing = notesRes.rows[0]?.notes ?? null;
+            const cleaned = stripSystemLateFeeNotes(existing);
+            if (cleaned !== existing) {
+              await client.query(`UPDATE customers SET notes = $1, updated_at = NOW() WHERE id = $2`, [
+                cleaned,
+                session.customer_id,
+              ]);
+            }
+          }
 
           // Update session status
           await client.query(

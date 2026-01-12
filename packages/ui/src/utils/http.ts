@@ -5,12 +5,17 @@ export async function readJson<T>(response: Response): Promise<T> {
     return null as unknown as T;
   }
 
-  const contentType = response.headers.get('content-type') || '';
-  const text = await response.text().catch(() => '');
+  const contentType = response.headers?.get?.('content-type') || '';
+  const hasJson = typeof (response as unknown as { json?: unknown }).json === 'function';
+
+  // Some unit tests mock fetch responses without implementing the full Response interface.
+  // Prefer Response.text() (for better error messages) when available; otherwise fall back to json().
+  const hasText = typeof (response as unknown as { text?: unknown }).text === 'function';
+  const text = hasText ? await response.text().catch(() => '') : '';
   const trimmed = text.trim();
   const snippet = trimmed.length > 500 ? `${trimmed.slice(0, 500)}…` : trimmed;
 
-  const isJson = contentType.includes('application/json');
+  const isJson = contentType.includes('application/json') || (!contentType && hasJson);
 
   if (!response.ok) {
     if (isJson && trimmed) {
@@ -30,6 +35,15 @@ export async function readJson<T>(response: Response): Promise<T> {
     // Gracefully handle empty bodies (common for some endpoints).
     if (!trimmed) return null as unknown as T;
     throw new Error(`Expected JSON but received ${contentType || 'unknown content-type'} — ${snippet}`);
+  }
+
+  // If Response.text() isn't available (test mocks), prefer Response.json().
+  if (!hasText && hasJson) {
+    try {
+      return (await (response as unknown as { json: () => Promise<unknown> }).json()) as T;
+    } catch {
+      return null as unknown as T;
+    }
   }
 
   if (!trimmed) return null as unknown as T;
