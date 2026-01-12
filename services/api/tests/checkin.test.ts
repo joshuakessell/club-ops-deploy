@@ -1105,6 +1105,157 @@ describe('Check-in Flow', () => {
     );
 
     it(
+      'fuzzy-matches by exact DOB + similar name when exact token match fails, and enriches id_scan_hash/value',
+      runIfDbAvailable(async () => {
+        const customerResult = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JOHN DOE', '1980-01-15']
+        );
+        const customerId = customerResult.rows[0]!.id;
+
+        // Scanned first name slightly off so exact token match fails, but fuzzy should pass.
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ555555555\nDCITX\n';
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const data = JSON.parse(response.body);
+        expect(data.result).toBe('MATCHED');
+        expect(data.scanType).toBe('STATE_ID');
+        expect(data.customer.id).toBe(customerId);
+        expect(data.enriched).toBe(true);
+
+        const row = await query<{ id_scan_hash: string | null; id_scan_value: string | null }>(
+          `SELECT id_scan_hash, id_scan_value FROM customers WHERE id = $1`,
+          [customerId]
+        );
+        expect(row.rows[0]!.id_scan_hash).toBeTruthy();
+        expect(row.rows[0]!.id_scan_value).toBeTruthy();
+      })
+    );
+
+    it(
+      'returns MULTIPLE_MATCHES when more than one fuzzy candidate passes thresholds',
+      runIfDbAvailable(async () => {
+        const c1 = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JOHN DOE', '1980-01-15']
+        );
+        const c2 = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JONN DOE', '1980-01-15']
+        );
+        const id1 = c1.rows[0]!.id;
+        const id2 = c2.rows[0]!.id;
+
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ777777777\nDCITX\n';
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const data = JSON.parse(response.body);
+        expect(data.result).toBe('MULTIPLE_MATCHES');
+        expect(data.scanType).toBe('STATE_ID');
+        expect(Array.isArray(data.candidates)).toBe(true);
+        expect(data.candidates.length).toBeGreaterThanOrEqual(2);
+        const ids = data.candidates.map((c: { id: string }) => c.id);
+        expect(ids).toContain(id1);
+        expect(ids).toContain(id2);
+        // Sorted by descending matchScore
+        for (let i = 1; i < data.candidates.length; i++) {
+          expect(data.candidates[i - 1].matchScore).toBeGreaterThanOrEqual(data.candidates[i].matchScore);
+        }
+      })
+    );
+
+    it(
+      'resolves MULTIPLE_MATCHES by selectedCustomerId and enriches id_scan_hash/value',
+      runIfDbAvailable(async () => {
+        const c1 = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JOHN DOE', '1980-01-15']
+        );
+        await query(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())`,
+          ['JONN DOE', '1980-01-15']
+        );
+        const selectedId = c1.rows[0]!.id;
+
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ888888888\nDCITX\n';
+        const initial = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw },
+        });
+        expect(initial.statusCode).toBe(200);
+        const initialData = JSON.parse(initial.body);
+        expect(initialData.result).toBe('MULTIPLE_MATCHES');
+
+        const resolved = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw, selectedCustomerId: selectedId },
+        });
+        expect(resolved.statusCode).toBe(200);
+        const resolvedData = JSON.parse(resolved.body);
+        expect(resolvedData.result).toBe('MATCHED');
+        expect(resolvedData.customer.id).toBe(selectedId);
+
+        const row = await query<{ id_scan_hash: string | null; id_scan_value: string | null }>(
+          `SELECT id_scan_hash, id_scan_value FROM customers WHERE id = $1`,
+          [selectedId]
+        );
+        expect(row.rows[0]!.id_scan_hash).toBeTruthy();
+        expect(row.rows[0]!.id_scan_value).toBeTruthy();
+      })
+    );
+
+    it(
+      'rejects selectedCustomerId resolution when DOB does not match extracted scan (INVALID_SELECTION)',
+      runIfDbAvailable(async () => {
+        const customerResult = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JOHN DOE', '1980-01-16']
+        );
+        const customerId = customerResult.rows[0]!.id;
+
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ999999999\nDCITX\n';
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw, selectedCustomerId: customerId },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const data = JSON.parse(response.body);
+        expect(data.result).toBe('ERROR');
+        expect(data.error.code).toBe('INVALID_SELECTION');
+      })
+    );
+
+    it(
       'matches non-ID scans as membership/general barcode',
       runIfDbAvailable(async () => {
         const customerResult = await query<{ id: string }>(

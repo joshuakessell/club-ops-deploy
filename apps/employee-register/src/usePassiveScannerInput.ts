@@ -1,0 +1,185 @@
+import { useCallback, useEffect, useRef } from 'react';
+
+export type ScannerCapture = {
+  /** Raw captured scan string (may include newlines). */
+  raw: string;
+};
+
+type Options = {
+  enabled: boolean;
+  /**
+   * Called exactly once per capture, with the accumulated scan string.
+   * The hook automatically resets its internal buffer after calling.
+   */
+  onCapture: (capture: ScannerCapture) => void;
+  /** Called when Escape is pressed during an active capture sequence (optional). */
+  onCancel?: () => void;
+  /** Idle timeout used to terminate scans that don't send a suffix key. */
+  idleTimeoutMs?: number;
+  /**
+   * Grace period after an Enter key to decide whether it was a terminator (end-of-scan)
+   * or a line break within a multi-line scan (PDF417). If another character arrives within
+   * this window, we treat Enter as a newline. Otherwise we finalize the scan.
+   */
+  enterGraceMs?: number;
+  /** Minimum trimmed length before emitting a capture. */
+  minLength?: number;
+};
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  const tag = el.tagName?.toLowerCase?.() || '';
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
+/**
+ * Passive keyboard-wedge scanner capture for "scan anywhere" screens.
+ *
+ * Differences vs `useScannerInput`:
+ * - No hidden focus trap (avoids intrusive keyboard behavior on tablets).
+ * - Does NOT block normal typing in editable inputs unless an active scan capture has started.
+ * - Uses a global keydown listener in capture phase.
+ */
+export function usePassiveScannerInput({
+  enabled,
+  onCapture,
+  onCancel,
+  idleTimeoutMs = 75,
+  enterGraceMs = 35,
+  minLength = 4,
+}: Options) {
+  const capturingRef = useRef(false);
+  const bufferRef = useRef('');
+  const timerRef = useRef<number | null>(null);
+  const lastWasEnterRef = useRef(false);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const reset = useCallback(() => {
+    capturingRef.current = false;
+    bufferRef.current = '';
+    lastWasEnterRef.current = false;
+    clearTimer();
+  }, [clearTimer]);
+
+  const finalize = useCallback(() => {
+    clearTimer();
+    capturingRef.current = false;
+    lastWasEnterRef.current = false;
+
+    let raw = bufferRef.current;
+    bufferRef.current = '';
+    if (!raw) return;
+
+    // If the scan ended with a terminator Enter, drop the trailing newline but preserve internal ones.
+    if (raw.endsWith('\n')) {
+      raw = raw.replace(/\n+$/g, '\n').replace(/\n$/, '');
+    }
+
+    if (raw.trim().length < minLength) return;
+    onCapture({ raw });
+  }, [clearTimer, minLength, onCapture]);
+
+  const scheduleFinalize = useCallback(() => {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => finalize(), idleTimeoutMs);
+  }, [clearTimer, finalize, idleTimeoutMs]);
+
+  const scheduleFinalizeAfterEnter = useCallback(() => {
+    clearTimer();
+    timerRef.current = window.setTimeout(
+      () => {
+        if (lastWasEnterRef.current) finalize();
+      },
+      Math.max(0, Math.min(idleTimeoutMs, enterGraceMs))
+    );
+  }, [clearTimer, enterGraceMs, finalize, idleTimeoutMs]);
+
+  useEffect(() => {
+    if (!enabled) {
+      reset();
+      return;
+    }
+    reset();
+    return () => reset();
+  }, [enabled, reset]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      const key = e.key;
+      const editable = isEditableTarget(e.target);
+
+      // If the user is typing in an editable element, do not intercept unless we already started
+      // capturing a scan sequence.
+      if (!capturingRef.current && editable) {
+        return;
+      }
+
+      // If we're not currently capturing, ignore modifier shortcuts and non-printable keys.
+      if (!capturingRef.current && (e.metaKey || e.ctrlKey || e.altKey)) {
+        return;
+      }
+
+      if (capturingRef.current) {
+        // While capturing, prevent scan keystrokes from leaking into UI.
+        e.stopPropagation();
+      }
+
+      if (key === 'Escape') {
+        if (!capturingRef.current) return;
+        e.preventDefault();
+        reset();
+        onCancel?.();
+        return;
+      }
+
+      if (key === 'Tab') {
+        if (!capturingRef.current) return;
+        e.preventDefault();
+        finalize();
+        return;
+      }
+
+      if (key === 'Enter') {
+        // Enter can be internal newline (PDF417) or a terminator suffix.
+        if (!capturingRef.current) return;
+        e.preventDefault();
+        bufferRef.current += '\n';
+        lastWasEnterRef.current = true;
+        scheduleFinalizeAfterEnter();
+        return;
+      }
+
+      if (key.length === 1) {
+        // Start capture on first printable character (when not typing in an editable element).
+        if (!capturingRef.current) capturingRef.current = true;
+        e.preventDefault();
+        lastWasEnterRef.current = false;
+        bufferRef.current += key;
+        scheduleFinalize();
+        return;
+      }
+
+      // Ignore other keys (arrows, function keys, etc.)
+      if (capturingRef.current) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDownCapture, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDownCapture, { capture: true });
+  }, [enabled, finalize, onCancel, reset, scheduleFinalize, scheduleFinalizeAfterEnter]);
+
+  return { reset };
+}
+

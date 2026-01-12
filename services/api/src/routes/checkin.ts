@@ -348,6 +348,150 @@ function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity {
   }
 }
 
+type NormalizedNameParts = {
+  normalizedFull: string;
+  firstToken: string;
+  lastToken: string;
+};
+
+function normalizePersonNameForMatch(input: string): string {
+  // Rules:
+  // - lower-case
+  // - trim
+  // - remove punctuation (keep letters, numbers, spaces)
+  // - collapse whitespace
+  // - remove common suffix tokens at end: jr, sr, ii, iii, iv
+  const lowered = input.toLowerCase().trim();
+  const noPunct = lowered.replace(/[^a-z0-9 ]+/g, ' ');
+  const collapsed = noPunct.replace(/\s+/g, ' ').trim();
+  if (!collapsed) return '';
+  const tokens = collapsed.split(' ').filter(Boolean);
+  const suffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
+  while (tokens.length > 1 && suffixes.has(tokens[tokens.length - 1]!)) {
+    tokens.pop();
+  }
+  return tokens.join(' ');
+}
+
+function splitNamePartsForMatch(input: string): NormalizedNameParts | null {
+  const normalizedFull = normalizePersonNameForMatch(input);
+  if (!normalizedFull) return null;
+  const tokens = normalizedFull.split(' ').filter(Boolean);
+  if (tokens.length === 0) return null;
+  const firstToken = tokens[0]!;
+  const lastToken = tokens[tokens.length - 1]!;
+  return { normalizedFull, firstToken, lastToken };
+}
+
+function jaroWinklerSimilarity(aRaw: string, bRaw: string): number {
+  // Deterministic lightweight string similarity. Returns 0..1.
+  const a = aRaw;
+  const b = bRaw;
+  if (a === b) return a.length === 0 ? 0 : 1;
+  const aLen = a.length;
+  const bLen = b.length;
+  if (aLen === 0 || bLen === 0) return 0;
+
+  const matchDistance = Math.max(0, Math.floor(Math.max(aLen, bLen) / 2) - 1);
+  const aMatches = new Array<boolean>(aLen).fill(false);
+  const bMatches = new Array<boolean>(bLen).fill(false);
+
+  let matches = 0;
+  for (let i = 0; i < aLen; i++) {
+    const start = Math.max(0, i - matchDistance);
+    const end = Math.min(i + matchDistance + 1, bLen);
+    for (let j = start; j < end; j++) {
+      if (bMatches[j]) continue;
+      if (a[i] !== b[j]) continue;
+      aMatches[i] = true;
+      bMatches[j] = true;
+      matches++;
+      break;
+    }
+  }
+  if (matches === 0) return 0;
+
+  let t = 0;
+  let k = 0;
+  for (let i = 0; i < aLen; i++) {
+    if (!aMatches[i]) continue;
+    while (k < bLen && !bMatches[k]) k++;
+    if (k < bLen && a[i] !== b[k]) t++;
+    k++;
+  }
+  const transpositions = t / 2;
+
+  const jaro =
+    (matches / aLen + matches / bLen + (matches - transpositions) / matches) / 3;
+
+  // Winkler adjustment
+  const prefixMax = 4;
+  let prefix = 0;
+  for (let i = 0; i < Math.min(prefixMax, aLen, bLen); i++) {
+    if (a[i] === b[i]) prefix++;
+    else break;
+  }
+  const p = 0.1;
+  const jw = jaro + prefix * p * (1 - jaro);
+  return Math.max(0, Math.min(1, jw));
+}
+
+const FUZZY_MIN_OVERALL = 0.88;
+const FUZZY_MIN_LAST = 0.9;
+const FUZZY_MIN_FIRST = 0.85;
+
+function scoreNameMatch(params: {
+  scannedFirst: string;
+  scannedLast: string;
+  storedFirst: string;
+  storedLast: string;
+}): {
+  score: number;
+  firstMax: number;
+  lastMax: number;
+} {
+  const firstDirect = jaroWinklerSimilarity(params.scannedFirst, params.storedFirst);
+  const lastDirect = jaroWinklerSimilarity(params.scannedLast, params.storedLast);
+  const direct = (firstDirect + lastDirect) / 2;
+
+  const firstSwapped = jaroWinklerSimilarity(params.scannedFirst, params.storedLast);
+  const lastSwapped = jaroWinklerSimilarity(params.scannedLast, params.storedFirst);
+  const swapped = (firstSwapped + lastSwapped) / 2;
+
+  const score = Math.max(direct, swapped);
+  const firstMax = Math.max(firstDirect, firstSwapped);
+  const lastMax = Math.max(lastDirect, lastSwapped);
+  return { score, firstMax, lastMax };
+}
+
+function passesFuzzyThresholds(score: { score: number; firstMax: number; lastMax: number }): boolean {
+  return (
+    score.score >= FUZZY_MIN_OVERALL &&
+    score.lastMax >= FUZZY_MIN_LAST &&
+    score.firstMax >= FUZZY_MIN_FIRST
+  );
+}
+
+async function maybeAttachScanIdentifiers(params: {
+  client: PoolClient;
+  customerId: string;
+  existingIdScanHash: string | null;
+  existingIdScanValue: string | null;
+  idScanHash: string;
+  idScanValue: string;
+}): Promise<void> {
+  if (params.existingIdScanHash && params.existingIdScanValue) return;
+  await params.client.query(
+    `UPDATE customers
+     SET id_scan_hash = COALESCE(id_scan_hash, $1),
+         id_scan_value = COALESCE(id_scan_value, $2),
+         updated_at = NOW()
+     WHERE id = $3
+       AND (id_scan_hash IS NULL OR id_scan_value IS NULL)`,
+    [params.idScanHash, params.idScanValue, params.customerId]
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -1117,6 +1261,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   const CheckinScanBodySchema = z.object({
     laneId: z.string().min(1),
     rawScanText: z.string().min(1),
+    selectedCustomerId: z.string().uuid().optional(),
   });
 
   fastify.post('/v1/checkin/scan', { preHandler: [requireAuth] }, async (request, reply) => {
@@ -1143,6 +1288,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const isAamva = isLikelyAamvaPdf417Text(normalized);
+    if (body.selectedCustomerId && !isAamva) {
+      return reply.status(400).send({
+        result: 'ERROR',
+        error: { code: 'INVALID_SELECTION', message: 'Selected customer does not match this scan' },
+      });
+    }
 
     try {
       const result = await transaction(async (client) => {
@@ -1172,6 +1323,94 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           const idScanValue = normalized;
           const idScanHash = computeSha256Hex(idScanValue);
 
+          // Employee-choice resolution (step after MULTIPLE_MATCHES)
+          if (body.selectedCustomerId) {
+            const selected = await client.query<CustomerIdentityRow>(
+              `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+               FROM customers
+               WHERE id = $1
+               LIMIT 1`,
+              [body.selectedCustomerId]
+            );
+            if (selected.rows.length === 0) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+            const chosen = selected.rows[0]!;
+
+            // Only allow selection resolution when scan has the identity fields needed.
+            if (!extracted.dob || !extracted.firstName || !extracted.lastName) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+
+            const chosenDob = chosen.dob ? chosen.dob.toISOString().slice(0, 10) : null;
+            if (chosenDob !== extracted.dob) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+
+            const scannedParts = splitNamePartsForMatch(
+              `${extracted.firstName} ${extracted.lastName}`.trim()
+            );
+            const storedParts = splitNamePartsForMatch(chosen.name);
+            if (!scannedParts || !storedParts) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+
+            const fuzzy = scoreNameMatch({
+              scannedFirst: scannedParts.firstToken,
+              scannedLast: scannedParts.lastToken,
+              storedFirst: storedParts.firstToken,
+              storedLast: storedParts.lastToken,
+            });
+            if (!passesFuzzyThresholds(fuzzy)) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+
+            checkBanned(chosen);
+            await maybeAttachScanIdentifiers({
+              client,
+              customerId: chosen.id,
+              existingIdScanHash: chosen.id_scan_hash,
+              existingIdScanValue: chosen.id_scan_value,
+              idScanHash,
+              idScanValue,
+            });
+
+            return {
+              result: 'MATCHED' as const,
+              scanType: 'STATE_ID' as const,
+              normalizedRawScanText: idScanValue,
+              idScanHash,
+              customer: {
+                id: chosen.id,
+                name: chosen.name,
+                dob: chosen.dob ? chosen.dob.toISOString().slice(0, 10) : null,
+                membershipNumber: chosen.membership_number,
+              },
+              extracted,
+              enriched: Boolean(!chosen.id_scan_hash || !chosen.id_scan_value),
+            };
+          }
+
           // Matching order:
           // 1) customers.id_scan_hash OR customers.id_scan_value
           const byHashOrValue = await client.query<CustomerIdentityRow>(
@@ -1190,16 +1429,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             checkBanned(matched);
 
             // Ensure both identifiers are persisted for future instant matches.
-            if (!matched.id_scan_hash || !matched.id_scan_value) {
-              await client.query(
-                `UPDATE customers
-                 SET id_scan_hash = COALESCE(id_scan_hash, $1),
-                     id_scan_value = COALESCE(id_scan_value, $2),
-                     updated_at = NOW()
-                 WHERE id = $3`,
-                [idScanHash, idScanValue, matched.id]
-              );
-            }
+            await maybeAttachScanIdentifiers({
+              client,
+              customerId: matched.id,
+              existingIdScanHash: matched.id_scan_hash,
+              existingIdScanValue: matched.id_scan_value,
+              idScanHash,
+              idScanValue,
+            });
 
             return {
               result: 'MATCHED' as const,
@@ -1237,14 +1474,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 checkBanned(matched);
 
                 // Enrich customer for future instant matches
-                await client.query(
-                  `UPDATE customers
-                   SET id_scan_hash = COALESCE(id_scan_hash, $1),
-                       id_scan_value = COALESCE(id_scan_value, $2),
-                       updated_at = NOW()
-                   WHERE id = $3`,
-                  [idScanHash, idScanValue, matched.id]
-                );
+                await maybeAttachScanIdentifiers({
+                  client,
+                  customerId: matched.id,
+                  existingIdScanHash: matched.id_scan_hash,
+                  existingIdScanValue: matched.id_scan_value,
+                  idScanHash,
+                  idScanValue,
+                });
 
                 return {
                   result: 'MATCHED' as const,
@@ -1258,8 +1495,83 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                     membershipNumber: matched.membership_number,
                   },
                   extracted,
-                  enriched: true,
+                  enriched: Boolean(!matched.id_scan_hash || !matched.id_scan_value),
                 };
+              }
+
+              // 2b) fuzzy match: exact DOB filter in SQL, then deterministic similarity in app code
+              const scannedParts = splitNamePartsForMatch(
+                `${extracted.firstName} ${extracted.lastName}`.trim()
+              );
+              if (scannedParts) {
+                const candidatesByDob = await client.query<CustomerIdentityRow>(
+                  `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+                   FROM customers
+                   WHERE dob = $1::date
+                   LIMIT 200`,
+                  [dobStr]
+                );
+
+                const scored = candidatesByDob.rows
+                  .map((row) => {
+                    const storedParts = splitNamePartsForMatch(row.name);
+                    if (!storedParts) return null;
+                    const s = scoreNameMatch({
+                      scannedFirst: scannedParts.firstToken,
+                      scannedLast: scannedParts.lastToken,
+                      storedFirst: storedParts.firstToken,
+                      storedLast: storedParts.lastToken,
+                    });
+                    return { row, score: s };
+                  })
+                  .filter((x): x is { row: CustomerIdentityRow; score: { score: number; firstMax: number; lastMax: number } } =>
+                    Boolean(x && passesFuzzyThresholds(x.score))
+                  )
+                  .sort((a, b) => b.score.score - a.score.score);
+
+                if (scored.length === 1) {
+                  const matched = scored[0]!.row;
+                  checkBanned(matched);
+                  await maybeAttachScanIdentifiers({
+                    client,
+                    customerId: matched.id,
+                    existingIdScanHash: matched.id_scan_hash,
+                    existingIdScanValue: matched.id_scan_value,
+                    idScanHash,
+                    idScanValue,
+                  });
+                  return {
+                    result: 'MATCHED' as const,
+                    scanType: 'STATE_ID' as const,
+                    normalizedRawScanText: idScanValue,
+                    idScanHash,
+                    customer: {
+                      id: matched.id,
+                      name: matched.name,
+                      dob: matched.dob ? matched.dob.toISOString().slice(0, 10) : null,
+                      membershipNumber: matched.membership_number,
+                    },
+                    extracted,
+                    enriched: Boolean(!matched.id_scan_hash || !matched.id_scan_value),
+                  };
+                }
+
+                if (scored.length > 1) {
+                  return {
+                    result: 'MULTIPLE_MATCHES' as const,
+                    scanType: 'STATE_ID' as const,
+                    normalizedRawScanText: idScanValue,
+                    idScanHash,
+                    extracted,
+                    candidates: scored.slice(0, 10).map(({ row, score }) => ({
+                      id: row.id,
+                      name: row.name,
+                      dob: row.dob ? row.dob.toISOString().slice(0, 10) : null,
+                      membershipNumber: row.membership_number,
+                      matchScore: score.score,
+                    })),
+                  };
+                }
               }
             }
           }

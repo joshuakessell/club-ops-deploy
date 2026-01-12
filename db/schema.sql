@@ -1403,6 +1403,13 @@ CREATE INDEX idx_customers_id_hash ON public.customers USING btree (id_scan_hash
 
 
 --
+-- Name: idx_customers_dob; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customers_dob ON public.customers USING btree (dob) WHERE (dob IS NOT NULL);
+
+
+--
 -- Name: idx_customers_membership; Type: INDEX; Schema: public; Owner: -
 --
 

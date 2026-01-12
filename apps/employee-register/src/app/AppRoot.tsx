@@ -43,12 +43,17 @@ import { UpgradePaymentModal } from '../components/register/modals/UpgradePaymen
 import { AddNoteModal } from '../components/register/modals/AddNoteModal';
 import { MembershipIdPromptModal } from '../components/register/modals/MembershipIdPromptModal';
 import { ModalFrame } from '../components/register/modals/ModalFrame';
+import {
+  MultipleMatchesModal,
+  type MultipleMatchCandidate,
+} from '../components/register/modals/MultipleMatchesModal';
 import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclineToast';
 import { RegisterSideDrawers } from '../components/drawers/RegisterSideDrawers';
 import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerContent';
 import { InventoryDrawer, type InventoryDrawerSection } from '../components/inventory/InventoryDrawer';
 import { InventorySummaryBar } from '../components/inventory/InventorySummaryBar';
 import { useRegisterTopActionsOverlays } from '../components/register/useRegisterTopActionsOverlays';
+import { usePassiveScannerInput } from '../usePassiveScannerInput';
 
 interface HealthStatus {
   status: string;
@@ -213,6 +218,26 @@ export function AppRoot() {
       postalCode?: string;
     };
   } | null>(null);
+  const [showCreateFromScanPrompt, setShowCreateFromScanPrompt] = useState(false);
+  const [createFromScanError, setCreateFromScanError] = useState<string | null>(null);
+  const [createFromScanSubmitting, setCreateFromScanSubmitting] = useState(false);
+
+  const [pendingScanResolution, setPendingScanResolution] = useState<null | {
+    rawScanText: string;
+    extracted?: {
+      firstName?: string;
+      lastName?: string;
+      fullName?: string;
+      dob?: string;
+      idNumber?: string;
+      issuer?: string;
+      jurisdiction?: string;
+    };
+    candidates: MultipleMatchCandidate[];
+  }>(null);
+  const [scanResolutionError, setScanResolutionError] = useState<string | null>(null);
+  const [scanResolutionSubmitting, setScanResolutionSubmitting] = useState(false);
+  const [scanToastMessage, setScanToastMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [agreementSigned, setAgreementSigned] = useState(false);
@@ -883,7 +908,7 @@ export function AppRoot() {
       }
 
       const data = payload as {
-        result: 'MATCHED' | 'NO_MATCH' | 'ERROR';
+        result: 'MATCHED' | 'NO_MATCH' | 'MULTIPLE_MATCHES' | 'ERROR';
         scanType?: 'STATE_ID' | 'MEMBERSHIP';
         customer?: { id: string; name: string; membershipNumber: string | null };
         extracted?: {
@@ -895,6 +920,13 @@ export function AppRoot() {
           issuer?: string;
           jurisdiction?: string;
         };
+        candidates?: Array<{
+          id: string;
+          name: string;
+          dob: string | null;
+          membershipNumber: string | null;
+          matchScore: number;
+        }>;
         normalizedRawScanText?: string;
         idScanHash?: string;
         membershipCandidate?: string;
@@ -907,8 +939,35 @@ export function AppRoot() {
 
       if (data.result === 'MATCHED' && data.customer?.id) {
         setPendingCreateFromScan(null);
+        setShowCreateFromScanPrompt(false);
+        setCreateFromScanError(null);
+        setPendingScanResolution(null);
+        setScanResolutionError(null);
         // Open customer record (start lane session) using the resolved customerId.
         return await startLaneSessionByCustomerId(data.customer.id, { suppressAlerts: true });
+      }
+
+      if (data.result === 'MULTIPLE_MATCHES' && data.scanType === 'STATE_ID') {
+        const extracted = data.extracted || {};
+        setPendingCreateFromScan(null);
+        setShowCreateFromScanPrompt(false);
+        setCreateFromScanError(null);
+        setScanResolutionError(null);
+        setPendingScanResolution({
+          rawScanText,
+          extracted: {
+            firstName: extracted.firstName,
+            lastName: extracted.lastName,
+            fullName: extracted.fullName,
+            dob: extracted.dob,
+            idNumber: extracted.idNumber,
+            issuer: extracted.issuer,
+            jurisdiction: extracted.jurisdiction,
+          },
+          candidates: (data.candidates || []).slice(0, 10),
+        });
+        // Close ScanMode overlay (if open) so the employee can select the correct customer.
+        return { outcome: 'matched' };
       }
 
       // NO_MATCH
@@ -948,6 +1007,111 @@ export function AppRoot() {
     }
   };
 
+  const blockingModalOpen =
+    !!pendingScanResolution ||
+    showCreateFromScanPrompt ||
+    !!alreadyCheckedIn ||
+    showPastDueModal ||
+    showManagerBypassModal ||
+    showMembershipIdPrompt ||
+    showUpgradePaymentModal ||
+    showAddNoteModal ||
+    documentsModalOpen ||
+    !!offerUpgradeModal ||
+    (showWaitlistModal && !!waitlistDesiredTier && !!waitlistBackupType) ||
+    (showCustomerConfirmationPending && !!customerConfirmationType) ||
+    !!selectedCheckoutRequest;
+
+  const passiveScanEnabled =
+    !!session?.sessionToken && !scanModeOpen && !isSubmitting && !manualEntry && !blockingModalOpen;
+
+  const handlePassiveCapture = useCallback(
+    (rawScanText: string) => {
+      void (async () => {
+        setScanToastMessage(null);
+        const result = await onBarcodeCaptured(rawScanText);
+        if (result.outcome === 'no_match') {
+          if (result.canCreate) {
+            setCreateFromScanError(null);
+            setShowCreateFromScanPrompt(true);
+          } else {
+            setScanToastMessage(result.message);
+          }
+          return;
+        }
+        if (result.outcome === 'error') {
+          setScanToastMessage(result.message);
+        }
+      })();
+    },
+    [onBarcodeCaptured]
+  );
+
+  usePassiveScannerInput({
+    enabled: passiveScanEnabled,
+    onCapture: ({ raw }) => handlePassiveCapture(raw),
+  });
+
+  const resolvePendingScanSelection = useCallback(
+    async (customerId: string) => {
+      if (!pendingScanResolution) return;
+      if (!session?.sessionToken) {
+        setScanResolutionError('Not authenticated');
+        return;
+      }
+      setScanResolutionSubmitting(true);
+      setScanResolutionError(null);
+      try {
+        const response = await fetch(`${API_BASE}/v1/checkin/scan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({
+            laneId: lane,
+            rawScanText: pendingScanResolution.rawScanText,
+            selectedCustomerId: customerId,
+          }),
+        });
+
+        const payload: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const msg =
+            (payload as { error?: { message?: string } } | null)?.error?.message ||
+            getErrorMessage(payload) ||
+            'Failed to resolve scan';
+          setScanResolutionError(msg);
+          return;
+        }
+
+        const data = payload as {
+          result: 'MATCHED' | 'NO_MATCH' | 'MULTIPLE_MATCHES' | 'ERROR';
+          customer?: { id?: string };
+          error?: { code?: string; message?: string };
+        };
+
+        if (data.result === 'ERROR') {
+          setScanResolutionError(data.error?.message || 'Failed to resolve scan');
+          return;
+        }
+        if (data.result === 'MATCHED' && data.customer?.id) {
+          setPendingScanResolution(null);
+          setScanResolutionError(null);
+          await startLaneSessionByCustomerId(data.customer.id, { suppressAlerts: true });
+          return;
+        }
+
+        setScanResolutionError('Could not resolve scan. Please try again.');
+      } catch (err) {
+        setScanResolutionError(err instanceof Error ? err.message : 'Failed to resolve scan');
+      } finally {
+        setScanResolutionSubmitting(false);
+      }
+    },
+    [lane, pendingScanResolution, session?.sessionToken, startLaneSessionByCustomerId]
+  );
+
   const handleCreateFromNoMatch = async (): Promise<ScanModeResult> => {
     if (!pendingCreateFromScan) {
       return { outcome: 'error', message: 'Nothing to create (no pending scan)' };
@@ -977,11 +1141,6 @@ export function AppRoot() {
           firstName,
           lastName,
           dob,
-          fullName: extracted.fullName || undefined,
-          addressLine1: extracted.addressLine1 || undefined,
-          city: extracted.city || undefined,
-          state: extracted.state || undefined,
-          postalCode: extracted.postalCode || undefined,
         }),
       });
 
@@ -998,6 +1157,8 @@ export function AppRoot() {
       }
 
       setPendingCreateFromScan(null);
+      setShowCreateFromScanPrompt(false);
+      setCreateFromScanError(null);
       return await startLaneSessionByCustomerId(customerId, { suppressAlerts: true });
     } catch (error) {
       console.error('Failed to create customer from scan:', error);
@@ -3297,6 +3458,100 @@ export function AppRoot() {
             }
           />
 
+          <MultipleMatchesModal
+            isOpen={!!pendingScanResolution}
+            candidates={pendingScanResolution?.candidates || []}
+            errorMessage={scanResolutionError}
+            isSubmitting={scanResolutionSubmitting}
+            onCancel={() => {
+              setPendingScanResolution(null);
+              setScanResolutionError(null);
+            }}
+            onSelect={(customerId) => void resolvePendingScanSelection(customerId)}
+          />
+
+          <ModalFrame
+            isOpen={showCreateFromScanPrompt && !!pendingCreateFromScan}
+            title="No match found"
+            onClose={() => {
+              setShowCreateFromScanPrompt(false);
+              setPendingCreateFromScan(null);
+              setCreateFromScanError(null);
+              setCreateFromScanSubmitting(false);
+            }}
+            maxWidth="720px"
+            closeOnOverlayClick={false}
+          >
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              <div style={{ color: '#94a3b8' }}>
+                Create a new customer profile using the scanned First Name, Last Name, and DOB.
+              </div>
+
+              {createFromScanError ? (
+                <div
+                  style={{
+                    padding: '0.75rem',
+                    background: 'rgba(239, 68, 68, 0.18)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: 12,
+                    color: '#fecaca',
+                    fontWeight: 800,
+                  }}
+                >
+                  {createFromScanError}
+                </div>
+              ) : null}
+
+              <div className="cs-liquid-card" style={{ padding: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', color: '#94a3b8' }}>
+                  <span>
+                    First: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.firstName || '—'}</strong>
+                  </span>
+                  <span>
+                    Last: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.lastName || '—'}</strong>
+                  </span>
+                  <span>
+                    DOB: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.dob || '—'}</strong>
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  disabled={createFromScanSubmitting || isSubmitting}
+                  onClick={() => {
+                    setShowCreateFromScanPrompt(false);
+                    setPendingCreateFromScan(null);
+                    setCreateFromScanError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="cs-liquid-button"
+                  disabled={createFromScanSubmitting || isSubmitting || !pendingCreateFromScan}
+                  onClick={() => {
+                    void (async () => {
+                      setCreateFromScanSubmitting(true);
+                      setCreateFromScanError(null);
+                      try {
+                        const r = await handleCreateFromNoMatch();
+                        if (r.outcome !== 'matched') {
+                          setCreateFromScanError(r.message);
+                        }
+                      } finally {
+                        setCreateFromScanSubmitting(false);
+                      }
+                    })();
+                  }}
+                >
+                  {createFromScanSubmitting ? 'Creating…' : 'Create Customer'}
+                </button>
+              </div>
+            </div>
+          </ModalFrame>
+
           {/* Full-screen Scan Mode (keyboard-wedge scanner; no iPad camera) */}
           <ScanMode
             isOpen={scanModeOpen}
@@ -3404,6 +3659,38 @@ export function AppRoot() {
           />
 
           <PaymentDeclineToast message={paymentDeclineError} onDismiss={() => setPaymentDeclineError(null)} />
+          {scanToastMessage && (
+            <div
+              style={{
+                position: 'fixed',
+                top: '1rem',
+                left: '1rem',
+                background: '#0f172a',
+                color: 'white',
+                padding: '1rem',
+                borderRadius: '12px',
+                zIndex: 1500,
+                maxWidth: '480px',
+                border: '1px solid rgba(148, 163, 184, 0.18)',
+                boxShadow: '0 6px 16px rgba(0, 0, 0, 0.35)',
+              }}
+              role="status"
+              aria-label="Scan message"
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                <div style={{ fontWeight: 900 }}>Scan</div>
+                <button
+                  onClick={() => setScanToastMessage(null)}
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  style={{ padding: '0.2rem 0.55rem' }}
+                  aria-label="Dismiss"
+                >
+                  ×
+                </button>
+              </div>
+              <div style={{ marginTop: '0.5rem', color: '#cbd5e1' }}>{scanToastMessage}</div>
+            </div>
+          )}
           {topActions.overlays}
 
           {/* Agreement + Assignment Display */}
