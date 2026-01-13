@@ -367,10 +367,11 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
          FROM rooms r
          LEFT JOIN customers c ON r.assigned_to_customer_id = c.id
          LEFT JOIN LATERAL (
-           SELECT starts_at, ends_at
+           SELECT cb.starts_at, cb.ends_at
            FROM checkin_blocks cb
+           JOIN visits v ON v.id = cb.visit_id
            WHERE cb.room_id = r.id
-             AND cb.ends_at > NOW()
+             AND v.ended_at IS NULL
            ORDER BY cb.ends_at DESC
            LIMIT 1
          ) cb ON TRUE
@@ -402,10 +403,11 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
          FROM lockers l
          LEFT JOIN customers c ON l.assigned_to_customer_id = c.id
          LEFT JOIN LATERAL (
-           SELECT starts_at, ends_at
+           SELECT cb.starts_at, cb.ends_at
            FROM checkin_blocks cb
+           JOIN visits v ON v.id = cb.visit_id
            WHERE cb.locker_id = l.id
-             AND cb.ends_at > NOW()
+             AND v.ended_at IS NULL
            ORDER BY cb.ends_at DESC
            LIMIT 1
          ) cb ON TRUE

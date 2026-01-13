@@ -35,3 +35,4 @@ Thumbs.db
 *.tsbuildinfo
 
 services/api/tests/_artifacts/agreement.generated.pdf
+services/api/tests/_artifacts/agreement.generated.pdf
