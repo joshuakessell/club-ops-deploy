@@ -11,7 +11,7 @@ import type {
 } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { t, type Language } from '../i18n';
-import { type SessionState } from '../utils/membership';
+import { getMembershipStatus, type SessionState } from '../utils/membership';
 import { IdleScreen } from '../screens/IdleScreen';
 import { LanguageScreen } from '../screens/LanguageScreen';
 import { SelectionScreen } from '../screens/SelectionScreen';
@@ -90,6 +90,7 @@ export function AppRoot() {
   const [membershipModalIntent, setMembershipModalIntent] = useState<'PURCHASE' | 'RENEW' | null>(
     null
   );
+  const [membershipChoice, setMembershipChoice] = useState<'ONE_TIME' | 'SIX_MONTH' | null>(null);
 
   // Inject pulse animation for proposal highlight
   useEffect(() => {
@@ -114,6 +115,23 @@ export function AppRoot() {
   useEffect(() => {
     sessionIdRef.current = session.sessionId;
   }, [session.sessionId]);
+
+  // Explicit membership choice step (non-members only): reset when session changes.
+  useEffect(() => {
+    setMembershipChoice(null);
+  }, [session.sessionId]);
+
+  // If the server indicates a 6-month membership intent is already selected, reflect it in the explicit choice step.
+  // (We intentionally do NOT auto-select ONE_TIME when intent is null.)
+  useEffect(() => {
+    const status = getMembershipStatus(session, Date.now());
+    const isMember = status === 'ACTIVE' || status === 'PENDING';
+    if (isMember) return;
+    if (session.membershipPurchaseIntent && membershipChoice !== 'SIX_MONTH') {
+      setMembershipChoice('SIX_MONTH');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.sessionId, session.membershipPurchaseIntent, session.membershipValidUntil, session.membershipNumber]);
 
   // Get lane from URL pathname pattern, query param, or sessionStorage fallback
   // Priority: /register-1 => lane-1, /register-2 => lane-2, etc.
@@ -479,15 +497,15 @@ export function AppRoot() {
   // Load active agreement when agreement view is shown
   useEffect(() => {
     const lang = session.customerPrimaryLanguage;
-    if (view === 'agreement' && !agreement) {
+    if (view === 'agreement') {
       fetch(`${API_BASE}/v1/agreements/active`)
         .then((res) => res.json())
         .then((data: Agreement) => {
           setAgreement({
             id: data.id,
             version: data.version,
-            title: data.title,
-            bodyText: data.bodyText,
+            title: lang === 'ES' ? t(lang, 'agreementTitle') : data.title,
+            bodyText: lang === 'ES' ? t(lang, 'agreement.legalBodyHtml') : data.bodyText,
           });
         })
         .catch((error) => {
@@ -495,7 +513,7 @@ export function AppRoot() {
           alert(t(lang, 'error.loadAgreement'));
         });
     }
-  }, [view, agreement, session.customerPrimaryLanguage]);
+  }, [view, session.customerPrimaryLanguage]);
 
   const handleRentalSelection = async (rental: string) => {
     if (!session.sessionId) {
@@ -663,9 +681,17 @@ export function AppRoot() {
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
 
+    // Translate pointer coordinates (CSS pixels) into canvas coordinates (canvas pixels).
+    // The canvas is rendered responsively in CSS, so rect.width/height often differs from canvas.width/height.
     const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0]!.clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0]!.clientY - rect.top : e.clientY - rect.top;
+    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY;
+    if (clientX == null || clientY == null) return;
+    if ('touches' in e) e.preventDefault();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
 
     const ctx = canvas.getContext('2d');
     if (ctx) {
@@ -682,8 +708,14 @@ export function AppRoot() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0]!.clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0]!.clientY - rect.top : e.clientY - rect.top;
+    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY;
+    if (clientX == null || clientY == null) return;
+    if ('touches' in e) e.preventDefault();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
 
     const ctx = canvas.getContext('2d');
     if (ctx) {
@@ -813,6 +845,14 @@ export function AppRoot() {
     setShowMembershipModal(true);
   };
 
+  const handleSelectOneTimeMembership = async () => {
+    setMembershipChoice('ONE_TIME');
+    // Ensure one-time explicitly clears any previously selected 6-month intent.
+    if (session.membershipPurchaseIntent) {
+      await handleClearMembershipPurchaseIntent();
+    }
+  };
+
   const handleClearMembershipPurchaseIntent = async () => {
     if (!session.sessionId) return;
     const lang = session.customerPrimaryLanguage;
@@ -859,6 +899,7 @@ export function AppRoot() {
       }
       // Immediate UX; server WS broadcast will also reconcile.
       setSession((prev) => ({ ...prev, membershipPurchaseIntent: membershipModalIntent }));
+      setMembershipChoice('SIX_MONTH');
       setShowMembershipModal(false);
       setMembershipModalIntent(null);
     } catch (error) {
@@ -1006,6 +1047,10 @@ export function AppRoot() {
       );
 
     case 'selection':
+      {
+        const membershipStatus = getMembershipStatus(session, Date.now());
+        const isMember = membershipStatus === 'ACTIVE' || membershipStatus === 'PENDING';
+        const isExpired = membershipStatus === 'EXPIRED';
       return (
         <>
           <SelectionScreen
@@ -1020,8 +1065,11 @@ export function AppRoot() {
             orientationOverlay={orientationOverlay}
             welcomeOverlay={welcomeOverlayNode}
             onSelectRental={(rental) => void handleRentalSelection(rental)}
-            onOpenMembershipModal={openMembershipModal}
-            onClearMembershipPurchaseIntent={() => void handleClearMembershipPurchaseIntent()}
+            membershipChoice={isMember ? null : membershipChoice}
+            onSelectOneTimeMembership={() => void handleSelectOneTimeMembership()}
+            onSelectSixMonthMembership={() =>
+              openMembershipModal(isExpired ? 'RENEW' : 'PURCHASE')
+            }
           />
           <UpgradeDisclaimerModal
             isOpen={showUpgradeDisclaimer}
@@ -1080,7 +1128,7 @@ export function AppRoot() {
             />
           )}
         </>
-      );
+      );}
 
     default:
       return null;

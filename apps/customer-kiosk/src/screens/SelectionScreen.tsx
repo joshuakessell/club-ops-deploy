@@ -42,8 +42,9 @@ export interface SelectionScreenProps {
   orientationOverlay: ReactNode;
   welcomeOverlay: ReactNode;
   onSelectRental: (rental: string) => void;
-  onOpenMembershipModal: (intent: 'PURCHASE' | 'RENEW') => void;
-  onClearMembershipPurchaseIntent: () => void;
+  membershipChoice: 'ONE_TIME' | 'SIX_MONTH' | null;
+  onSelectOneTimeMembership: () => void;
+  onSelectSixMonthMembership: () => void;
 }
 
 export function SelectionScreen({
@@ -58,16 +59,26 @@ export function SelectionScreen({
   orientationOverlay,
   welcomeOverlay,
   onSelectRental,
-  onOpenMembershipModal,
-  onClearMembershipPurchaseIntent,
+  membershipChoice,
+  onSelectOneTimeMembership,
+  onSelectSixMonthMembership,
 }: SelectionScreenProps) {
   const lang = session.customerPrimaryLanguage;
   const membershipStatus = getMembershipStatus(session, Date.now());
   const isMember = membershipStatus === 'ACTIVE' || membershipStatus === 'PENDING';
-  const isExpired = membershipStatus === 'EXPIRED';
+  const isNonMember = !isMember;
 
-  const canInteract = !isSubmitting && !session.pastDueBlocked;
-  const membershipIntentSelected = Boolean(session.membershipPurchaseIntent);
+  const prereqsSatisfied = isMember || membershipChoice !== null;
+  const showPendingApprovalOverlay =
+    proposedBy === 'CUSTOMER' && Boolean(proposedRentalType) && prereqsSatisfied && !selectionConfirmed;
+  const canInteract = !isSubmitting && !session.pastDueBlocked && !showPendingApprovalOverlay;
+
+  const activeStep: 'MEMBERSHIP' | 'RENTAL' | null = (() => {
+    if (!canInteract) return null;
+    if (isMember) return proposedBy === 'CUSTOMER' && proposedRentalType ? null : 'RENTAL';
+    if (!membershipChoice) return 'MEMBERSHIP';
+    return proposedBy === 'CUSTOMER' && proposedRentalType ? null : 'RENTAL';
+  })();
 
   const rentalOrder = ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'] as const;
   const allowedSet = new Set(session.allowedRentals);
@@ -124,7 +135,18 @@ export function SelectionScreen({
 
             <div className="purchase-cards">
               {/* Membership card */}
-              <section className="cs-liquid-card purchase-card purchase-card--membership">
+              <div className="ck-step-wrap">
+                {activeStep === 'MEMBERSHIP' && (
+                  <>
+                    <div className="ck-step-helper-text ck-glow-text">{t(lang, 'guidance.pleaseSelectOne')}</div>
+                    <div className="ck-arrow ck-arrow--step ck-arrow--bounce-x" aria-hidden="true">
+                      ▶
+                    </div>
+                  </>
+                )}
+                <section
+                  className={`cs-liquid-card purchase-card purchase-card--membership ${activeStep === 'MEMBERSHIP' ? 'ck-step-active' : ''}`}
+                >
                 <div className="purchase-card__header">
                   <div className="purchase-card__title">{t(lang, 'membership')}</div>
                   <div className="purchase-card__status">
@@ -145,15 +167,12 @@ export function SelectionScreen({
                   </div>
                 ) : (
                   <div className="purchase-card__body">
-                    <div className="purchase-card__subheader">
-                      {t(lang, 'membership.pleaseSelectOne')}
-                    </div>
                     <div className="membership-option-stack">
                       <button
-                        className={`cs-liquid-button kiosk-option-button ${!membershipIntentSelected ? 'cs-liquid-button--selected' : ''}`}
+                        className={`cs-liquid-button kiosk-option-button ${membershipChoice === 'ONE_TIME' ? 'cs-liquid-button--selected' : ''}`}
                         onClick={() => {
                           if (!canInteract) return;
-                          if (membershipIntentSelected) onClearMembershipPurchaseIntent();
+                          onSelectOneTimeMembership();
                         }}
                         disabled={!canInteract}
                       >
@@ -165,8 +184,11 @@ export function SelectionScreen({
                       </button>
 
                       <button
-                        className={`cs-liquid-button kiosk-option-button ${membershipIntentSelected ? 'cs-liquid-button--selected' : ''}`}
-                        onClick={() => onOpenMembershipModal(isExpired ? 'RENEW' : 'PURCHASE')}
+                        className={`cs-liquid-button kiosk-option-button ${membershipChoice === 'SIX_MONTH' ? 'cs-liquid-button--selected' : ''}`}
+                        onClick={() => {
+                          if (!canInteract) return;
+                          onSelectSixMonthMembership();
+                        }}
                         disabled={!canInteract}
                       >
                         <span className="kiosk-option-title">
@@ -178,10 +200,22 @@ export function SelectionScreen({
                     </div>
                   </div>
                 )}
-              </section>
+                </section>
+              </div>
 
               {/* Rental card */}
-              <section className="cs-liquid-card purchase-card purchase-card--rental">
+              <div className="ck-step-wrap">
+                {activeStep === 'RENTAL' && (
+                  <>
+                    <div className="ck-step-helper-text ck-glow-text">{t(lang, 'guidance.pleaseSelectOne')}</div>
+                    <div className="ck-arrow ck-arrow--step ck-arrow--bounce-x" aria-hidden="true">
+                      ▶
+                    </div>
+                  </>
+                )}
+                <section
+                  className={`cs-liquid-card purchase-card purchase-card--rental ${activeStep === 'RENTAL' ? 'ck-step-active' : ''}`}
+                >
                 <div className="purchase-card__header">
                   <div className="purchase-card__title">{t(lang, 'rental.title')}</div>
                 </div>
@@ -194,10 +228,10 @@ export function SelectionScreen({
                           inventory?.rooms[rental] || (rental === 'LOCKER' ? inventory?.lockers : 0) || 0;
                         const showWarning = availableCount > 0 && availableCount <= 5;
                         const isUnavailable = availableCount === 0;
-                        const isDisabled = session.pastDueBlocked;
+                        const isDisabled = session.pastDueBlocked || (isNonMember && !membershipChoice) || showPendingApprovalOverlay;
                         const isSelected = proposedRentalType === rental && selectionConfirmed;
                         const isStaffProposed =
-                          proposedBy === 'EMPLOYEE' && proposedRentalType === rental && !selectionConfirmed;
+                          proposedBy === 'EMPLOYEE' && proposedRentalType === rental && !selectionConfirmed && prereqsSatisfied;
                         const isPulsing = isStaffProposed;
                         const isForced =
                           selectedRental === rental &&
@@ -217,7 +251,8 @@ export function SelectionScreen({
                             className={`cs-liquid-button kiosk-option-button ${span2 ? 'span-2' : ''} ${isSelected ? 'cs-liquid-button--selected' : ''} ${isStaffProposed ? 'cs-liquid-button--staff-proposed' : ''} ${isDisabled ? 'cs-liquid-button--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
                             data-forced={isForced}
                             onClick={() => {
-                              if (!isDisabled) void onSelectRental(rental);
+                              if (isDisabled) return;
+                              void onSelectRental(rental);
                             }}
                             disabled={isDisabled}
                           >
@@ -247,11 +282,25 @@ export function SelectionScreen({
                     </div>
                   )}
                 </div>
-              </section>
+                </section>
+              </div>
             </div>
 
           </main>
         </div>
+
+        {showPendingApprovalOverlay && (
+          <div className="ck-pending-overlay" role="status" aria-live="polite">
+            <div className="ck-pending-overlay__text">
+              {t(lang, 'selection.pendingApproval')}
+              <span className="ck-ellipsis" aria-hidden="true">
+                <span className="ck-dot">.</span>
+                <span className="ck-dot">.</span>
+                <span className="ck-dot">.</span>
+              </span>
+            </div>
+          </div>
+        )}
       </ScreenShell>
     </I18nProvider>
   );
