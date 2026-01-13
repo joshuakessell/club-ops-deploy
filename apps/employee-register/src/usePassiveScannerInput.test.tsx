@@ -11,10 +11,12 @@ function Harness(props: {
 }) {
   const { reset } = usePassiveScannerInput({
     enabled: props.enabled,
-    onCapture: ({ raw }) => props.onCapture(raw),
-    idleTimeoutMs: 75,
+    onCapture: (raw) => props.onCapture(raw),
+    idleTimeoutMs: 180,
     enterGraceMs: 35,
     minLength: 4,
+    cooldownMs: 400,
+    scannerInterKeyMaxMs: 35,
   });
 
   useEffect(() => {
@@ -59,7 +61,7 @@ describe('usePassiveScannerInput', () => {
     keyOnWindow('D');
 
     expect(onCapture).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(200);
 
     expect(onCapture).toHaveBeenCalledTimes(1);
     expect(onCapture).toHaveBeenCalledWith('ABCD');
@@ -81,7 +83,7 @@ describe('usePassiveScannerInput', () => {
     keyOnWindow('3');
     keyOnWindow('4');
 
-    await vi.advanceTimersByTimeAsync(80);
+    await vi.advanceTimersByTimeAsync(200);
     expect(onCapture).toHaveBeenCalledTimes(1);
     expect(onCapture).toHaveBeenCalledWith('ABCD\n1234');
   });
@@ -111,7 +113,7 @@ describe('usePassiveScannerInput', () => {
     keyOnEl(input, 'B');
     keyOnEl(input, 'C');
     keyOnEl(input, 'D');
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(250);
 
     expect(onCapture).not.toHaveBeenCalled();
   });
@@ -123,7 +125,7 @@ describe('usePassiveScannerInput', () => {
     keyOnWindow('A');
     keyOnWindow('B');
     keyOnWindow('C');
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(250);
 
     expect(onCapture).not.toHaveBeenCalled();
   });

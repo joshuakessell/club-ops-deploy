@@ -8,6 +8,10 @@ export interface RegisterSideDrawersProps {
   onInventoryOpenChange(next: boolean): void;
   upgradesAttention?: boolean;
   inventoryAttention?: boolean;
+  upgradesTabVariant?: 'secondary' | 'success' | 'warning' | 'danger';
+  upgradesTabPulseVariant?: 'success' | 'danger' | null;
+  inventoryTabVariant?: 'secondary' | 'success' | 'warning' | 'danger';
+  inventoryTabPulseVariant?: 'success' | 'danger' | null;
   upgradesContent: ReactNode;
   inventoryContent: ReactNode;
 }
@@ -19,6 +23,10 @@ export function RegisterSideDrawers({
   onInventoryOpenChange,
   upgradesAttention = false,
   inventoryAttention = false,
+  upgradesTabVariant = 'secondary',
+  upgradesTabPulseVariant = null,
+  inventoryTabVariant = 'secondary',
+  inventoryTabPulseVariant = null,
   upgradesContent,
   inventoryContent,
 }: RegisterSideDrawersProps) {
@@ -60,6 +68,8 @@ export function RegisterSideDrawers({
           onUpgradesOpenChange(next);
         }}
         attention={upgradesAttention}
+        tabVariant={upgradesTabVariant}
+        tabPulseVariant={upgradesTabPulseVariant}
       >
         {upgradesContent}
       </SlideOutDrawer>
@@ -73,6 +83,8 @@ export function RegisterSideDrawers({
           onInventoryOpenChange(next);
         }}
         attention={inventoryAttention}
+        tabVariant={inventoryTabVariant}
+        tabPulseVariant={inventoryTabPulseVariant}
         widthPx={inventoryWidthPx}
       >
         {inventoryContent}

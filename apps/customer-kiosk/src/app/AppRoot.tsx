@@ -813,6 +813,33 @@ export function AppRoot() {
     setShowMembershipModal(true);
   };
 
+  const handleClearMembershipPurchaseIntent = async () => {
+    if (!session.sessionId) return;
+    const lang = session.customerPrimaryLanguage;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intent: 'NONE', sessionId: session.sessionId }),
+        }
+      );
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to clear membership intent');
+      }
+      // Immediate UX; server WS broadcast will also reconcile.
+      setSession((prev) => ({ ...prev, membershipPurchaseIntent: null }));
+    } catch (error) {
+      console.error('Failed to clear membership purchase intent:', error);
+      alert(error instanceof Error ? error.message : t(lang, 'error.process'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleMembershipContinue = async () => {
     if (!membershipModalIntent || !session.sessionId) return;
     const lang = session.customerPrimaryLanguage;
@@ -994,6 +1021,7 @@ export function AppRoot() {
             welcomeOverlay={welcomeOverlayNode}
             onSelectRental={(rental) => void handleRentalSelection(rental)}
             onOpenMembershipModal={openMembershipModal}
+            onClearMembershipPurchaseIntent={() => void handleClearMembershipPurchaseIntent()}
           />
           <UpgradeDisclaimerModal
             isOpen={showUpgradeDisclaimer}

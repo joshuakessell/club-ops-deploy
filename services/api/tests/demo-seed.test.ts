@@ -8,6 +8,10 @@ import {
 const FIFTEEN_MIN_MS = 15 * 60 * 1000;
 const TWO_MIN_MS = 2 * 60 * 1000;
 
+function floorTo15Min(date: Date): Date {
+  return new Date(Math.floor(date.getTime() / FIFTEEN_MIN_MS) * FIFTEEN_MIN_MS);
+}
+
 describe('demo seed (busy Saturday) database assertions', () => {
   let pool: pg.Pool;
 
@@ -108,6 +112,13 @@ describe('demo seed (busy Saturday) database assertions', () => {
     const activeVisitsNow = parseInt(activeVisits.rows[0]!.count, 10);
     expect(activeVisitsNow).toBe(activeSessions.rows.length);
 
+    // Demo seed should always set check-in time for active sessions (used by UI).
+    expect(activeSessions.rows.every((s) => s.check_in_time instanceof Date)).toBe(true);
+    // Checkout times should be on 15-minute boundaries.
+    expect(
+      activeSessions.rows.every((s) => s.checkout_at instanceof Date && s.checkout_at.getMinutes() % 15 === 0)
+    ).toBe(true);
+
     // Exactly one overdue active session (15 minutes late)
     const overdueActiveSessions = await pool.query<{
       id: string;
@@ -127,10 +138,10 @@ describe('demo seed (busy Saturday) database assertions', () => {
     expect(overdue.checkout_at).not.toBeNull();
     expect(Boolean(overdue.room_id) !== Boolean(overdue.locker_id)).toBe(true);
 
-    // Verify overdue is approximately 15 minutes late relative to DB clock (within 2 seconds tolerance)
+    // Verify overdue is aligned to the prior 15-minute boundary (within 2 minutes tolerance).
     const dbNowRes = await pool.query<{ now: Date }>(`SELECT NOW() as now`);
     const dbNow = dbNowRes.rows[0]!.now;
-    const expectedLateMs = dbNow.getTime() - FIFTEEN_MIN_MS;
+    const expectedLateMs = floorTo15Min(dbNow).getTime() - FIFTEEN_MIN_MS;
     // Allow some slack because the test runs after seeding completes.
     expect(Math.abs(new Date(overdue.checkout_at!).getTime() - expectedLateMs)).toBeLessThan(TWO_MIN_MS);
 

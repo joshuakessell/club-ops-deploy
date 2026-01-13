@@ -17,6 +17,7 @@ export interface InventoryDrawerProps {
   selectedItem?: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
   sessionId?: string | null;
   disableSelection?: boolean;
+  onAlertSummaryChange?: (summary: { hasLate: boolean; hasNearing: boolean }) => void;
 }
 
 export function InventoryDrawer({
@@ -33,6 +34,7 @@ export function InventoryDrawer({
   selectedItem = null,
   sessionId = null,
   disableSelection = true,
+  onAlertSummaryChange,
 }: InventoryDrawerProps) {
   const [query, setQuery] = useState('');
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState<InventoryDrawerSection>(null);
@@ -51,31 +53,7 @@ export function InventoryDrawer({
         overflow: 'hidden',
       }}
     >
-      {/*
-        Main inventory content should never force the drawer itself to scroll.
-        Each expanded category is responsible for its own internal scrolling.
-      */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <InventorySelector
-          customerSelectedType={customerSelectedType}
-          waitlistDesiredTier={waitlistDesiredTier}
-          waitlistBackupType={waitlistBackupType}
-          onSelect={onSelect ?? (() => undefined)}
-          selectedItem={selectedItem}
-          sessionId={sessionId}
-          lane={lane}
-          sessionToken={sessionToken}
-          filterQuery={effectiveQuery}
-          forcedExpandedSection={expandedSection}
-          onExpandedSectionChange={(next) => {
-            onExpandedSectionChange?.(next);
-            if (forcedExpandedSection === undefined) setUncontrolledExpanded(next);
-          }}
-          disableSelection={disableSelection}
-        />
-      </div>
-
-      {/* Search stays pinned at the bottom of the inventory panel */}
+      {/* Search stays pinned at the TOP of the inventory panel */}
       <div className="cs-liquid-search" style={{ flexShrink: 0 }}>
         <input
           className="cs-liquid-input cs-liquid-search__input"
@@ -104,6 +82,31 @@ export function InventoryDrawer({
             />
           </svg>
         </div>
+      </div>
+
+      {/*
+        Main inventory content should never force the drawer itself to scroll.
+        Each expanded category is responsible for its own internal scrolling.
+      */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+        <InventorySelector
+          customerSelectedType={customerSelectedType}
+          waitlistDesiredTier={waitlistDesiredTier}
+          waitlistBackupType={waitlistBackupType}
+          onSelect={onSelect ?? (() => undefined)}
+          selectedItem={selectedItem}
+          sessionId={sessionId}
+          lane={lane}
+          sessionToken={sessionToken}
+          filterQuery={effectiveQuery}
+          forcedExpandedSection={expandedSection}
+          onExpandedSectionChange={(next) => {
+            onExpandedSectionChange?.(next);
+            if (forcedExpandedSection === undefined) setUncontrolledExpanded(next);
+          }}
+          disableSelection={disableSelection}
+          onAlertSummaryChange={onAlertSummaryChange}
+        />
       </div>
     </div>
   );

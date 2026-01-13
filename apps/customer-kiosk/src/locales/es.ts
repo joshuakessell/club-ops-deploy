@@ -85,6 +85,14 @@ export const es: Record<keyof typeof en, string> = {
     'Puede ahorrar en las tarifas diarias de membresía renovando una membresía de 6 meses por $43.',
   'common.continue': 'Continuar',
 
+  // Purchase cards (Selection)
+  'membership.pleaseSelectOne': 'Por favor seleccione una opción',
+  'membership.oneTimeOption': 'Membresía por un día - {price}',
+  'membership.sixMonthOption': 'Membresía de 6 meses - {price}',
+  'membership.thankYouMember': 'Gracias por ser miembro.',
+  'membership.expiresOn': 'Su membresía vence el {date}.',
+  'rental.title': 'Alquiler',
+
   // Experience section
   'experience.choose': 'Elige tu experiencia:',
 

@@ -349,6 +349,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           assigned_to_customer_id: string | null;
           assigned_customer_name: string | null;
           override_flag: boolean;
+          checkin_at: Date | null;
           checkout_at: Date | null;
         }>(
           `SELECT 
@@ -361,11 +362,12 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           r.assigned_to_customer_id,
           c.name as assigned_customer_name,
           r.override_flag,
+          cb.starts_at as checkin_at,
           cb.ends_at as checkout_at
          FROM rooms r
          LEFT JOIN customers c ON r.assigned_to_customer_id = c.id
          LEFT JOIN LATERAL (
-           SELECT ends_at
+           SELECT starts_at, ends_at
            FROM checkin_blocks cb
            WHERE cb.room_id = r.id
              AND cb.ends_at > NOW()
@@ -386,6 +388,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           status: string;
           assigned_to_customer_id: string | null;
           assigned_customer_name: string | null;
+          checkin_at: Date | null;
           checkout_at: Date | null;
         }>(
           `SELECT 
@@ -394,11 +397,12 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           l.status,
           l.assigned_to_customer_id,
           c.name as assigned_customer_name,
+          cb.starts_at as checkin_at,
           cb.ends_at as checkout_at
          FROM lockers l
          LEFT JOIN customers c ON l.assigned_to_customer_id = c.id
          LEFT JOIN LATERAL (
-           SELECT ends_at
+           SELECT starts_at, ends_at
            FROM checkin_blocks cb
            WHERE cb.locker_id = l.id
              AND cb.ends_at > NOW()
@@ -421,6 +425,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           assignedTo: row.assigned_to_customer_id || undefined,
           assignedMemberName: row.assigned_customer_name || undefined,
           overrideFlag: row.override_flag,
+          checkinAt: row.checkin_at ? new Date(row.checkin_at).toISOString() : undefined,
           checkoutAt: row.checkout_at ? new Date(row.checkout_at).toISOString() : undefined,
         }));
 
@@ -430,6 +435,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           status: row.status,
           assignedTo: row.assigned_to_customer_id || undefined,
           assignedMemberName: row.assigned_customer_name || undefined,
+          checkinAt: row.checkin_at ? new Date(row.checkin_at).toISOString() : undefined,
           checkoutAt: row.checkout_at ? new Date(row.checkout_at).toISOString() : undefined,
         }));
 

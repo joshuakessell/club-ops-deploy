@@ -34,10 +34,11 @@
   pointer-events: auto;
   align-self: center;
 
-  width: var(--sod-tab-width, 44px);
-  min-height: 160px;
+  /* Drawer tab exception: do NOT shrink; slightly increase size for readability. */
+  width: var(--sod-tab-width, 54px) !important;
+  min-height: 178px !important;
 
-  padding: 0.5rem 0.25rem;
+  padding: 0.65rem 0.3rem !important;
   border-radius: 9999px;
 
   display: inline-flex;
@@ -67,7 +68,7 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 800;
-  font-size: 0.8rem;
+  font-size: calc(0.8rem + 3px);
 }
 
 /* Make label read top-to-bottom on left side */
@@ -107,14 +108,14 @@
 
 .sod-left .sod-panel {
   margin-left: var(--sod-edge-gap, 12px);
-  margin-right: var(--sod-tab-width, 44px);
-  width: calc(100% - var(--sod-tab-width, 44px) - var(--sod-edge-gap, 12px));
+  margin-right: var(--sod-tab-width, 54px);
+  width: calc(100% - var(--sod-tab-width, 54px) - var(--sod-edge-gap, 12px));
 }
 
 .sod-right .sod-panel {
-  margin-left: var(--sod-tab-width, 44px);
+  margin-left: var(--sod-tab-width, 54px);
   margin-right: var(--sod-edge-gap, 12px);
-  width: calc(100% - var(--sod-tab-width, 44px) - var(--sod-edge-gap, 12px));
+  width: calc(100% - var(--sod-tab-width, 54px) - var(--sod-edge-gap, 12px));
 }
 
 /* Reduce accidental text selection while dragging */

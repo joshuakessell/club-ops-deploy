@@ -88,6 +88,14 @@ export const en = {
     'You can save on daily membership fees by renewing a 6 month membership for $43.',
   'common.continue': 'Continue',
 
+  // Purchase cards (Selection)
+  'membership.pleaseSelectOne': 'Please select one',
+  'membership.oneTimeOption': 'One-time Membership - {price}',
+  'membership.sixMonthOption': '6-Month Membership - {price}',
+  'membership.thankYouMember': 'Thank you for being a member.',
+  'membership.expiresOn': 'Your membership expires on {date}.',
+  'rental.title': 'Rental',
+
   // Experience section
   'experience.choose': 'Choose your experience:',
 

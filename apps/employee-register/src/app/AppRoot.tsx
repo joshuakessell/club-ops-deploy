@@ -21,7 +21,10 @@ import {
 import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { RegisterSignIn } from '../RegisterSignIn';
 import type { IdScanPayload } from '@club-ops/shared';
-import { ScanMode, type ScanModeResult } from '../ScanMode';
+type ScanResult =
+  | { outcome: 'matched' }
+  | { outcome: 'no_match'; message: string; canCreate?: boolean }
+  | { outcome: 'error'; message: string };
 import { debounce } from '../utils/debounce';
 import { OfferUpgradeModal } from '../components/OfferUpgradeModal';
 import { CheckoutRequestsBanner } from '../components/register/CheckoutRequestsBanner';
@@ -29,7 +32,6 @@ import { CheckoutVerificationModal } from '../components/register/CheckoutVerifi
 import { RegisterHeader } from '../components/register/RegisterHeader';
 import { RegisterTopActionsBar } from '../components/register/RegisterTopActionsBar';
 import { useEmployeeRegisterTabletUiTweaks } from '../hooks/useEmployeeRegisterTabletUiTweaks';
-import { MeasuredHalfWidthSearchInput } from '../components/register/MeasuredHalfWidthSearchInput';
 import { RequiredTenderOutcomeModal } from '../components/register/modals/RequiredTenderOutcomeModal';
 import { WaitlistNoticeModal } from '../components/register/modals/WaitlistNoticeModal';
 import {
@@ -194,7 +196,7 @@ export function AppRoot() {
   });
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [scanModeOpen, setScanModeOpen] = useState(false);
+  const [passiveScanProcessing, setPassiveScanProcessing] = useState(false);
   const [manualEntry, setManualEntry] = useState(false);
   const [isUpgradesDrawerOpen, setIsUpgradesDrawerOpen] = useState(false);
   const [isInventoryDrawerOpen, setIsInventoryDrawerOpen] = useState(false);
@@ -367,6 +369,7 @@ export function AppRoot() {
     desiredTier: 'STANDARD' | 'DOUBLE' | 'SPECIAL';
     customerLabel?: string;
   } | null>(null);
+  const [inventoryHasLate, setInventoryHasLate] = useState(false);
 
   // Customer info state
   const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(
@@ -666,7 +669,7 @@ export function AppRoot() {
   const handleIdScan = async (
     payload: IdScanPayload,
     opts?: { suppressAlerts?: boolean }
-  ): Promise<ScanModeResult> => {
+  ): Promise<ScanResult> => {
     if (!session?.sessionToken) {
       const msg = 'Not authenticated';
       if (!opts?.suppressAlerts) alert(msg);
@@ -742,7 +745,7 @@ export function AppRoot() {
     idScanValue: string,
     membershipScanValue?: string | null,
     opts?: { suppressAlerts?: boolean }
-  ): Promise<ScanModeResult> => {
+  ): Promise<ScanResult> => {
     if (!session?.sessionToken) {
       const msg = 'Not authenticated';
       if (!opts?.suppressAlerts) alert(msg);
@@ -813,7 +816,7 @@ export function AppRoot() {
   const startLaneSessionByCustomerId = async (
     customerId: string,
     opts?: { suppressAlerts?: boolean }
-  ): Promise<ScanModeResult> => {
+  ): Promise<ScanResult> => {
     if (!session?.sessionToken) {
       const msg = 'Not authenticated';
       if (!opts?.suppressAlerts) alert(msg);
@@ -883,7 +886,7 @@ export function AppRoot() {
     await handleManualIdEntry(customerName.trim());
   };
 
-  const onBarcodeCaptured = async (rawScanText: string): Promise<ScanModeResult> => {
+  const onBarcodeCaptured = async (rawScanText: string): Promise<ScanResult> => {
     if (!session?.sessionToken) {
       return { outcome: 'error', message: 'Not authenticated' };
     }
@@ -966,7 +969,7 @@ export function AppRoot() {
           },
           candidates: (data.candidates || []).slice(0, 10),
         });
-        // Close ScanMode overlay (if open) so the employee can select the correct customer.
+        // Let the employee select the correct customer.
         return { outcome: 'matched' };
       }
 
@@ -1023,13 +1026,15 @@ export function AppRoot() {
     !!selectedCheckoutRequest;
 
   const passiveScanEnabled =
-    !!session?.sessionToken && !scanModeOpen && !isSubmitting && !manualEntry && !blockingModalOpen;
+    !!session?.sessionToken && !passiveScanProcessing && !isSubmitting && !manualEntry && !blockingModalOpen;
 
   const handlePassiveCapture = useCallback(
     (rawScanText: string) => {
       void (async () => {
         setScanToastMessage(null);
+        setPassiveScanProcessing(true);
         const result = await onBarcodeCaptured(rawScanText);
+        setPassiveScanProcessing(false);
         if (result.outcome === 'no_match') {
           if (result.canCreate) {
             setCreateFromScanError(null);
@@ -1049,7 +1054,7 @@ export function AppRoot() {
 
   usePassiveScannerInput({
     enabled: passiveScanEnabled,
-    onCapture: ({ raw }) => handlePassiveCapture(raw),
+    onCapture: (raw) => handlePassiveCapture(raw),
   });
 
   const resolvePendingScanSelection = useCallback(
@@ -1112,7 +1117,7 @@ export function AppRoot() {
     [lane, pendingScanResolution, session?.sessionToken, startLaneSessionByCustomerId]
   );
 
-  const handleCreateFromNoMatch = async (): Promise<ScanModeResult> => {
+  const handleCreateFromNoMatch = async (): Promise<ScanResult> => {
     if (!pendingCreateFromScan) {
       return { outcome: 'error', message: 'Nothing to create (no pending scan)' };
     }
@@ -2672,7 +2677,7 @@ export function AppRoot() {
       ) : !session ? (
         <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading...</div>
       ) : (
-        <div className="container" style={{ marginTop: '60px', padding: '1.5rem' }}>
+        <div className="container" style={{ marginTop: '60px' }}>
           <RegisterSideDrawers
             upgradesOpen={isUpgradesDrawerOpen}
             onUpgradesOpenChange={(next) => {
@@ -2681,7 +2686,11 @@ export function AppRoot() {
             }}
             inventoryOpen={isInventoryDrawerOpen}
             onInventoryOpenChange={setIsInventoryDrawerOpen}
-            upgradesAttention={showUpgradePulse && hasEligibleEntries}
+            upgradesAttention={false}
+            upgradesTabVariant={hasEligibleEntries ? 'success' : 'secondary'}
+            upgradesTabPulseVariant={hasEligibleEntries ? 'success' : null}
+            inventoryTabVariant={inventoryHasLate ? 'danger' : 'secondary'}
+            inventoryTabPulseVariant={inventoryHasLate ? 'danger' : null}
             upgradesContent={
               <UpgradesDrawerContent
                 waitlistEntries={waitlistEntries}
@@ -2726,9 +2735,19 @@ export function AppRoot() {
                 selectedItem={selectedInventoryItem}
                 sessionId={currentSessionId}
                 disableSelection={false}
+                onAlertSummaryChange={({ hasLate }) => setInventoryHasLate(hasLate)}
               />
             }
           />
+
+          {passiveScanProcessing && (
+            <div className="er-scan-processing-overlay" aria-hidden="true">
+              <div className="er-scan-processing-card cs-liquid-card">
+                <span className="er-spinner" aria-hidden="true" />
+                <span className="er-scan-processing-text">Processing scan…</span>
+              </div>
+            </div>
+          )}
 
           {/* Checkout Request Notifications */}
           {checkoutRequests.size > 0 && !selectedCheckoutRequest && (
@@ -2789,7 +2808,7 @@ export function AppRoot() {
                   borderRadius: '8px',
                 }}
               >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
+                <h2 className="er-text-lg" style={{ marginBottom: '1rem', fontWeight: 600 }}>
                   Customer Information
                 </h2>
                 <div
@@ -2801,20 +2820,24 @@ export function AppRoot() {
                 >
                   <div>
                     <div
-                      style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                      className="er-text-sm"
+                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
                     >
                       Name
                     </div>
-                    <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerName}</div>
+                    <div className="er-text-md" style={{ fontWeight: 600 }}>
+                      {customerName}
+                    </div>
                   </div>
                   {customerPrimaryLanguage && (
                     <div>
                       <div
-                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                        className="er-text-sm"
+                        style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
                       >
                         Primary Language
                       </div>
-                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+                      <div className="er-text-md" style={{ fontWeight: 600 }}>
                         {customerPrimaryLanguage}
                       </div>
                     </div>
@@ -2822,21 +2845,25 @@ export function AppRoot() {
                   {customerDobMonthDay && (
                     <div>
                       <div
-                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                        className="er-text-sm"
+                        style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
                       >
                         Date of Birth
                       </div>
-                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerDobMonthDay}</div>
+                      <div className="er-text-md" style={{ fontWeight: 600 }}>
+                        {customerDobMonthDay}
+                      </div>
                     </div>
                   )}
                   {customerLastVisitAt && (
                     <div>
                       <div
-                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                        className="er-text-sm"
+                        style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
                       >
                         Last Visit
                       </div>
-                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>
+                      <div className="er-text-md" style={{ fontWeight: 600 }}>
                         {new Date(customerLastVisitAt).toLocaleDateString()}
                       </div>
                     </div>
@@ -2844,14 +2871,15 @@ export function AppRoot() {
                   {pastDueBalance > 0 && (
                     <div>
                       <div
-                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
+                        className="er-text-sm"
+                        style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
                       >
                         Past Due Balance
                       </div>
                       <div
+                        className="er-text-md"
                         style={{
                           fontWeight: 600,
-                          fontSize: '1rem',
                           color: pastDueBalance > 0 ? '#f59e0b' : 'inherit',
                         }}
                       >
@@ -2868,15 +2896,15 @@ export function AppRoot() {
                       borderTop: '1px solid #475569',
                     }}
                   >
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>
+                    <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.5rem' }}>
                       Notes
                     </div>
                     <div
+                      className="er-text-sm"
                       style={{
                         padding: '0.75rem',
                         background: '#0f172a',
                         borderRadius: '6px',
-                        fontSize: '0.875rem',
                         whiteSpace: 'pre-wrap',
                         maxHeight: '150px',
                         overflowY: 'auto',
@@ -2889,10 +2917,9 @@ export function AppRoot() {
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
                   <button
                     onClick={() => setShowAddNoteModal(true)}
-                    className="cs-liquid-button cs-liquid-button--secondary"
+                    className="cs-liquid-button cs-liquid-button--secondary er-text-sm"
                     style={{
                       padding: '0.5rem 1rem',
-                      fontSize: '0.875rem',
                       fontWeight: 600,
                       cursor: 'pointer',
                     }}
@@ -2915,10 +2942,10 @@ export function AppRoot() {
                   color: '#92400e',
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.5rem' }}>
+                <div className="er-text-md" style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
                   ⚠️ Customer Waitlisted
                 </div>
-                <div style={{ fontSize: '0.875rem' }}>
+                <div className="er-text-sm">
                   Customer requested <strong>{waitlistDesiredTier}</strong> but it's unavailable.
                   Assigning <strong>{waitlistBackupType}</strong> as backup. If{' '}
                   {waitlistDesiredTier} becomes available, customer can upgrade.
@@ -3210,113 +3237,117 @@ export function AppRoot() {
               <h2>Lane Session</h2>
 
               {/* Customer lookup (typeahead) */}
-              <div
-                className="typeahead-section cs-liquid-card"
-                style={{
-                  marginTop: 0,
-                  marginBottom: '1rem',
-                  padding: '1rem',
-                }}
-              >
+              <div className="er-search-section-half">
                 <div
+                  className="typeahead-section cs-liquid-card"
                   style={{
-                    display: 'flex',
-                    gap: '0.5rem',
-                    alignItems: 'center',
-                    marginBottom: '0.5rem',
-                    flexWrap: 'wrap',
+                    marginTop: 0,
+                    marginBottom: '1rem',
+                    padding: '1rem',
                   }}
                 >
-                  <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
-                    Search Customer
-                  </label>
-                  <span className="er-search-help" style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                    (type at least 3 letters)
-                  </span>
-                </div>
-                <MeasuredHalfWidthSearchInput
-                  id="customer-search"
-                  value={customerSearch}
-                  onChange={(next) => setCustomerSearch(next)}
-                  placeholder="Start typing name..."
-                  disabled={isSubmitting}
-                />
-                {customerSearchLoading && (
-                  <div style={{ marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.875rem' }}>
-                    Searching...
-                  </div>
-                )}
-                {customerSuggestions.length > 0 && (
                   <div
-                    className="cs-liquid-card"
                     style={{
-                      marginTop: '0.5rem',
-                      maxHeight: '180px',
-                      overflowY: 'auto',
+                      display: 'flex',
+                      gap: '0.5rem',
+                      alignItems: 'center',
+                      marginBottom: '0.5rem',
+                      flexWrap: 'wrap',
                     }}
                   >
-                    {customerSuggestions.map((s) => {
-                      const label = `${s.lastName}, ${s.firstName}`;
-                      const active = selectedCustomerId === s.id;
-                      return (
-                        <div
-                          key={s.id}
-                          onClick={() => {
-                            setSelectedCustomerId(s.id);
-                            setSelectedCustomerLabel(label);
-                          }}
-                          style={{
-                            padding: '0.5rem 0.75rem',
-                            cursor: 'pointer',
-                            background: active ? '#1e293b' : 'transparent',
-                            borderBottom: '1px solid #1f2937',
-                          }}
-                        >
-                          <div style={{ fontWeight: 600 }}>{label}</div>
+                    <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
+                      Search Customer
+                    </label>
+                    <span className="er-search-help">(type at least 3 letters)</span>
+                  </div>
+                  <input
+                    id="customer-search"
+                    type="text"
+                    className="cs-liquid-input"
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    placeholder="Start typing name..."
+                    disabled={isSubmitting}
+                  />
+                  {customerSearchLoading && (
+                    <div className="er-text-sm" style={{ marginTop: '0.25rem', color: '#94a3b8' }}>
+                      Searching...
+                    </div>
+                  )}
+                  {customerSuggestions.length > 0 && (
+                    <div
+                      className="cs-liquid-card"
+                      style={{
+                        marginTop: '0.5rem',
+                        maxHeight: '180px',
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {customerSuggestions.map((s) => {
+                        const label = `${s.lastName}, ${s.firstName}`;
+                        const active = selectedCustomerId === s.id;
+                        return (
                           <div
+                            key={s.id}
+                            onClick={() => {
+                              setSelectedCustomerId(s.id);
+                              setSelectedCustomerLabel(label);
+                            }}
                             style={{
-                              fontSize: '0.8rem',
-                              color: '#94a3b8',
-                              display: 'flex',
-                              gap: '0.75rem',
-                              flexWrap: 'wrap',
+                              padding: '0.5rem 0.75rem',
+                              cursor: 'pointer',
+                              background: active ? '#1e293b' : 'transparent',
+                              borderBottom: '1px solid #1f2937',
                             }}
                           >
-                            {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
-                            {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
+                            <div style={{ fontWeight: 600 }}>{label}</div>
+                            <div
+                              className="er-text-sm"
+                              style={{
+                                color: '#94a3b8',
+                                display: 'flex',
+                                gap: '0.75rem',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
+                              {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'center',
+                      gap: '0.75rem',
+                      marginTop: '0.75rem',
+                      alignItems: 'center',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <div className="er-search-help">
+                      {selectedCustomerLabel ? `Selected: ${selectedCustomerLabel}` : 'Select a customer above'}
+                    </div>
+                    <button
+                      onClick={() => void handleConfirmCustomerSelection()}
+                      disabled={!selectedCustomerId || isSubmitting}
+                      className="cs-liquid-button"
+                      style={{
+                        padding: '0.55rem 0.9rem',
+                        fontWeight: 700,
+                        opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
+                      }}
+                    >
+                      Confirm
+                    </button>
                   </div>
-                )}
-                <button
-                  onClick={() => void handleConfirmCustomerSelection()}
-                  disabled={!selectedCustomerId || isSubmitting}
-                  className="cs-liquid-button"
-                  style={{
-                    marginTop: '0.75rem',
-                    width: '100%',
-                    padding: '0.65rem',
-                    fontWeight: 600,
-                    opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
-                  }}
-                >
-                  {selectedCustomerLabel ? `Confirm ${selectedCustomerLabel}` : 'Confirm'}
-                </button>
+                </div>
               </div>
 
               <div className="action-buttons">
-                <button
-                  className={`action-btn cs-liquid-button ${scanModeOpen ? 'cs-liquid-button--selected active' : ''}`}
-                  onClick={() => {
-                    setManualEntry(false);
-                    setScanModeOpen(true);
-                  }}
-                >
-                  <span className="btn-icon">📡</span>
-                  Scan
-                </button>
                 <button
                   className={`action-btn cs-liquid-button cs-liquid-button--secondary ${manualEntry ? 'cs-liquid-button--selected active' : ''}`}
                   onClick={() => {
@@ -3551,17 +3582,6 @@ export function AppRoot() {
               </div>
             </div>
           </ModalFrame>
-
-          {/* Full-screen Scan Mode (keyboard-wedge scanner; no iPad camera) */}
-          <ScanMode
-            isOpen={scanModeOpen}
-            onCancel={() => {
-              setScanModeOpen(false);
-              setPendingCreateFromScan(null);
-            }}
-            onBarcodeCaptured={onBarcodeCaptured}
-            onCreateFromNoMatch={handleCreateFromNoMatch}
-          />
 
           {pastDueBalance > 0 && (
             <PastDuePaymentModal

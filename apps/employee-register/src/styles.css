@@ -18,6 +18,22 @@
   --er-text: rgba(255, 255, 255, 0.92);
   --er-text-muted: rgba(255, 255, 255, 0.72);
 
+  /* Employee Register: keep typography close to baseline liquid-glass defaults */
+  --er-text-downshift: 0px;
+  --er-text-upshift: 0px;
+  --er-search-text-downshift: 0px;
+
+  /* Employee Register: consistent control sizes (slightly larger than inventory card text) */
+  --er-font-btn: 18px;
+  --er-font-label: 16px;
+  --er-font-input: 18px;
+  --er-font-help: 14px;
+  --er-font-icon: 22px;
+
+  /* Employee Register: edge safe area to avoid drawer tab overlap */
+  --er-edge-safe: 20px;
+  --er-drawer-tab-width: 54px;
+
   /* Fixed top bar (employee + register number) */
   --er-topbar-height: 60px;
 }
@@ -29,32 +45,34 @@
    computed font sizes (see `useEmployeeRegisterTabletUiTweaks`).
 ------------------------------------------------------------ */
 
+.er-ui-tweaks {
+  /* Keep app text consistent; buttons/inputs override explicitly below. */
+  font-size: 1rem;
+}
+
 .er-ui-tweaks .cs-liquid-button {
-  /* Primary buttons: +10px (~7.5pt) */
-  font-size: calc(var(--er-font-btn-primary-base, 14px) + 10px) !important;
+  font-size: var(--er-font-btn) !important;
   line-height: 1.15 !important;
-  padding: 0.85rem 1.15rem !important;
+  padding: 0.7rem 1rem !important;
   min-height: 56px !important;
   white-space: nowrap;
   gap: 0.65rem !important;
 }
 
 .er-ui-tweaks .cs-liquid-button.cs-liquid-button--secondary {
-  /* Secondary: slightly smaller bump to keep dense toolbars fitting */
-  font-size: calc(var(--er-font-btn-secondary-base, 14px) + 8px) !important;
+  font-size: var(--er-font-btn) !important;
 }
 
 .er-ui-tweaks label {
-  /* Labels: +6px (~4.5pt) */
-  font-size: calc(var(--er-font-label-base, 14px) + 6px) !important;
+  font-size: var(--er-font-label) !important;
   line-height: 1.2 !important;
 }
 
 /* Search Customer bar text: input + helper text */
 .er-ui-tweaks #customer-search {
-  font-size: calc(var(--er-font-search-base, 14px) + 10px) !important;
+  font-size: var(--er-font-input) !important;
   line-height: 1.2 !important;
-  padding: 0.9rem 1.15rem !important;
+  padding: 0.75rem 1rem !important;
 }
 
 .er-ui-tweaks .typeahead-section span {
@@ -63,7 +81,7 @@
 
 /* Search helper text is treated as part of "Search Customer bar text" */
 .er-ui-tweaks .er-search-help {
-  font-size: calc(0.875rem + 6px) !important;
+  font-size: var(--er-font-help) !important;
 }
 
 /* Action buttons (icon + label) */
@@ -75,13 +93,13 @@
 .er-ui-tweaks .action-btn {
   /* Uses column layout; keep text on one line */
   white-space: nowrap;
-  font-size: calc(var(--er-font-btn-secondary-base, 14px) + 8px) !important;
+  font-size: var(--er-font-btn) !important;
   padding: 1.5rem !important;
   gap: 0.75rem !important;
 }
 
 .er-ui-tweaks .btn-icon {
-  font-size: calc(var(--er-font-btn-icon-base, 22px) + 8px) !important;
+  font-size: var(--er-font-icon) !important;
   line-height: 1 !important;
   display: inline-flex;
   align-items: center;
@@ -180,24 +198,70 @@
   color: var(--er-text-muted);
 }
 
+/* ------------------------------------------------------------
+   Employee Register: text utilities (avoid inline fontSize)
+------------------------------------------------------------ */
+
+.er-text-xs {
+  font-size: 12px;
+}
+
+.er-text-sm {
+  font-size: 14px;
+}
+
+.er-text-md {
+  font-size: 16px;
+}
+
+.er-text-lg {
+  font-size: 18px;
+}
+
+.er-text-xl {
+  font-size: 20px;
+}
+
+.er-text-2xl {
+  font-size: 26px;
+}
+
+.er-header-action-btn {
+  /* Ensure Sign Out + Close Out match exactly (size/shape), only color differs by variant */
+  padding: 0.45rem 0.85rem;
+  min-height: 44px;
+  font-weight: 800;
+  border-radius: 9999px;
+}
+
+.er-ui-tweaks .er-header-action-btn {
+  /* Header is a toolbar cluster: keep both buttons the same text size regardless of variant class. */
+  font-size: var(--er-font-btn) !important;
+  line-height: 1.1 !important;
+}
+
 /* Solid black background with very dark overlay */
 body {
-  background-image: url('./assets/background.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
   background-color: #000000;
   position: relative;
 }
 
+/* Fixed background image layer (keeps background still while UI scrolls) */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  /* Let the background photo read while still keeping a dark, high-contrast UI */
-  background: rgba(0, 0, 0, 0.62);
+  background-image: url('./assets/background.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   z-index: 0;
   pointer-events: none;
+}
+
+/* Background overlay removed per UX request (keep only the photo). */
+body::after {
+  content: none;
 }
 
 /* Ensure app content always renders above the fixed overlay */
@@ -211,10 +275,96 @@ body::before {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 1.5rem;
+  padding: 1.5rem max(1.5rem, calc(var(--er-drawer-tab-width) + var(--er-edge-safe)));
   background: transparent;
   position: relative;
   z-index: 1;
+}
+
+.er-search-section-half {
+  width: min(50%, 840px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 900px) {
+  .er-search-section-half {
+    width: 100%;
+  }
+}
+
+.er-search-help {
+  color: #94a3b8;
+  font-size: 0.875rem;
+}
+
+/* Local button variants missing from shared stylesheet */
+.cs-liquid-button--warning {
+  background: rgba(245, 158, 11, 0.10);
+  border-color: rgba(245, 158, 11, 0.60);
+}
+.cs-liquid-button--warning:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.22);
+}
+
+.cs-liquid-button--success {
+  background: rgba(34, 197, 94, 0.10);
+  border-color: rgba(34, 197, 94, 0.60);
+}
+.cs-liquid-button--success:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.22);
+}
+
+/* Inventory cards (rooms/lockers) */
+.er-inv-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 150ms ease, filter 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.er-inv-item:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.er-inv-item:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.er-inv-item--selected {
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 2px rgba(96, 165, 250, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.er-inv-item--warning {
+  border-color: rgba(245, 158, 11, 0.70);
+  background: linear-gradient(145deg, rgba(245, 158, 11, 0.18), rgba(255, 255, 255, 0.06));
+}
+
+.er-inv-item--danger {
+  border-color: rgba(239, 68, 68, 0.70);
+  background: linear-gradient(145deg, rgba(239, 68, 68, 0.18), rgba(255, 255, 255, 0.06));
+}
+
+.er-inv-item--waitlist {
+  border-color: rgba(245, 158, 11, 0.70);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 2px rgba(245, 158, 11, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.er-inv-meta {
+  color: rgba(148, 163, 184, 0.95);
 }
 
 .header {
@@ -575,137 +725,46 @@ body::before {
   color: var(--text-muted) !important;
 }
 
-/* Full-screen Scan Mode (keyboard-wedge scanner) */
-.scan-mode-overlay {
+@keyframes erSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Passive scan processing feedback (home screen scanning) */
+.er-scan-processing-overlay {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: rgba(2, 6, 23, 0.96);
-  color: var(--text);
-  display: flex;
-  flex-direction: column;
-}
-
-.scan-mode-topbar {
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.92);
-}
-
-.scan-mode-title {
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.scan-mode-spacer {
-  width: 120px;
-}
-
-.scan-mode-cancel {
-  width: 120px;
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.scan-mode-exit {
-  width: 120px;
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.scan-mode-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1rem;
-  gap: 2rem;
-}
-
-.scan-mode-reticle {
-  width: min(720px, 92vw);
-  height: min(360px, 40vh);
-  border-radius: 20px;
-  border: 2px solid rgba(59, 130, 246, 0.6);
-  box-shadow:
-    0 0 0 6px rgba(59, 130, 246, 0.12),
-    0 20px 60px rgba(0, 0, 0, 0.55);
-  position: relative;
-}
-
-.scan-mode-reticle-inner {
-  position: absolute;
-  inset: 14px;
-  border-radius: 14px;
-  border: 1px dashed rgba(148, 163, 184, 0.35);
-}
-
-.scan-mode-status {
-  text-align: center;
-  max-width: 720px;
-}
-
-.scan-mode-status-text {
-  font-size: 2rem;
-  font-weight: 900;
-}
-
-.scan-mode-message {
-  margin-top: 0.75rem;
-  font-size: 1rem;
-  color: rgba(226, 232, 240, 0.9);
-}
-
-.scan-mode-subhint {
-  margin-top: 0.75rem;
-  font-size: 0.95rem;
-  color: rgba(148, 163, 184, 0.9);
-}
-
-.scan-mode-actions {
-  margin-top: 0.5rem;
-}
-
-.scan-mode-primary {
-  padding: 0.9rem 1.25rem;
-  border-radius: 0.9rem;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.scan-mode-processing-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
-.scan-mode-processing-card {
+.er-scan-processing-card {
   padding: 1rem 1.25rem;
   border-radius: 0.75rem;
   color: var(--text);
   font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
-.scan-mode-hidden-input {
-  position: fixed;
-  left: -9999px;
-  top: 0;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
+.er-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  animation: erSpin 0.9s linear infinite;
+}
+
+.er-scan-processing-text {
+  letter-spacing: 0.01em;
 }
 
 /* Manual Entry Form */
@@ -845,9 +904,9 @@ body::before {
 
 .register-sign-in-button {
   position: absolute;
-  top: 60%;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   padding: 1.25rem 2.5rem;
   color: var(--cs-text);
   font-size: 1.25rem;
@@ -859,7 +918,7 @@ body::before {
 
 /* Preserve centering transform on press (cs-liquid-button:active sets transform and would override translateX(-50%)). */
 .register-sign-in-button:active:not(:disabled) {
-  transform: translateX(-50%) translateY(1px);
+  transform: translate(-50%, -50%) translateY(1px);
 }
 
 .register-top-bar {
@@ -1120,6 +1179,43 @@ body::before {
   animation: none;
   box-shadow: none;
   filter: none;
+}
+
+/* Slow pulsing glows for drawer handle alerts */
+@keyframes erPulseDanger {
+  0%,
+  100% {
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      0 0 0 0 rgba(239, 68, 68, 0.0);
+  }
+  50% {
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      0 0 22px 6px rgba(239, 68, 68, 0.38);
+  }
+}
+
+@keyframes erPulseSuccess {
+  0%,
+  100% {
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      0 0 0 0 rgba(34, 197, 94, 0.0);
+  }
+  50% {
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      0 0 22px 6px rgba(34, 197, 94, 0.35);
+  }
+}
+
+.er-pulse-danger:not(:disabled) {
+  animation: erPulseDanger 2.6s ease-in-out infinite;
+}
+
+.er-pulse-success:not(:disabled) {
+  animation: erPulseSuccess 2.6s ease-in-out infinite;
 }
 
 /* Offer Upgrade Modal */

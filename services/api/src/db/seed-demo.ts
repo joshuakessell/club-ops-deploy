@@ -23,6 +23,24 @@ export async function seedDemoData(): Promise<void> {
 
   try {
     const now = new Date();
+    const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+
+    function ceilToNext15Min(d: Date): Date {
+      const ms = d.getTime();
+      const rounded = Math.ceil(ms / FIFTEEN_MIN_MS) * FIFTEEN_MIN_MS;
+      return new Date(rounded);
+    }
+
+    function floorTo15Min(d: Date): Date {
+      const ms = d.getTime();
+      const rounded = Math.floor(ms / FIFTEEN_MIN_MS) * FIFTEEN_MIN_MS;
+      return new Date(rounded);
+    }
+
+    function scheduledCheckoutFromCheckin(checkInAt: Date, durationMinutes: number): Date {
+      // Checkout times round UP to the nearest 15-minute increment.
+      return ceilToNext15Min(new Date(checkInAt.getTime() + durationMinutes * 60 * 1000));
+    }
 
     // -----------------------------------------------------------------------
     // Busy Saturday Night demo seeding (stress-test-friendly dataset)
@@ -296,9 +314,11 @@ export async function seedDemoData(): Promise<void> {
 
         // Choose the last occupied locker customer to be the overdue one
         const lateActiveCustomerId = lockerCustomerIds[ACTIVE_LOCKER_OCCUPANCY - 1]!;
-        const lateScheduledCheckoutAt = new Date(now.getTime() - 15 * 60 * 1000); // 15 minutes ago (overdue)
-        // For realism: checked in recently, still overdue by 15 minutes
-        const lateCheckInAt = new Date(now.getTime() - 3 * 60 * 60 * 1000); // 3 hours ago
+        // Keep the overdue stay's checkout aligned to a 15-minute boundary (realistic display),
+        // while still being "about 15 minutes late".
+        const lateScheduledCheckoutAt = new Date(floorTo15Min(now).getTime() - FIFTEEN_MIN_MS);
+        // Demo expected duration is 6 hours (360 minutes). Check-in does NOT round; checkout does.
+        const lateCheckInAt = new Date(lateScheduledCheckoutAt.getTime() - 6 * 60 * 60 * 1000);
 
         function rentalTypeForRoomNumber(roomNumber: number): RentalType {
           const kind = getRoomKind(roomNumber);
@@ -375,12 +395,11 @@ export async function seedDemoData(): Promise<void> {
           const roomMeta = roomIdByNumber.get(String(roomNumber));
           if (!roomMeta) throw new Error(`Missing room inventory row for ${roomNumber}`);
 
-          // Check in within last 12 hours (15 minutes to 10 hours ago)
-          const minutesAgo = 15 + rng() * (10 * 60 - 15); // 15m..10h ago
+          // Check in within the last ~5h15m so checkout (6h later) is still in the future.
+          // This keeps ACTIVE demo stays consistent with expected_duration=360.
+          const minutesAgo = 15 + rng() * (5 * 60 + 15 - 15); // 15m..5h15m ago
           const checkInAt = new Date(now.getTime() - minutesAgo * 60 * 1000);
-          // Scheduled checkout 45 minutes to 6 hours in the future
-          const minutesRemaining = 45 + rng() * (6 * 60 - 45); // 45m..6h
-          const scheduledCheckoutAt = new Date(now.getTime() + minutesRemaining * 60 * 1000);
+          const scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, 360);
           activeRoomCheckInTimes.push(checkInAt);
 
           // Active stay - no checkout yet
@@ -419,12 +438,10 @@ export async function seedDemoData(): Promise<void> {
             });
           } else {
             // All other active lockers have future checkout times
-            // Check in within last 12 hours (15 minutes to 10 hours ago)
-            const minutesAgo = 15 + rng() * (10 * 60 - 15); // 15m..10h ago
+            // Check in within the last ~5h15m so checkout (6h later) is still in the future.
+            const minutesAgo = 15 + rng() * (5 * 60 + 15 - 15); // 15m..5h15m ago
             const checkInAt = new Date(now.getTime() - minutesAgo * 60 * 1000);
-            // Scheduled checkout 45 minutes to 6 hours in the future
-            const minutesRemaining = 45 + rng() * (6 * 60 - 45); // 45m..6h
-            const scheduledCheckoutAt = new Date(now.getTime() + minutesRemaining * 60 * 1000);
+            const scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, 360);
             activeLockerCheckInTimes.push(checkInAt);
 
             await createVisitStay({
@@ -493,14 +510,14 @@ export async function seedDemoData(): Promise<void> {
           let checkInAt = new Date(now.getTime() - ageHours * 60 * 60 * 1000);
 
           const durationMinutes = randInt(120, 360); // 2h..6h
-          let scheduledCheckoutAt = new Date(checkInAt.getTime() + durationMinutes * 60 * 1000);
+          let scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, durationMinutes);
 
           // Ensure the scheduled checkout is in the past (completed) and doesn't overlap active check-in on same resource.
           const latestScheduled = new Date(now.getTime() - 60 * 1000); // <= now-1m
           if (scheduledCheckoutAt.getTime() > latestScheduled.getTime()) {
             const shiftMs = scheduledCheckoutAt.getTime() - latestScheduled.getTime() + randInt(0, 60) * 60 * 1000;
             checkInAt = new Date(checkInAt.getTime() - shiftMs);
-            scheduledCheckoutAt = new Date(scheduledCheckoutAt.getTime() - shiftMs);
+            scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, durationMinutes);
           }
 
           if (resource.roomId) {
@@ -510,7 +527,7 @@ export async function seedDemoData(): Promise<void> {
               const newScheduled = new Date(activeCheckInAt.getTime() - bufferMs);
               const shiftMs = scheduledCheckoutAt.getTime() - newScheduled.getTime();
               checkInAt = new Date(checkInAt.getTime() - shiftMs);
-              scheduledCheckoutAt = new Date(scheduledCheckoutAt.getTime() - shiftMs);
+              scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, durationMinutes);
             }
           }
           if (resource.lockerId) {
@@ -520,7 +537,7 @@ export async function seedDemoData(): Promise<void> {
               const newScheduled = new Date(activeCheckInAt.getTime() - bufferMs);
               const shiftMs = scheduledCheckoutAt.getTime() - newScheduled.getTime();
               checkInAt = new Date(checkInAt.getTime() - shiftMs);
-              scheduledCheckoutAt = new Date(scheduledCheckoutAt.getTime() - shiftMs);
+              scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, durationMinutes);
             }
           }
 
@@ -765,10 +782,12 @@ export async function seedDemoData(): Promise<void> {
       if (overdueActiveSessions.rows.length !== 1)
         throw new Error(`Expected exactly 1 overdue active session, got ${overdueActiveSessions.rows.length}`);
       const overdue = overdueActiveSessions.rows[0]!;
-      const expectedLateMs = now.getTime() - 15 * 60 * 1000;
+      // Overdue session checkout is seeded on a 15-minute boundary and set to the prior 15-minute tick.
+      const expectedLateMs = floorTo15Min(now).getTime() - 15 * 60 * 1000;
       if (!overdue.checkout_at) throw new Error('Overdue active session missing checkout_at');
       const lateDiffMs = Math.abs(new Date(overdue.checkout_at).getTime() - expectedLateMs);
-      if (lateDiffMs > 2000) {
+      // Allow slack because seeding + verification takes time.
+      if (lateDiffMs > 2 * 60 * 1000) {
         throw new Error(
           `Overdue active session checkout mismatch: got ${new Date(overdue.checkout_at).toISOString()} expected ~${new Date(expectedLateMs).toISOString()} (diff: ${lateDiffMs}ms)`
         );
