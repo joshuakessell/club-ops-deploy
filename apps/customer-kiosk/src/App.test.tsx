@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import App from './App';
 
 // Mock fetch and WebSocket
@@ -63,6 +63,12 @@ describe('App', () => {
         } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/membership-purchase-intent')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/propose-selection')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ success: true }),
@@ -277,7 +283,9 @@ describe('App', () => {
     expect(await screen.findByText('Member')).toBeDefined();
     expect(screen.getByText(/Thank you for being a member/i)).toBeDefined();
     expect(screen.getByText(/expires on/i)).toBeDefined();
-    expect(screen.queryByText(/Please select one/i)).toBeNull();
+    // Guard: membership card should NOT show membership option buttons for members.
+    expect(screen.queryByRole('button', { name: /One-time Membership/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /6-Month Membership/i })).toBeNull();
   });
 
   it('shows Non-Member status + Purchase CTA when membership id is missing', async () => {
@@ -304,7 +312,6 @@ describe('App', () => {
 
     expect(await screen.findByText('Membership')).toBeDefined();
     expect(await screen.findByText('Non-Member')).toBeDefined();
-    expect(screen.getByText(/Please select one/i)).toBeDefined();
     expect(screen.getByRole('button', { name: /One-time Membership.*\$13/ })).toBeDefined();
     expect(screen.getByRole('button', { name: /6-Month Membership.*\$43/ })).toBeDefined();
   });
@@ -334,6 +341,120 @@ describe('App', () => {
 
     expect(await screen.findByText('Non-Member')).toBeDefined();
     expect(screen.getByRole('button', { name: /6-Month Membership.*\$43/ })).toBeDefined();
+  });
+
+  it('non-member must explicitly choose membership before rentals enable (no implicit one-time selection)', async () => {
+    await act(async () => {
+      render(<App />);
+    });
+
+    await act(async () => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    const oneTime = await screen.findByRole('button', { name: /One-time Membership.*\$13/ });
+    const sixMonth = screen.getByRole('button', { name: /6-Month Membership.*\$43/ });
+    const locker = screen.getByRole('button', { name: /Locker/i });
+
+    // No default selection on either membership option.
+    expect(oneTime.className.includes('cs-liquid-button--selected')).toBe(false);
+    expect(sixMonth.className.includes('cs-liquid-button--selected')).toBe(false);
+    // Rental buttons gated until membership choice is made.
+    expect(locker).toHaveProperty('disabled', true);
+
+    act(() => {
+      (oneTime as HTMLButtonElement).click();
+    });
+
+    await waitFor(() => {
+      expect(locker).toHaveProperty('disabled', false);
+    });
+  });
+
+  it('shows Pending approval overlay after non-member completes membership + rental selection', async () => {
+    // Override inventory to allow immediate rental selection (avoid waitlist path).
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
+      if (u.includes('/health')) {
+        return Promise.resolve({
+          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/inventory/available')) {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              rooms: { SPECIAL: 1, DOUBLE: 1, STANDARD: 1 },
+              rawRooms: { SPECIAL: 1, DOUBLE: 1, STANDARD: 1 },
+              waitlistDemand: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              lockers: 10,
+              total: 13,
+            }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/propose-selection')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) } as unknown as Response);
+      }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/membership-purchase-intent')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
+    });
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    await act(async () => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'],
+            pastDueBlocked: false,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    act(() => {
+      screen.getByRole('button', { name: /One-time Membership.*\$13/ }).click();
+    });
+
+    // Now rentals enable.
+    const lockerBtn = await screen.findByRole('button', { name: /Locker/i });
+    await waitFor(() => expect(lockerBtn).toHaveProperty('disabled', false));
+
+    act(() => {
+      (lockerBtn as HTMLButtonElement).click();
+    });
+
+    expect(await screen.findByText('Waiting for approval')).toBeDefined();
   });
 
   it('shows whole-dollar prices next to rental options and never shows Join Waitlist for Upgrade', async () => {
@@ -390,11 +511,9 @@ describe('App', () => {
       });
     });
 
-    expect(await screen.findByText('No miembro')).toBeDefined();
-    expect(
-      screen.getByRole('button', { name: /Membresía de 6 meses.*\$43/ })
-    ).toBeDefined();
-    expect(screen.getByRole('button', { name: /Membresía por un día.*\$13/ })).toBeDefined();
+    expect(await screen.findByText('Sin membresía')).toBeDefined();
+    expect(screen.getByRole('button', { name: /Membresía 6 meses.*\$43/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Membresía por día.*\$13/ })).toBeDefined();
     // Guard: key screens should not leak obvious English CTAs when in Spanish.
     expect(screen.queryByText('Non-Member')).toBeNull();
     expect(screen.queryByText(/6-Month Membership/i)).toBeNull();
@@ -422,14 +541,14 @@ describe('App', () => {
       });
     });
 
-    const purchaseBtn = await screen.findByRole('button', { name: /Membresía de 6 meses.*\$43/ });
+    const purchaseBtn = await screen.findByRole('button', { name: /Membresía 6 meses.*\$43/ });
     act(() => {
       (purchaseBtn as HTMLButtonElement).click();
     });
 
     // Spanish title/body + Spanish buttons
     expect(await screen.findByRole('heading', { name: 'Membresía' })).toBeDefined();
-    expect(screen.getByText(/Puede ahorrar/i)).toBeDefined();
+    expect(screen.getByText(/Ahorra/i)).toBeDefined();
     expect(screen.getByText('Continuar')).toBeDefined();
     expect(screen.getByText('Cancelar')).toBeDefined();
 

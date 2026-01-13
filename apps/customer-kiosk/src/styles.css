@@ -290,6 +290,261 @@ body {
   width: 100%;
 }
 
+/* Guided step UI (SelectionScreen + AgreementScreen) */
+@keyframes ckGlowPulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    text-shadow:
+      0 0 0 rgba(255, 255, 255, 0),
+      0 0 0 rgba(255, 255, 255, 0);
+  }
+  50% {
+    opacity: 1;
+    text-shadow:
+      0 0 10px rgba(255, 255, 255, 0.55),
+      0 0 18px rgba(255, 255, 255, 0.35);
+  }
+}
+
+@keyframes ckBounceInX {
+  0%,
+  100% {
+    transform: translateY(-50%) translateX(calc(var(--toward, 1) * -6px));
+  }
+  50% {
+    transform: translateY(-50%) translateX(calc(var(--toward, 1) * 10px));
+  }
+}
+
+@keyframes ckBounceDown {
+  0%,
+  100% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(10px);
+  }
+}
+
+@keyframes ckBounceRight {
+  0%,
+  100% {
+    transform: translateX(-6px);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+}
+
+@keyframes ckCardPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(255, 255, 255, 0.0),
+      0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(255, 255, 255, 0.25),
+      0 0 22px rgba(255, 255, 255, 0.22),
+      0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+}
+
+.ck-glow-text {
+  animation: ckGlowPulse 1.2s ease-in-out infinite;
+}
+
+.ck-step-wrap {
+  position: relative;
+  /* Provide an internal gutter so side arrows are never clipped/hidden by the card. */
+  padding-left: 48px;
+  padding-right: 48px;
+}
+
+.ck-step-active {
+  animation: ckCardPulse 1.15s ease-in-out infinite;
+}
+
+.ck-step-helper-text {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  transform: translate(-50%, -100%);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ck-arrow {
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.98);
+  font-weight: 900;
+  z-index: 5;
+  filter:
+    drop-shadow(0 0 10px rgba(255, 255, 255, 0.35))
+    drop-shadow(0 0 22px rgba(255, 255, 255, 0.18));
+}
+
+/* Inward arrows for active SelectionScreen card */
+.ck-arrow--in {
+  position: absolute;
+  top: 50%;
+  font-size: 44px;
+}
+
+.ck-arrow--left {
+  left: 10px;
+  --toward: 1;
+  animation: ckBounceInX 0.9s ease-in-out infinite;
+}
+
+.ck-arrow--right {
+  right: 10px;
+  --toward: -1;
+  animation: ckBounceInX 0.9s ease-in-out infinite;
+}
+
+/* Agreement scroll shell + down arrows */
+.ck-agreement-scroll-shell {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: stretch;
+  gap: 10px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.ck-arrow-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+/* The scroll region must take the remaining height above the fixed action row. */
+.ck-agreement-scroll-region {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.ck-arrow--down {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+}
+
+.ck-arrow--bounce-y {
+  animation: ckBounceDown 0.9s ease-in-out infinite;
+}
+
+.ck-arrow--bounce-x {
+  animation: ckBounceRight 0.9s ease-in-out infinite;
+}
+
+.ck-arrow--checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  margin-right: 0;
+}
+
+/* SelectionScreen step arrow: positioned next to the card header title */
+.ck-arrow--step {
+  position: absolute;
+  /* .ck-step-wrap has internal gutters; card starts after 48px padding. */
+  left: 58px;
+  top: 30px;
+  font-size: 34px;
+}
+
+.ck-agreement-helper-text {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  pointer-events: none;
+}
+
+.ck-agreement-helper-text--bottom {
+  margin-top: -0.25rem;
+}
+
+.ck-checkbox-helper-text {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Pending approval overlay */
+.ck-pending-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4500;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ck-pending-overlay__text {
+  color: #ffffff;
+  font-size: clamp(1.5rem, 3.6vw, 2.25rem);
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 0 22px rgba(255, 255, 255, 0.15);
+}
+
+/* Fixed-width ellipsis so the phrase doesn't shift while dots animate */
+@keyframes ckDotPulse {
+  0%,
+  20% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.ck-ellipsis {
+  display: inline-flex;
+  width: 3ch;
+  justify-content: flex-start;
+  margin-left: 0.15ch;
+}
+
+.ck-dot {
+  display: inline-block;
+  width: 1ch;
+  text-align: left;
+  opacity: 0.15;
+  animation: ckDotPulse 1.2s ease-in-out infinite;
+}
+
+.ck-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.ck-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
 .purchase-card {
   padding: 1.15rem;
   display: flex;
@@ -486,10 +741,11 @@ body {
   color: #ffffff;
 }
 
+/* Scroll box container must be allowed to shrink, otherwise overflow won't engage */
 .agreement-scroll-wrap {
   position: relative;
-  flex: 0 0 60%;
   min-height: 0;
+  height: 100%;
 }
 
 .agreement-scroll-area {
@@ -498,9 +754,11 @@ body {
   padding: 1.25rem;
   height: 100%;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
   background: rgba(0, 0, 0, 0.78);
-  margin-bottom: 1rem;
-  flex: 1;
+  margin-bottom: 0;
   min-height: 0;
 }
 
@@ -542,6 +800,35 @@ body {
   flex-direction: column;
   gap: 0.75rem;
   flex-shrink: 0;
+}
+
+.ck-action-row {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.ck-action-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.ck-action-content {
+  min-width: 0;
+}
+
+.ck-action-content--center {
+  display: flex;
+  justify-content: center;
+}
+
+.ck-action-content--checkbox {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .agreement-signature-row {
