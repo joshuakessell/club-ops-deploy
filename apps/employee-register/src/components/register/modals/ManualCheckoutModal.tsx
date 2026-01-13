@@ -36,6 +36,18 @@ function toDate(value: string | Date): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
+function formatClockTime(value: string | Date): string {
+  const d = toDate(value);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatLateDuration(minutesLate: number): string {
+  const total = Math.max(0, Math.floor(minutesLate));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+
 export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }: ManualCheckoutModalProps) {
   const [step, setStep] = useState<Step>('select');
   const [candidates, setCandidates] = useState<ManualCandidate[]>([]);
@@ -219,6 +231,11 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {candidates.map((c) => {
                     const selected = selectedOccupancyId === c.occupancyId;
+                    const scheduled = toDate(c.scheduledCheckoutAt);
+                    const minutesLate = Math.max(0, Math.floor((Date.now() - scheduled.getTime()) / 60000));
+                    const checkoutLabel = `Checkout: ${formatClockTime(scheduled)}${
+                      c.isOverdue ? ` (${formatLateDuration(minutesLate)} late)` : ''
+                    }`;
                     return (
                       <button
                         key={c.occupancyId}
@@ -243,12 +260,28 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
                               : undefined,
                         }}
                       >
-                        <span style={{ fontWeight: 800 }}>
-                          {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number}
-                        </span>
-                        <span style={{ color: c.isOverdue ? '#fecaca' : 'rgba(148, 163, 184, 0.95)' }}>
-                          {c.customerName}
-                        </span>
+                        <div
+                          style={{
+                            display: 'flex',
+                            width: '100%',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '1rem',
+                          }}
+                        >
+                          <div style={{ fontWeight: 900 }}>
+                            {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number} -- {c.customerName}
+                          </div>
+                          <div
+                            style={{
+                              fontWeight: 800,
+                              color: c.isOverdue ? '#fecaca' : 'rgba(148, 163, 184, 0.95)',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {checkoutLabel}
+                          </div>
+                        </div>
                       </button>
                     );
                   })}

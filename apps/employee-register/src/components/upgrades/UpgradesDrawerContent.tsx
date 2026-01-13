@@ -143,7 +143,10 @@ export function UpgradesDrawerContent({
                           {status === 'ACTIVE' ? (
                             <button
                               onClick={() => onOffer(entry.id, entry.desiredTier, customerLabel)}
-                              className="cs-liquid-button cs-liquid-button--secondary"
+                              className={[
+                                'cs-liquid-button',
+                                eligible ? 'cs-liquid-button--success' : 'cs-liquid-button--secondary',
+                              ].join(' ')}
                               disabled={!eligible || isSubmitting}
                               style={{
                                 padding: '0.5rem 1rem',

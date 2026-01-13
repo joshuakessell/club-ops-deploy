@@ -13,9 +13,18 @@ const DISPLAY_PRICE_BY_RENTAL: Record<string, number> = {
 };
 
 const SIX_MONTH_MEMBERSHIP_PRICE = 43;
+const ONE_TIME_MEMBERSHIP_PRICE = 13;
 
 function formatWholeDollars(amount: number): string {
   return `$${Math.round(amount)}`;
+}
+
+function formatMembershipDate(yyyyMmDd: string, lang: SessionState['customerPrimaryLanguage']): string {
+  const locale = lang === 'ES' ? 'es-US' : 'en-US';
+  const d = new Date(`${yyyyMmDd}T00:00:00Z`);
+  // Guard against invalid payloads; fall back to raw string.
+  if (!Number.isFinite(d.getTime())) return yyyyMmDd;
+  return new Intl.DateTimeFormat(locale, { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
 }
 
 export interface SelectionScreenProps {
@@ -34,6 +43,7 @@ export interface SelectionScreenProps {
   welcomeOverlay: ReactNode;
   onSelectRental: (rental: string) => void;
   onOpenMembershipModal: (intent: 'PURCHASE' | 'RENEW') => void;
+  onClearMembershipPurchaseIntent: () => void;
 }
 
 export function SelectionScreen({
@@ -49,7 +59,20 @@ export function SelectionScreen({
   welcomeOverlay,
   onSelectRental,
   onOpenMembershipModal,
+  onClearMembershipPurchaseIntent,
 }: SelectionScreenProps) {
+  const lang = session.customerPrimaryLanguage;
+  const membershipStatus = getMembershipStatus(session, Date.now());
+  const isMember = membershipStatus === 'ACTIVE' || membershipStatus === 'PENDING';
+  const isExpired = membershipStatus === 'EXPIRED';
+
+  const canInteract = !isSubmitting && !session.pastDueBlocked;
+  const membershipIntentSelected = Boolean(session.membershipPurchaseIntent);
+
+  const rentalOrder = ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'] as const;
+  const allowedSet = new Set(session.allowedRentals);
+  const rentalsToShow = rentalOrder.filter((r) => allowedSet.has(r));
+
   return (
     <I18nProvider lang={session.customerPrimaryLanguage}>
       <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
@@ -65,96 +88,6 @@ export function SelectionScreen({
                     })
                   : t(session.customerPrimaryLanguage, 'welcome')}
               </h1>
-            </div>
-
-            {/* Membership Level - locked buttons */}
-            <div className="membership-level-section">
-              <p className="section-label">{t(session.customerPrimaryLanguage, 'membership.level')}</p>
-              {(() => {
-                const lang = session.customerPrimaryLanguage;
-                const status = getMembershipStatus(session, Date.now());
-                const isActive = status === 'ACTIVE';
-                const isPending = status === 'PENDING';
-                const isExpired = status === 'EXPIRED';
-                const isNonMember = status === 'NON_MEMBER';
-
-                return (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div
-                      className="cs-liquid-button cs-liquid-button--disabled"
-                      style={{
-                        opacity: 1,
-                        cursor: 'default',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.75rem',
-                        padding: '0.9rem 1rem',
-                      }}
-                    >
-                      <span style={{ fontWeight: 700 }}>
-                        {isActive || isPending
-                          ? t(lang, 'membership.member')
-                          : t(lang, 'membership.nonMember')}
-                      </span>
-                      {isPending && (
-                        <span
-                          style={{
-                            padding: '0.25rem 0.6rem',
-                            borderRadius: '999px',
-                            background: '#f59e0b',
-                            color: 'black',
-                            fontWeight: 800,
-                            fontSize: '0.85rem',
-                          }}
-                        >
-                          {t(lang, 'membership.pending')}
-                        </span>
-                      )}
-                      {isExpired && !isPending && (
-                        <span
-                          style={{
-                            padding: '0.25rem 0.6rem',
-                            borderRadius: '999px',
-                            background: '#ef4444',
-                            color: 'white',
-                            fontWeight: 700,
-                            fontSize: '0.85rem',
-                          }}
-                        >
-                          {t(lang, 'membership.expired')}
-                        </span>
-                      )}
-                    </div>
-
-                    {isNonMember && (
-                      <button
-                        className="cs-liquid-button kiosk-option-button"
-                        onClick={() => onOpenMembershipModal('PURCHASE')}
-                        disabled={isSubmitting}
-                      >
-                        <span className="kiosk-option-title">{t(lang, 'membership.purchase6Month')}</span>
-                        <span className="kiosk-option-price">
-                          {formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE)}
-                        </span>
-                      </button>
-                    )}
-
-                    {isExpired && (
-                      <button
-                        className="cs-liquid-button kiosk-option-button"
-                        onClick={() => onOpenMembershipModal('RENEW')}
-                        disabled={isSubmitting}
-                      >
-                        <span className="kiosk-option-title">{t(lang, 'membership.renewMembership')}</span>
-                        <span className="kiosk-option-price">
-                          {formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE)}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
             </div>
 
             {/* Past-due block message */}
@@ -189,82 +122,132 @@ export function SelectionScreen({
               </div>
             )}
 
-            {/* Choose your experience */}
-            <div className="experience-section">
-              <p className="section-label">{t(session.customerPrimaryLanguage, 'experience.choose')}</p>
-              <div className="experience-options">
-                {session.allowedRentals.length > 0 ? (
-                  session.allowedRentals.map((rental) => {
-                    const availableCount =
-                      inventory?.rooms[rental] ||
-                      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
-                      0;
-                    const showWarning = availableCount > 0 && availableCount <= 5;
-                    const isUnavailable = availableCount === 0;
-                    const isDisabled = session.pastDueBlocked;
-                    const isSelected = proposedRentalType === rental && selectionConfirmed;
-                    const isStaffProposed =
-                      proposedBy === 'EMPLOYEE' &&
-                      proposedRentalType === rental &&
-                      !selectionConfirmed;
-                    const isPulsing = isStaffProposed;
-                    const isForced =
-                      selectedRental === rental &&
-                      selectionConfirmed &&
-                      selectionConfirmedBy === 'EMPLOYEE';
-                    const lang = session.customerPrimaryLanguage;
+            <div className="purchase-cards">
+              {/* Membership card */}
+              <section className="cs-liquid-card purchase-card purchase-card--membership">
+                <div className="purchase-card__header">
+                  <div className="purchase-card__title">{t(lang, 'membership')}</div>
+                  <div className="purchase-card__status">
+                    {isMember ? t(lang, 'membership.member') : t(lang, 'membership.nonMember')}
+                  </div>
+                </div>
 
-                    const displayName = getRentalDisplayName(rental, lang);
-                    const displayPrice = DISPLAY_PRICE_BY_RENTAL[rental];
-                    const displayPriceLabel =
-                      typeof displayPrice === 'number' ? formatWholeDollars(displayPrice) : '';
-
-                    return (
-                      <button
-                        key={rental}
-                        className={`cs-liquid-button kiosk-option-button ${isSelected ? 'cs-liquid-button--selected' : ''} ${isStaffProposed ? 'cs-liquid-button--staff-proposed' : ''} ${isDisabled ? 'cs-liquid-button--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
-                        data-forced={isForced}
-                        onClick={() => {
-                          if (!isDisabled) {
-                            void onSelectRental(rental);
-                          }
-                        }}
-                        disabled={isDisabled}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '0.5rem',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <div className="kiosk-option-stack">
-                            <span className="kiosk-option-title">{displayName}</span>
-                            {displayPriceLabel && (
-                              <span className="kiosk-option-price">{displayPriceLabel}</span>
-                            )}
-                          </div>
-                          {showWarning && !isUnavailable && (
-                            <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
-                              {t(lang, 'availability.onlyAvailable', { count: availableCount })}
-                            </span>
-                          )}
-                          {isUnavailable && (
-                            <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
-                              {t(lang, 'availability.unavailable')}
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })
+                {isMember ? (
+                  <div className="purchase-card__body">
+                    <p className="purchase-card__message">{t(lang, 'membership.thankYouMember')}</p>
+                    {session.membershipValidUntil && (
+                      <p className="purchase-card__message">
+                        {t(lang, 'membership.expiresOn', {
+                          date: formatMembershipDate(session.membershipValidUntil, lang),
+                        })}
+                      </p>
+                    )}
+                  </div>
                 ) : (
-                  <div className="cs-liquid-button cs-liquid-button--disabled">
-                    {t(session.customerPrimaryLanguage, 'noOptionsAvailable')}
+                  <div className="purchase-card__body">
+                    <div className="purchase-card__subheader">
+                      {t(lang, 'membership.pleaseSelectOne')}
+                    </div>
+                    <div className="membership-option-stack">
+                      <button
+                        className={`cs-liquid-button kiosk-option-button ${!membershipIntentSelected ? 'cs-liquid-button--selected' : ''}`}
+                        onClick={() => {
+                          if (!canInteract) return;
+                          if (membershipIntentSelected) onClearMembershipPurchaseIntent();
+                        }}
+                        disabled={!canInteract}
+                      >
+                        <span className="kiosk-option-title">
+                          {t(lang, 'membership.oneTimeOption', {
+                            price: formatWholeDollars(ONE_TIME_MEMBERSHIP_PRICE),
+                          })}
+                        </span>
+                      </button>
+
+                      <button
+                        className={`cs-liquid-button kiosk-option-button ${membershipIntentSelected ? 'cs-liquid-button--selected' : ''}`}
+                        onClick={() => onOpenMembershipModal(isExpired ? 'RENEW' : 'PURCHASE')}
+                        disabled={!canInteract}
+                      >
+                        <span className="kiosk-option-title">
+                          {t(lang, 'membership.sixMonthOption', {
+                            price: formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE),
+                          })}
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 )}
-              </div>
+              </section>
+
+              {/* Rental card */}
+              <section className="cs-liquid-card purchase-card purchase-card--rental">
+                <div className="purchase-card__header">
+                  <div className="purchase-card__title">{t(lang, 'rental.title')}</div>
+                </div>
+
+                <div className="purchase-card__body">
+                  {rentalsToShow.length > 0 ? (
+                    <div className="rental-grid">
+                      {rentalsToShow.map((rental) => {
+                        const availableCount =
+                          inventory?.rooms[rental] || (rental === 'LOCKER' ? inventory?.lockers : 0) || 0;
+                        const showWarning = availableCount > 0 && availableCount <= 5;
+                        const isUnavailable = availableCount === 0;
+                        const isDisabled = session.pastDueBlocked;
+                        const isSelected = proposedRentalType === rental && selectionConfirmed;
+                        const isStaffProposed =
+                          proposedBy === 'EMPLOYEE' && proposedRentalType === rental && !selectionConfirmed;
+                        const isPulsing = isStaffProposed;
+                        const isForced =
+                          selectedRental === rental &&
+                          selectionConfirmed &&
+                          selectionConfirmedBy === 'EMPLOYEE';
+
+                        const displayName = getRentalDisplayName(rental, lang);
+                        const displayPrice = DISPLAY_PRICE_BY_RENTAL[rental];
+                        const displayPriceLabel =
+                          typeof displayPrice === 'number' ? formatWholeDollars(displayPrice) : '';
+
+                        const span2 = rental === 'LOCKER' || rental === 'STANDARD';
+
+                        return (
+                          <button
+                            key={rental}
+                            className={`cs-liquid-button kiosk-option-button ${span2 ? 'span-2' : ''} ${isSelected ? 'cs-liquid-button--selected' : ''} ${isStaffProposed ? 'cs-liquid-button--staff-proposed' : ''} ${isDisabled ? 'cs-liquid-button--disabled' : ''} ${isPulsing ? 'pulse-bright' : ''}`}
+                            data-forced={isForced}
+                            onClick={() => {
+                              if (!isDisabled) void onSelectRental(rental);
+                            }}
+                            disabled={isDisabled}
+                          >
+                            <div className="kiosk-option-stack">
+                              <span className="kiosk-option-title">{displayName}</span>
+                              {displayPriceLabel && (
+                                <span className="kiosk-option-price">{displayPriceLabel}</span>
+                              )}
+                              {showWarning && !isUnavailable && (
+                                <span className="kiosk-option-subtext">
+                                  {t(lang, 'availability.onlyAvailable', { count: availableCount })}
+                                </span>
+                              )}
+                              {isUnavailable && (
+                                <span className="kiosk-option-subtext">
+                                  {t(lang, 'availability.unavailable')}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="cs-liquid-button cs-liquid-button--disabled">
+                      {t(lang, 'noOptionsAvailable')}
+                    </div>
+                  )}
+                </div>
+              </section>
             </div>
 
           </main>

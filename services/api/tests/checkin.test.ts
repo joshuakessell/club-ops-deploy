@@ -606,6 +606,120 @@ describe('Check-in Flow', () => {
     );
   });
 
+  describe('POST /v1/checkin/lane/:laneId/membership-purchase-intent', () => {
+    it(
+      "should allow intent=NONE to clear a prior 6-month intent (stored as NULL) and recompute the DUE quote",
+      runIfDbAvailable(async () => {
+        // Start a lane session
+        const startResponse = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
+          payload: {
+            customerId,
+          },
+        });
+        expect(startResponse.statusCode).toBe(200);
+        const startData = JSON.parse(startResponse.body) as { sessionId: string };
+        expect(startData.sessionId).toBeTruthy();
+
+        // Confirm a selection + create a DUE payment intent (required for immediate quote updates).
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { confirmedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+
+        const piIdResult = await query<{ payment_intent_id: string | null }>(
+          `SELECT payment_intent_id FROM lane_sessions WHERE id = $1`,
+          [startData.sessionId]
+        );
+        const paymentIntentId = piIdResult.rows[0]!.payment_intent_id;
+        expect(paymentIntentId).toBeTruthy();
+
+        const getQuote = async () => {
+          const r = await query<{ quote_json: unknown }>(
+            `SELECT quote_json FROM payment_intents WHERE id = $1`,
+            [paymentIntentId]
+          );
+          const raw = r.rows[0]!.quote_json;
+          return typeof raw === 'string' ? (JSON.parse(raw) as any) : (raw as any);
+        };
+
+        // Baseline quote should include daily membership fee (customer has no valid membership on file).
+        const baseQuote = await getQuote();
+        const baseItems: Array<{ description: string; amount: number }> = baseQuote.lineItems ?? [];
+        expect(baseItems.some((li) => li.description === 'Membership Fee')).toBe(true);
+        expect(baseItems.some((li) => li.description === '6 Month Membership')).toBe(false);
+
+        // Set PURCHASE intent; quote should include 6 Month Membership and omit Membership Fee.
+        const purchaseResp = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/membership-purchase-intent`,
+          payload: { intent: 'PURCHASE', sessionId: startData.sessionId },
+        });
+        expect(purchaseResp.statusCode).toBe(200);
+
+        const intentRow = await query<{
+          membership_purchase_intent: string | null;
+          membership_purchase_requested_at: string | null;
+        }>(
+          `SELECT membership_purchase_intent, membership_purchase_requested_at
+           FROM lane_sessions
+           WHERE id = $1`,
+          [startData.sessionId]
+        );
+        expect(intentRow.rows[0]!.membership_purchase_intent).toBe('PURCHASE');
+        expect(intentRow.rows[0]!.membership_purchase_requested_at).toBeTruthy();
+
+        const purchasedQuote = await getQuote();
+        const purchasedItems: Array<{ description: string; amount: number }> =
+          purchasedQuote.lineItems ?? [];
+        expect(purchasedItems.some((li) => li.description === '6 Month Membership')).toBe(true);
+        expect(purchasedItems.some((li) => li.description === 'Membership Fee')).toBe(false);
+
+        // Clear it with NONE; should persist NULLs and restore Membership Fee in the quote.
+        const clearResp = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/membership-purchase-intent`,
+          payload: { intent: 'NONE', sessionId: startData.sessionId },
+        });
+        expect(clearResp.statusCode).toBe(200);
+
+        const clearedRow = await query<{
+          membership_purchase_intent: string | null;
+          membership_purchase_requested_at: string | null;
+        }>(
+          `SELECT membership_purchase_intent, membership_purchase_requested_at
+           FROM lane_sessions
+           WHERE id = $1`,
+          [startData.sessionId]
+        );
+        expect(clearedRow.rows[0]!.membership_purchase_intent).toBeNull();
+        expect(clearedRow.rows[0]!.membership_purchase_requested_at).toBeNull();
+
+        const clearedQuote = await getQuote();
+        const clearedItems: Array<{ description: string; amount: number }> = clearedQuote.lineItems ?? [];
+        expect(clearedItems.some((li) => li.description === 'Membership Fee')).toBe(true);
+        expect(clearedItems.some((li) => li.description === '6 Month Membership')).toBe(false);
+      })
+    );
+  });
+
   describe('POST /v1/checkin/lane/:laneId/propose-selection', () => {
     it(
       'should allow customer to propose a rental type',
@@ -1300,6 +1414,31 @@ describe('Check-in Flow', () => {
         expect(data.extracted.firstName).toBe('JANE');
         expect(data.extracted.lastName).toBe('DOE');
         expect(data.extracted.dob).toBe('1992-01-02');
+      })
+    );
+
+    it(
+      'extracts identity fields from concatenated AAMVA payloads (field boundary parsing regression)',
+      runIfDbAvailable(async () => {
+        const raw =
+          '@\nANSI 636015090002DL00410289DLDCACDCBNONEDCDNONEDBA01012030DCSDOEDDENDACJOHNDDFNDBB07151988DAQ123456789DAJTX\n';
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const data = JSON.parse(response.body);
+        expect(data.result).toBe('NO_MATCH');
+        expect(data.scanType).toBe('STATE_ID');
+        expect(data.extracted).toBeDefined();
+        expect(data.extracted.firstName).toBe('JOHN');
+        expect(data.extracted.lastName).toBe('DOE');
+        expect(data.extracted.dob).toBe('1988-07-15');
+        expect(data.extracted.idNumber).toBe('123456789');
+        expect(data.extracted.jurisdiction).toBe('TX');
       })
     );
 

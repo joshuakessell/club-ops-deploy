@@ -62,15 +62,13 @@ export function RegisterHeader({
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
         <button
           onClick={() => void onSignOut()}
-          className="cs-liquid-button cs-liquid-button--secondary"
-          style={{ padding: '0.45rem 0.85rem', fontWeight: 700 }}
+          className="cs-liquid-button cs-liquid-button--secondary er-header-action-btn"
         >
           Sign Out
         </button>
         <button
           onClick={() => void onCloseOut()}
-          className="cs-liquid-button cs-liquid-button--danger"
-          style={{ padding: '0.45rem 0.85rem', fontWeight: 800 }}
+          className="cs-liquid-button cs-liquid-button--danger er-header-action-btn"
         >
           Close Out
         </button>

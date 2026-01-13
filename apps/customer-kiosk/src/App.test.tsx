@@ -95,8 +95,8 @@ describe('App', () => {
     const logo = screen.getByAltText('Club Dallas');
     expect(logo).toBeDefined();
     // Should not show customer info
-    expect(screen.queryByText(/Membership:/)).toBeNull();
-    expect(screen.queryByText(/Choose your experience/i)).toBeNull();
+    expect(screen.queryByText(/Membership/i)).toBeNull();
+    expect(screen.queryByText(/Rental/i)).toBeNull();
   });
 
   it('never shows a payment decline reason (generic guidance only)', async () => {
@@ -273,9 +273,11 @@ describe('App', () => {
       });
     });
 
+    expect(await screen.findByText('Membership')).toBeDefined();
     expect(await screen.findByText('Member')).toBeDefined();
-    expect(screen.queryByText('Purchase 6 Month Membership')).toBeNull();
-    expect(screen.queryByText('Renew Membership')).toBeNull();
+    expect(screen.getByText(/Thank you for being a member/i)).toBeDefined();
+    expect(screen.getByText(/expires on/i)).toBeDefined();
+    expect(screen.queryByText(/Please select one/i)).toBeNull();
   });
 
   it('shows Non-Member status + Purchase CTA when membership id is missing', async () => {
@@ -300,12 +302,14 @@ describe('App', () => {
       });
     });
 
+    expect(await screen.findByText('Membership')).toBeDefined();
     expect(await screen.findByText('Non-Member')).toBeDefined();
-    expect(screen.getByRole('button', { name: /Purchase 6 Month Membership.*\$43/ })).toBeDefined();
-    expect(screen.queryByText('Renew Membership')).toBeNull();
+    expect(screen.getByText(/Please select one/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /One-time Membership.*\$13/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /6-Month Membership.*\$43/ })).toBeDefined();
   });
 
-  it('shows Non-Member + Expired indicator + Renew CTA when membership is expired', async () => {
+  it('shows Non-Member and routes 6-month CTA through renew flow when membership is expired', async () => {
     await act(async () => {
       render(<App />);
     });
@@ -329,8 +333,7 @@ describe('App', () => {
     });
 
     expect(await screen.findByText('Non-Member')).toBeDefined();
-    expect(screen.getByText('Expired')).toBeDefined();
-    expect(screen.getByRole('button', { name: /Renew Membership.*\$43/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /6-Month Membership.*\$43/ })).toBeDefined();
   });
 
   it('shows whole-dollar prices next to rental options and never shows Join Waitlist for Upgrade', async () => {
@@ -360,7 +363,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /Private Dressing Room.*\$30/ })).toBeDefined();
     expect(screen.getByRole('button', { name: /Deluxe Dressing Room.*\$40/ })).toBeDefined();
     expect(screen.getByRole('button', { name: /Special Dressing Room.*\$50/ })).toBeDefined();
-    expect(screen.getByRole('button', { name: /Renew Membership.*\$43/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /6-Month Membership.*\$43/ })).toBeDefined();
 
     expect(screen.queryByText(/Join Waitlist for Upgrade/i)).toBeNull();
   });
@@ -389,11 +392,12 @@ describe('App', () => {
 
     expect(await screen.findByText('No miembro')).toBeDefined();
     expect(
-      screen.getByRole('button', { name: /Comprar membresía de 6 meses.*\$43/ })
+      screen.getByRole('button', { name: /Membresía de 6 meses.*\$43/ })
     ).toBeDefined();
+    expect(screen.getByRole('button', { name: /Membresía por un día.*\$13/ })).toBeDefined();
     // Guard: key screens should not leak obvious English CTAs when in Spanish.
     expect(screen.queryByText('Non-Member')).toBeNull();
-    expect(screen.queryByText('Purchase 6 Month Membership')).toBeNull();
+    expect(screen.queryByText(/6-Month Membership/i)).toBeNull();
   });
 
   it('renders Spanish membership modal copy (no English fallback) when language is ES', async () => {
@@ -418,15 +422,13 @@ describe('App', () => {
       });
     });
 
-    const purchaseBtn = await screen.findByRole('button', {
-      name: /Comprar membresía de 6 meses.*\$43/,
-    });
+    const purchaseBtn = await screen.findByRole('button', { name: /Membresía de 6 meses.*\$43/ });
     act(() => {
       (purchaseBtn as HTMLButtonElement).click();
     });
 
     // Spanish title/body + Spanish buttons
-    expect(await screen.findByText('Membresía')).toBeDefined();
+    expect(await screen.findByRole('heading', { name: 'Membresía' })).toBeDefined();
     expect(screen.getByText(/Puede ahorrar/i)).toBeDefined();
     expect(screen.getByText('Continuar')).toBeDefined();
     expect(screen.getByText('Cancelar')).toBeDefined();
@@ -457,14 +459,12 @@ describe('App', () => {
       });
     });
 
-    const purchaseBtn = await screen.findByRole('button', {
-      name: /Purchase 6 Month Membership.*\$43/,
-    });
+    const purchaseBtn = await screen.findByRole('button', { name: /6-Month Membership.*\$43/ });
     act(() => {
       (purchaseBtn as HTMLButtonElement).click();
     });
 
-    expect(await screen.findByText('Membership')).toBeDefined();
+    expect(await screen.findByRole('heading', { name: 'Membership' })).toBeDefined();
     expect(screen.getByText(/save on daily membership fees/i)).toBeDefined();
     const cancel = screen.getByText('Cancel');
     act(() => {
@@ -482,6 +482,6 @@ describe('App', () => {
     });
 
     expect(await screen.findByText('Member')).toBeDefined();
-    expect(await screen.findByText('Pending')).toBeDefined();
+    expect(screen.queryByText('Pending')).toBeNull();
   });
 });

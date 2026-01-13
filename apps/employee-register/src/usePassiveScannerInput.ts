@@ -1,21 +1,18 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-export type ScannerCapture = {
-  /** Raw captured scan string (may include newlines). */
-  raw: string;
-};
-
 type Options = {
   enabled: boolean;
   /**
    * Called exactly once per capture, with the accumulated scan string.
    * The hook automatically resets its internal buffer after calling.
    */
-  onCapture: (capture: ScannerCapture) => void;
+  onCapture: (raw: string) => void;
   /** Called when Escape is pressed during an active capture sequence (optional). */
   onCancel?: () => void;
   /** Idle timeout used to terminate scans that don't send a suffix key. */
   idleTimeoutMs?: number;
+  /** Ignore new scans for this duration after emitting (prevents double-capture). */
+  cooldownMs?: number;
   /**
    * Grace period after an Enter key to decide whether it was a terminator (end-of-scan)
    * or a line break within a multi-line scan (PDF417). If another character arrives within
@@ -24,6 +21,11 @@ type Options = {
   enterGraceMs?: number;
   /** Minimum trimmed length before emitting a capture. */
   minLength?: number;
+  /**
+   * If an editable element is focused, only begin capture if inter-key timing suggests
+   * scanner-speed input (in ms).
+   */
+  scannerInterKeyMaxMs?: number;
 };
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -47,14 +49,18 @@ export function usePassiveScannerInput({
   enabled,
   onCapture,
   onCancel,
-  idleTimeoutMs = 75,
+  idleTimeoutMs = 180,
+  cooldownMs = 400,
   enterGraceMs = 35,
   minLength = 4,
+  scannerInterKeyMaxMs = 35,
 }: Options) {
   const capturingRef = useRef(false);
   const bufferRef = useRef('');
   const timerRef = useRef<number | null>(null);
   const lastWasEnterRef = useRef(false);
+  const lastKeyAtRef = useRef<number | null>(null);
+  const cooldownUntilRef = useRef<number>(0);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -67,6 +73,7 @@ export function usePassiveScannerInput({
     capturingRef.current = false;
     bufferRef.current = '';
     lastWasEnterRef.current = false;
+    lastKeyAtRef.current = null;
     clearTimer();
   }, [clearTimer]);
 
@@ -85,7 +92,8 @@ export function usePassiveScannerInput({
     }
 
     if (raw.trim().length < minLength) return;
-    onCapture({ raw });
+    cooldownUntilRef.current = Date.now() + cooldownMs;
+    onCapture(raw);
   }, [clearTimer, minLength, onCapture]);
 
   const scheduleFinalize = useCallback(() => {
@@ -118,17 +126,24 @@ export function usePassiveScannerInput({
     const onKeyDownCapture = (e: KeyboardEvent) => {
       const key = e.key;
       const editable = isEditableTarget(e.target);
+      const now = Date.now();
+      const lastKeyAt = lastKeyAtRef.current;
+      const delta = lastKeyAt === null ? null : now - lastKeyAt;
+      lastKeyAtRef.current = now;
 
       // If the user is typing in an editable element, do not intercept unless we already started
-      // capturing a scan sequence.
-      if (!capturingRef.current && editable) {
-        return;
-      }
+      // capturing a scan sequence OR the inter-key timing looks like scanner-speed.
+      const looksLikeScannerSpeed =
+        delta !== null && delta >= 0 && delta <= scannerInterKeyMaxMs;
+      if (!capturingRef.current && editable && !looksLikeScannerSpeed) return;
 
       // If we're not currently capturing, ignore modifier shortcuts and non-printable keys.
       if (!capturingRef.current && (e.metaKey || e.ctrlKey || e.altKey)) {
         return;
       }
+
+      // Cooldown: ignore new captures for a short window after a scan emits.
+      if (!capturingRef.current && now < cooldownUntilRef.current) return;
 
       if (capturingRef.current) {
         // While capturing, prevent scan keystrokes from leaking into UI.

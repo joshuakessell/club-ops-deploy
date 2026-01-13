@@ -283,6 +283,74 @@ body {
   font-weight: 500;
 }
 
+.purchase-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.purchase-card {
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.purchase-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.purchase-card__title {
+  font-weight: 800;
+  font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+}
+
+.purchase-card__status {
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 700;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  white-space: nowrap;
+}
+
+.purchase-card__subheader {
+  color: rgba(255, 255, 255, 0.86);
+  font-weight: 700;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+}
+
+.purchase-card__message {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  line-height: 1.35;
+}
+
+.membership-option-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rental-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+.rental-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+.kiosk-option-subtext {
+  font-size: 0.85rem;
+  opacity: 0.85;
+  line-height: 1.15;
+}
+
 .membership-buttons,
 .experience-options {
   display: grid;

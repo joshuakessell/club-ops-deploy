@@ -276,41 +276,144 @@ type ExtractedIdIdentity = {
   jurisdiction?: string;
 };
 
-function minimalAamvaExtract(raw: string): ExtractedIdIdentity {
-  const lines = raw.split('\n');
-  const out: ExtractedIdIdentity = {};
-  for (const lineRaw of lines) {
-    const line = lineRaw ?? '';
-    if (line.startsWith('DCS')) out.lastName = line.substring(3).trim() || out.lastName;
-    else if (line.startsWith('DAC')) out.firstName = line.substring(3).trim() || out.firstName;
-    else if (line.startsWith('DAA')) out.fullName = line.substring(3).trim() || out.fullName;
-    else if (line.startsWith('DAQ')) out.idNumber = line.substring(3).trim() || out.idNumber;
-    else if (line.startsWith('DBD')) {
-      const dobStr = line.substring(3).trim();
-      // Common AAMVA DBD format: YYYYMMDD
-      if (/^\d{8}$/.test(dobStr)) {
-        const yyyy = dobStr.slice(0, 4);
-        const mm = dobStr.slice(4, 6);
-        const dd = dobStr.slice(6, 8);
-        out.dob = `${yyyy}-${mm}-${dd}`;
-      }
-    } else if (line.startsWith('DCI')) {
-      const j = line.substring(3).trim();
-      if (j) {
-        out.jurisdiction = j;
-        out.issuer = out.issuer || j;
-      }
+const AAMVA_CODES = new Set([
+  // core identity fields
+  'DCS',
+  'DAC',
+  'DAD',
+  'DAA',
+  'DBB',
+  'DBD',
+  'DAQ',
+  'DAJ',
+  'DCI',
+  // common truncation/flags that often appear between name fields
+  'DDE',
+  'DDF',
+  'DDG',
+  // other common fields that can appear and must be treated as boundaries
+  'DBA',
+  'DBC',
+  'DCA',
+  'DCB',
+  'DCD',
+  'DCF',
+  'DCG',
+  'DCK',
+  'DCL',
+  'DDA',
+  'DDB',
+  'DDC',
+  'DDD',
+  'DAG',
+  'DAI',
+  'DAK',
+  'DAR',
+  'DAS',
+  'DAT',
+  'DAU',
+]);
+
+function extractAamvaFieldMap(raw: string): Record<string, string> {
+  // Scan raw (already normalized) for occurrences of known AAMVA 3-letter codes.
+  // Record positions and slice values between consecutive codes.
+  // Trim whitespace/newlines from values.
+  // If a code appears multiple times, keep the first non-empty value (or prefer the longest non-empty).
+  const s = raw;
+  const hits: Array<{ code: string; idx: number }> = [];
+
+  for (let i = 0; i <= s.length - 3; i++) {
+    const code = s.slice(i, i + 3);
+    if (AAMVA_CODES.has(code)) {
+      hits.push({ code, idx: i });
     }
   }
-  if (!out.fullName && out.firstName && out.lastName) {
-    out.fullName = `${out.firstName} ${out.lastName}`.trim();
+
+  hits.sort((a, b) => a.idx - b.idx);
+
+  const out: Record<string, string> = {};
+  for (let i = 0; i < hits.length; i++) {
+    const cur = hits[i]!;
+    const nextIdx = hits[i + 1]?.idx ?? s.length;
+    const rawValue = s.slice(cur.idx + 3, nextIdx);
+    const value = rawValue.replace(/\s+/g, ' ').trim();
+    if (!value) continue;
+
+    const existing = out[cur.code];
+    if (!existing) {
+      out[cur.code] = value;
+      continue;
+    }
+    // Prefer longest non-empty (helps when a code repeats with a fuller value).
+    if (value.length > existing.length) out[cur.code] = value;
   }
+
   return out;
 }
 
+function parseAamvaDateToISO(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const digits = value.replace(/\D/g, '');
+  if (!/^\d{8}$/.test(digits)) return undefined;
+
+  const tryYyyyMmDd = () => {
+    const yyyy = Number(digits.slice(0, 4));
+    const mm = Number(digits.slice(4, 6));
+    const dd = Number(digits.slice(6, 8));
+    if (yyyy < 1900 || yyyy > 2100) return undefined;
+    if (mm < 1 || mm > 12) return undefined;
+    if (dd < 1 || dd > 31) return undefined;
+    return `${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  };
+
+  const tryMmDdYyyy = () => {
+    const mm = Number(digits.slice(0, 2));
+    const dd = Number(digits.slice(2, 4));
+    const yyyy = Number(digits.slice(4, 8));
+    if (yyyy < 1900 || yyyy > 2100) return undefined;
+    if (mm < 1 || mm > 12) return undefined;
+    if (dd < 1 || dd > 31) return undefined;
+    return `${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  };
+
+  // First try YYYYMMDD if year looks plausible, otherwise MMDDYYYY.
+  const yyyy = Number(digits.slice(0, 4));
+  if (yyyy >= 1900 && yyyy <= 2100) {
+    return tryYyyyMmDd() ?? tryMmDdYyyy();
+  }
+  return tryMmDdYyyy() ?? tryYyyyMmDd();
+}
+
+function isCleanParsedAamvaValue(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const s = value.trim();
+  if (!s) return false;
+  if (s.length > 64) return false;
+  // Guard against concatenated AAMVA codes leaking into parsed strings.
+  if (/(?:^|[^A-Z])D[A-Z]{2}(?:[^A-Z]|$)/.test(s)) return false;
+  if (/\b(DAQ|DBB|DBD|DCS|DAC|DAA|DAJ|DCI)\b/.test(s)) return false;
+  return true;
+}
+
 function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity {
-  // Use a maintained parser first; fall back to minimal AAMVA tag parsing for robustness.
-  const minimal = minimalAamvaExtract(rawNormalized);
+  const fieldMap = extractAamvaFieldMap(rawNormalized);
+  const fromMap: ExtractedIdIdentity = {
+    lastName: fieldMap['DCS'] || undefined,
+    firstName: fieldMap['DAC'] || undefined,
+    fullName: fieldMap['DAA'] || undefined,
+    dob:
+      parseAamvaDateToISO(fieldMap['DBB']) ||
+      parseAamvaDateToISO(fieldMap['DBD']) ||
+      undefined,
+    idNumber: fieldMap['DAQ'] || undefined,
+    jurisdiction: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
+    issuer: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
+  };
+
+  if (!fromMap.fullName && fromMap.firstName && fromMap.lastName) {
+    fromMap.fullName = `${fromMap.firstName} ${fromMap.lastName}`.trim();
+  }
+
   try {
     const parsed = ParseAamva(rawNormalized) as unknown as {
       firstName?: string | null;
@@ -321,30 +424,26 @@ function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity {
       pdf417?: string | null;
     };
 
-    const dob =
+    // Only trust parsed values if they look clean AND we are missing that field from fieldMap.
+    const parsedDob =
       parsed?.dateOfBirth instanceof Date
         ? parsed.dateOfBirth.toISOString().slice(0, 10)
         : typeof parsed?.dateOfBirth === 'string'
-          ? (() => {
-              const d = new Date(parsed.dateOfBirth);
-              return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) : undefined;
-            })()
+          ? parseAamvaDateToISO(parsed.dateOfBirth)
           : undefined;
 
-    const merged: ExtractedIdIdentity = {
-      firstName: (parsed?.firstName ?? undefined) || minimal.firstName,
-      lastName: (parsed?.lastName ?? undefined) || minimal.lastName,
-      dob: dob || minimal.dob,
-      idNumber: (parsed?.driversLicenseId ?? undefined) || minimal.idNumber,
-      jurisdiction: (parsed?.state ?? undefined) || minimal.jurisdiction,
-      issuer: (parsed?.state ?? undefined) || minimal.issuer,
-    };
-    if (minimal.fullName) merged.fullName = minimal.fullName;
-    else if (merged.firstName && merged.lastName)
-      merged.fullName = `${merged.firstName} ${merged.lastName}`.trim();
-    return merged;
+    const out: ExtractedIdIdentity = { ...fromMap };
+    if (!out.firstName && isCleanParsedAamvaValue(parsed?.firstName)) out.firstName = parsed.firstName!.trim();
+    if (!out.lastName && isCleanParsedAamvaValue(parsed?.lastName)) out.lastName = parsed.lastName!.trim();
+    if (!out.idNumber && isCleanParsedAamvaValue(parsed?.driversLicenseId))
+      out.idNumber = parsed.driversLicenseId!.trim();
+    if (!out.jurisdiction && isCleanParsedAamvaValue(parsed?.state)) out.jurisdiction = parsed.state!.trim();
+    if (!out.issuer && isCleanParsedAamvaValue(parsed?.state)) out.issuer = parsed.state!.trim();
+    if (!out.dob && parsedDob) out.dob = parsedDob;
+    if (!out.fullName && out.firstName && out.lastName) out.fullName = `${out.firstName} ${out.lastName}`.trim();
+    return out;
   } catch {
-    return minimal;
+    return fromMap;
   }
 }
 
@@ -4612,7 +4711,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{
     Params: { laneId: string };
-    Body: { intent: 'PURCHASE' | 'RENEW'; sessionId?: string };
+    Body: { intent: 'PURCHASE' | 'RENEW' | 'NONE'; sessionId?: string };
   }>(
     '/v1/checkin/lane/:laneId/membership-purchase-intent',
     {
@@ -4621,7 +4720,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { laneId } = request.params;
       const bodySchema = z.object({
-        intent: z.enum(['PURCHASE', 'RENEW']),
+        intent: z.enum(['PURCHASE', 'RENEW', 'NONE']),
         sessionId: z.string().uuid().optional(),
       });
       const parsed = bodySchema.safeParse(request.body);
@@ -4658,15 +4757,17 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           // Persist membership purchase intent on lane session.
+          const intentValue: 'PURCHASE' | 'RENEW' | null = intent === 'NONE' ? null : intent;
+          const requestedAt = intent === 'NONE' ? null : new Date();
           const updatedSession = (
             await client.query<LaneSessionRow>(
               `UPDATE lane_sessions
                SET membership_purchase_intent = $1,
-                   membership_purchase_requested_at = NOW(),
+                   membership_purchase_requested_at = $2,
                    updated_at = NOW()
-               WHERE id = $2
+               WHERE id = $3
                RETURNING *`,
-              [intent, session.id]
+              [intentValue, requestedAt, session.id]
             )
           ).rows[0]!;
 
@@ -4701,7 +4802,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 checkInTime: new Date(),
                 membershipCardType,
                 membershipValidUntil,
-                includeSixMonthMembershipPurchase: true,
+                includeSixMonthMembershipPurchase: intent !== 'NONE',
               };
 
               const quote = calculatePriceQuote(pricingInput);

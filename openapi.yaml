@@ -706,7 +706,8 @@ paths:
               properties:
                 intent:
                   type: string
-                  enum: [PURCHASE, RENEW]
+                  enum: [PURCHASE, RENEW, NONE]
+                  description: When NONE, clears any previously requested 6-month membership purchase/renewal intent.
                 sessionId:
                   type: string
                   format: uuid

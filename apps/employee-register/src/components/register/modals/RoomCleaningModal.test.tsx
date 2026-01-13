@@ -9,7 +9,7 @@ describe('RoomCleaningModal', () => {
     vi.clearAllMocks();
   });
 
-  it('shows only rooms in CLEANING status', async () => {
+  it('shows DIRTY and CLEANING columns and filters out other statuses', async () => {
     (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
       ok: true,
       json: () =>
@@ -32,12 +32,14 @@ describe('RoomCleaningModal', () => {
       />
     );
 
-    expect(await screen.findByText(/Rooms currently cleaning/i)).toBeDefined();
+    expect(await screen.findByText(/Select rooms to begin or finish cleaning/i)).toBeDefined();
+    expect(screen.getByText(/DIRTY \(ready to begin cleaning\)/i)).toBeDefined();
+    expect(screen.getByText(/CLEANING \(ready to finish cleaning\)/i)).toBeDefined();
     expect(await screen.findByRole('button', { name: /Room 101/i })).toBeDefined();
     expect(screen.queryByRole('button', { name: /Room 102/i })).toBeNull();
   });
 
-  it('multi-select enables Continue and confirm calls /v1/cleaning/batch with expected payload', async () => {
+  it('multi-select CLEANING rooms enables Finish Cleaning and calls /v1/cleaning/batch with expected payload', async () => {
     (global.fetch as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce({
         ok: true,
@@ -68,17 +70,15 @@ describe('RoomCleaningModal', () => {
       />
     );
 
-    const continueBtn = await screen.findByRole('button', { name: 'Continue' });
-    expect(continueBtn).toHaveProperty('disabled', true);
+    const primaryBtn = await screen.findByRole('button', { name: 'Continue' });
+    expect(primaryBtn).toHaveProperty('disabled', true);
 
     fireEvent.click(await screen.findByRole('button', { name: /Room 101/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Room 103/i }));
-    expect(continueBtn).toHaveProperty('disabled', false);
+    const finishBtn = await screen.findByRole('button', { name: 'Finish Cleaning' });
+    expect(finishBtn).toHaveProperty('disabled', false);
 
-    fireEvent.click(continueBtn);
-    await screen.findByText(/Confirm finish cleaning/i);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    fireEvent.click(finishBtn);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(

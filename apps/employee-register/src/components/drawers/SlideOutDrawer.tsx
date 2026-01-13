@@ -10,13 +10,15 @@ export interface SlideOutDrawerProps {
   onOpenChange(next: boolean): void;
   widthPx?: number;
   tabWidthPx?: number;
+  tabVariant?: 'secondary' | 'success' | 'warning' | 'danger';
+  tabPulseVariant?: 'success' | 'danger' | null;
   zIndex?: number;
   attention?: boolean;
   children: ReactNode;
 }
 
 const DEFAULT_WIDTH_PX = 520;
-const DEFAULT_TAB_WIDTH_PX = 44;
+const DEFAULT_TAB_WIDTH_PX = 54;
 const DEFAULT_Z_INDEX = 1500;
 
 const DRAG_START_THRESHOLD_PX = 6;
@@ -39,6 +41,8 @@ export function SlideOutDrawer({
   onOpenChange,
   widthPx = DEFAULT_WIDTH_PX,
   tabWidthPx = DEFAULT_TAB_WIDTH_PX,
+  tabVariant = 'secondary',
+  tabPulseVariant = null,
   zIndex = DEFAULT_Z_INDEX,
   attention = false,
   children,
@@ -172,9 +176,10 @@ export function SlideOutDrawer({
 
   const tabClasses = [
     'cs-liquid-button',
-    'cs-liquid-button--secondary',
+    tabVariant === 'secondary' ? 'cs-liquid-button--secondary' : `cs-liquid-button--${tabVariant}`,
     'sod-tab',
     side === 'left' ? 'sod-tab--left' : 'sod-tab--right',
+    tabPulseVariant ? `er-pulse-${tabPulseVariant}` : '',
     attention ? 'gold-pulse' : '',
   ]
     .filter(Boolean)
