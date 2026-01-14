@@ -7,6 +7,10 @@ type Options = {
    * The hook automatically resets its internal buffer after calling.
    */
   onCapture: (raw: string) => void;
+  /** Called when a scan capture sequence starts (first printable character captured). */
+  onCaptureStart?: () => void;
+  /** Called when a scan capture sequence ends (after emit or discard/cancel). */
+  onCaptureEnd?: () => void;
   /** Called when Escape is pressed during an active capture sequence (optional). */
   onCancel?: () => void;
   /** Idle timeout used to terminate scans that don't send a suffix key. */
@@ -48,6 +52,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export function usePassiveScannerInput({
   enabled,
   onCapture,
+  onCaptureStart,
+  onCaptureEnd,
   onCancel,
   idleTimeoutMs = 180,
   cooldownMs = 400,
@@ -70,11 +76,13 @@ export function usePassiveScannerInput({
   }, []);
 
   const reset = useCallback(() => {
+    const wasCapturing = capturingRef.current;
     capturingRef.current = false;
     bufferRef.current = '';
     lastWasEnterRef.current = false;
     lastKeyAtRef.current = null;
     clearTimer();
+    if (wasCapturing) onCaptureEnd?.();
   }, [clearTimer]);
 
   const finalize = useCallback(() => {
@@ -84,17 +92,24 @@ export function usePassiveScannerInput({
 
     let raw = bufferRef.current;
     bufferRef.current = '';
-    if (!raw) return;
+    if (!raw) {
+      onCaptureEnd?.();
+      return;
+    }
 
     // If the scan ended with a terminator Enter, drop the trailing newline but preserve internal ones.
     if (raw.endsWith('\n')) {
       raw = raw.replace(/\n+$/g, '\n').replace(/\n$/, '');
     }
 
-    if (raw.trim().length < minLength) return;
+    if (raw.trim().length < minLength) {
+      onCaptureEnd?.();
+      return;
+    }
     cooldownUntilRef.current = Date.now() + cooldownMs;
     onCapture(raw);
-  }, [clearTimer, minLength, onCapture]);
+    onCaptureEnd?.();
+  }, [clearTimer, cooldownMs, minLength, onCapture, onCaptureEnd]);
 
   const scheduleFinalize = useCallback(() => {
     clearTimer();
@@ -177,7 +192,10 @@ export function usePassiveScannerInput({
 
       if (key.length === 1) {
         // Start capture on first printable character (when not typing in an editable element).
-        if (!capturingRef.current) capturingRef.current = true;
+        if (!capturingRef.current) {
+          capturingRef.current = true;
+          onCaptureStart?.();
+        }
         e.preventDefault();
         lastWasEnterRef.current = false;
         bufferRef.current += key;
@@ -193,7 +211,16 @@ export function usePassiveScannerInput({
 
     window.addEventListener('keydown', onKeyDownCapture, { capture: true });
     return () => window.removeEventListener('keydown', onKeyDownCapture, { capture: true });
-  }, [enabled, finalize, onCancel, reset, scheduleFinalize, scheduleFinalizeAfterEnter]);
+  }, [
+    enabled,
+    finalize,
+    onCancel,
+    onCaptureEnd,
+    onCaptureStart,
+    reset,
+    scheduleFinalize,
+    scheduleFinalizeAfterEnter,
+  ]);
 
   return { reset };
 }

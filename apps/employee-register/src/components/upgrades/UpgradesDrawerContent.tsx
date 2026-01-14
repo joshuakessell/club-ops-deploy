@@ -33,7 +33,7 @@ export interface UpgradesDrawerContentProps {
 
 export function UpgradesDrawerContent({
   waitlistEntries,
-  hasEligibleEntries,
+  hasEligibleEntries: _hasEligibleEntries,
   isEntryOfferEligible,
   onOffer,
   onStartPayment,
@@ -52,13 +52,8 @@ export function UpgradesDrawerContent({
       <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: '1rem' }}>
         <div>
           <h2 style={{ margin: 0, marginBottom: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
-            Upgrade Waitlist Entries
+            Upgrade Waitlist
           </h2>
-          <div style={{ fontSize: '0.9rem', color: '#94a3b8' }}>
-            {hasEligibleEntries
-              ? 'Eligible offers available now.'
-              : 'No eligible offers right now. Offered upgrades can still be fulfilled.'}
-          </div>
         </div>
         {headerRightSlot}
       </div>

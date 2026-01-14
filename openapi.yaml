@@ -546,6 +546,107 @@ paths:
         '403':
           description: Customer banned
 
+  /v1/customers/match-identity:
+    post:
+      tags: [Customers]
+      summary: Match existing customer by (firstName, lastName, dob) for manual entry duplicate prevention
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firstName, lastName, dob]
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                dob:
+                  type: string
+                  description: Date of birth YYYY-MM-DD
+      responses:
+        '200':
+          description: Match result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  matchCount:
+                    type: integer
+                  bestMatch:
+                    type: object
+                    nullable: true
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      dob:
+                        type: string
+                        nullable: true
+                      membershipNumber:
+                        type: string
+                        nullable: true
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+
+  /v1/customers/create-manual:
+    post:
+      tags: [Customers]
+      summary: Create customer from manual entry (firstName, lastName, dob) without de-duping
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firstName, lastName, dob]
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                dob:
+                  type: string
+                  description: Date of birth YYYY-MM-DD
+      responses:
+        '200':
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: boolean
+                  customer:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      dob:
+                        type: string
+                        nullable: true
+                      membershipNumber:
+                        type: string
+                        nullable: true
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+
   /v1/checkin/lane/{laneId}/scan-id:
     post:
       tags: [Check-in]
@@ -1074,6 +1175,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InventorySummary'
+
+  /v1/inventory/detailed:
+    get:
+      tags: [Inventory]
+      summary: Get detailed inventory with occupancy info (active check-in/out times)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Detailed inventory (rooms + lockers)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rooms:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        number:
+                          type: string
+                        tier:
+                          type: string
+                        status:
+                          type: string
+                        floor:
+                          type: integer
+                        lastStatusChange:
+                          type: string
+                        assignedTo:
+                          type: string
+                          nullable: true
+                        assignedMemberName:
+                          type: string
+                          nullable: true
+                        overrideFlag:
+                          type: boolean
+                        occupancyId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                        checkinAt:
+                          type: string
+                          nullable: true
+                        checkoutAt:
+                          type: string
+                          nullable: true
+                  lockers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        number:
+                          type: string
+                        status:
+                          type: string
+                        assignedTo:
+                          type: string
+                          nullable: true
+                        assignedMemberName:
+                          type: string
+                          nullable: true
+                        occupancyId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                        checkinAt:
+                          type: string
+                          nullable: true
+                        checkoutAt:
+                          type: string
+                          nullable: true
 
   /v1/cleaning/batch:
     post:

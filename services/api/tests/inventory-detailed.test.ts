@@ -67,7 +67,7 @@ describe('GET /v1/inventory/detailed (includes overdue active stays)', () => {
     const visitId = visit.rows[0]!.id;
 
     // Overdue scheduled checkout (ended 1 hour ago) on the active visit.
-    const block = await pool.query<{ starts_at: Date; ends_at: Date }>(
+    const block = await pool.query<{ id: string; starts_at: Date; ends_at: Date }>(
       `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, rental_type, locker_id)
        VALUES (
          $1,
@@ -77,16 +77,19 @@ describe('GET /v1/inventory/detailed (includes overdue active stays)', () => {
          'LOCKER',
          $2
        )
-       RETURNING starts_at, ends_at`,
+       RETURNING id, starts_at, ends_at`,
       [visitId, lockerId]
     );
 
     const res = await app.inject({ method: 'GET', url: '/v1/inventory/detailed' });
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { lockers?: Array<{ number?: string; checkinAt?: string; checkoutAt?: string }> };
+    const body = JSON.parse(res.body) as {
+      lockers?: Array<{ number?: string; occupancyId?: string; checkinAt?: string; checkoutAt?: string }>;
+    };
 
     const row = (body.lockers ?? []).find((l) => l.number === '040');
     expect(row).toBeDefined();
+    expect(row!.occupancyId).toBe(block.rows[0]!.id);
     expect(typeof row!.checkinAt).toBe('string');
     expect(typeof row!.checkoutAt).toBe('string');
 

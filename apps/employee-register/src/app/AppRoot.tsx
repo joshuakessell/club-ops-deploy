@@ -26,6 +26,7 @@ type ScanResult =
   | { outcome: 'no_match'; message: string; canCreate?: boolean }
   | { outcome: 'error'; message: string };
 import { debounce } from '../utils/debounce';
+import { extractDobDigits, formatDobMmDdYyyy, parseDobDigitsToIso } from '../utils/dob';
 import { OfferUpgradeModal } from '../components/OfferUpgradeModal';
 import { CheckoutRequestsBanner } from '../components/register/CheckoutRequestsBanner';
 import { CheckoutVerificationModal } from '../components/register/CheckoutVerificationModal';
@@ -197,7 +198,26 @@ export function AppRoot() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [passiveScanProcessing, setPassiveScanProcessing] = useState(false);
+  const passiveScanProcessingRef = useRef(false);
+  const [scanOverlayMounted, setScanOverlayMounted] = useState(false);
+  const [scanOverlayActive, setScanOverlayActive] = useState(false);
+  const scanOverlayHideTimerRef = useRef<number | null>(null);
+  const scanOverlayShownAtRef = useRef<number | null>(null);
+  const SCAN_OVERLAY_MIN_VISIBLE_MS = 300;
   const [manualEntry, setManualEntry] = useState(false);
+  const [manualFirstName, setManualFirstName] = useState('');
+  const [manualLastName, setManualLastName] = useState('');
+  const [manualDobDigits, setManualDobDigits] = useState('');
+  const [manualEntrySubmitting, setManualEntrySubmitting] = useState(false);
+  const [manualExistingPrompt, setManualExistingPrompt] = useState<null | {
+    firstName: string;
+    lastName: string;
+    dobIso: string;
+    matchCount: number;
+    bestMatch: { id: string; name: string; membershipNumber?: string | null; dob?: string | null };
+  }>(null);
+  const [manualExistingPromptError, setManualExistingPromptError] = useState<string | null>(null);
+  const [manualExistingPromptSubmitting, setManualExistingPromptSubmitting] = useState(false);
   const [isUpgradesDrawerOpen, setIsUpgradesDrawerOpen] = useState(false);
   const [isInventoryDrawerOpen, setIsInventoryDrawerOpen] = useState(false);
   const [inventoryForcedSection, setInventoryForcedSection] = useState<InventoryDrawerSection>(null);
@@ -732,15 +752,6 @@ export function AppRoot() {
     }
   };
 
-  const handleManualIdEntry = async (name: string, idNumber?: string, dob?: string) => {
-    const payload: IdScanPayload = {
-      fullName: name,
-      idNumber: idNumber || undefined,
-      dob: dob || undefined,
-    };
-    await handleIdScan(payload);
-  };
-
   const startLaneSession = async (
     idScanValue: string,
     membershipScanValue?: string | null,
@@ -878,12 +889,88 @@ export function AppRoot() {
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim()) {
-      alert('Please enter customer name');
+    const firstName = manualFirstName.trim();
+    const lastName = manualLastName.trim();
+    const dobIso = parseDobDigitsToIso(manualDobDigits);
+    if (!firstName || !lastName || !dobIso) {
+      alert('Please enter First Name, Last Name, and a valid Date of Birth (MM/DD/YYYY).');
       return;
     }
-    // Use scan-id endpoint for manual entry too (with minimal payload)
-    await handleManualIdEntry(customerName.trim());
+    if (!session?.sessionToken) {
+      alert('Not authenticated');
+      return;
+    }
+
+    setManualEntrySubmitting(true);
+    setManualExistingPromptError(null);
+    try {
+      // First: check for existing customer match (name + dob).
+      const matchRes = await fetch(`${API_BASE}/v1/customers/match-identity`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ firstName, lastName, dob: dobIso }),
+      });
+
+      const matchPayload: unknown = await matchRes.json().catch(() => null);
+      if (!matchRes.ok) {
+        const msg = getErrorMessage(matchPayload) || 'Failed to check for existing customer';
+        setManualExistingPromptError(msg);
+        return;
+      }
+
+      const data = matchPayload as {
+        matchCount?: number;
+        bestMatch?: { id?: string; name?: string; membershipNumber?: string | null; dob?: string | null } | null;
+      };
+      const best = data.bestMatch;
+      const matchCount = typeof data.matchCount === 'number' ? data.matchCount : 0;
+      if (best && typeof best.id === 'string' && typeof best.name === 'string') {
+        // Show confirmation prompt instead of creating a duplicate immediately.
+        setManualExistingPrompt({
+          firstName,
+          lastName,
+          dobIso,
+          matchCount,
+          bestMatch: { id: best.id, name: best.name, membershipNumber: best.membershipNumber, dob: best.dob },
+        });
+        return;
+      }
+
+      // No match: create new customer then load it.
+      const createRes = await fetch(`${API_BASE}/v1/customers/create-manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ firstName, lastName, dob: dobIso }),
+      });
+      const createPayload: unknown = await createRes.json().catch(() => null);
+      if (!createRes.ok) {
+        const msg = getErrorMessage(createPayload) || 'Failed to create customer';
+        setManualExistingPromptError(msg);
+        return;
+      }
+      const created = createPayload as { customer?: { id?: string } };
+      const newId = created.customer?.id;
+      if (!newId) {
+        setManualExistingPromptError('Create returned no customer id');
+        return;
+      }
+
+      const result = await startLaneSessionByCustomerId(newId, { suppressAlerts: true });
+      if (result.outcome === 'matched') {
+        setManualEntry(false);
+        setManualFirstName('');
+        setManualLastName('');
+        setManualDobDigits('');
+      }
+    } finally {
+      setManualEntrySubmitting(false);
+    }
   };
 
   const onBarcodeCaptured = async (rawScanText: string): Promise<ScanResult> => {
@@ -1028,13 +1115,48 @@ export function AppRoot() {
   const passiveScanEnabled =
     !!session?.sessionToken && !passiveScanProcessing && !isSubmitting && !manualEntry && !blockingModalOpen;
 
+  const showScanOverlay = useCallback(() => {
+    if (scanOverlayHideTimerRef.current) {
+      window.clearTimeout(scanOverlayHideTimerRef.current);
+      scanOverlayHideTimerRef.current = null;
+    }
+    scanOverlayShownAtRef.current = performance.now();
+    setScanOverlayMounted(true);
+    // Ensure CSS transition runs by toggling active on next frame.
+    window.requestAnimationFrame(() => setScanOverlayActive(true));
+  }, []);
+
+  const hideScanOverlay = useCallback(() => {
+    const shownAt = scanOverlayShownAtRef.current;
+    const elapsed = shownAt ? performance.now() - shownAt : Number.POSITIVE_INFINITY;
+    const remaining = Math.max(0, SCAN_OVERLAY_MIN_VISIBLE_MS - elapsed);
+
+    if (scanOverlayHideTimerRef.current) {
+      window.clearTimeout(scanOverlayHideTimerRef.current);
+      scanOverlayHideTimerRef.current = null;
+    }
+
+    scanOverlayHideTimerRef.current = window.setTimeout(() => {
+      setScanOverlayActive(false);
+      // After fade-out, fully unmount.
+      window.setTimeout(() => {
+        setScanOverlayMounted(false);
+        scanOverlayHideTimerRef.current = null;
+        scanOverlayShownAtRef.current = null;
+      }, 220);
+    }, remaining);
+  }, []);
+
   const handlePassiveCapture = useCallback(
     (rawScanText: string) => {
       void (async () => {
         setScanToastMessage(null);
+        passiveScanProcessingRef.current = true;
         setPassiveScanProcessing(true);
         const result = await onBarcodeCaptured(rawScanText);
+        passiveScanProcessingRef.current = false;
         setPassiveScanProcessing(false);
+        hideScanOverlay();
         if (result.outcome === 'no_match') {
           if (result.canCreate) {
             setCreateFromScanError(null);
@@ -1049,13 +1171,33 @@ export function AppRoot() {
         }
       })();
     },
-    [onBarcodeCaptured]
+    [hideScanOverlay, onBarcodeCaptured]
   );
 
   usePassiveScannerInput({
     enabled: passiveScanEnabled,
+    onCaptureStart: () => showScanOverlay(),
+    onCaptureEnd: () => {
+      // If the capture ended but no processing started (e.g. too-short scan), undim.
+      if (!passiveScanProcessingRef.current) hideScanOverlay();
+    },
+    onCancel: () => {
+      passiveScanProcessingRef.current = false;
+      setPassiveScanProcessing(false);
+      hideScanOverlay();
+    },
     onCapture: (raw) => handlePassiveCapture(raw),
   });
+
+  // Cleanup overlay timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (scanOverlayHideTimerRef.current) {
+        window.clearTimeout(scanOverlayHideTimerRef.current);
+        scanOverlayHideTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const resolvePendingScanSelection = useCallback(
     async (customerId: string) => {
@@ -2723,8 +2865,16 @@ export function AppRoot() {
             }
           />
 
-          {passiveScanProcessing && (
-            <div className="er-scan-processing-overlay" aria-hidden="true">
+          {scanOverlayMounted && (
+            <div
+              className={[
+                'er-scan-processing-overlay',
+                scanOverlayActive ? 'er-scan-processing-overlay--active' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              aria-hidden="true"
+            >
               <div className="er-scan-processing-card cs-liquid-card">
                 <span className="er-spinner" aria-hidden="true" />
                 <span className="er-scan-processing-text">Processing scan…</span>
@@ -3334,11 +3484,22 @@ export function AppRoot() {
                 <button
                   className={`action-btn cs-liquid-button cs-liquid-button--secondary ${manualEntry ? 'cs-liquid-button--selected active' : ''}`}
                   onClick={() => {
-                    setManualEntry(!manualEntry);
+                    const next = !manualEntry;
+                    setManualEntry(next);
+                    if (!next) {
+                      setManualFirstName('');
+                      setManualLastName('');
+                      setManualDobDigits('');
+                    }
                   }}
                 >
                   <span className="btn-icon">✏️</span>
-                  First Time Customer
+                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
+                    <span>First Time Customer</span>
+                    <span className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 700 }}>
+                      Alternate ID
+                    </span>
+                  </span>
                 </button>
                 <button
                   className="action-btn cs-liquid-button cs-liquid-button--danger"
@@ -3356,47 +3517,69 @@ export function AppRoot() {
                   onSubmit={(e) => void handleManualSubmit(e)}
                 >
                   <div className="form-group">
-                    <label htmlFor="customerName">Customer Name *</label>
+                    <label htmlFor="manualFirstName">First Name *</label>
                     <input
-                      id="customerName"
+                      id="manualFirstName"
                       type="text"
                       className="cs-liquid-input"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Enter customer name"
+                      value={manualFirstName}
+                      onChange={(e) => setManualFirstName(e.target.value)}
+                      placeholder="Enter first name"
                       disabled={isSubmitting}
                       required
                     />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="membershipNumber">Membership Number (optional)</label>
+                    <label htmlFor="manualLastName">Last Name *</label>
                     <input
-                      id="membershipNumber"
+                      id="manualLastName"
                       type="text"
                       className="cs-liquid-input"
-                      value={membershipNumber}
-                      onChange={(e) => setMembershipNumber(e.target.value)}
-                      placeholder="Enter membership number"
+                      value={manualLastName}
+                      onChange={(e) => setManualLastName(e.target.value)}
+                      placeholder="Enter last name"
                       disabled={isSubmitting}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="manualDob">Date of Birth *</label>
+                    <input
+                      id="manualDob"
+                      type="text"
+                      inputMode="numeric"
+                      className="cs-liquid-input"
+                      value={formatDobMmDdYyyy(manualDobDigits)}
+                      onChange={(e) => setManualDobDigits(extractDobDigits(e.target.value))}
+                      placeholder="MM/DD/YYYY"
+                      disabled={isSubmitting}
+                      required
                     />
                   </div>
                   <div className="form-actions">
                     <button
                       type="submit"
                       className="submit-btn cs-liquid-button"
-                      disabled={isSubmitting || !customerName.trim()}
+                      disabled={
+                        isSubmitting ||
+                        manualEntrySubmitting ||
+                        !manualFirstName.trim() ||
+                        !manualLastName.trim() ||
+                        !parseDobDigitsToIso(manualDobDigits)
+                      }
                     >
-                      {isSubmitting ? 'Submitting...' : 'Update Session'}
+                      {isSubmitting || manualEntrySubmitting ? 'Submitting...' : 'Add Customer'}
                     </button>
                     <button
                       type="button"
                       className="cancel-btn cs-liquid-button cs-liquid-button--danger"
                       onClick={() => {
                         setManualEntry(false);
-                        setCustomerName('');
-                        setMembershipNumber('');
+                        setManualFirstName('');
+                        setManualLastName('');
+                        setManualDobDigits('');
                       }}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || manualEntrySubmitting}
                     >
                       Cancel
                     </button>
@@ -3483,6 +3666,158 @@ export function AppRoot() {
             }}
             onSelect={(customerId) => void resolvePendingScanSelection(customerId)}
           />
+
+          <ModalFrame
+            isOpen={!!manualExistingPrompt}
+            title="Existing customer found"
+            onClose={() => {
+              setManualExistingPrompt(null);
+              setManualExistingPromptError(null);
+              setManualExistingPromptSubmitting(false);
+            }}
+            maxWidth="640px"
+            closeOnOverlayClick={false}
+          >
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              <div style={{ color: '#94a3b8' }}>
+                An existing customer already matches this First Name, Last Name, and Date of Birth. Do you want to continue?
+              </div>
+
+              {manualExistingPrompt?.matchCount && manualExistingPrompt.matchCount > 1 ? (
+                <div style={{ color: '#f59e0b', fontWeight: 800 }}>
+                  {manualExistingPrompt.matchCount} matching customers found. Showing best match:
+                </div>
+              ) : null}
+
+              {manualExistingPrompt ? (
+                <div className="cs-liquid-card" style={{ padding: '1rem' }}>
+                  <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>{manualExistingPrompt.bestMatch.name}</div>
+                  <div style={{ marginTop: '0.25rem', color: '#94a3b8', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <span>
+                      DOB:{' '}
+                      <strong style={{ color: 'white' }}>
+                        {manualExistingPrompt.bestMatch.dob || manualExistingPrompt.dobIso}
+                      </strong>
+                    </span>
+                    {manualExistingPrompt.bestMatch.membershipNumber ? (
+                      <span>
+                        Membership:{' '}
+                        <strong style={{ color: 'white' }}>{manualExistingPrompt.bestMatch.membershipNumber}</strong>
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {manualExistingPromptError ? (
+                <div
+                  style={{
+                    padding: '0.75rem',
+                    background: 'rgba(239, 68, 68, 0.18)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: 12,
+                    color: '#fecaca',
+                    fontWeight: 800,
+                  }}
+                >
+                  {manualExistingPromptError}
+                </div>
+              ) : null}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  disabled={manualExistingPromptSubmitting || isSubmitting}
+                  onClick={() => {
+                    setManualExistingPrompt(null);
+                    setManualExistingPromptError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  disabled={manualExistingPromptSubmitting || isSubmitting || !manualExistingPrompt}
+                  onClick={() => {
+                    if (!manualExistingPrompt) return;
+                    void (async () => {
+                      setManualExistingPromptSubmitting(true);
+                      setManualExistingPromptError(null);
+                      try {
+                        const result = await startLaneSessionByCustomerId(manualExistingPrompt.bestMatch.id, {
+                          suppressAlerts: true,
+                        });
+                        if (result.outcome === 'matched') {
+                          setManualExistingPrompt(null);
+                          setManualEntry(false);
+                          setManualFirstName('');
+                          setManualLastName('');
+                          setManualDobDigits('');
+                        }
+                      } catch (err) {
+                        setManualExistingPromptError(err instanceof Error ? err.message : 'Failed to load existing customer');
+                      } finally {
+                        setManualExistingPromptSubmitting(false);
+                      }
+                    })();
+                  }}
+                >
+                  Existing Customer
+                </button>
+
+                <button
+                  type="button"
+                  className="cs-liquid-button"
+                  disabled={manualExistingPromptSubmitting || isSubmitting || !manualExistingPrompt || !session?.sessionToken}
+                  onClick={() => {
+                    if (!manualExistingPrompt || !session?.sessionToken) return;
+                    void (async () => {
+                      setManualExistingPromptSubmitting(true);
+                      setManualExistingPromptError(null);
+                      try {
+                        const { firstName, lastName, dobIso } = manualExistingPrompt;
+                        const createRes = await fetch(`${API_BASE}/v1/customers/create-manual`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${session.sessionToken}`,
+                          },
+                          body: JSON.stringify({ firstName, lastName, dob: dobIso }),
+                        });
+                        const createPayload: unknown = await createRes.json().catch(() => null);
+                        if (!createRes.ok) {
+                          const msg = getErrorMessage(createPayload) || 'Failed to create customer';
+                          setManualExistingPromptError(msg);
+                          return;
+                        }
+                        const created = createPayload as { customer?: { id?: string } };
+                        const newId = created.customer?.id;
+                        if (!newId) {
+                          setManualExistingPromptError('Create returned no customer id');
+                          return;
+                        }
+                        const result = await startLaneSessionByCustomerId(newId, { suppressAlerts: true });
+                        if (result.outcome === 'matched') {
+                          setManualExistingPrompt(null);
+                          setManualEntry(false);
+                          setManualFirstName('');
+                          setManualLastName('');
+                          setManualDobDigits('');
+                        }
+                      } finally {
+                        setManualExistingPromptSubmitting(false);
+                      }
+                    })();
+                  }}
+                >
+                  Add Customer
+                </button>
+              </div>
+            </div>
+          </ModalFrame>
 
           <ModalFrame
             isOpen={showCreateFromScanPrompt && !!pendingCreateFromScan}

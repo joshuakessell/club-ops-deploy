@@ -204,6 +204,56 @@ describe('ManualCheckoutModal', () => {
       expect(onSuccess).toHaveBeenCalledWith('Checkout completed');
     });
   });
+
+  it('in direct-confirm mode, auto-resolves and Back closes the modal', async () => {
+    const onSuccess = vi.fn();
+    const onClose = vi.fn();
+
+    (global.fetch as ReturnType<typeof vi.fn>)
+      // candidates
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ candidates: [] }),
+      })
+      // resolve
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            occupancyId: 'occ-1',
+            resourceType: 'ROOM',
+            number: '101',
+            customerName: 'John Smith',
+            checkinAt: new Date('2026-01-01T10:00:00.000Z').toISOString(),
+            scheduledCheckoutAt: new Date('2026-01-01T11:00:00.000Z').toISOString(),
+            lateMinutes: 0,
+            fee: 0,
+            banApplied: false,
+          }),
+      });
+
+    render(
+      <ManualCheckoutModal
+        isOpen={true}
+        sessionToken="tok"
+        onClose={onClose}
+        onSuccess={onSuccess}
+        entryMode="direct-confirm"
+        prefill={{ occupancyId: 'occ-1' }}
+      />
+    );
+
+    // Should land on confirm step without clicking Continue.
+    expect(await screen.findByText(/Confirm checkout/i)).toBeDefined();
+
+    // Back closes in direct-confirm mode (returns to inventory).
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    // Resolve call should have used occupancyId.
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(calls.some((url) => String(url).includes('/api/v1/checkout/manual-resolve'))).toBe(true);
+  });
 });
 
 
