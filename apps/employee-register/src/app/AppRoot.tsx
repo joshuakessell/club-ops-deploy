@@ -46,6 +46,7 @@ import { UpgradePaymentModal } from '../components/register/modals/UpgradePaymen
 import { AddNoteModal } from '../components/register/modals/AddNoteModal';
 import { MembershipIdPromptModal } from '../components/register/modals/MembershipIdPromptModal';
 import { ModalFrame } from '../components/register/modals/ModalFrame';
+import { TransactionCompleteModal } from '../components/register/modals/TransactionCompleteModal';
 import {
   MultipleMatchesModal,
   type MultipleMatchCandidate,
@@ -4046,89 +4047,24 @@ export function AppRoot() {
           {topActions.overlays}
 
           {/* Agreement + Assignment Display */}
-          {currentSessionId && customerName && (agreementSigned || assignedResourceType) && (
-            <div
-              style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                background: '#1e293b',
-                borderTop: '2px solid #3b82f6',
-                padding: '1.5rem',
-                zIndex: 100,
-              }}
-            >
-              {!agreementSigned && selectionConfirmed && paymentStatus === 'PAID' && (
-                <div
-                  style={{
-                    marginBottom: '1rem',
-                    padding: '1rem',
-                    background: '#0f172a',
-                    borderRadius: '6px',
-                  }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
-                    Agreement Pending
-                  </div>
-                  <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                    Waiting for customer to sign the agreement on their device.
-                  </div>
-                </div>
-              )}
-              {assignedResourceType && assignedResourceNumber && (
-                <div
-                  style={{
-                    marginBottom: '1rem',
-                    padding: '1rem',
-                    background: '#0f172a',
-                    borderRadius: '6px',
-                  }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
-                    Assigned: {assignedResourceType === 'room' ? 'Room' : 'Locker'}{' '}
-                    {assignedResourceNumber}
-                  </div>
-                  {checkoutAt && (
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                      Checkout: {new Date(checkoutAt).toLocaleString()}
-                    </div>
-                  )}
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <button
-                      onClick={() => {
-                        const sid = currentSessionIdRef.current;
-                        if (!sid) return;
-                        setDocumentsModalOpen(true);
-                        void fetchDocumentsBySession(sid);
-                      }}
-                      className="cs-liquid-button cs-liquid-button--secondary"
-                      style={{ width: '100%', padding: '0.6rem', fontWeight: 700 }}
-                      disabled={!session?.sessionToken || !currentSessionIdRef.current}
-                    >
-                      Verify agreement PDF + signature saved
-                    </button>
-                  </div>
-                </div>
-              )}
-              {agreementSigned && assignedResourceType && (
-                <button
-                  onClick={() => void handleCompleteTransaction()}
-                  disabled={isSubmitting}
-                  className="cs-liquid-button"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {isSubmitting ? 'Processing...' : 'Complete Transaction'}
-                </button>
-              )}
-            </div>
-          )}
+          <TransactionCompleteModal
+            isOpen={Boolean(currentSessionId && customerName && assignedResourceType && assignedResourceNumber)}
+            agreementPending={!agreementSigned && selectionConfirmed && paymentStatus === 'PAID'}
+            assignedLabel={assignedResourceType === 'room' ? 'Room' : 'Locker'}
+            assignedNumber={assignedResourceNumber || '—'}
+            checkoutAt={checkoutAt}
+            verifyDisabled={!session?.sessionToken || !currentSessionIdRef.current}
+            showComplete={Boolean(agreementSigned && assignedResourceType)}
+            completeLabel={isSubmitting ? 'Processing...' : 'Complete Transaction'}
+            completeDisabled={isSubmitting}
+            onVerifyAgreementArtifacts={() => {
+              const sid = currentSessionIdRef.current;
+              if (!sid) return;
+              setDocumentsModalOpen(true);
+              void fetchDocumentsBySession(sid);
+            }}
+            onCompleteTransaction={() => void handleCompleteTransaction()}
+          />
 
           {/* Pay-First Demo Buttons (after selection confirmed) */}
           {currentSessionId &&

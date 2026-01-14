@@ -172,6 +172,70 @@
   width: 100%;
 }
 
+/* Transaction completion modal (replaces fixed bottom bar) */
+@keyframes erTxnCompleteOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes erTxnCompleteModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.er-txn-complete-modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1800; /* below ModalFrame(2000), above main UI */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: erTxnCompleteOverlayIn 180ms ease-out;
+}
+
+.er-txn-complete-modal {
+  width: min(760px, 94vw);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: erTxnCompleteModalIn 220ms var(--cs-ease-decelerate, ease-out);
+}
+
+.er-txn-complete-modal__title {
+  font-weight: 950;
+  letter-spacing: 0.01em;
+  font-size: 1.7rem;
+  text-align: center;
+}
+
+.er-txn-complete-modal__notice,
+.er-txn-complete-modal__assignment {
+  padding: 14px;
+  border-radius: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.er-txn-complete-modal__verify,
+.er-txn-complete-modal__complete {
+  width: 100%;
+}
+
 .er-surface {
   background: var(--er-surface);
   border: 1px solid var(--er-border);
