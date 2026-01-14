@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { transaction, serializableTransaction } from '../db/index.js';
-import { requireAuth, requireReauth } from '../auth/middleware.js';
+import { requireAuth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
 import { broadcastInventoryUpdate } from './sessions.js';
@@ -649,7 +649,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
    *
    * Called after payment is marked as paid.
    * Performs the actual upgrade: resource swap and inventory transitions.
-   * Requires step-up re-auth.
+   * Auth required.
    */
   fastify.post<{
     Body: {
@@ -659,7 +659,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/upgrades/complete',
     {
-      preHandler: [requireAuth, requireReauth],
+      preHandler: [requireAuth],
     },
     async (request, reply) => {
       const staff = request.staff;

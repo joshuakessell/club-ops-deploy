@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getInstalledTelemetry } from '../telemetry/global';
 
 export type ReconnectingWebSocketStatus = 'connecting' | 'open' | 'closed' | 'reconnecting';
 
@@ -48,6 +49,9 @@ function isSocketOpen(ws: WebSocket | null): ws is WebSocket {
 function isSocketConnecting(ws: WebSocket | null): ws is WebSocket {
   return !!ws && ws.readyState === WebSocket.CONNECTING;
 }
+
+const recentCloseTimesByUrl = new Map<string, number[]>();
+const lastReconnectLoopLogByUrl = new Map<string, number>();
 
 export function useReconnectingWebSocket(
   options: UseReconnectingWebSocketOptions
@@ -157,11 +161,15 @@ export function useReconnectingWebSocket(
       setStatus(nextStatus);
       setConnected(false);
 
+      const createdAt = Date.now();
+      let openedAt: number | null = null;
+
       const ws = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
         if (wsRef.current !== ws) return;
+        openedAt = Date.now();
         retryCountRef.current = 0;
         setRetryCount(0);
         setLastCloseEvent(null);
@@ -190,6 +198,21 @@ export function useReconnectingWebSocket(
 
       ws.onerror = (ev) => {
         if (wsRef.current !== ws) return;
+        try {
+          getInstalledTelemetry()?.capture({
+            level: 'error',
+            kind: 'ws.error',
+            message: 'WebSocket error',
+            url,
+            meta: {
+              status: nextStatus,
+              retryCount: retryCountRef.current,
+              online: typeof navigator !== 'undefined' ? navigator.onLine : undefined,
+            },
+          });
+        } catch {
+          // ignore
+        }
         onErrorRef.current?.(ev);
       };
 
@@ -199,6 +222,48 @@ export function useReconnectingWebSocket(
         setConnected(false);
         setLastCloseEvent(ev);
         setStatus('closed');
+        try {
+          const now = Date.now();
+          const durationMs = openedAt != null ? now - openedAt : now - createdAt;
+          const closedBeforeOpen = openedAt == null;
+
+          const list = recentCloseTimesByUrl.get(url) ?? [];
+          list.push(now);
+          const pruned = list.filter((t) => now - t <= 30_000);
+          recentCloseTimesByUrl.set(url, pruned);
+
+          getInstalledTelemetry()?.capture({
+            level: closedBeforeOpen ? 'warn' : 'error',
+            kind: closedBeforeOpen ? 'ws.closed_before_open' : 'ws.close',
+            message: closedBeforeOpen ? 'WebSocket closed before open' : 'WebSocket closed',
+            url,
+            meta: {
+              code: ev.code,
+              reason: ev.reason,
+              wasClean: ev.wasClean,
+              durationMs,
+              status: nextStatus,
+              retryCount: retryCountRef.current,
+              online: typeof navigator !== 'undefined' ? navigator.onLine : undefined,
+            },
+          });
+
+          if (pruned.length >= 5) {
+            const lastLogged = lastReconnectLoopLogByUrl.get(url) ?? 0;
+            if (now - lastLogged > 30_000) {
+              lastReconnectLoopLogByUrl.set(url, now);
+              getInstalledTelemetry()?.capture({
+                level: 'warn',
+                kind: 'ws.reconnect_loop',
+                message: 'WebSocket reconnect loop detected',
+                url,
+                meta: { closesIn30s: pruned.length },
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
         onCloseRef.current?.(ev);
 
         if (stoppedRef.current || closedByUserRef.current) return;
@@ -206,8 +271,11 @@ export function useReconnectingWebSocket(
         if (retryCountRef.current >= maxRetries) return;
 
         const attempt = retryCountRef.current;
+        const closedBeforeOpen = openedAt == null;
+        const effectiveBaseDelayMs = closedBeforeOpen ? Math.max(baseDelayMs, 1000) : baseDelayMs;
         const delay =
-          Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt)) + Math.floor(Math.random() * jitterMs);
+          Math.min(maxDelayMs, effectiveBaseDelayMs * Math.pow(2, attempt)) +
+          Math.floor(Math.random() * jitterMs);
         retryCountRef.current = attempt + 1;
         setRetryCount(retryCountRef.current);
 

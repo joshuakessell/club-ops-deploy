@@ -36,6 +36,7 @@ import { cleanupAbandonedRegisterSessions } from './routes/registers.js';
 import { seedDemoData } from './db/seed-demo.js';
 import type { WebSocketEventType } from '@club-ops/shared';
 import { expireWaitlistEntries } from './waitlist/expireWaitlist.js';
+import { setupTelemetry } from './telemetry/plugin.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -92,6 +93,9 @@ async function main() {
       },
     },
   });
+
+  // Telemetry: requestId correlation, ingestion endpoint, backend error capture.
+  await setupTelemetry(fastify);
 
   // Register CORS
   await fastify.register(cors, {

@@ -268,7 +268,7 @@ export function SelectionScreen({
                               )}
                               {isUnavailable && (
                                 <span className="kiosk-option-subtext">
-                                  {t(lang, 'availability.unavailable')}
+                                  {t(lang, 'availability.joinWaitlist')}
                                 </span>
                               )}
                             </div>

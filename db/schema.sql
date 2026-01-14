@@ -2192,5 +2192,113 @@ ALTER TABLE ONLY public.webauthn_challenges
 
 
 --
+-- Name: telemetry_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.telemetry_events (
+    id bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    app text NOT NULL,
+    level text NOT NULL,
+    kind text NOT NULL,
+    route text,
+    message text,
+    stack text,
+    request_id text,
+    session_id text,
+    device_id text,
+    lane text,
+    method text,
+    status integer,
+    url text,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL
+);
+
+
+--
+-- Name: telemetry_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.telemetry_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: telemetry_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.telemetry_events_id_seq OWNED BY public.telemetry_events.id;
+
+
+--
+-- Name: telemetry_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_events ALTER COLUMN id SET DEFAULT nextval('public.telemetry_events_id_seq'::regclass);
+
+
+--
+-- Name: telemetry_events telemetry_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_events
+    ADD CONSTRAINT telemetry_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: telemetry_events_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_created_at_idx ON public.telemetry_events USING btree (created_at);
+
+
+--
+-- Name: telemetry_events_app_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_app_idx ON public.telemetry_events USING btree (app);
+
+
+--
+-- Name: telemetry_events_kind_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_kind_idx ON public.telemetry_events USING btree (kind);
+
+
+--
+-- Name: telemetry_events_level_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_level_idx ON public.telemetry_events USING btree (level);
+
+
+--
+-- Name: telemetry_events_request_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_request_id_idx ON public.telemetry_events USING btree (request_id);
+
+
+--
+-- Name: telemetry_events_device_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_device_id_idx ON public.telemetry_events USING btree (device_id);
+
+
+--
+-- Name: telemetry_events telemetry_events_level_check; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.telemetry_events
+    ADD CONSTRAINT telemetry_events_level_check CHECK ((level = ANY (ARRAY['error'::text, 'warn'::text, 'info'::text])));
+
+
+--
 -- PostgreSQL database dump complete
 --

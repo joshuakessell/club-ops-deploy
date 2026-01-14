@@ -1649,17 +1649,6 @@ export function AppRoot() {
     }
   };
 
-  const openUpgradePaymentQuote = (entry: (typeof waitlistEntries)[number]) => {
-    setSelectedWaitlistEntry(entry.id);
-    setUpgradeContext((prev) => ({
-      waitlistId: entry.id,
-      customerLabel: entry.customerName || entry.displayIdentifier,
-      offeredRoomNumber: entry.offeredRoomNumber,
-      newRoomNumber: prev?.newRoomNumber ?? entry.offeredRoomNumber ?? null,
-    }));
-    setShowUpgradePaymentModal(true);
-  };
-
   const handleUpgradePaymentDecline = (reason?: string) => {
     setPaymentDeclineError(reason || 'Payment declined');
     setUpgradePaymentStatus('DUE');
@@ -1705,11 +1694,6 @@ export function AppRoot() {
 
       if (!completeResponse.ok) {
         const errorPayload: unknown = await completeResponse.json().catch(() => null);
-        if (isRecord(errorPayload) && errorPayload.code === 'REAUTH_REQUIRED') {
-          alert('Re-authentication required. Please log in again.');
-          await handleLogout();
-          return;
-        }
         throw new Error(getErrorMessage(errorPayload) || 'Failed to complete upgrade');
       }
 
@@ -2713,7 +2697,6 @@ export function AppRoot() {
                   setSelectedWaitlistEntry(entry.id);
                   void handleStartUpgradePayment(entry);
                 }}
-                onOpenPaymentQuote={(entry) => openUpgradePaymentQuote(entry)}
                 onCancelOffer={(entryId) => {
                   // Cancellation endpoint not yet implemented in this demo UI.
                   alert(`Cancel offer not implemented yet (waitlistId=${entryId}).`);
@@ -3683,32 +3666,46 @@ export function AppRoot() {
             <div
               style={{
                 position: 'fixed',
-                top: '1rem',
-                left: '1rem',
-                background: '#0f172a',
-                color: 'white',
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.55)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 padding: '1rem',
-                borderRadius: '12px',
-                zIndex: 1500,
-                maxWidth: '480px',
-                border: '1px solid rgba(148, 163, 184, 0.18)',
-                boxShadow: '0 6px 16px rgba(0, 0, 0, 0.35)',
+                zIndex: 2000,
               }}
               role="status"
               aria-label="Scan message"
+              onClick={() => setScanToastMessage(null)}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
-                <div style={{ fontWeight: 900 }}>Scan</div>
-                <button
-                  onClick={() => setScanToastMessage(null)}
-                  className="cs-liquid-button cs-liquid-button--secondary"
-                  style={{ padding: '0.2rem 0.55rem' }}
-                  aria-label="Dismiss"
-                >
-                  ×
-                </button>
+              <div
+                className="cs-liquid-card"
+                style={{
+                  width: 'min(520px, 92vw)',
+                  background: '#0f172a',
+                  color: 'white',
+                  padding: '1rem',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(148, 163, 184, 0.18)',
+                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.45)',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <div style={{ fontWeight: 900 }}>Scan</div>
+                  <button
+                    onClick={() => setScanToastMessage(null)}
+                    className="cs-liquid-button cs-liquid-button--secondary"
+                    style={{ padding: '0.2rem 0.55rem' }}
+                    aria-label="Dismiss"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ marginTop: '0.5rem', color: '#cbd5e1', fontWeight: 700 }}>
+                  {scanToastMessage}
+                </div>
               </div>
-              <div style={{ marginTop: '0.5rem', color: '#cbd5e1' }}>{scanToastMessage}</div>
             </div>
           )}
           {topActions.overlays}

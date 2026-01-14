@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../auth/middleware.js';
 import { query } from '../db/index.js';
 import crypto from 'crypto';
@@ -26,13 +26,10 @@ export async function sessionDocumentsRoutes(fastify: FastifyInstance): Promise<
    * Auth required.
    * Returns a list of documents tied to a lane session's check-in block.
    */
-  fastify.get(
+  fastify.get<{ Params: { sessionId: string } }>(
     '/v1/documents/by-session/:sessionId',
     { preHandler: [requireAuth] },
-    async (
-      request: FastifyRequest<{ Params: { sessionId: string } }>,
-      reply: FastifyReply
-    ) => {
+    async (request, reply) => {
       const { sessionId } = request.params;
 
       const rows = await query<SessionDocumentRow>(
@@ -87,13 +84,10 @@ export async function sessionDocumentsRoutes(fastify: FastifyInstance): Promise<
    * Auth required.
    * Returns the raw PDF bytes for an agreement (stored on checkin_blocks.agreement_pdf).
    */
-  fastify.get(
+  fastify.get<{ Params: { documentId: string } }>(
     '/v1/documents/:documentId/download',
     { preHandler: [requireAuth] },
-    async (
-      request: FastifyRequest<{ Params: { documentId: string } }>,
-      reply: FastifyReply
-    ) => {
+    async (request, reply) => {
       const { documentId } = request.params;
 
       const result = await query<{ agreement_pdf: Buffer | null }>(

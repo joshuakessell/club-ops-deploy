@@ -32,7 +32,6 @@ describe('UpgradesDrawerContent', () => {
         isEntryOfferEligible={() => true}
         onOffer={onOffer}
         onStartPayment={() => undefined}
-        onOpenPaymentQuote={() => undefined}
         onCancelOffer={() => undefined}
       />
     );
@@ -45,7 +44,7 @@ describe('UpgradesDrawerContent', () => {
     expect(onOffer).toHaveBeenCalledWith('w1', 'DOUBLE', 'Test Customer');
   });
 
-  it('renders an OFFERED entry with Start Payment / View Payment Quote actions (not disabled by any sessionActive prop)', () => {
+  it('renders an OFFERED entry with Start Payment action', () => {
     render(
       <UpgradesDrawerContent
         waitlistEntries={[
@@ -63,16 +62,13 @@ describe('UpgradesDrawerContent', () => {
         isEntryOfferEligible={() => true}
         onOffer={() => undefined}
         onStartPayment={() => undefined}
-        onOpenPaymentQuote={() => undefined}
         onCancelOffer={() => undefined}
       />
     );
 
     const startPayment = screen.getByRole('button', { name: 'Start Payment' });
-    const viewQuote = screen.getByRole('button', { name: 'View Payment Quote' });
 
     expect(startPayment).toBeDefined();
-    expect(viewQuote).toBeDefined();
     expect(startPayment).toHaveProperty('disabled', false);
   });
 });

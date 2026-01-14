@@ -286,7 +286,7 @@ body {
 .purchase-cards {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 2.25rem;
   width: 100%;
 }
 
@@ -384,7 +384,7 @@ body {
   pointer-events: none;
   color: rgba(255, 255, 255, 0.98);
   font-weight: 900;
-  z-index: 5;
+  z-index: 50;
   filter:
     drop-shadow(0 0 10px rgba(255, 255, 255, 0.35))
     drop-shadow(0 0 22px rgba(255, 255, 255, 0.18));
@@ -462,8 +462,8 @@ body {
 .ck-arrow--step {
   position: absolute;
   /* .ck-step-wrap has internal gutters; card starts after 48px padding. */
-  left: 58px;
-  top: 30px;
+  left: 14px;
+  top: 18px;
   font-size: 34px;
 }
 

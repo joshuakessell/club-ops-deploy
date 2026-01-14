@@ -145,6 +145,7 @@ export const es: Record<keyof typeof en, string> = {
   unavailable: 'No hay por ahora — toca para lista de espera',
   'availability.onlyAvailable': 'Solo {count} disponibles',
   'availability.unavailable': 'No disponible',
+  'availability.joinWaitlist': 'Únete a la lista de espera',
 
   // Rental types (display)
   locker: 'Casillero',

@@ -12,3 +12,7 @@ export * from './utils/typeGuards';
 export * from './utils/http';
 export * from './components/LiquidGlassNumpad';
 export * from './components/LiquidGlassPinInput';
+
+export * from './telemetry/installTelemetry';
+export * from './telemetry/TelemetryErrorBoundary';
+export * from './telemetry/types';

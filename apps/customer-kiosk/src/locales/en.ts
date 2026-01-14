@@ -148,6 +148,7 @@ export const en = {
   unavailable: 'Currently unavailable - Tap to join waitlist',
   'availability.onlyAvailable': 'Only {count} available',
   'availability.unavailable': 'Unavailable',
+  'availability.joinWaitlist': 'Join the waiting list',
 
   // Rental types (display)
   locker: 'Locker',

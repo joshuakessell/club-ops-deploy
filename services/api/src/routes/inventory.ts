@@ -36,11 +36,6 @@ interface LockerCountRow {
   count: string;
 }
 
-interface WaitlistDemandRow {
-  tier: string;
-  count: string;
-}
-
 /**
  * Inventory routes for room and locker availability.
  */

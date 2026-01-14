@@ -45,6 +45,8 @@ tags:
     description: Key tag resolution
   - name: Documents
     description: Agreement PDF + signature verification endpoints
+  - name: Telemetry
+    description: Best-effort UI + backend telemetry ingestion
 
 paths:
   /v1/health:
@@ -65,6 +67,81 @@ paths:
                   uptime:
                     type: number
                     example: 12345
+
+  /v1/telemetry:
+    post:
+      tags: [Telemetry]
+      summary: Ingest telemetry events (single or batch)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  description: Single event
+                  properties:
+                    timestamp: { oneOf: [{ type: string }, { type: number }] }
+                    app: { type: string }
+                    level: { type: string, enum: [error, warn, info] }
+                    kind: { type: string }
+                    route: { type: string }
+                    message: { type: string }
+                    stack: { type: string }
+                    requestId: { type: string }
+                    sessionId: { type: string }
+                    deviceId: { type: string }
+                    lane: { type: string }
+                    method: { type: string }
+                    status: { type: integer }
+                    url: { type: string }
+                    meta: { type: object, additionalProperties: true }
+                - type: array
+                  description: Batch of events
+                  items:
+                    type: object
+                    properties:
+                      timestamp: { oneOf: [{ type: string }, { type: number }] }
+                      app: { type: string }
+                      level: { type: string, enum: [error, warn, info] }
+                      kind: { type: string }
+                      route: { type: string }
+                      message: { type: string }
+                      stack: { type: string }
+                      requestId: { type: string }
+                      sessionId: { type: string }
+                      deviceId: { type: string }
+                      lane: { type: string }
+                      method: { type: string }
+                      status: { type: integer }
+                      url: { type: string }
+                      meta: { type: object, additionalProperties: true }
+                - type: object
+                  description: Batch envelope
+                  properties:
+                    events:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          timestamp: { oneOf: [{ type: string }, { type: number }] }
+                          app: { type: string }
+                          level: { type: string, enum: [error, warn, info] }
+                          kind: { type: string }
+                          route: { type: string }
+                          message: { type: string }
+                          stack: { type: string }
+                          requestId: { type: string }
+                          sessionId: { type: string }
+                          deviceId: { type: string }
+                          lane: { type: string }
+                          method: { type: string }
+                          status: { type: integer }
+                          url: { type: string }
+                          meta: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Always OK (best-effort ingestion)
 
   /v1/auth/login-pin:
     post:

@@ -26,7 +26,6 @@ export interface UpgradesDrawerContentProps {
   isEntryOfferEligible(entryId: string, status: string, desiredTier: string): boolean;
   onOffer(entryId: string, desiredTier: string, customerLabel: string): void;
   onStartPayment(entry: UpgradeWaitlistEntry): void;
-  onOpenPaymentQuote(entry: UpgradeWaitlistEntry): void;
   onCancelOffer(entryId: string): void;
   isSubmitting?: boolean;
   headerRightSlot?: ReactNode;
@@ -38,7 +37,6 @@ export function UpgradesDrawerContent({
   isEntryOfferEligible,
   onOffer,
   onStartPayment,
-  onOpenPaymentQuote,
   onCancelOffer,
   isSubmitting = false,
   headerRightSlot,
@@ -169,18 +167,6 @@ export function UpgradesDrawerContent({
                                 }}
                               >
                                 Start Payment
-                              </button>
-                              <button
-                                onClick={() => onOpenPaymentQuote(entry)}
-                                className="cs-liquid-button cs-liquid-button--secondary"
-                                disabled={isSubmitting}
-                                style={{
-                                  padding: '0.5rem 0.9rem',
-                                  fontSize: '0.875rem',
-                                  fontWeight: 700,
-                                }}
-                              >
-                                View Payment Quote
                               </button>
                               <button
                                 onClick={() => onCancelOffer(entry.id)}

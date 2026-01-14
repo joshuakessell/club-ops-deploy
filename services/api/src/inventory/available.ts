@@ -1,4 +1,5 @@
 import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
+import type pg from 'pg';
 
 type RoomTier = 'SPECIAL' | 'DOUBLE' | 'STANDARD';
 
@@ -10,7 +11,10 @@ export type InventoryAvailableResponse = {
   total: number; // rooms.SPECIAL + rooms.DOUBLE + rooms.STANDARD
 };
 
-export type QueryFn = <T>(text: string, params?: unknown[]) => Promise<{ rows: T[] }>;
+export type QueryFn = <T extends pg.QueryResultRow = pg.QueryResultRow>(
+  text: string,
+  params?: unknown[]
+) => Promise<{ rows: T[] }>;
 
 function getRoomTier(roomNumber: string): RoomTier {
   const num = parseInt(roomNumber, 10);

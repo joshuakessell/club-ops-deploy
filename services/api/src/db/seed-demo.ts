@@ -383,10 +383,6 @@ export async function seedDemoData(): Promise<void> {
           return { visitId, sessionId };
         }
 
-        function makeCheckoutDeltaMinutes(isMajorityGood: boolean): number {
-          return isMajorityGood ? randInt(0, 15) : randInt(16, 90);
-        }
-
         // 1) Create ACTIVE room stays at NOW (all with future checkout times)
         const activeRoomCheckInTimes: Date[] = [];
         for (let i = 0; i < ACTIVE_ROOM_OCCUPANCY; i++) {
