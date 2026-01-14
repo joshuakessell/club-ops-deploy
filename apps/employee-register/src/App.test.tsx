@@ -238,6 +238,90 @@ describe('App', () => {
     });
   });
 
+  it('shows transaction completion modal (with PDF verify + complete) after assignment + agreement signed', async () => {
+    localStorage.setItem(
+      'staff_session',
+      JSON.stringify({
+        staffId: 'staff-1',
+        sessionToken: 'test-token',
+        name: 'Test User',
+        role: 'STAFF',
+      })
+    );
+
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
+      if (u.includes('/v1/registers/status')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              signedIn: true,
+              employee: { id: 'emp-1', name: 'Test Employee' },
+              registerNumber: 1,
+            }),
+        } as unknown as Response);
+      }
+      if (u.includes('/health')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
+    });
+
+    await act(async () => {
+      render(<App />);
+    });
+    expect(await screen.findByText('Lane Session')).toBeDefined();
+
+    let wsWithHandler: MockWebSocket | null = null;
+    await waitFor(() => {
+      const results = (global.WebSocket as unknown as ReturnType<typeof vi.fn>).mock.results;
+      const instances = results
+        .map((r: { value: unknown }) => r.value as MockWebSocket | undefined)
+        .filter((w): w is MockWebSocket => !!w);
+      wsWithHandler = instances.find((w) => typeof w?.onmessage === 'function') ?? null;
+      expect(wsWithHandler).not.toBeNull();
+    });
+
+    await act(async () => {
+      wsWithHandler?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-123',
+            customerName: 'Alex Rivera',
+            agreementSigned: true,
+            selectionConfirmed: true,
+            paymentStatus: 'PAID',
+            assignedResourceType: 'locker',
+            assignedResourceNumber: '012',
+            checkoutAt: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
+          },
+        }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Transaction Ready')).toBeDefined();
+      expect(screen.getByText('Verify agreement PDF + signature saved')).toBeDefined();
+      expect(screen.getByText('Complete Transaction')).toBeDefined();
+    });
+
+    // Overlay should exist (blocks clicks on underlying UI)
+    expect(document.querySelector('.er-txn-complete-modal__overlay')).not.toBeNull();
+  });
+
   it('shows customer suggestions at 3+ characters and confirm triggers session', async () => {
     localStorage.setItem(
       'staff_session',
