@@ -3,6 +3,7 @@ import { RoomStatus } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import { getRoomTier } from './utils/getRoomTier';
 import { ModalFrame } from './components/register/modals/ModalFrame';
+import { ManualCheckoutModal } from './components/register/modals/ManualCheckoutModal';
 
 const INVENTORY_COLUMN_HEADER_STYLE: CSSProperties = {
   fontWeight: 700,
@@ -77,6 +78,7 @@ interface DetailedRoom {
   overrideFlag: boolean;
   checkinAt?: string;
   checkoutAt?: string;
+  occupancyId?: string;
 }
 
 interface DetailedLocker {
@@ -87,6 +89,7 @@ interface DetailedLocker {
   assignedMemberName?: string;
   checkinAt?: string;
   checkoutAt?: string;
+  occupancyId?: string;
 }
 
 interface DetailedInventory {
@@ -277,12 +280,16 @@ export function InventorySelector({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [localFilterQuery, setLocalFilterQuery] = useState('');
   const [occupancyDetails, setOccupancyDetails] = useState<{
     type: 'room' | 'locker';
     number: string;
+    occupancyId?: string;
+    customerName?: string;
     checkinAt?: string;
     checkoutAt?: string;
   } | null>(null);
+  const [quickCheckout, setQuickCheckout] = useState<null | { occupancyId?: string; number: string }>(null);
   const waitlistEntries: Array<{ desiredTier: string; status: string }> = useMemo(() => [], []);
 
   const API_BASE = '/api';
@@ -379,6 +386,7 @@ export function InventorySelector({
               overrideFlag: typeof room.overrideFlag === 'boolean' ? room.overrideFlag : false,
               checkinAt: typeof room.checkinAt === 'string' ? room.checkinAt : undefined,
               checkoutAt: typeof room.checkoutAt === 'string' ? room.checkoutAt : undefined,
+              occupancyId: typeof room.occupancyId === 'string' ? room.occupancyId : undefined,
             }));
 
           const lockers: DetailedLocker[] = (Array.isArray(data.lockers) ? data.lockers : [])
@@ -400,6 +408,7 @@ export function InventorySelector({
                   : undefined,
               checkinAt: typeof locker.checkinAt === 'string' ? locker.checkinAt : undefined,
               checkoutAt: typeof locker.checkoutAt === 'string' ? locker.checkoutAt : undefined,
+              occupancyId: typeof locker.occupancyId === 'string' ? locker.occupancyId : undefined,
             }));
 
           setInventory({ rooms, lockers });
@@ -483,7 +492,8 @@ export function InventorySelector({
   ]);
 
   // Group rooms by tier (must be before conditional returns to follow React hooks rules)
-  const query = (filterQuery ?? '').trim().toLowerCase();
+  const effectiveFilterQuery = filterQuery !== undefined ? filterQuery : localFilterQuery;
+  const query = effectiveFilterQuery.trim().toLowerCase();
 
   const matchesQuery = useMemo(() => {
     if (!query) return () => true;
@@ -537,6 +547,8 @@ export function InventorySelector({
   const openOccupancyDetails = (payload: {
     type: 'room' | 'locker';
     number: string;
+    occupancyId?: string;
+    customerName?: string;
     checkinAt?: string;
     checkoutAt?: string;
   }) => {
@@ -549,6 +561,8 @@ export function InventorySelector({
       openOccupancyDetails({
         type: 'room',
         number: room.number,
+        occupancyId: room.occupancyId,
+        customerName: room.assignedMemberName || room.assignedTo,
         checkinAt: room.checkinAt,
         checkoutAt: room.checkoutAt,
       });
@@ -565,6 +579,8 @@ export function InventorySelector({
       openOccupancyDetails({
         type: 'locker',
         number: locker.number,
+        occupancyId: locker.occupancyId,
+        customerName: locker.assignedMemberName || locker.assignedTo,
         checkinAt: locker.checkinAt,
         checkoutAt: locker.checkoutAt,
       });
@@ -631,7 +647,7 @@ export function InventorySelector({
           flexDirection: 'column',
         }}
       >
-        <h2 className="er-text-md" style={{ margin: 0, marginBottom: '0.75rem', fontWeight: 600 }}>
+        <h2 style={{ margin: 0, marginBottom: '0.75rem', fontSize: '1.25rem', fontWeight: 800 }}>
           Inventory
         </h2>
 
@@ -713,6 +729,42 @@ export function InventorySelector({
             occupancyLookupMode={occupancyLookupMode}
           />
         </div>
+
+        {/* Search pinned at the bottom of the same card */}
+        <div style={{ marginTop: '0.75rem', flexShrink: 0 }}>
+          <div style={{ margin: 0, marginBottom: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
+            Search
+          </div>
+          <div className="cs-liquid-search">
+            <input
+              className="cs-liquid-input cs-liquid-search__input"
+              type="text"
+              placeholder="Search by name or number..."
+              value={effectiveFilterQuery}
+              onChange={(e) => setLocalFilterQuery(e.target.value)}
+              aria-label="Inventory search"
+              disabled={filterQuery !== undefined}
+            />
+            <div className="cs-liquid-search__icon">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M14 14L11.1 11.1"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+          </div>
+        </div>
       </div>
 
       <ModalFrame
@@ -728,6 +780,16 @@ export function InventorySelector({
       >
         {occupancyDetails && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
+            <div
+              style={{
+                textAlign: 'center',
+                fontSize: '1.5rem',
+                fontWeight: 600,
+              }}
+            >
+              {occupancyDetails.customerName || '—'}
+            </div>
+
             <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
               <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.25rem' }}>
                 Check-in
@@ -745,9 +807,40 @@ export function InventorySelector({
                 {occupancyDetails.checkoutAt ? new Date(occupancyDetails.checkoutAt).toLocaleString() : '—'}
               </div>
             </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <button
+                type="button"
+                className="cs-liquid-button"
+                onClick={() => {
+                  setQuickCheckout({ occupancyId: occupancyDetails.occupancyId, number: occupancyDetails.number });
+                  setOccupancyDetails(null);
+                }}
+              >
+                Checkout
+              </button>
+            </div>
           </div>
         )}
       </ModalFrame>
+
+      {quickCheckout && (
+        <ManualCheckoutModal
+          isOpen={true}
+          sessionToken={sessionToken}
+          entryMode="direct-confirm"
+          prefill={
+            quickCheckout.occupancyId
+              ? { occupancyId: quickCheckout.occupancyId }
+              : { number: quickCheckout.number }
+          }
+          onClose={() => setQuickCheckout(null)}
+          onSuccess={() => {
+            setQuickCheckout(null);
+            setRefreshTrigger((prev) => prev + 1);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -842,16 +935,24 @@ function InventorySection({
           padding: '0.75rem',
           fontWeight: 600,
           cursor: 'pointer',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          position: 'relative',
+          textAlign: 'left',
         }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-            <span>{title}</span>
-            <span>{isExpanded ? '▼' : '▶'}</span>
-          </div>
+        <span
+          aria-hidden={true}
+          style={{
+            position: 'absolute',
+            top: '0.75rem',
+            right: '0.75rem',
+            fontWeight: 900,
+          }}
+        >
+          {isExpanded ? '▼' : '▶'}
+        </span>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', alignItems: 'flex-start' }}>
+          <div style={{ fontWeight: 700 }}>{title}</div>
           <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800 }}>
             Available: {sectionCounts.availableCount}
           </div>
@@ -1163,29 +1264,38 @@ function LockerSection({
           padding: '0.75rem',
           fontWeight: 600,
           cursor: 'pointer',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'stretch',
-          gap: '0.15rem',
+          position: 'relative',
+          textAlign: 'left',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-          <span>{ROOM_TYPE_LABELS.LOCKER}</span>
-          <span>{isExpanded ? '▼' : '▶'}</span>
-        </div>
-        <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800 }}>
-          Available: {sectionCounts.availableCount}
-        </div>
-        {sectionCounts.nearing > 0 && (
-          <div className="er-text-sm" style={{ fontWeight: 900, color: '#f59e0b' }}>
-            Nearing Checkout: {sectionCounts.nearing}
+        <span
+          aria-hidden={true}
+          style={{
+            position: 'absolute',
+            top: '0.75rem',
+            right: '0.75rem',
+            fontWeight: 900,
+          }}
+        >
+          {isExpanded ? '▼' : '▶'}
+        </span>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', alignItems: 'flex-start' }}>
+          <div style={{ fontWeight: 700 }}>{ROOM_TYPE_LABELS.LOCKER}</div>
+          <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800 }}>
+            Available: {sectionCounts.availableCount}
           </div>
-        )}
-        {sectionCounts.late > 0 && (
-          <div className="er-text-sm" style={{ fontWeight: 900, color: '#ef4444' }}>
-            Late for Checkout: {sectionCounts.late}
-          </div>
-        )}
+          {sectionCounts.nearing > 0 && (
+            <div className="er-text-sm" style={{ fontWeight: 900, color: '#f59e0b' }}>
+              Nearing Checkout: {sectionCounts.nearing}
+            </div>
+          )}
+          {sectionCounts.late > 0 && (
+            <div className="er-text-sm" style={{ fontWeight: 900, color: '#ef4444' }}>
+              Late for Checkout: {sectionCounts.late}
+            </div>
+          )}
+        </div>
       </button>
 
       {isExpanded && (

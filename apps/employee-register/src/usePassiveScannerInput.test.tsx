@@ -6,12 +6,16 @@ import { usePassiveScannerInput } from './usePassiveScannerInput';
 function Harness(props: {
   enabled: boolean;
   onCapture: (raw: string) => void;
+  onCaptureStart?: () => void;
+  onCaptureEnd?: () => void;
   withInput?: boolean;
   focusInput?: boolean;
 }) {
   const { reset } = usePassiveScannerInput({
     enabled: props.enabled,
     onCapture: (raw) => props.onCapture(raw),
+    onCaptureStart: props.onCaptureStart,
+    onCaptureEnd: props.onCaptureEnd,
     idleTimeoutMs: 180,
     enterGraceMs: 35,
     minLength: 4,
@@ -53,9 +57,12 @@ describe('usePassiveScannerInput', () => {
 
   it('captures printable characters and finalizes after idle timeout', async () => {
     const onCapture = vi.fn();
-    render(<Harness enabled={true} onCapture={onCapture} />);
+    const onStart = vi.fn();
+    const onEnd = vi.fn();
+    render(<Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />);
 
     keyOnWindow('A');
+    expect(onStart).toHaveBeenCalledTimes(1);
     keyOnWindow('B');
     keyOnWindow('C');
     keyOnWindow('D');
@@ -65,6 +72,7 @@ describe('usePassiveScannerInput', () => {
 
     expect(onCapture).toHaveBeenCalledTimes(1);
     expect(onCapture).toHaveBeenCalledWith('ABCD');
+    expect(onEnd).toHaveBeenCalledTimes(1);
   });
 
   it('preserves multi-line scan strings (Enter within payload) and finalizes after idle timeout', async () => {
@@ -120,14 +128,18 @@ describe('usePassiveScannerInput', () => {
 
   it('does not emit captures shorter than the minimum length', async () => {
     const onCapture = vi.fn();
-    render(<Harness enabled={true} onCapture={onCapture} />);
+    const onStart = vi.fn();
+    const onEnd = vi.fn();
+    render(<Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />);
 
     keyOnWindow('A');
+    expect(onStart).toHaveBeenCalledTimes(1);
     keyOnWindow('B');
     keyOnWindow('C');
     await vi.advanceTimersByTimeAsync(250);
 
     expect(onCapture).not.toHaveBeenCalled();
+    expect(onEnd).toHaveBeenCalledTimes(1);
   });
 });
 

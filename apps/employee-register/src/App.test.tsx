@@ -646,10 +646,107 @@ describe('App', () => {
       fireEvent.click(upgradesTab);
     });
 
-    expect(await screen.findByText(/Upgrade Waitlist Entries/i)).toBeDefined();
+    expect(await screen.findByText(/Upgrade Waitlist/i)).toBeDefined();
     expect(screen.queryByText(/Active session present — waitlist actions are disabled/i)).toBeNull();
 
     const offerUpgrade = await screen.findByRole('button', { name: 'Offer Upgrade' });
     expect(offerUpgrade).toHaveProperty('disabled', false);
+  });
+
+  it('First Time Customer: if identity matches an existing customer, prompts and allows loading existing customer', async () => {
+    localStorage.setItem(
+      'staff_session',
+      JSON.stringify({
+        staffId: 'staff-1',
+        sessionToken: 'test-token',
+        name: 'Test User',
+        role: 'STAFF',
+      })
+    );
+
+    const calls: Array<{ url: string; body?: any }> = [];
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL, init?: RequestInit) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
+
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      calls.push({ url: u, body });
+
+      if (u.includes('/v1/registers/status')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              signedIn: true,
+              employee: { id: 'emp-1', name: 'Test Employee' },
+              registerNumber: 1,
+            }),
+        } as unknown as Response);
+      }
+      if (u.includes('/health')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/customers/match-identity')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              matchCount: 1,
+              bestMatch: {
+                id: 'cust-1',
+                name: 'John Smith',
+                dob: '1988-01-02',
+                membershipNumber: null,
+              },
+            }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/checkin/lane/lane-1/start')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ sessionId: 'sess-1', customerName: 'John Smith', membershipNumber: null }),
+        } as unknown as Response);
+      }
+
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
+    });
+
+    await act(async () => {
+      render(<App />);
+    });
+
+    // Open manual entry
+    fireEvent.click(await screen.findByText(/First Time Customer/i));
+
+    fireEvent.change(screen.getByLabelText(/First Name/i), { target: { value: 'John' } });
+    fireEvent.change(screen.getByLabelText(/Last Name/i), { target: { value: 'Smith' } });
+    fireEvent.change(screen.getByLabelText(/Date of Birth/i), { target: { value: '01021988' } });
+
+    const addBtn = screen.getByRole('button', { name: /Add Customer/i });
+    expect(addBtn).toHaveProperty('disabled', false);
+
+    fireEvent.click(addBtn);
+
+    // Prompt appears
+    expect(await screen.findByRole('heading', { name: /Existing customer found/i })).toBeDefined();
+    expect(screen.getByText(/John Smith/i)).toBeDefined();
+
+    // Choose existing customer
+    fireEvent.click(screen.getByRole('button', { name: /Existing Customer/i }));
+
+    await waitFor(() => {
+      const startCall = calls.find((c) => c.url.includes('/v1/checkin/lane/lane-1/start'));
+      expect(startCall).toBeDefined();
+      expect(startCall?.body?.customerId).toBe('cust-1');
+    });
   });
 });

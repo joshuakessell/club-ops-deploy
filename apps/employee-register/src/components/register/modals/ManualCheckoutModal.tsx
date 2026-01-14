@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModalFrame } from './ModalFrame';
 
 type Step = 'select' | 'confirm';
@@ -30,6 +30,8 @@ export interface ManualCheckoutModalProps {
   sessionToken: string;
   onClose: () => void;
   onSuccess: (message: string) => void;
+  prefill?: { occupancyId?: string; number?: string };
+  entryMode?: 'default' | 'direct-confirm';
 }
 
 function toDate(value: string | Date): Date {
@@ -48,7 +50,14 @@ function formatLateDuration(minutesLate: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }: ManualCheckoutModalProps) {
+export function ManualCheckoutModal({
+  isOpen,
+  sessionToken,
+  onClose,
+  onSuccess,
+  prefill,
+  entryMode = 'default',
+}: ManualCheckoutModalProps) {
   const [step, setStep] = useState<Step>('select');
   const [candidates, setCandidates] = useState<ManualCandidate[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
@@ -60,6 +69,7 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
   const [confirmData, setConfirmData] = useState<ResolveResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCancelWarning, setShowCancelWarning] = useState(false);
+  const [autoContinue, setAutoContinue] = useState(false);
 
   const canContinue = useMemo(() => {
     if (selectedOccupancyId) return true;
@@ -72,11 +82,14 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
     setStep('select');
     setCandidates([]);
     setCandidatesError(null);
-    setSelectedOccupancyId(null);
-    setTypedNumber('');
+    const initialOccupancyId = prefill?.occupancyId ?? null;
+    const initialNumber = prefill?.number ?? '';
+    setSelectedOccupancyId(initialOccupancyId);
+    setTypedNumber(initialOccupancyId ? '' : initialNumber);
     setConfirmData(null);
     setIsSubmitting(false);
     setShowCancelWarning(false);
+    setAutoContinue(entryMode === 'direct-confirm' && Boolean(initialOccupancyId || initialNumber));
   }, [isOpen]);
 
   useEffect(() => {
@@ -101,6 +114,11 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
   }, [isOpen, sessionToken]);
 
   const attemptClose = () => {
+    // In direct-confirm entry mode, Back/X should just return to inventory (no warning).
+    if (entryMode === 'direct-confirm') {
+      onClose();
+      return;
+    }
     if (step === 'confirm') {
       setShowCancelWarning(true);
       return;
@@ -108,7 +126,7 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
     onClose();
   };
 
-  const handleContinue = async () => {
+  const handleContinue = useCallback(async () => {
     if (!canContinue) return;
     setIsSubmitting(true);
     try {
@@ -132,9 +150,9 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [canContinue, selectedOccupancyId, sessionToken, typedNumber]);
 
-  const handleConfirm = async () => {
+  const handleConfirm = useCallback(async () => {
     if (!confirmData) return;
     setIsSubmitting(true);
     try {
@@ -155,7 +173,22 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [confirmData, onClose, onSuccess, sessionToken]);
+
+  // If this modal is opened as a "direct confirm" action (e.g. from Inventory occupancy details),
+  // automatically resolve and land on the confirm step.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (entryMode !== 'direct-confirm') return;
+    if (!autoContinue) return;
+    if (step !== 'select') {
+      setAutoContinue(false);
+      return;
+    }
+    if (!canContinue) return;
+    setAutoContinue(false);
+    void handleContinue();
+  }, [autoContinue, canContinue, entryMode, handleContinue, isOpen, step]);
 
   return (
     <>
@@ -178,116 +211,122 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
 
         {step === 'select' ? (
           <>
-            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div className="cs-liquid-search" style={{ flex: 1, minWidth: 280 }}>
-                <input
-                  className="cs-liquid-input cs-liquid-search__input"
-                  placeholder="Type room/locker number…"
-                  value={typedNumber}
-                  onFocus={() => setSelectedOccupancyId(null)}
-                  onChange={(e) => {
-                    setSelectedOccupancyId(null);
-                    setTypedNumber(e.target.value);
-                  }}
-                  aria-label="Checkout number"
-                />
-                <div className="cs-liquid-search__icon">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path
-                      d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+            {entryMode === 'direct-confirm' ? (
+              <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading checkout…</div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className="cs-liquid-search" style={{ flex: 1, minWidth: 280 }}>
+                    <input
+                      className="cs-liquid-input cs-liquid-search__input"
+                      placeholder="Type room/locker number…"
+                      value={typedNumber}
+                      onFocus={() => setSelectedOccupancyId(null)}
+                      onChange={(e) => {
+                        setSelectedOccupancyId(null);
+                        setTypedNumber(e.target.value);
+                      }}
+                      aria-label="Checkout number"
                     />
-                    <path
-                      d="M14 14L11.1 11.1"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+                    <div className="cs-liquid-search__icon">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path
+                          d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M14 14L11.1 11.1"
+                          stroke="currentColor"
+                          strokeWidth="1.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="cs-liquid-button"
+                    onClick={() => void handleContinue()}
+                    disabled={!canContinue || isSubmitting}
+                  >
+                    {isSubmitting ? 'Loading…' : 'Continue'}
+                  </button>
                 </div>
-              </div>
 
-              <button
-                type="button"
-                className="cs-liquid-button"
-                onClick={() => void handleContinue()}
-                disabled={!canContinue || isSubmitting}
-              >
-                {isSubmitting ? 'Loading…' : 'Continue'}
-              </button>
-            </div>
-
-            <div style={{ marginTop: '1rem' }}>
-              <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Suggested</div>
-              {loadingCandidates ? (
-                <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading candidates…</div>
-              ) : candidates.length === 0 ? (
-                <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No candidates</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {candidates.map((c) => {
-                    const selected = selectedOccupancyId === c.occupancyId;
-                    const scheduled = toDate(c.scheduledCheckoutAt);
-                    const minutesLate = Math.max(0, Math.floor((Date.now() - scheduled.getTime()) / 60000));
-                    const checkoutLabel = `Checkout: ${formatClockTime(scheduled)}${
-                      c.isOverdue ? ` (${formatLateDuration(minutesLate)} late)` : ''
-                    }`;
-                    return (
-                      <button
-                        key={c.occupancyId}
-                        type="button"
-                        className={[
-                          'cs-liquid-button',
-                          selected ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
-                        ].join(' ')}
-                        aria-pressed={selected}
-                        onClick={() => {
-                          setSelectedOccupancyId(c.occupancyId);
-                          setTypedNumber('');
-                        }}
-                        style={{
-                          justifyContent: 'space-between',
-                          padding: '0.75rem',
-                          borderColor: c.isOverdue ? 'rgba(239, 68, 68, 0.65)' : undefined,
-                          background: selected
-                            ? undefined
-                            : c.isOverdue
-                              ? 'rgba(239, 68, 68, 0.08)'
-                              : undefined,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            width: '100%',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            gap: '1rem',
-                          }}
-                        >
-                          <div style={{ fontWeight: 900 }}>
-                            {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number} -- {c.customerName}
-                          </div>
-                          <div
+                <div style={{ marginTop: '1rem' }}>
+                  <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Suggested</div>
+                  {loadingCandidates ? (
+                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading candidates…</div>
+                  ) : candidates.length === 0 ? (
+                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No candidates</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {candidates.map((c) => {
+                        const selected = selectedOccupancyId === c.occupancyId;
+                        const scheduled = toDate(c.scheduledCheckoutAt);
+                        const minutesLate = Math.max(0, Math.floor((Date.now() - scheduled.getTime()) / 60000));
+                        const checkoutLabel = `Checkout: ${formatClockTime(scheduled)}${
+                          c.isOverdue ? ` (${formatLateDuration(minutesLate)} late)` : ''
+                        }`;
+                        return (
+                          <button
+                            key={c.occupancyId}
+                            type="button"
+                            className={[
+                              'cs-liquid-button',
+                              selected ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                            ].join(' ')}
+                            aria-pressed={selected}
+                            onClick={() => {
+                              setSelectedOccupancyId(c.occupancyId);
+                              setTypedNumber('');
+                            }}
                             style={{
-                              fontWeight: 800,
-                              color: c.isOverdue ? '#fecaca' : 'rgba(148, 163, 184, 0.95)',
-                              whiteSpace: 'nowrap',
+                              justifyContent: 'space-between',
+                              padding: '0.75rem',
+                              borderColor: c.isOverdue ? 'rgba(239, 68, 68, 0.65)' : undefined,
+                              background: selected
+                                ? undefined
+                                : c.isOverdue
+                                  ? 'rgba(239, 68, 68, 0.08)'
+                                  : undefined,
                             }}
                           >
-                            {checkoutLabel}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
+                            <div
+                              style={{
+                                display: 'flex',
+                                width: '100%',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '1rem',
+                              }}
+                            >
+                              <div style={{ fontWeight: 900 }}>
+                                {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number} -- {c.customerName}
+                              </div>
+                              <div
+                                style={{
+                                  fontWeight: 800,
+                                  color: c.isOverdue ? '#fecaca' : 'rgba(148, 163, 184, 0.95)',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {checkoutLabel}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -336,6 +375,10 @@ export function ManualCheckoutModal({ isOpen, sessionToken, onClose, onSuccess }
                   type="button"
                   className="cs-liquid-button cs-liquid-button--secondary"
                   onClick={() => {
+                    if (entryMode === 'direct-confirm') {
+                      onClose();
+                      return;
+                    }
                     setStep('select');
                     setShowCancelWarning(false);
                   }}
