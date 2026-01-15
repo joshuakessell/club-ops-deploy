@@ -20,7 +20,13 @@ import type {
   SelectionAcknowledgedPayload,
 } from '@club-ops/shared';
 import { calculatePriceQuote, type PricingInput } from '../pricing/engine.js';
-import { IdScanPayloadSchema, type IdScanPayload, isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
+import {
+  AGREEMENT_LEGAL_BODY_HTML_BY_LANG,
+  IdScanPayloadSchema,
+  type IdScanPayload,
+  isDeluxeRoom,
+  isSpecialRoom,
+} from '@club-ops/shared';
 import crypto from 'crypto';
 import { Parse as ParseAamva } from 'aamva-parser';
 
@@ -3250,18 +3256,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             };
           }
 
-          // Get customer info for PDF
+          // Get customer identity info for PDF + signature snapshot
           const customerResult = session.customer_id
-            ? await client.query<CustomerRow>(
-                `SELECT name, membership_number FROM customers WHERE id = $1`,
-                [session.customer_id]
-              )
-            : { rows: [] };
+            ? await client.query<{
+                name: string;
+                dob: Date | string | null;
+                membership_number: string | null;
+                primary_language: string | null;
+              }>(`SELECT name, dob, membership_number, primary_language FROM customers WHERE id = $1`, [
+                session.customer_id,
+              ])
+            : { rows: [] as Array<{ name: string; dob: Date | string | null; membership_number: string | null; primary_language: string | null }> };
 
-          const customerName =
-            customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
-          const membershipNumber =
-            customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const customerName = customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
+          const customerDob = customerResult.rows[0]?.dob ?? null;
+          const membershipNumber = customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const customerLang = customerResult.rows[0]?.primary_language === 'ES' ? 'ES' : 'EN';
 
           // Get active agreement text
           const agreementResult = await client.query<{
@@ -3289,18 +3299,25 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           const signedAt = new Date();
+          const checkinAt = signedAt; // demo flow uses "now" for check-in start; keep PDF consistent with stored block.starts_at
+
+          const agreementTextSnapshot =
+            customerLang === 'ES' ? AGREEMENT_LEGAL_BODY_HTML_BY_LANG.ES : agreement.body_text;
+          const agreementTitleForPdf = customerLang === 'ES' ? 'Acuerdo del Club' : agreement.title;
 
           // Generate PDF (robust pdf-lib)
           let pdfBuffer: Buffer;
           try {
             pdfBuffer = await generateAgreementPdf({
-              agreementTitle: agreement.title,
+              agreementTitle: agreementTitleForPdf,
               agreementVersion: agreement.version,
+              agreementText: agreementTextSnapshot,
               customerName,
+              customerDob,
               membershipNumber,
-              agreementText: agreement.body_text,
-              signatureImageBase64: signatureData,
+              checkinAt,
               signedAt,
+              signatureImageBase64: signatureData,
             });
           } catch (e) {
             request.log.warn(
@@ -3448,7 +3465,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             blockType = 'INITIAL';
           }
 
-          const startsAt = new Date(); // demo: now (UTC)
+          const startsAt = checkinAt; // demo: now (consistent with PDF)
           const endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
 
           // Create checkin_block with PDF
@@ -3532,7 +3549,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               membershipNumber || null,
               signedAt,
               signatureData,
-              agreement.body_text,
+              agreementTextSnapshot,
               agreement.version,
               request.headers['user-agent'] || null,
               request.ip || null,
@@ -3679,18 +3696,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             };
           }
 
-          // Get customer info for PDF
+          // Get customer identity info for PDF + signature snapshot
           const customerResult = session.customer_id
-            ? await client.query<CustomerRow>(
-                `SELECT name, membership_number FROM customers WHERE id = $1`,
-                [session.customer_id]
-              )
-            : { rows: [] };
+            ? await client.query<{
+                name: string;
+                dob: Date | string | null;
+                membership_number: string | null;
+                primary_language: string | null;
+              }>(`SELECT name, dob, membership_number, primary_language FROM customers WHERE id = $1`, [
+                session.customer_id,
+              ])
+            : { rows: [] as Array<{ name: string; dob: Date | string | null; membership_number: string | null; primary_language: string | null }> };
 
-          const customerName =
-            customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
-          const membershipNumber =
-            customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const customerName = customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
+          const customerDob = customerResult.rows[0]?.dob ?? null;
+          const membershipNumber = customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const customerLang = customerResult.rows[0]?.primary_language === 'ES' ? 'ES' : 'EN';
 
           // Get active agreement text
           const agreementResult = await client.query<{
@@ -3709,16 +3730,23 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           const agreement = agreementResult.rows[0]!;
 
           const signedAt = new Date();
+          const checkinAt = signedAt;
+
+          const agreementTextSnapshot =
+            customerLang === 'ES' ? AGREEMENT_LEGAL_BODY_HTML_BY_LANG.ES : agreement.body_text;
+          const agreementTitleForPdf = customerLang === 'ES' ? 'Acuerdo del Club' : agreement.title;
 
           // Generate PDF with override text instead of signature image
           let pdfBuffer: Buffer;
           try {
             pdfBuffer = await generateAgreementPdf({
-              agreementTitle: agreement.title,
+              agreementTitle: agreementTitleForPdf,
               agreementVersion: agreement.version,
+              agreementText: agreementTextSnapshot,
               customerName,
+              customerDob,
               membershipNumber,
-              agreementText: agreement.body_text,
+              checkinAt,
               signatureText: 'Manual Signature Override',
               signedAt,
             });

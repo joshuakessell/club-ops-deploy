@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { generateAgreementPdf } from '../utils/pdf-generator.js';
 import { roundUpToQuarterHour } from '../time/rounding.js';
+import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG } from '@club-ops/shared';
 
 /**
  * Schema for signing an agreement.
@@ -40,7 +41,9 @@ interface SessionRow {
 interface CustomerRow {
   id: string;
   name: string;
+  dob: Date | string | null;
   membership_number: string | null;
+  primary_language?: string | null;
 }
 
 /**
@@ -133,7 +136,7 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
 
           // 2. Get customer info
           const customerResult = await client.query<CustomerRow>(
-            `SELECT id, name, membership_number FROM customers WHERE id = $1`,
+            `SELECT id, name, dob, membership_number, primary_language FROM customers WHERE id = $1`,
             [session.customer_id]
           );
 
@@ -142,6 +145,7 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           const customer = customerResult.rows[0]!;
+          const customerLang = customer.primary_language === 'ES' ? 'ES' : 'EN';
 
           // 3. Verify this is an initial check-in or renewal (not upgrade)
           if (session.checkin_type === 'UPGRADE') {
@@ -262,16 +266,22 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
 
           const signedAt = new Date();
 
+          const agreementTextSnapshot =
+            customerLang === 'ES' ? AGREEMENT_LEGAL_BODY_HTML_BY_LANG.ES : agreement.body_text;
+          const agreementTitleForPdf = customerLang === 'ES' ? 'Acuerdo del Club' : agreement.title;
+
           // Generate + store agreement PDF bytes on the check-in block
           let pdfBuffer: Buffer | null = null;
           if (signatureBase64) {
             try {
               pdfBuffer = await generateAgreementPdf({
-                agreementTitle: agreement.title,
+                agreementTitle: agreementTitleForPdf,
                 agreementVersion: agreement.version,
-                agreementText: agreement.body_text,
+                agreementText: agreementTextSnapshot,
                 customerName: customer.name,
+                customerDob: customer.dob,
                 membershipNumber: customer.membership_number || undefined,
+                checkinAt: session.check_in_time,
                 signedAt,
                 signatureImageBase64: signatureBase64,
               });
@@ -326,7 +336,7 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
               customer.membership_number,
               signatureBase64,
               body.signatureStrokesJson ? JSON.stringify(body.signatureStrokesJson) : null,
-              agreement.body_text,
+              agreementTextSnapshot,
               agreement.version,
               request.headers['x-device-id'] || null,
               request.headers['x-device-type'] || 'customer-kiosk',
