@@ -79,3 +79,6 @@ export {
   getRoomKind,
   type RoomKind,
 } from './inventory';
+
+// Agreement content (built-in HTML used by kiosk + PDF generation)
+export { AGREEMENT_LEGAL_BODY_HTML_BY_LANG, type AgreementLanguage } from './agreementContent';
