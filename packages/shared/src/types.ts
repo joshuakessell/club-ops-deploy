@@ -1,4 +1,4 @@
-import { RoomStatus, RoomType } from './enums';
+import { RoomStatus, RoomType } from './enums.js';
 
 /**
  * Represents a room in the club.

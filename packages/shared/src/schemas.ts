@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RoomStatus, RoomType } from './enums';
+import { RoomStatus, RoomType } from './enums.js';
 
 /**
  * Zod schema for RoomStatus enum validation.

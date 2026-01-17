@@ -12,7 +12,9 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\"",
+    "check:esm": "node ./scripts/check-esm.mjs",
+    "build": "tsc && pnpm check:esm",
     "dev": "tsc --watch",
     "pretest": "pnpm build",
     "test": "pnpm exec vitest run",
