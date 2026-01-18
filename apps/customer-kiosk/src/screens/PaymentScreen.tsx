@@ -28,7 +28,6 @@ export function PaymentScreen({
         <div className="active-content">
           <main className="main-content">
             <div className="payment-pending-screen">
-              <h1>{t(customerPrimaryLanguage, 'paymentPending')}</h1>
               {paymentLineItems && paymentLineItems.length > 0 && (
                 <div className="payment-breakdown">
                   <p className="breakdown-title">
@@ -58,9 +57,6 @@ export function PaymentScreen({
                   {t(customerPrimaryLanguage, 'paymentIssueSeeAttendant')}
                 </div>
               )}
-              <p className="payment-instruction">
-                {t(customerPrimaryLanguage, 'paymentPending')}
-              </p>
             </div>
           </main>
         </div>

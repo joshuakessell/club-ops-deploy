@@ -229,7 +229,10 @@ export function SelectionScreen({
                         const showWarning = availableCount > 0 && availableCount <= 5;
                         const isUnavailable = availableCount === 0;
                         const isDisabled = session.pastDueBlocked || (isNonMember && !membershipChoice) || showPendingApprovalOverlay;
-                        const isSelected = proposedRentalType === rental && selectionConfirmed;
+                        // Show the customer's chosen rental as selected even while waiting for attendant approval,
+                        // so the UI gives immediate visual feedback before/under the pending overlay.
+                        const isSelected =
+                          proposedRentalType === rental && (selectionConfirmed || proposedBy === 'CUSTOMER');
                         const isStaffProposed =
                           proposedBy === 'EMPLOYEE' && proposedRentalType === rental && !selectionConfirmed && prereqsSatisfied;
                         const isPulsing = isStaffProposed;

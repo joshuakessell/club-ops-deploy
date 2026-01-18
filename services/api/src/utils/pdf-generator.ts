@@ -420,11 +420,16 @@ export async function generateAgreementPdf(params: {
     const topY = PAGE_H - marginTop;
 
     if (logo) {
-      const maxLogoH = 42;
-      const scale = Math.min(1, maxLogoH / logo.height);
+      // Place logo centered in the header so it doesn't overlap the "Club Dallas" label on the left.
+      // Cap both height + width to keep it legible but safely away from the left header text.
+      const maxLogoH = 54;
+      const maxLogoW = 260;
+      const scale = Math.min(1, maxLogoH / logo.height, maxLogoW / logo.width);
       const drawH = logo.height * scale;
       const drawW = logo.width * scale;
-      page.drawImage(logo, { x: marginX, y: topY - drawH, width: drawW, height: drawH });
+      const x = (PAGE_W - drawW) / 2;
+      const y = topY - drawH + 2;
+      page.drawImage(logo, { x, y, width: drawW, height: drawH });
     }
 
     page.drawText('Club Dallas', {

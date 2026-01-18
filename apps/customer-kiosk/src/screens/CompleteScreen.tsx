@@ -21,7 +21,7 @@ export function CompleteScreen({
   isSubmitting,
   orientationOverlay,
   welcomeOverlay,
-  onComplete,
+  onComplete: _onComplete,
 }: CompleteScreenProps) {
   const lang = customerPrimaryLanguage;
   const locale = lang ?? undefined;
@@ -43,7 +43,6 @@ export function CompleteScreen({
         <div className="active-content">
           <main className="main-content">
             <div className="complete-screen">
-              <h1>{t(lang, 'thankYou')}</h1>
               {assignedResourceType && assignedResourceNumber ? (
                 <div className="assignment-info cs-liquid-card">
                   <div className="assignment-row">
@@ -64,16 +63,6 @@ export function CompleteScreen({
               ) : (
                 <p>{t(lang, 'assignmentComplete')}</p>
               )}
-
-              <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'center' }}>
-                <button
-                  className="cs-liquid-button modal-ok-btn complete-ok-btn"
-                  onClick={onComplete}
-                  disabled={isSubmitting}
-                >
-                  {t(lang, 'common.ok')}
-                </button>
-              </div>
             </div>
           </main>
         </div>
