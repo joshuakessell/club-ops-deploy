@@ -3,8 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { installTelemetry, TelemetryErrorBoundary } from '@club-ops/ui';
 import App from './App';
 import '@club-ops/ui/src/styles/tokens.css';
-import '@club-ops/ui/src/styles/components.css';
-import '@club-ops/ui/src/styles/liquid-glass.css';
+import './blink.css';
 import './styles.css';
 
 const root = document.getElementById('root');
