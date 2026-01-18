@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { InventorySelector } from './InventorySelector';
 
 // Mock fetch
@@ -87,10 +87,10 @@ describe('InventorySelector', () => {
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
     // Wait for data to load
-    await screen.findByText(/standard/i);
+    await screen.findByRole('heading', { name: 'Inventory' });
 
     // Check that sections are rendered
-    expect(screen.getByText(/standard/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Standard' })).toBeDefined();
   });
 
   it('should auto-expand section when customer selects type', async () => {
@@ -101,7 +101,8 @@ describe('InventorySelector', () => {
 
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
-    await screen.findByText(/standard/i);
+    await screen.findByRole('heading', { name: 'Inventory' });
+    expect(screen.getByRole('button', { name: 'Standard' })).toBeDefined();
 
     // Section should be expanded (we can check by looking for room numbers)
     // This is a basic test - in a real scenario, we'd check the expanded state
@@ -118,13 +119,10 @@ describe('InventorySelector', () => {
       <InventorySelector {...mockProps} customerSelectedType="STANDARD" onSelect={onSelect} />
     );
 
-    await screen.findByText(/standard/i);
-
-    // Auto-selection happens in useEffect, so we wait a bit
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // onSelect should be called with the first available room
-    expect(onSelect).toHaveBeenCalledWith('room', 'room-1', '101', 'STANDARD');
+    await screen.findByRole('heading', { name: 'Inventory' });
+    await waitFor(() => {
+      expect(onSelect).toHaveBeenCalledWith('room', 'room-1', '101', 'STANDARD');
+    });
   });
 
   it('in lookup mode (no sessionId), only occupied items open the details modal and available items are not selectable', async () => {
@@ -165,7 +163,7 @@ describe('InventorySelector', () => {
     );
 
     // Wait for the section content to render.
-    await screen.findByText(/standard/i);
+    await screen.findByRole('heading', { name: 'Inventory' });
     await screen.findByText('Room 101');
 
     // Should not auto-select anything in lookup mode.

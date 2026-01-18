@@ -52,6 +52,7 @@ export type WebSocketEventType =
   | 'ROOM_ASSIGNED'
   | 'ROOM_RELEASED'
   | 'SESSION_UPDATED'
+  | 'CHECKIN_OPTION_HIGHLIGHTED'
   | 'SELECTION_PROPOSED'
   | 'SELECTION_FORCED'
   | 'SELECTION_LOCKED'
@@ -128,6 +129,14 @@ export interface SessionUpdatedPayload {
    */
   customerMembershipValidUntil?: string;
   /**
+   * Explicit membership choice made during the kiosk membership step.
+   * - ONE_TIME: customer chose the one-time membership option
+   * - SIX_MONTH: customer chose the 6-month membership option
+   *
+   * This is used for kiosk/employee UI coordination only; pricing logic remains server-authoritative.
+   */
+  membershipChoice?: 'ONE_TIME' | 'SIX_MONTH' | null;
+  /**
    * Customer kiosk requested a membership purchase/renewal to be included in the payment quote.
    * Server-authoritative (stored on lane_sessions).
    */
@@ -172,6 +181,24 @@ export interface SessionUpdatedPayload {
   assignedResourceType?: 'room' | 'locker';
   assignedResourceNumber?: string;
   checkoutAt?: string;
+}
+
+/**
+ * Ephemeral UI-only event to coordinate employee "pending/highlight" state with the customer kiosk
+ * without mutating server-authoritative selection state.
+ */
+export interface CheckinOptionHighlightedPayload {
+  sessionId: string;
+  step: 'LANGUAGE' | 'MEMBERSHIP';
+  /**
+   * Option identifier for the step:
+   * - LANGUAGE: 'EN' | 'ES'
+   * - MEMBERSHIP: 'ONE_TIME' | 'SIX_MONTH'
+   *
+   * null clears the highlight for the step.
+   */
+  option: string | null;
+  by: 'EMPLOYEE';
 }
 
 /**

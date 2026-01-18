@@ -905,6 +905,95 @@ paths:
         '404':
           description: No active session found
 
+  /v1/checkin/lane/{laneId}/membership-choice:
+    post:
+      tags: [Check-in]
+      summary: Persist the kiosk membership-step choice (ONE_TIME vs SIX_MONTH) for the active lane session
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [choice]
+              properties:
+                choice:
+                  type: string
+                  enum: [ONE_TIME, SIX_MONTH, NONE]
+                  description: When NONE, clears any previously stored membership choice.
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
+      responses:
+        '200':
+          description: Membership choice recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Invalid input or session not found
+        '404':
+          description: No active session found
+
+  /v1/checkin/lane/{laneId}/highlight-option:
+    post:
+      tags: [Check-in]
+      summary: Ephemeral kiosk UI highlight for employee pending selections (LANGUAGE/MEMBERSHIP)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [step]
+              properties:
+                step:
+                  type: string
+                  enum: [LANGUAGE, MEMBERSHIP]
+                option:
+                  type: string
+                  nullable: true
+                  description: Option identifier for the step; null clears the highlight.
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
+      responses:
+        '200':
+          description: Highlight broadcast to lane
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Invalid input or session not found
+        '401':
+          description: Unauthorized
+        '404':
+          description: No active session found
+
   /v1/checkin/lane/{laneId}/complete-membership-purchase:
     post:
       tags: [Check-in]

@@ -474,6 +474,7 @@ CREATE TABLE public.lane_sessions (
     payment_intent_id uuid,
     membership_purchase_intent character varying(20),
     membership_purchase_requested_at timestamp with time zone,
+    membership_choice character varying(20),
     kiosk_acknowledged_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -485,7 +486,8 @@ CREATE TABLE public.lane_sessions (
     selection_confirmed_by character varying(20),
     selection_locked_at timestamp with time zone,
     CONSTRAINT lane_sessions_proposed_by_check CHECK (((proposed_by)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'EMPLOYEE'::character varying])::text[]))),
-    CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'EMPLOYEE'::character varying])::text[])))
+    CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'EMPLOYEE'::character varying])::text[]))),
+    CONSTRAINT lane_sessions_membership_choice_check CHECK (((membership_choice)::text = ANY ((ARRAY['ONE_TIME'::character varying, 'SIX_MONTH'::character varying])::text[])) OR membership_choice IS NULL)
 );
 
 
