@@ -6,6 +6,7 @@ export interface SessionState {
   customerName: string | null;
   membershipNumber: string | null;
   membershipValidUntil?: string | null; // YYYY-MM-DD (customer membership expiration)
+  membershipChoice?: 'ONE_TIME' | 'SIX_MONTH' | null;
   membershipPurchaseIntent?: 'PURCHASE' | 'RENEW' | null;
   kioskAcknowledgedAt?: string | null;
   allowedRentals: string[];

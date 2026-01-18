@@ -5,6 +5,7 @@ import type {
   RoomStatusChangedPayload,
   InventoryUpdatedPayload,
   SessionUpdatedPayload,
+  CheckinOptionHighlightedPayload,
   SelectionForcedPayload,
   CheckoutRequestedPayload,
   CheckoutClaimedPayload,
@@ -48,6 +49,7 @@ export type WebSocketPayload =
   | RoomAssignedPayload
   | RoomReleasedPayload
   | SessionUpdatedPayload
+  | CheckinOptionHighlightedPayload
   | CheckoutRequestedPayload
   | CheckoutClaimedPayload
   | CheckoutUpdatedPayload

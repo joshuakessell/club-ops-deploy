@@ -297,6 +297,9 @@ export function InventorySelector({
     checkinAt?: string;
     checkoutAt?: string;
   } | null>(null);
+  const [searchHighlight, setSearchHighlight] = useState<null | { type: 'room' | 'locker'; id: string }>(
+    null
+  );
   const waitlistEntries: Array<{ desiredTier: string; status: string }> = useMemo(() => [], []);
 
   const API_BASE = '/api';
@@ -631,21 +634,6 @@ export function InventorySelector({
     onAlertSummaryChange({ hasLate, hasNearing });
   }, [inventory, nowMs, onAlertSummaryChange]);
 
-  if (loading) {
-    return <div style={{ padding: '1rem', textAlign: 'center' }}>Loading inventory...</div>;
-  }
-
-  if (error) {
-    return <div style={{ padding: '1rem', color: '#ef4444' }}>Error: {error}</div>;
-  }
-
-  if (!inventory) {
-    return null;
-  }
-
-  const selectionLockedToType: 'room' | 'locker' | null = selectedItem?.type ?? null;
-  const [searchHighlight, setSearchHighlight] = useState<null | { type: 'room' | 'locker'; id: string }>(null);
-
   useEffect(() => {
     if (!query) {
       setSearchHighlight(null);
@@ -683,6 +671,20 @@ export function InventorySelector({
 
     setSearchHighlight(null);
   }, [query, filteredLockers, roomsByTier, setExpandedSection]);
+
+  if (loading) {
+    return <div style={{ padding: '1rem', textAlign: 'center' }}>Loading inventory...</div>;
+  }
+
+  if (error) {
+    return <div style={{ padding: '1rem', color: '#ef4444' }}>Error: {error}</div>;
+  }
+
+  if (!inventory) {
+    return null;
+  }
+
+  const selectionLockedToType: 'room' | 'locker' | null = selectedItem?.type ?? null;
 
   return (
     <>

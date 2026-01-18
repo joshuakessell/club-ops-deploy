@@ -624,6 +624,12 @@ body {
   min-height: 92px;
 }
 
+.ck-option-highlight {
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.55),
+    0 0 28px rgba(255, 255, 255, 0.18);
+}
+
 .kiosk-option-stack {
   display: flex;
   flex-direction: column;

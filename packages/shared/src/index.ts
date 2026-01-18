@@ -20,6 +20,7 @@ export type {
   DetailedInventory,
   WebSocketEventType,
   WebSocketEvent,
+  CheckinOptionHighlightedPayload,
   RoomStatusChangedPayload,
   InventoryUpdatedPayload,
   SessionUpdatedPayload,

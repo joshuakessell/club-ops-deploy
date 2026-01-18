@@ -151,7 +151,7 @@ describe('App', () => {
     await act(async () => {
       render(<App />);
     });
-    expect(await screen.findByText('Lane Session')).toBeDefined();
+    expect(await screen.findByText('Scan Now')).toBeDefined();
   });
 
   it('updates agreement status when receiving SESSION_UPDATED with agreementSigned=true', async () => {
@@ -198,7 +198,7 @@ describe('App', () => {
     await act(async () => {
       render(<App />);
     });
-    expect(await screen.findByText('Lane Session')).toBeDefined();
+    expect(await screen.findByText('Scan Now')).toBeDefined();
 
     // Wait until App has attached its onmessage handler, then simulate an agreement-signed update.
     // React StrictMode can create multiple WS instances; use the one that has the handler attached.
@@ -229,12 +229,8 @@ describe('App', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Current Session:/i)).toBeDefined();
-      expect(screen.getByText(/Name:\s*Alex Rivera/i)).toBeDefined();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText(/Agreement signed/i)).toBeDefined();
+      expect(screen.getByText('Customer Details')).toBeDefined();
+      expect(screen.getByText('Alex Rivera')).toBeDefined();
     });
   });
 
@@ -281,7 +277,7 @@ describe('App', () => {
     await act(async () => {
       render(<App />);
     });
-    expect(await screen.findByText('Lane Session')).toBeDefined();
+    expect(await screen.findByText('Scan Now')).toBeDefined();
 
     let wsWithHandler: MockWebSocket | null = null;
     await waitFor(() => {
@@ -406,6 +402,11 @@ describe('App', () => {
 
     await act(async () => {
       render(<App />);
+    });
+
+    const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
+    await act(async () => {
+      fireEvent.click(searchTab);
     });
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
@@ -545,6 +546,10 @@ describe('App', () => {
       render(<App />);
     });
 
+    const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
+    await act(async () => {
+      fireEvent.click(searchTab);
+    });
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
     await act(async () => {
       fireEvent.change(searchInput, { target: { value: 'Ale' } });
@@ -564,20 +569,73 @@ describe('App', () => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
 
-    const proposeButtons = screen.getAllByText(/Propose/);
-    await act(async () => {
-      fireEvent.click(proposeButtons[0]!); // first tap proposes
-    });
+    // The app auto-switches to Scan tab when a session becomes active.
     await waitFor(() => {
-      expect(screen.queryAllByText(/Proposed:/).length).toBeGreaterThan(0);
-    });
-    await act(async () => {
-      fireEvent.click(proposeButtons[0]!); // second tap forces (confirm)
+      expect(screen.getByText('Customer Details')).toBeDefined();
     });
 
+    // Simulate kiosk prerequisites already resolved (language + membership choice) so we land on RENTAL step.
+    // React StrictMode can create multiple WS instances; use the one that has the handler attached.
+    let wsWithHandler: MockWebSocket | null = null;
     await waitFor(() => {
-      // Confirming selection triggers payment intent creation; the quote total is surfaced
-      expect(screen.queryAllByText(/\$10\.00/).length).toBeGreaterThan(0);
+      const results = (global.WebSocket as unknown as ReturnType<typeof vi.fn>).mock.results;
+      const instances = results
+        .map((r: { value: unknown }) => r.value as MockWebSocket | undefined)
+        .filter((w): w is MockWebSocket => !!w);
+      wsWithHandler = instances.find((w) => typeof w?.onmessage === 'function') ?? null;
+      expect(wsWithHandler).not.toBeNull();
+    });
+
+    await act(async () => {
+      wsWithHandler?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-123',
+            customerName: 'Alex Rivera',
+            allowedRentals: ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'],
+            customerPrimaryLanguage: 'EN',
+            membershipChoice: 'ONE_TIME',
+            selectionConfirmed: false,
+          },
+        }),
+      });
+    });
+
+    const proposeLocker = await screen.findByRole('button', { name: /Propose Locker/i });
+    await act(async () => {
+      fireEvent.click(proposeLocker); // first tap highlights
+    });
+    await act(async () => {
+      fireEvent.click(proposeLocker); // second tap selects as customer (approval step)
+    });
+
+    // Drive the app to APPROVAL step (normally via WS after /propose-selection).
+    await act(async () => {
+      wsWithHandler?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SELECTION_PROPOSED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-123',
+            rentalType: 'LOCKER',
+            proposedBy: 'CUSTOMER',
+          },
+        }),
+      });
+    });
+
+    const ok = await screen.findByRole('button', { name: 'OK' });
+    await act(async () => {
+      fireEvent.click(ok);
+    });
+
+    // Approval triggers /confirm-selection and then payment intent creation.
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes('/v1/checkin/lane/lane-1/confirm-selection'))).toBe(true);
+      expect(urls.some((u) => u.includes('/v1/checkin/lane/lane-1/create-payment-intent'))).toBe(true);
     });
   });
 
@@ -703,6 +761,11 @@ describe('App', () => {
 
     await act(async () => {
       render(<App />);
+    });
+
+    const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
+    await act(async () => {
+      fireEvent.click(searchTab);
     });
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');

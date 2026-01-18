@@ -18,6 +18,7 @@ import type {
   SelectionProposedPayload,
   SelectionLockedPayload,
   SelectionAcknowledgedPayload,
+  CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
 import { calculatePriceQuote, type PricingInput } from '../pricing/engine.js';
 import {
@@ -54,6 +55,7 @@ interface LaneSessionRow {
   payment_intent_id: string | null;
   membership_purchase_intent?: 'PURCHASE' | 'RENEW' | null;
   membership_purchase_requested_at?: Date | null;
+  membership_choice?: 'ONE_TIME' | 'SIX_MONTH' | null;
   kiosk_acknowledged_at?: Date | null;
   checkin_mode: string | null; // 'INITIAL' or 'RENEWAL'
   proposed_rental_type: string | null;
@@ -788,6 +790,7 @@ async function buildFullSessionUpdatedPayload(
     customerName: customer?.name || session.customer_display_name || '',
     membershipNumber,
     customerMembershipValidUntil,
+    membershipChoice: (session.membership_choice as 'ONE_TIME' | 'SIX_MONTH' | null) ?? null,
     membershipPurchaseIntent: (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
     kioskAcknowledgedAt: session.kiosk_acknowledged_at ? session.kiosk_acknowledged_at.toISOString() : undefined,
     allowedRentals,
@@ -4874,6 +4877,175 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(500).send({
           error: 'Internal Server Error',
           message: 'Failed to set membership purchase intent',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/checkin/lane/:laneId/highlight-option
+   *
+   * Ephemeral (non-persisted) kiosk UI highlight for employee "pending" selections
+   * during the LANGUAGE and MEMBERSHIP steps.
+   *
+   * Security: requireAuth (staff only).
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { step: 'LANGUAGE' | 'MEMBERSHIP'; option: string | null; sessionId?: string };
+  }>(
+    '/v1/checkin/lane/:laneId/highlight-option',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+      const { laneId } = request.params;
+
+      const bodySchema = z.object({
+        step: z.enum(['LANGUAGE', 'MEMBERSHIP']),
+        option: z.string().min(1).nullable(),
+        sessionId: z.string().uuid().optional(),
+      });
+      const parsed = bodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' });
+      }
+      const { step, option, sessionId } = parsed.data;
+
+      try {
+        const resolved = await transaction(async (client) => {
+          const sessionResult = sessionId
+            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
+                sessionId,
+              ])
+            : await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE lane_id = $1
+                   AND status IN ('ACTIVE', 'AWAITING_CUSTOMER', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [laneId]
+              );
+
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'No active session found' };
+          }
+
+          const session = sessionResult.rows[0]!;
+          return { laneId: session.lane_id || laneId, sessionId: session.id };
+        });
+
+        const payload: CheckinOptionHighlightedPayload = {
+          sessionId: resolved.sessionId,
+          step,
+          option,
+          by: 'EMPLOYEE',
+        };
+
+        fastify.broadcaster.broadcastToLane(
+          { type: 'CHECKIN_OPTION_HIGHLIGHTED', payload, timestamp: new Date().toISOString() },
+          resolved.laneId
+        );
+
+        return reply.send({ success: true });
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to highlight option');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to highlight option',
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to highlight option',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/checkin/lane/:laneId/membership-choice
+   *
+   * Persist the kiosk "membership step" choice (ONE_TIME vs SIX_MONTH) on the lane session
+   * so employee-register can mirror the kiosk step-by-step reliably.
+   *
+   * Security: optionalAuth (kiosk does not have staff token).
+   *
+   * Notes:
+   * - This does NOT change pricing logic directly.
+   * - SIX_MONTH is usually set automatically via /membership-purchase-intent.
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { choice: 'ONE_TIME' | 'NONE' | 'SIX_MONTH'; sessionId?: string };
+  }>(
+    '/v1/checkin/lane/:laneId/membership-choice',
+    { preHandler: [optionalAuth] },
+    async (request, reply) => {
+      const { laneId } = request.params;
+      const bodySchema = z.object({
+        choice: z.enum(['ONE_TIME', 'SIX_MONTH', 'NONE']),
+        sessionId: z.string().uuid().optional(),
+      });
+      const parsed = bodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' });
+      }
+      const { choice, sessionId } = parsed.data;
+
+      try {
+        const result = await transaction(async (client) => {
+          const sessionResult = sessionId
+            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
+                sessionId,
+              ])
+            : await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE lane_id = $1
+                   AND status IN ('ACTIVE', 'AWAITING_CUSTOMER', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [laneId]
+              );
+
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'No active session found' };
+          }
+
+          const session = sessionResult.rows[0]!;
+          const resolvedLaneId = session.lane_id || laneId;
+
+          const value: 'ONE_TIME' | 'SIX_MONTH' | null =
+            choice === 'NONE' ? null : (choice as 'ONE_TIME' | 'SIX_MONTH');
+
+          await client.query(
+            `UPDATE lane_sessions
+             SET membership_choice = $1,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [value, session.id]
+          );
+
+          return { sessionId: session.id, laneId: resolvedLaneId };
+        });
+
+        const { payload } = await transaction((client) =>
+          buildFullSessionUpdatedPayload(client, result.sessionId)
+        );
+        fastify.broadcaster.broadcastSessionUpdated(payload, result.laneId || laneId);
+
+        return reply.send({ success: true });
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to set membership choice');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to set membership choice',
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to set membership choice',
         });
       }
     }

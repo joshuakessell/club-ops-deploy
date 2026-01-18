@@ -53,6 +53,8 @@ import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclin
 import { SuccessToast } from '../components/register/toasts/SuccessToast';
 import { ManualCheckoutPanel } from '../components/register/panels/ManualCheckoutPanel';
 import { RoomCleaningPanel } from '../components/register/panels/RoomCleaningPanel';
+import { CustomerDetailsCard } from '../components/register/CustomerDetailsCard';
+import { EmployeeAssistPanel } from '../components/register/EmployeeAssistPanel';
 import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerContent';
 import { InventoryDrawer, type InventoryDrawerSection } from '../components/inventory/InventoryDrawer';
 import { InventorySummaryBar } from '../components/inventory/InventorySummaryBar';
@@ -377,7 +379,9 @@ export function AppRoot() {
   const [membershipPurchaseIntent, setMembershipPurchaseIntent] = useState<'PURCHASE' | 'RENEW' | null>(
     null
   );
+  const [membershipChoice, setMembershipChoice] = useState<'ONE_TIME' | 'SIX_MONTH' | null>(null);
   const [customerMembershipValidUntil, setCustomerMembershipValidUntil] = useState<string | null>(null);
+  const [allowedRentals, setAllowedRentals] = useState<string[]>([]);
 
   // Agreement/PDF verification (staff-only)
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
@@ -395,6 +399,17 @@ export function AppRoot() {
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
+
+  // When a session becomes active via any entry path (scan/search/first-time),
+  // bring the operator to the check-in panel (Scan tab) automatically.
+  const prevSessionIdForTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevSessionIdForTabRef.current;
+    prevSessionIdForTabRef.current = currentSessionId;
+    if (!prev && currentSessionId) {
+      selectHomeTab('scan');
+    }
+  }, [currentSessionId, selectHomeTab]);
 
   const customerSelectedTypeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -2032,8 +2047,14 @@ export function AppRoot() {
           if (payload.customerMembershipValidUntil !== undefined) {
             setCustomerMembershipValidUntil(payload.customerMembershipValidUntil || null);
           }
+          if (payload.membershipChoice !== undefined) {
+            setMembershipChoice(payload.membershipChoice || null);
+          }
           if (payload.membershipPurchaseIntent !== undefined) {
             setMembershipPurchaseIntent(payload.membershipPurchaseIntent || null);
+          }
+          if (Array.isArray(payload.allowedRentals)) {
+            setAllowedRentals(payload.allowedRentals);
           }
 
           // Agreement completion sync
@@ -2126,7 +2147,9 @@ export function AppRoot() {
             setPaymentQuote(null);
             setPaymentStatus(null);
             setMembershipPurchaseIntent(null);
+            setMembershipChoice(null);
             setCustomerMembershipValidUntil(null);
+            setAllowedRentals([]);
             setShowMembershipIdPrompt(false);
             setMembershipIdInput('');
             setMembershipIdError(null);
@@ -2235,17 +2258,112 @@ export function AppRoot() {
     setSelectedInventoryItem({ type, id, number, tier });
   };
 
-  const handleProposeSelection = async (rentalType: string) => {
-    if (!currentSessionId || !session?.sessionToken) {
-      return;
+  const highlightKioskOption = async (params: {
+    step: 'LANGUAGE' | 'MEMBERSHIP';
+    option: string | null;
+  }) => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    try {
+      await fetch(`${API_BASE}/v1/checkin/lane/${lane}/highlight-option`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ ...params, sessionId: currentSessionId }),
+      });
+    } catch {
+      // Best-effort (UI-only).
     }
+  };
 
-    // Second tap on same rental forces selection
-    if (proposedRentalType === rentalType && !selectionConfirmed) {
-      await handleConfirmSelection();
-      return;
+  const handleConfirmLanguage = async (lang: 'EN' | 'ES') => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/set-language`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ language: lang, sessionId: currentSessionId, customerName }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to set language');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to set language');
+    } finally {
+      setIsSubmitting(false);
     }
+  };
 
+  const handleConfirmMembershipOneTime = async () => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    setIsSubmitting(true);
+    try {
+      // Clear any 6-month intent (if present)
+      await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ intent: 'NONE', sessionId: currentSessionId }),
+      });
+
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ choice: 'ONE_TIME', sessionId: currentSessionId }),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to set membership choice');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to set membership choice');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmMembershipSixMonth = async () => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    const base = getCustomerMembershipStatus({
+      membershipNumber: membershipNumber || null,
+      membershipValidUntil: customerMembershipValidUntil,
+    });
+    const intent: 'PURCHASE' | 'RENEW' = base === 'EXPIRED' ? 'RENEW' : 'PURCHASE';
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ intent, sessionId: currentSessionId }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to set membership purchase intent');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to set membership purchase intent');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleProposeSelection = async (rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+    if (!currentSessionId || !session?.sessionToken) return;
     setIsSubmitting(true);
     try {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
@@ -2254,24 +2372,36 @@ export function AppRoot() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.sessionToken}`,
         },
-        body: JSON.stringify({
-          rentalType,
-          proposedBy: 'EMPLOYEE',
-        }),
+        body: JSON.stringify({ rentalType, proposedBy: 'EMPLOYEE' }),
       });
-
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to propose selection');
       }
-
-      setProposedRentalType(rentalType);
-      setProposedBy('EMPLOYEE');
     } catch (error) {
-      console.error('Failed to propose selection:', error);
-      alert(
-        error instanceof Error ? error.message : 'Failed to propose selection. Please try again.'
-      );
+      alert(error instanceof Error ? error.message : 'Failed to propose selection');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCustomerSelectRental = async (rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+    if (!currentSessionId) return;
+    setIsSubmitting(true);
+    try {
+      // Public endpoint; we intentionally set proposedBy=CUSTOMER so the kiosk enters its
+      // "pending approval" step and employee-register shows the OK button.
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rentalType, proposedBy: 'CUSTOMER' }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to select rental');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to select rental');
     } finally {
       setIsSubmitting(false);
     }
@@ -2931,441 +3061,7 @@ export function AppRoot() {
             })()}
 
           <main className="main">
-            {/* Customer Info Panel */}
-            {currentSessionId && customerName && (
-              <section
-                style={{
-                  marginBottom: '1rem',
-                  padding: '1rem',
-                  background: '#1e293b',
-                  border: '1px solid #475569',
-                  borderRadius: '8px',
-                }}
-              >
-                <h2 className="er-text-lg" style={{ marginBottom: '1rem', fontWeight: 600 }}>
-                  Customer Information
-                </h2>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                    gap: '1rem',
-                  }}
-                >
-                  <div>
-                    <div
-                      className="er-text-sm"
-                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                    >
-                      Name
-                    </div>
-                    <div className="er-text-md" style={{ fontWeight: 600 }}>
-                      {customerName}
-                    </div>
-                  </div>
-                  {customerPrimaryLanguage && (
-                    <div>
-                      <div
-                        className="er-text-sm"
-                        style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                      >
-                        Primary Language
-                      </div>
-                      <div className="er-text-md" style={{ fontWeight: 600 }}>
-                        {customerPrimaryLanguage}
-                      </div>
-                    </div>
-                  )}
-                  {customerDobMonthDay && (
-                    <div>
-                      <div
-                        className="er-text-sm"
-                        style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                      >
-                        Date of Birth
-                      </div>
-                      <div className="er-text-md" style={{ fontWeight: 600 }}>
-                        {customerDobMonthDay}
-                      </div>
-                    </div>
-                  )}
-                  {customerLastVisitAt && (
-                    <div>
-                      <div
-                        className="er-text-sm"
-                        style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                      >
-                        Last Visit
-                      </div>
-                      <div className="er-text-md" style={{ fontWeight: 600 }}>
-                        {new Date(customerLastVisitAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  )}
-                  {pastDueBalance > 0 && (
-                    <div>
-                      <div
-                        className="er-text-sm"
-                        style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                      >
-                        Past Due Balance
-                      </div>
-                      <div
-                        className="er-text-md"
-                        style={{
-                          fontWeight: 600,
-                          color: pastDueBalance > 0 ? '#f59e0b' : 'inherit',
-                        }}
-                      >
-                        ${pastDueBalance.toFixed(2)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {customerNotes && (
-                  <div
-                    style={{
-                      marginTop: '1rem',
-                      paddingTop: '1rem',
-                      borderTop: '1px solid #475569',
-                    }}
-                  >
-                    <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.5rem' }}>
-                      Notes
-                    </div>
-                    <div
-                      className="er-text-sm"
-                      style={{
-                        padding: '0.75rem',
-                        background: '#0f172a',
-                        borderRadius: '6px',
-                        whiteSpace: 'pre-wrap',
-                        maxHeight: '150px',
-                        overflowY: 'auto',
-                      }}
-                    >
-                      {customerNotes}
-                    </div>
-                  </div>
-                )}
-                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => setShowAddNoteModal(true)}
-                    className="cs-liquid-button cs-liquid-button--secondary er-text-sm"
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Add Note
-                  </button>
-                </div>
-              </section>
-            )}
-
-            {/* Waitlist Banner */}
-            {waitlistDesiredTier && waitlistBackupType && (
-              <div
-                style={{
-                  padding: '1rem',
-                  background: '#fef3c7',
-                  border: '2px solid #f59e0b',
-                  borderRadius: '8px',
-                  marginBottom: '1rem',
-                  color: '#92400e',
-                }}
-              >
-                <div className="er-text-md" style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-                  ⚠️ Customer Waitlisted
-                </div>
-                <div className="er-text-sm">
-                  Customer requested <strong>{waitlistDesiredTier}</strong> but it's unavailable.
-                  Assigning <strong>{waitlistBackupType}</strong> as backup. If{' '}
-                  {waitlistDesiredTier} becomes available, customer can upgrade.
-                </div>
-              </div>
-            )}
-
-            {/* Selection State Display */}
-            {currentSessionId && customerName && (proposedRentalType || selectionConfirmed) && (
-              <div
-                style={{
-                  padding: '1rem',
-                  marginBottom: '1rem',
-                  background: selectionConfirmed ? '#10b981' : '#3b82f6',
-                  borderRadius: '8px',
-                  color: 'white',
-                }}
-              >
-                <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-                  {selectionConfirmed
-                    ? `✓ Selection Locked: ${proposedRentalType} (by ${selectionConfirmedBy === 'CUSTOMER' ? 'Customer' : 'You'})`
-                    : `Proposed: ${proposedRentalType} (by ${proposedBy === 'CUSTOMER' ? 'Customer' : 'You'})`}
-                </div>
-                {!selectionConfirmed && proposedBy === 'EMPLOYEE' && (
-                  <button
-                    onClick={() => void handleConfirmSelection()}
-                    className="cs-liquid-button"
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {isSubmitting ? 'Confirming...' : 'Confirm Selection'}
-                  </button>
-                )}
-                {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
-                  <button
-                    onClick={() => void handleConfirmSelection()}
-                    className="cs-liquid-button"
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {isSubmitting ? 'Confirming...' : 'Confirm Customer Selection'}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Quick Selection Buttons */}
-            {currentSessionId && customerName && !selectionConfirmed && !pastDueBlocked && (
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '0.5rem',
-                  marginBottom: '1rem',
-                  flexWrap: 'wrap',
-                }}
-              >
-                {['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'].map((rental) => (
-                  <button
-                    key={rental}
-                    onClick={() => void handleProposeSelection(rental)}
-                    disabled={isSubmitting}
-                    className={[
-                      'cs-liquid-button',
-                      'cs-liquid-button--secondary',
-                      proposedRentalType === rental ? 'cs-liquid-button--selected' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Propose {rental}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Inventory Selector */}
-            {currentSessionId && customerName && !pastDueBlocked && (
-              <InventorySummaryBar
-                counts={inventoryAvailable}
-                onOpenInventorySection={(section) => {
-                  setInventoryForcedSection(section);
-                selectHomeTab('inventory');
-                }}
-              />
-            )}
-
-            {/* Assignment Bar */}
-            {selectedInventoryItem && (
-              <div
-                className="cs-liquid-card"
-                style={{
-                  position: 'sticky',
-                  bottom: 0,
-                  borderTop: '2px solid #3b82f6',
-                  padding: '1rem',
-                  zIndex: 100,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '1rem',
-                    marginBottom: paymentQuote ? '1rem' : 0,
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}>
-                      Selected: {selectedInventoryItem.type === 'room' ? 'Room' : 'Locker'}{' '}
-                      {selectedInventoryItem.number}
-                    </div>
-                    {customerSelectedType &&
-                      selectedInventoryItem.tier !== customerSelectedType && (
-                        <div style={{ fontSize: '0.875rem', color: '#f59e0b' }}>
-                          Waiting for customer confirmation...
-                        </div>
-                      )}
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                      onClick={() => void handleAssign()}
-                      className="cs-liquid-button"
-                      disabled={
-                        isSubmitting ||
-                        showCustomerConfirmationPending ||
-                        !agreementSigned ||
-                        paymentStatus !== 'PAID'
-                      }
-                      style={{
-                        padding: '0.75rem 1.5rem',
-                        fontSize: '1rem',
-                        fontWeight: 600,
-                        cursor:
-                          isSubmitting ||
-                          showCustomerConfirmationPending ||
-                          !agreementSigned ||
-                          paymentStatus !== 'PAID'
-                            ? 'not-allowed'
-                            : 'pointer',
-                      }}
-                      title={
-                        showCustomerConfirmationPending
-                          ? 'Waiting for customer confirmation'
-                          : paymentStatus !== 'PAID'
-                            ? 'Payment must be successful before assignment'
-                            : !agreementSigned
-                              ? 'Waiting for customer to sign agreement'
-                              : 'Assign resource'
-                      }
-                    >
-                      {isSubmitting
-                        ? 'Assigning...'
-                        : showCustomerConfirmationPending
-                          ? 'Waiting for Confirmation'
-                          : paymentStatus !== 'PAID'
-                            ? 'Awaiting Payment'
-                            : !agreementSigned
-                              ? 'Awaiting Signature'
-                              : 'Assign'}
-                    </button>
-                    {!agreementSigned && paymentStatus === 'PAID' ? (
-                      <button
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              'Override customer signature? This will complete the agreement signing process without a customer signature.'
-                            )
-                          ) {
-                            void handleManualSignatureOverride();
-                          }
-                        }}
-                        className="cs-liquid-button cs-liquid-button--danger"
-                        disabled={isSubmitting}
-                        style={{
-                          padding: '0.75rem 1.5rem',
-                          fontSize: '1rem',
-                          fontWeight: 600,
-                          cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        Manual Signature
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleClearSelection}
-                        className="cs-liquid-button cs-liquid-button--secondary"
-                        disabled={isSubmitting}
-                        style={{
-                          padding: '0.75rem 1.5rem',
-                          fontSize: '1rem',
-                          fontWeight: 600,
-                          cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Payment Quote and Mark Paid */}
-                {paymentQuote && (
-                  <div
-                    className="cs-liquid-card"
-                    style={{
-                      padding: '1rem',
-                    }}
-                  >
-                    <div style={{ marginBottom: '0.75rem', fontWeight: 600, fontSize: '1rem' }}>
-                      Payment Quote
-                    </div>
-                    <div style={{ marginBottom: '0.5rem' }}>
-                      {paymentQuote.lineItems.map((item, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            marginBottom: '0.25rem',
-                            fontSize: '0.875rem',
-                          }}
-                        >
-                          <span>{item.description}</span>
-                          <span>${item.amount.toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontWeight: 600,
-                        fontSize: '1.125rem',
-                        paddingTop: '0.5rem',
-                        borderTop: '1px solid #475569',
-                        marginBottom: '0.75rem',
-                      }}
-                    >
-                      <span>Total Due:</span>
-                      <span>${paymentQuote.total.toFixed(2)}</span>
-                    </div>
-                    {paymentQuote.messages && paymentQuote.messages.length > 0 && (
-                      <div
-                        style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.75rem' }}
-                      >
-                        {paymentQuote.messages.map((msg, idx) => (
-                          <div key={idx}>{msg}</div>
-                        ))}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => void handleMarkPaid()}
-                      disabled={isSubmitting || paymentStatus === 'PAID'}
-                      className={[
-                        'cs-liquid-button',
-                        paymentStatus === 'PAID' ? 'cs-liquid-button--selected' : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem',
-                        fontSize: '1rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {paymentStatus === 'PAID' ? '✓ Paid in Square' : 'Mark Paid in Square'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Check-in UI lives inside the right-side panel (Scan tab), so it never overflows past the left rail. */}
 
             <section className="actions-panel">
               <div className="er-home-layout">
@@ -3474,15 +3170,73 @@ export function AppRoot() {
 
                 <div className="er-home-content">
                   {homeTab === 'scan' && (
-                    <div className="er-home-panel er-home-panel--center cs-liquid-card" style={{ padding: '1rem' }}>
-                      <div style={{ fontSize: '4rem', lineHeight: 1 }} aria-hidden="true">
-                        📷
+                    currentSessionId && customerName ? (
+                      <div
+                        className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card"
+                        style={{ padding: '0.75rem' }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.75rem',
+                            height: '100%',
+                            minHeight: 0,
+                          }}
+                        >
+                          <CustomerDetailsCard
+                            name={customerName}
+                            dobMonthDay={customerDobMonthDay || null}
+                            language={customerPrimaryLanguage || null}
+                            membershipNumber={membershipNumber || null}
+                          />
+
+                          <EmployeeAssistPanel
+                            sessionId={currentSessionId}
+                            customerName={customerName}
+                            customerPrimaryLanguage={customerPrimaryLanguage}
+                            membershipNumber={membershipNumber || null}
+                            customerMembershipValidUntil={customerMembershipValidUntil}
+                            membershipPurchaseIntent={membershipPurchaseIntent}
+                            membershipChoice={membershipChoice}
+                            allowedRentals={allowedRentals}
+                            proposedRentalType={proposedRentalType}
+                            proposedBy={proposedBy}
+                            selectionConfirmed={selectionConfirmed}
+                            waitlistDesiredTier={waitlistDesiredTier}
+                            waitlistBackupType={waitlistBackupType}
+                            inventoryAvailable={
+                              inventoryAvailable
+                                ? { rooms: inventoryAvailable.rooms, lockers: inventoryAvailable.lockers }
+                                : null
+                            }
+                            isSubmitting={isSubmitting}
+                            onHighlightLanguage={(lang) =>
+                              void highlightKioskOption({ step: 'LANGUAGE', option: lang })
+                            }
+                            onConfirmLanguage={(lang) => void handleConfirmLanguage(lang)}
+                            onHighlightMembership={(choice) =>
+                              void highlightKioskOption({ step: 'MEMBERSHIP', option: choice })
+                            }
+                            onConfirmMembershipOneTime={() => void handleConfirmMembershipOneTime()}
+                            onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
+                            onHighlightRental={(rental) => void handleProposeSelection(rental)}
+                            onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+                            onApproveRental={() => void handleConfirmSelection()}
+                          />
+                        </div>
                       </div>
-                      <div style={{ marginTop: '0.75rem', fontWeight: 950, fontSize: '1.6rem' }}>Scan Now</div>
-                      <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
-                        Scan a membership ID or driver license.
+                    ) : (
+                      <div className="er-home-panel er-home-panel--center cs-liquid-card" style={{ padding: '1rem' }}>
+                        <div style={{ fontSize: '4rem', lineHeight: 1 }} aria-hidden="true">
+                          📷
+                        </div>
+                        <div style={{ marginTop: '0.75rem', fontWeight: 950, fontSize: '1.6rem' }}>Scan Now</div>
+                        <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
+                          Scan a membership ID or driver license.
+                        </div>
                       </div>
-                    </div>
+                    )
                   )}
 
                   {homeTab === 'search' && (

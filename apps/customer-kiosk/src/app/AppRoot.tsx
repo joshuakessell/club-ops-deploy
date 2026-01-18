@@ -8,6 +8,7 @@ import type {
   SelectionProposedPayload,
   SelectionLockedPayload,
   SelectionForcedPayload,
+  CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { t, type Language } from '../i18n';
@@ -91,6 +92,10 @@ export function AppRoot() {
     null
   );
   const [membershipChoice, setMembershipChoice] = useState<'ONE_TIME' | 'SIX_MONTH' | null>(null);
+  const [highlightedLanguage, setHighlightedLanguage] = useState<'EN' | 'ES' | null>(null);
+  const [highlightedMembershipChoice, setHighlightedMembershipChoice] = useState<
+    'ONE_TIME' | 'SIX_MONTH' | null
+  >(null);
 
   // Inject pulse animation for proposal highlight
   useEffect(() => {
@@ -120,6 +125,20 @@ export function AppRoot() {
   useEffect(() => {
     setMembershipChoice(null);
   }, [session.sessionId]);
+
+  // If the server has a membershipChoice persisted, reflect it locally so the kiosk flow
+  // can be coordinated with employee-register (e.g. staff-selected ONE_TIME).
+  useEffect(() => {
+    if (session.membershipChoice === 'ONE_TIME' && membershipChoice !== 'ONE_TIME') {
+      setMembershipChoice('ONE_TIME');
+      return;
+    }
+    if (session.membershipChoice === 'SIX_MONTH' && membershipChoice !== 'SIX_MONTH') {
+      setMembershipChoice('SIX_MONTH');
+      return;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.sessionId, session.membershipChoice]);
 
   // If the server indicates a 6-month membership intent is already selected, reflect it in the explicit choice step.
   // (We intentionally do NOT auto-select ONE_TIME when intent is null.)
@@ -217,6 +236,7 @@ export function AppRoot() {
           customerName: payload.customerName,
           membershipNumber: payload.membershipNumber || null,
           membershipValidUntil: payload.customerMembershipValidUntil || null,
+          membershipChoice: payload.membershipChoice ?? null,
           membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
           kioskAcknowledgedAt: payload.kioskAcknowledgedAt || null,
           allowedRentals: payload.allowedRentals,
@@ -272,6 +292,8 @@ export function AppRoot() {
           setSelectionAcknowledged(false);
           setUpgradeDisclaimerAcknowledged(false);
           setHasScrolledAgreement(false);
+          setHighlightedLanguage(null);
+          setHighlightedMembershipChoice(null);
           return;
         }
 
@@ -346,6 +368,17 @@ export function AppRoot() {
         }
       } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
         setSelectionAcknowledged(true);
+      } else if (message.type === 'CHECKIN_OPTION_HIGHLIGHTED') {
+        const payload = message.payload as CheckinOptionHighlightedPayload;
+        if (payload.sessionId !== sessionIdRef.current) return;
+        if (payload.step === 'LANGUAGE') {
+          const opt = payload.option === 'EN' || payload.option === 'ES' ? payload.option : null;
+          setHighlightedLanguage(opt);
+        } else if (payload.step === 'MEMBERSHIP') {
+          const opt =
+            payload.option === 'ONE_TIME' || payload.option === 'SIX_MONTH' ? payload.option : null;
+          setHighlightedMembershipChoice(opt);
+        }
       } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
         const payload = message.payload as CustomerConfirmationRequiredPayload;
         setCustomerConfirmationData(payload);
@@ -386,6 +419,7 @@ export function AppRoot() {
         type: 'subscribe',
         events: [
           'SESSION_UPDATED',
+          'CHECKIN_OPTION_HIGHLIGHTED',
           'SELECTION_PROPOSED',
           'SELECTION_LOCKED',
           'SELECTION_ACKNOWLEDGED',
@@ -851,6 +885,19 @@ export function AppRoot() {
     if (session.membershipPurchaseIntent) {
       await handleClearMembershipPurchaseIntent();
     }
+    // Persist the explicit choice so employee-register can mirror the kiosk step reliably.
+    if (session.sessionId) {
+      try {
+        await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ choice: 'ONE_TIME', sessionId: session.sessionId }),
+        });
+        // SESSION_UPDATED will reconcile; we don't need to block UX on this.
+      } catch {
+        // Best-effort (UI still works locally).
+      }
+    }
   };
 
   const handleClearMembershipPurchaseIntent = async () => {
@@ -949,6 +996,7 @@ export function AppRoot() {
           customerPrimaryLanguage={session.customerPrimaryLanguage}
           onSelectLanguage={(lang) => void handleLanguageSelection(lang)}
           isSubmitting={isSubmitting}
+          highlightedLanguage={highlightedLanguage}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
         />
@@ -1003,45 +1051,47 @@ export function AppRoot() {
           isSubmitting={isSubmitting}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
-          onComplete={async () => {
-            setIsSubmitting(true);
-            try {
-              // Kiosk acknowledgement: UI-only. Must NOT end/clear the lane session.
-              await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
-              });
-            } catch (error) {
-              console.error('Failed to kiosk-ack completion:', error);
-              // Continue to local UI reset even if server call fails; WS will reconcile when possible.
-            } finally {
-              // Local reset (immediate UX): hide customer flow and return kiosk to idle,
-              // but keep session data so the kiosk remains "locked" until employee-register completes.
-              setView('idle');
-              setSession((prev) => ({
-                ...prev,
-                kioskAcknowledgedAt: new Date().toISOString(),
-              }));
-              setSelectedRental(null);
-              setAgreed(false);
-              setSignatureData(null);
-              setShowUpgradeDisclaimer(false);
-              setUpgradeAction(null);
-              setShowRenewalDisclaimer(false);
-              setCheckinMode(null);
-              setShowWaitlistModal(false);
-              setWaitlistDesiredType(null);
-              setWaitlistBackupType(null);
-              setProposedRentalType(null);
-              setProposedBy(null);
-              setSelectionConfirmed(false);
-              setSelectionConfirmedBy(null);
-              setSelectionAcknowledged(false);
-              setUpgradeDisclaimerAcknowledged(false);
-              setHasScrolledAgreement(false);
-              setIsSubmitting(false);
-            }
+          onComplete={() => {
+            void (async () => {
+              setIsSubmitting(true);
+              try {
+                // Kiosk acknowledgement: UI-only. Must NOT end/clear the lane session.
+                await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({}),
+                });
+              } catch (error) {
+                console.error('Failed to kiosk-ack completion:', error);
+                // Continue to local UI reset even if server call fails; WS will reconcile when possible.
+              } finally {
+                // Local reset (immediate UX): hide customer flow and return kiosk to idle,
+                // but keep session data so the kiosk remains "locked" until employee-register completes.
+                setView('idle');
+                setSession((prev) => ({
+                  ...prev,
+                  kioskAcknowledgedAt: new Date().toISOString(),
+                }));
+                setSelectedRental(null);
+                setAgreed(false);
+                setSignatureData(null);
+                setShowUpgradeDisclaimer(false);
+                setUpgradeAction(null);
+                setShowRenewalDisclaimer(false);
+                setCheckinMode(null);
+                setShowWaitlistModal(false);
+                setWaitlistDesiredType(null);
+                setWaitlistBackupType(null);
+                setProposedRentalType(null);
+                setProposedBy(null);
+                setSelectionConfirmed(false);
+                setSelectionConfirmedBy(null);
+                setSelectionAcknowledged(false);
+                setUpgradeDisclaimerAcknowledged(false);
+                setHasScrolledAgreement(false);
+                setIsSubmitting(false);
+              }
+            })();
           }}
         />
       );
@@ -1070,6 +1120,7 @@ export function AppRoot() {
             onSelectSixMonthMembership={() =>
               openMembershipModal(isExpired ? 'RENEW' : 'PURCHASE')
             }
+              highlightedMembershipChoice={highlightedMembershipChoice}
           />
           <UpgradeDisclaimerModal
             isOpen={showUpgradeDisclaimer}

@@ -45,6 +45,7 @@ export interface SelectionScreenProps {
   membershipChoice: 'ONE_TIME' | 'SIX_MONTH' | null;
   onSelectOneTimeMembership: () => void;
   onSelectSixMonthMembership: () => void;
+  highlightedMembershipChoice?: 'ONE_TIME' | 'SIX_MONTH' | null;
 }
 
 export function SelectionScreen({
@@ -62,6 +63,7 @@ export function SelectionScreen({
   membershipChoice,
   onSelectOneTimeMembership,
   onSelectSixMonthMembership,
+  highlightedMembershipChoice = null,
 }: SelectionScreenProps) {
   const lang = session.customerPrimaryLanguage;
   const membershipStatus = getMembershipStatus(session, Date.now());
@@ -169,7 +171,14 @@ export function SelectionScreen({
                   <div className="purchase-card__body">
                     <div className="membership-option-stack">
                       <button
-                        className={`cs-liquid-button kiosk-option-button ${membershipChoice === 'ONE_TIME' ? 'cs-liquid-button--selected' : ''}`}
+                        className={[
+                          'cs-liquid-button',
+                          'kiosk-option-button',
+                          membershipChoice === 'ONE_TIME' ? 'cs-liquid-button--selected' : '',
+                          highlightedMembershipChoice === 'ONE_TIME' ? 'ck-option-highlight' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
                         onClick={() => {
                           if (!canInteract) return;
                           onSelectOneTimeMembership();
@@ -184,7 +193,14 @@ export function SelectionScreen({
                       </button>
 
                       <button
-                        className={`cs-liquid-button kiosk-option-button ${membershipChoice === 'SIX_MONTH' ? 'cs-liquid-button--selected' : ''}`}
+                        className={[
+                          'cs-liquid-button',
+                          'kiosk-option-button',
+                          membershipChoice === 'SIX_MONTH' ? 'cs-liquid-button--selected' : '',
+                          highlightedMembershipChoice === 'SIX_MONTH' ? 'ck-option-highlight' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
                         onClick={() => {
                           if (!canInteract) return;
                           onSelectSixMonthMembership();
