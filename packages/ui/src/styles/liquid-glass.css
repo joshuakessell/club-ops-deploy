@@ -152,11 +152,12 @@
 }
 
 .cs-liquid-button--danger {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.55);
+  /* Make "danger" read as clearly RED (less pink). */
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.6);
 }
 .cs-liquid-button--danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(220, 38, 38, 0.22);
 }
 
 .cs-liquid-button--selected {

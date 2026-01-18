@@ -16,7 +16,16 @@ const CleaningBatchSchema = z.object({
   overrideReason: z.string().optional(),
 });
 
-type CleaningBatchInput = z.infer<typeof CleaningBatchSchema>;
+// NOTE: We intentionally spell this type out to avoid occasional `unknown` inference
+// issues in certain TS/Zod toolchain combinations. Runtime validation remains the
+// source of truth via `CleaningBatchSchema.parse(...)`.
+type CleaningBatchInput = {
+  roomIds: string[];
+  targetStatus: RoomStatus;
+  staffId: string;
+  override: boolean;
+  overrideReason?: string;
+};
 
 interface RoomRow {
   id: string;
@@ -66,7 +75,8 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
       let body: CleaningBatchInput;
 
       try {
-        body = CleaningBatchSchema.parse(request.body);
+        // Work around occasional `unknown` inference in downstream tooling; runtime validation still applies.
+        body = CleaningBatchSchema.parse(request.body) as CleaningBatchInput;
       } catch (error) {
         return reply.status(400).send({
           error: 'Validation failed',

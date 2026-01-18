@@ -31,11 +31,20 @@
   --er-font-icon: 22px;
 
   /* Employee Register: edge safe area to avoid drawer tab overlap */
-  --er-edge-safe: 20px;
+  --er-edge-safe: 0px;
   --er-drawer-tab-width: 54px;
+  /* Main content gutter (header + right panel content). */
+  --er-body-gutter: 0.75rem;
+  /* Left edge should be flush so the left tabs can hit the screen edge. */
+  --er-left-safe: 0px;
+  --er-right-safe: 0.75rem;
 
   /* Fixed top bar (employee + register number) */
   --er-topbar-height: 60px;
+  /* Small inset so tabs/rails don't touch the toolbar or bottom edge */
+  --er-rail-gap: 12px;
+  /* Left home rail width (fixed-position, like right drawer tabs) */
+  --er-home-rail-width: 210px;
 }
 
 /* ------------------------------------------------------------
@@ -304,10 +313,17 @@
   line-height: 1.1 !important;
 }
 
-/* Solid black background with very dark overlay */
+/* Background: let the Blink bridge/theme decide the base color */
 body {
-  background-color: #000000;
+  background-color: var(--bg);
   position: relative;
+}
+
+/* Prevent page scroll (internal panels may scroll as needed) */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Fixed background image layer (keeps background still while UI scrolls) */
@@ -339,10 +355,11 @@ body::after {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 1.5rem max(1.5rem, calc(var(--er-drawer-tab-width) + var(--er-edge-safe)));
+  padding: 0 var(--er-right-safe) 1.5rem var(--er-left-safe);
   background: transparent;
   position: relative;
   z-index: 1;
+  overflow: hidden;
 }
 
 .er-search-section-half {
@@ -364,19 +381,19 @@ body::after {
 
 /* Local button variants missing from shared stylesheet */
 .cs-liquid-button--warning {
-  background: rgba(245, 158, 11, 0.10);
-  border-color: rgba(245, 158, 11, 0.60);
+  background: color-mix(in oklch, var(--color-warning) 16%, transparent);
+  border-color: color-mix(in oklch, var(--color-warning) 60%, transparent);
 }
 .cs-liquid-button--warning:hover:not(:disabled) {
-  background: rgba(245, 158, 11, 0.22);
+  background: color-mix(in oklch, var(--color-warning) 28%, transparent);
 }
 
 .cs-liquid-button--success {
-  background: rgba(34, 197, 94, 0.10);
-  border-color: rgba(34, 197, 94, 0.60);
+  background: color-mix(in oklch, var(--color-success) 16%, transparent);
+  border-color: color-mix(in oklch, var(--color-success) 60%, transparent);
 }
 .cs-liquid-button--success:hover:not(:disabled) {
-  background: rgba(34, 197, 94, 0.22);
+  background: color-mix(in oklch, var(--color-success) 28%, transparent);
 }
 
 /* Inventory cards (rooms/lockers) */
@@ -390,6 +407,10 @@ body::after {
   color: var(--text);
   cursor: pointer;
   transition: transform 150ms ease, filter 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.er-inv-item--highlight {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
 }
 
 .er-inv-item:disabled {
@@ -440,6 +461,14 @@ body::after {
   border-bottom: 1px solid var(--border);
 }
 
+/* Second bar (Employee Register + Sign Out/Close Out): centered with small gutters */
+.header.er-surface-strong {
+  margin-left: var(--er-body-gutter);
+  margin-right: var(--er-body-gutter);
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
 .header.er-surface-strong {
   /* Narrow override: avoid pulling blue-tinted global border tokens into the top toolbar */
   border-bottom: 1px solid var(--er-border);
@@ -478,6 +507,109 @@ body::after {
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  min-height: 0;
+  overflow: hidden;
+  padding-left: var(--er-body-gutter);
+  padding-right: var(--er-body-gutter);
+  padding-top: var(--er-rail-gap);
+  padding-bottom: var(--er-rail-gap);
+}
+
+/* Make the home actions area occupy the remaining height so the left rail is height-stable
+   (Clear Session stays pinned to the bottom regardless of right-panel content height). */
+.actions-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.actions-panel > .er-home-layout {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------
+   Home actions (left tabs + right panel)
+------------------------------------------------------------ */
+
+.er-home-layout {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+.er-home-tabs {
+  /* Fixed-position left rail (behaves like the right drawer tabs) */
+  position: fixed;
+  left: 0;
+  top: calc(var(--er-topbar-height) + var(--er-rail-gap));
+  bottom: var(--er-rail-gap);
+  width: var(--er-home-rail-width);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+
+  padding: 0.5rem 0;
+  z-index: 90; /* under .register-top-bar (100), above main content */
+  pointer-events: auto;
+}
+
+.er-home-tab-btn {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  /* Slightly shorter so all tabs fit on landscape iPad */
+  padding: 0.9rem 1.05rem !important;
+  min-height: 64px !important;
+  font-weight: 800;
+  border-radius: 0 9999px 9999px 0;
+}
+
+.er-home-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+
+  /* Keep content fully visible to the right of the fixed rail,
+     with a gutter that matches the right edge gutter. */
+  margin-left: var(--er-home-rail-width);
+}
+
+/* Right-panel panels: always fill available height.
+   - Center vertically when short
+   - Scroll internally when long */
+.er-home-panel {
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.er-home-panel--center {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.er-home-panel--top {
+  justify-content: flex-start;
+  align-items: stretch;
+  text-align: left;
+}
+
+.er-home-panel--no-scroll {
+  overflow: hidden;
 }
 
 .inventory-panel h2,
@@ -994,15 +1126,14 @@ body::after {
 }
 
 .register-top-bar {
-  position: fixed;
+  /* Keep it part of layout so nothing can render behind it. */
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
   height: var(--er-topbar-height);
   background: var(--er-surface-strong);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 0 1.5rem;
   z-index: 100;
   border-bottom: 1px solid var(--er-border);
@@ -1010,11 +1141,49 @@ body::after {
   -webkit-backdrop-filter: blur(16px);
 }
 
+.register-top-bar-left {
+  justify-self: start;
+  min-width: 0;
+}
+
+.register-top-bar-title {
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .register-top-bar-center {
-  flex: 1;
-  text-align: center;
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
   font-size: 1rem;
   font-weight: 600;
+  min-width: 0;
+}
+
+.register-top-bar-dev {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.register-top-bar-right {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Slightly smaller top-toolbar buttons so they don't touch the toolbar edges
+   (also overrides `.er-ui-tweaks .cs-liquid-button` sizing). */
+.register-top-bar-right .cs-liquid-button {
+  padding: 0.5rem 0.85rem !important;
+  min-height: 46px !important;
+  font-size: 16px !important;
+  line-height: 1.1 !important;
 }
 
 .register-menu-button {

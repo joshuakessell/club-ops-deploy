@@ -71,7 +71,7 @@ export async function seedDemoData(): Promise<void> {
 
       // Choose one STANDARD room to remain free at NOW
       const freeRoomNumber =
-        ROOM_NUMBERS.find((n) => {
+        ROOM_NUMBERS.find((n: number) => {
           try {
             return getRoomKind(n) === 'STANDARD';
           } catch {
@@ -79,7 +79,7 @@ export async function seedDemoData(): Promise<void> {
           }
         }) ?? 200;
 
-      const occupiedRoomNumbers = ROOM_NUMBERS.filter((n) => n !== freeRoomNumber);
+      const occupiedRoomNumbers = ROOM_NUMBERS.filter((n: number) => n !== freeRoomNumber);
       const ACTIVE_LOCKERS_TARGET = 40;
       const occupiedLockerNumbers = LOCKER_NUMBERS.slice(0, ACTIVE_LOCKERS_TARGET); // deterministic
 

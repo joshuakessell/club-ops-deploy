@@ -18,7 +18,6 @@ export function CompleteScreen({
   assignedResourceType,
   assignedResourceNumber,
   checkoutAt,
-  isSubmitting,
   orientationOverlay,
   welcomeOverlay,
   onComplete: _onComplete,
