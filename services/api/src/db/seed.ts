@@ -24,7 +24,7 @@ interface LockerSeed {
  *
  * This seed enforces inventory presence and removes any invalid legacy rooms/lockers.
  */
-const seedRooms: RoomSeed[] = ROOMS.map((r) => {
+const seedRooms: RoomSeed[] = ROOMS.map((r: { number: number; kind: string }) => {
   const type: RoomType =
     r.kind === 'DELUXE' ? RoomType.DOUBLE : r.kind === 'SPECIAL' ? RoomType.SPECIAL : RoomType.STANDARD;
   return {
@@ -35,7 +35,7 @@ const seedRooms: RoomSeed[] = ROOMS.map((r) => {
   };
 });
 
-const seedLockers: LockerSeed[] = LOCKER_NUMBERS.map((n) => ({
+const seedLockers: LockerSeed[] = LOCKER_NUMBERS.map((n: string) => ({
   number: n,
   tagCode: `LOCKER-${n}`,
 }));

@@ -16,10 +16,13 @@ export default function EventLogOverlay() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    return onEvent((e) => {
+    const unsubscribe = onEvent((e) => {
       if (paused) return;
       setEvents((prev) => [...prev, e].slice(-MAX_EVENTS));
     });
+    return () => {
+      unsubscribe();
+    };
   }, [paused]);
 
   useEffect(() => {

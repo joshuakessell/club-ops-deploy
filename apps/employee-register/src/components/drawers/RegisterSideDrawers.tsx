@@ -60,7 +60,7 @@ export function RegisterSideDrawers({
   return (
     <>
       <SlideOutDrawer
-        side="left"
+        side="right"
         label="Upgrades"
         isOpen={upgradesOpen}
         onOpenChange={(next) => {
@@ -70,6 +70,7 @@ export function RegisterSideDrawers({
         attention={upgradesAttention}
         tabVariant={upgradesTabVariant}
         tabPulseVariant={upgradesTabPulseVariant}
+        tabTopPercent={70}
       >
         {upgradesContent}
       </SlideOutDrawer>
@@ -86,6 +87,7 @@ export function RegisterSideDrawers({
         tabVariant={inventoryTabVariant}
         tabPulseVariant={inventoryTabPulseVariant}
         widthPx={inventoryWidthPx}
+        tabTopPercent={42}
       >
         {inventoryContent}
       </SlideOutDrawer>

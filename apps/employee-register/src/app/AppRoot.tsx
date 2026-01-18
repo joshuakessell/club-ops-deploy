@@ -30,8 +30,6 @@ import { extractDobDigits, formatDobMmDdYyyy, parseDobDigitsToIso } from '../uti
 import { OfferUpgradeModal } from '../components/OfferUpgradeModal';
 import { CheckoutRequestsBanner } from '../components/register/CheckoutRequestsBanner';
 import { CheckoutVerificationModal } from '../components/register/CheckoutVerificationModal';
-import { RegisterHeader } from '../components/register/RegisterHeader';
-import { RegisterTopActionsBar } from '../components/register/RegisterTopActionsBar';
 import { useEmployeeRegisterTabletUiTweaks } from '../hooks/useEmployeeRegisterTabletUiTweaks';
 import { RequiredTenderOutcomeModal } from '../components/register/modals/RequiredTenderOutcomeModal';
 import { WaitlistNoticeModal } from '../components/register/modals/WaitlistNoticeModal';
@@ -52,11 +50,12 @@ import {
   type MultipleMatchCandidate,
 } from '../components/register/modals/MultipleMatchesModal';
 import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclineToast';
-import { RegisterSideDrawers } from '../components/drawers/RegisterSideDrawers';
+import { SuccessToast } from '../components/register/toasts/SuccessToast';
+import { ManualCheckoutPanel } from '../components/register/panels/ManualCheckoutPanel';
+import { RoomCleaningPanel } from '../components/register/panels/RoomCleaningPanel';
 import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerContent';
 import { InventoryDrawer, type InventoryDrawerSection } from '../components/inventory/InventoryDrawer';
 import { InventorySummaryBar } from '../components/inventory/InventorySummaryBar';
-import { useRegisterTopActionsOverlays } from '../components/register/useRegisterTopActionsOverlays';
 import { usePassiveScannerInput } from '../usePassiveScannerInput';
 
 interface HealthStatus {
@@ -205,6 +204,24 @@ export function AppRoot() {
   const scanOverlayHideTimerRef = useRef<number | null>(null);
   const scanOverlayShownAtRef = useRef<number | null>(null);
   const SCAN_OVERLAY_MIN_VISIBLE_MS = 300;
+
+  type HomeTab =
+    | 'scan'
+    | 'search'
+    | 'inventory'
+    | 'upgrades'
+    | 'checkout'
+    | 'roomCleaning'
+    | 'firstTime'
+    | 'clearSession';
+  const [homeTab, setHomeTab] = useState<HomeTab>('scan');
+  const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null);
+  const successToastTimerRef = useRef<number | null>(null);
+
+  const [inventoryRefreshNonce, setInventoryRefreshNonce] = useState(0);
+  const [checkoutPrefill, setCheckoutPrefill] = useState<null | { occupancyId?: string; number?: string }>(null);
+  const [checkoutEntryMode, setCheckoutEntryMode] = useState<'default' | 'direct-confirm'>('default');
+  const checkoutReturnToTabRef = useRef<HomeTab | null>(null);
   const [manualEntry, setManualEntry] = useState(false);
   const [manualFirstName, setManualFirstName] = useState('');
   const [manualLastName, setManualLastName] = useState('');
@@ -219,9 +236,59 @@ export function AppRoot() {
   }>(null);
   const [manualExistingPromptError, setManualExistingPromptError] = useState<string | null>(null);
   const [manualExistingPromptSubmitting, setManualExistingPromptSubmitting] = useState(false);
-  const [isUpgradesDrawerOpen, setIsUpgradesDrawerOpen] = useState(false);
-  const [isInventoryDrawerOpen, setIsInventoryDrawerOpen] = useState(false);
   const [inventoryForcedSection, setInventoryForcedSection] = useState<InventoryDrawerSection>(null);
+
+  useEffect(() => {
+    if (!successToastMessage) return;
+    if (successToastTimerRef.current) window.clearTimeout(successToastTimerRef.current);
+    successToastTimerRef.current = window.setTimeout(() => setSuccessToastMessage(null), 3000);
+    return () => {
+      if (successToastTimerRef.current) window.clearTimeout(successToastTimerRef.current);
+    };
+  }, [successToastMessage]);
+
+  const selectHomeTab = useCallback(
+    (next: HomeTab) => {
+      setHomeTab(next);
+      // First Time Customer tab drives manual entry mode.
+      setManualEntry(next === 'firstTime');
+      if (next !== 'checkout') {
+        setCheckoutPrefill(null);
+        setCheckoutEntryMode('default');
+        checkoutReturnToTabRef.current = null;
+      }
+    },
+    [setHomeTab]
+  );
+
+  const startCheckoutFromHome = useCallback(() => {
+    checkoutReturnToTabRef.current = null;
+    setCheckoutPrefill(null);
+    setCheckoutEntryMode('default');
+    selectHomeTab('checkout');
+  }, [selectHomeTab]);
+
+  const startCheckoutFromInventory = useCallback(
+    (prefill: { occupancyId?: string; number: string }) => {
+      checkoutReturnToTabRef.current = 'inventory';
+      setCheckoutEntryMode('direct-confirm');
+      setCheckoutPrefill(prefill);
+      selectHomeTab('checkout');
+    },
+    [selectHomeTab]
+  );
+
+  const exitCheckout = useCallback(() => {
+    const returnTo = checkoutReturnToTabRef.current;
+    checkoutReturnToTabRef.current = null;
+    setCheckoutPrefill(null);
+    setCheckoutEntryMode('default');
+    if (returnTo) {
+      selectHomeTab(returnTo);
+      return;
+    }
+    selectHomeTab('scan');
+  }, [selectHomeTab]);
   const [customerName, setCustomerName] = useState('');
   const [membershipNumber, setMembershipNumber] = useState('');
   const [pendingCreateFromScan, setPendingCreateFromScan] = useState<{
@@ -1114,7 +1181,12 @@ export function AppRoot() {
     !!selectedCheckoutRequest;
 
   const passiveScanEnabled =
-    !!session?.sessionToken && !passiveScanProcessing && !isSubmitting && !manualEntry && !blockingModalOpen;
+    homeTab === 'scan' &&
+    !!session?.sessionToken &&
+    !passiveScanProcessing &&
+    !isSubmitting &&
+    !manualEntry &&
+    !blockingModalOpen;
 
   const showScanOverlay = useCallback(() => {
     if (scanOverlayHideTimerRef.current) {
@@ -1782,7 +1854,7 @@ export function AppRoot() {
         newRoomNumber: payload.newRoomNumber ?? entry.offeredRoomNumber ?? null,
       });
       dismissUpgradePulse();
-      setIsUpgradesDrawerOpen(true);
+      selectHomeTab('upgrades');
       setShowUpgradePaymentModal(true);
     } catch (error) {
       console.error('Failed to start upgrade:', error);
@@ -2792,80 +2864,23 @@ export function AppRoot() {
     }
   }, [showManagerBypassModal, session?.sessionToken]);
 
-  const topActions = useRegisterTopActionsOverlays({
-    sessionToken: session?.sessionToken ?? null,
-    staffId: session?.staffId ?? null,
-  });
-
   return (
-    <RegisterSignIn deviceId={deviceId} onSignedIn={handleRegisterSignIn}>
+    <RegisterSignIn
+      deviceId={deviceId}
+      onSignedIn={handleRegisterSignIn}
+      topTitle="Employee Register"
+      lane={lane}
+      apiStatus={health?.status ?? null}
+      wsConnected={wsConnected}
+      onSignOut={() => void handleLogout()}
+      onCloseOut={() => void handleCloseOut()}
+    >
       {!registerSession ? (
         <div />
       ) : !session ? (
         <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading...</div>
       ) : (
-        <div className="container" style={{ marginTop: '60px' }}>
-          <RegisterSideDrawers
-            upgradesOpen={isUpgradesDrawerOpen}
-            onUpgradesOpenChange={(next) => {
-              if (next) dismissUpgradePulse();
-              setIsUpgradesDrawerOpen(next);
-            }}
-            inventoryOpen={isInventoryDrawerOpen}
-            onInventoryOpenChange={setIsInventoryDrawerOpen}
-            upgradesAttention={false}
-            upgradesTabVariant={hasEligibleEntries ? 'success' : 'secondary'}
-            upgradesTabPulseVariant={hasEligibleEntries ? 'success' : null}
-            inventoryTabVariant={inventoryHasLate ? 'danger' : 'secondary'}
-            inventoryTabPulseVariant={inventoryHasLate ? 'danger' : null}
-            upgradesContent={
-              <UpgradesDrawerContent
-                waitlistEntries={waitlistEntries}
-                hasEligibleEntries={hasEligibleEntries}
-                isEntryOfferEligible={(entryId, status, desiredTier) => {
-                  const entry = waitlistEntries.find((e) => e.id === entryId);
-                  if (!entry) return false;
-                  if (entry.status !== status) return false;
-                  if (entry.desiredTier !== desiredTier) return false;
-                  return isEntryOfferEligible(entry);
-                }}
-                onOffer={(entryId) => {
-                  const entry = waitlistEntries.find((e) => e.id === entryId);
-                  if (!entry) return;
-                  openOfferUpgradeModal(entry);
-                  setIsUpgradesDrawerOpen(true);
-                }}
-                onStartPayment={(entry) => {
-                  resetUpgradeState();
-                  setSelectedWaitlistEntry(entry.id);
-                  void handleStartUpgradePayment(entry);
-                }}
-                onCancelOffer={(entryId) => {
-                  // Cancellation endpoint not yet implemented in this demo UI.
-                  alert(`Cancel offer not implemented yet (waitlistId=${entryId}).`);
-                }}
-                isSubmitting={isSubmitting}
-              />
-            }
-            inventoryContent={
-              <InventoryDrawer
-                lane={lane}
-                sessionToken={session.sessionToken}
-                forcedExpandedSection={inventoryForcedSection}
-                onExpandedSectionChange={setInventoryForcedSection}
-                customerSelectedType={customerSelectedType}
-                waitlistDesiredTier={waitlistDesiredTier}
-                waitlistBackupType={waitlistBackupType}
-                onSelect={handleInventorySelect}
-                onClearSelection={() => setSelectedInventoryItem(null)}
-                selectedItem={selectedInventoryItem}
-                sessionId={currentSessionId}
-                disableSelection={false}
-                onAlertSummaryChange={({ hasLate }) => setInventoryHasLate(hasLate)}
-              />
-            }
-          />
-
+        <div className="container">
           {scanOverlayMounted && (
             <div
               className={[
@@ -2914,21 +2929,6 @@ export function AppRoot() {
                 />
               );
             })()}
-
-          <RegisterHeader
-            health={health}
-            wsConnected={wsConnected}
-            lane={lane}
-            staffName={session.name}
-            staffRole={session.role}
-            onSignOut={() => void handleLogout()}
-            onCloseOut={() => void handleCloseOut()}
-          />
-
-          <RegisterTopActionsBar
-            onCheckout={topActions.openCheckout}
-            onRoomCleaning={topActions.openRoomCleaning}
-          />
 
           <main className="main">
             {/* Customer Info Panel */}
@@ -3174,7 +3174,7 @@ export function AppRoot() {
                 counts={inventoryAvailable}
                 onOpenInventorySection={(section) => {
                   setInventoryForcedSection(section);
-                  setIsInventoryDrawerOpen(true);
+                selectHomeTab('inventory');
                 }}
               />
             )}
@@ -3368,244 +3368,414 @@ export function AppRoot() {
             )}
 
             <section className="actions-panel">
-              <h2>Lane Session</h2>
-
-              {/* Customer lookup (typeahead) */}
-              <div className="er-search-section-half">
-                <div
-                  className="typeahead-section cs-liquid-card"
-                  style={{
-                    marginTop: 0,
-                    marginBottom: '1rem',
-                    padding: '1rem',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: '0.5rem',
-                      alignItems: 'center',
-                      marginBottom: '0.5rem',
-                      flexWrap: 'wrap',
+              <div className="er-home-layout">
+                <nav className="er-home-tabs" aria-label="Home actions">
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'scan' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('scan')}
+                  >
+                    Scan
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'search' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('search')}
+                  >
+                    Search Customer
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'inventory'
+                        ? 'cs-liquid-button--selected'
+                        : inventoryHasLate
+                          ? 'cs-liquid-button--danger'
+                          : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('inventory')}
+                  >
+                    Inventory
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'upgrades'
+                        ? 'cs-liquid-button--selected'
+                        : hasEligibleEntries
+                          ? 'cs-liquid-button--success'
+                          : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => {
+                      dismissUpgradePulse();
+                      selectHomeTab('upgrades');
                     }}
                   >
-                    <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
-                      Search Customer
-                    </label>
-                    <span className="er-search-help">(type at least 3 letters)</span>
-                  </div>
-                  <input
-                    id="customer-search"
-                    type="text"
-                    className="cs-liquid-input"
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
-                    placeholder="Start typing name..."
-                    disabled={isSubmitting}
-                  />
-                  {customerSearchLoading && (
-                    <div className="er-text-sm" style={{ marginTop: '0.25rem', color: '#94a3b8' }}>
-                      Searching...
+                    Upgrades
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'checkout' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => startCheckoutFromHome()}
+                  >
+                    Checkout
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'roomCleaning' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('roomCleaning')}
+                  >
+                    Room Cleaning
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'firstTime' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('firstTime')}
+                  >
+                    First Time Customer
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      'cs-liquid-button--danger',
+                      homeTab === 'clearSession' ? 'cs-liquid-button--selected' : '',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('clearSession')}
+                  >
+                    Clear Session
+                  </button>
+                </nav>
+
+                <div className="er-home-content">
+                  {homeTab === 'scan' && (
+                    <div className="er-home-panel er-home-panel--center cs-liquid-card" style={{ padding: '1rem' }}>
+                      <div style={{ fontSize: '4rem', lineHeight: 1 }} aria-hidden="true">
+                        📷
+                      </div>
+                      <div style={{ marginTop: '0.75rem', fontWeight: 950, fontSize: '1.6rem' }}>Scan Now</div>
+                      <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
+                        Scan a membership ID or driver license.
+                      </div>
                     </div>
                   )}
-                  {customerSuggestions.length > 0 && (
+
+                  {homeTab === 'search' && (
                     <div
-                      className="cs-liquid-card"
-                      style={{
-                        marginTop: '0.5rem',
-                        maxHeight: '180px',
-                        overflowY: 'auto',
-                      }}
+                      className="er-home-panel er-home-panel--top typeahead-section cs-liquid-card"
+                      style={{ marginTop: 0, padding: '1rem' }}
                     >
-                      {customerSuggestions.map((s) => {
-                        const label = `${s.lastName}, ${s.firstName}`;
-                        const active = selectedCustomerId === s.id;
-                        return (
-                          <div
-                            key={s.id}
-                            onClick={() => {
-                              setSelectedCustomerId(s.id);
-                              setSelectedCustomerLabel(label);
-                            }}
-                            style={{
-                              padding: '0.5rem 0.75rem',
-                              cursor: 'pointer',
-                              background: active ? '#1e293b' : 'transparent',
-                              borderBottom: '1px solid #1f2937',
-                            }}
-                          >
-                            <div style={{ fontWeight: 600 }}>{label}</div>
-                            <div
-                              className="er-text-sm"
-                              style={{
-                                color: '#94a3b8',
-                                display: 'flex',
-                                gap: '0.75rem',
-                                flexWrap: 'wrap',
-                              }}
-                            >
-                              {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
-                              {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '0.5rem',
+                          alignItems: 'center',
+                          marginBottom: '0.5rem',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
+                          Search Customer
+                        </label>
+                        <span className="er-search-help">(type at least 3 letters)</span>
+                      </div>
+                      <input
+                        id="customer-search"
+                        type="text"
+                        className="cs-liquid-input"
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        placeholder="Start typing name..."
+                        disabled={isSubmitting}
+                      />
+                      {customerSearchLoading && (
+                        <div className="er-text-sm" style={{ marginTop: '0.25rem', color: '#94a3b8' }}>
+                          Searching...
+                        </div>
+                      )}
+                      {customerSuggestions.length > 0 && (
+                        <div
+                          className="cs-liquid-card"
+                          style={{
+                            marginTop: '0.5rem',
+                            maxHeight: '180px',
+                            overflowY: 'auto',
+                          }}
+                        >
+                          {customerSuggestions.map((s) => {
+                            const label = `${s.lastName}, ${s.firstName}`;
+                            const active = selectedCustomerId === s.id;
+                            return (
+                              <div
+                                key={s.id}
+                                onClick={() => {
+                                  setSelectedCustomerId(s.id);
+                                  setSelectedCustomerLabel(label);
+                                }}
+                                style={{
+                                  padding: '0.5rem 0.75rem',
+                                  cursor: 'pointer',
+                                  background: active ? '#1e293b' : 'transparent',
+                                  borderBottom: '1px solid #1f2937',
+                                }}
+                              >
+                                <div style={{ fontWeight: 600 }}>{label}</div>
+                                <div
+                                  className="er-text-sm"
+                                  style={{
+                                    color: '#94a3b8',
+                                    display: 'flex',
+                                    gap: '0.75rem',
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
+                                  {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'center',
+                          gap: '0.75rem',
+                          marginTop: '0.75rem',
+                          alignItems: 'center',
+                          flexDirection: 'column',
+                        }}
+                      >
+                        <div className="er-search-help">
+                          {selectedCustomerLabel ? `Selected: ${selectedCustomerLabel}` : 'Select a customer above'}
+                        </div>
+                        <button
+                          onClick={() => void handleConfirmCustomerSelection()}
+                          disabled={!selectedCustomerId || isSubmitting}
+                          className="cs-liquid-button"
+                          style={{
+                            padding: '0.55rem 0.9rem',
+                            fontWeight: 700,
+                            opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
+                          }}
+                        >
+                          Confirm
+                        </button>
+                      </div>
                     </div>
                   )}
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      gap: '0.75rem',
-                      marginTop: '0.75rem',
-                      alignItems: 'center',
-                      flexDirection: 'column',
-                    }}
-                  >
-                    <div className="er-search-help">
-                      {selectedCustomerLabel ? `Selected: ${selectedCustomerLabel}` : 'Select a customer above'}
+
+                  {homeTab === 'inventory' && session?.sessionToken && (
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card" style={{ padding: '0.75rem' }}>
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                        <InventoryDrawer
+                          lane={lane}
+                          sessionToken={session.sessionToken}
+                          forcedExpandedSection={inventoryForcedSection}
+                          onExpandedSectionChange={setInventoryForcedSection}
+                          customerSelectedType={customerSelectedType}
+                          waitlistDesiredTier={waitlistDesiredTier}
+                          waitlistBackupType={waitlistBackupType}
+                          onSelect={handleInventorySelect}
+                          onClearSelection={() => setSelectedInventoryItem(null)}
+                          selectedItem={selectedInventoryItem}
+                          sessionId={currentSessionId}
+                          disableSelection={false}
+                          onAlertSummaryChange={({ hasLate }) => setInventoryHasLate(hasLate)}
+                          onRequestCheckout={startCheckoutFromInventory}
+                          externalRefreshNonce={inventoryRefreshNonce}
+                        />
+                      </div>
                     </div>
-                    <button
-                      onClick={() => void handleConfirmCustomerSelection()}
-                      disabled={!selectedCustomerId || isSubmitting}
-                      className="cs-liquid-button"
-                      style={{
-                        padding: '0.55rem 0.9rem',
-                        fontWeight: 700,
-                        opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
-                      }}
-                    >
-                      Confirm
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="action-buttons">
-                <button
-                  className={`action-btn cs-liquid-button cs-liquid-button--secondary ${manualEntry ? 'cs-liquid-button--selected active' : ''}`}
-                  onClick={() => {
-                    const next = !manualEntry;
-                    setManualEntry(next);
-                    if (!next) {
-                      setManualFirstName('');
-                      setManualLastName('');
-                      setManualDobDigits('');
-                    }
-                  }}
-                >
-                  <span className="btn-icon">✏️</span>
-                  <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.1 }}>
-                    <span>First Time Customer</span>
-                    <span className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 700 }}>
-                      Alternate ID
-                    </span>
-                  </span>
-                </button>
-                <button
-                  className="action-btn cs-liquid-button cs-liquid-button--danger"
-                  onClick={() => void handleClearSession()}
-                  disabled={isSubmitting}
-                >
-                  <span className="btn-icon">🗑️</span>
-                  Clear Session
-                </button>
-              </div>
-
-              {manualEntry && (
-                <form
-                  className="manual-entry-form cs-liquid-card"
-                  onSubmit={(e) => void handleManualSubmit(e)}
-                >
-                  <div className="form-group">
-                    <label htmlFor="manualFirstName">First Name *</label>
-                    <input
-                      id="manualFirstName"
-                      type="text"
-                      className="cs-liquid-input"
-                      value={manualFirstName}
-                      onChange={(e) => setManualFirstName(e.target.value)}
-                      placeholder="Enter first name"
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="manualLastName">Last Name *</label>
-                    <input
-                      id="manualLastName"
-                      type="text"
-                      className="cs-liquid-input"
-                      value={manualLastName}
-                      onChange={(e) => setManualLastName(e.target.value)}
-                      placeholder="Enter last name"
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="manualDob">Date of Birth *</label>
-                    <input
-                      id="manualDob"
-                      type="text"
-                      inputMode="numeric"
-                      className="cs-liquid-input"
-                      value={formatDobMmDdYyyy(manualDobDigits)}
-                      onChange={(e) => setManualDobDigits(extractDobDigits(e.target.value))}
-                      placeholder="MM/DD/YYYY"
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <div className="form-actions">
-                    <button
-                      type="submit"
-                      className="submit-btn cs-liquid-button"
-                      disabled={
-                        isSubmitting ||
-                        manualEntrySubmitting ||
-                        !manualFirstName.trim() ||
-                        !manualLastName.trim() ||
-                        !parseDobDigitsToIso(manualDobDigits)
-                      }
-                    >
-                      {isSubmitting || manualEntrySubmitting ? 'Submitting...' : 'Add Customer'}
-                    </button>
-                    <button
-                      type="button"
-                      className="cancel-btn cs-liquid-button cs-liquid-button--danger"
-                      onClick={() => {
-                        setManualEntry(false);
-                        setManualFirstName('');
-                        setManualLastName('');
-                        setManualDobDigits('');
-                      }}
-                      disabled={isSubmitting || manualEntrySubmitting}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {(customerName || membershipNumber) && !manualEntry && (
-                <div className="current-session">
-                  <p>
-                    <strong>Current Session:</strong>
-                  </p>
-                  <p>Name: {customerName || 'Not set'}</p>
-                  {membershipNumber && <p>Membership: {membershipNumber}</p>}
-                  {currentSessionId && (
-                    <p
-                      className={
-                        agreementSigned ? 'agreement-status signed' : 'agreement-status unsigned'
-                      }
-                    >
-                      {agreementSigned ? 'Agreement signed ✓' : 'Agreement pending'}
-                    </p>
                   )}
+
+                  {homeTab === 'upgrades' && (
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card" style={{ padding: '0.75rem' }}>
+                      <UpgradesDrawerContent
+                        waitlistEntries={waitlistEntries}
+                        hasEligibleEntries={hasEligibleEntries}
+                        isEntryOfferEligible={(entryId, status, desiredTier) => {
+                          const entry = waitlistEntries.find((e) => e.id === entryId);
+                          if (!entry) return false;
+                          if (entry.status !== status) return false;
+                          if (entry.desiredTier !== desiredTier) return false;
+                          return isEntryOfferEligible(entry);
+                        }}
+                        onOffer={(entryId) => {
+                          const entry = waitlistEntries.find((e) => e.id === entryId);
+                          if (!entry) return;
+                          openOfferUpgradeModal(entry);
+                          selectHomeTab('upgrades');
+                        }}
+                        onStartPayment={(entry) => {
+                          resetUpgradeState();
+                          setSelectedWaitlistEntry(entry.id);
+                          void handleStartUpgradePayment(entry);
+                        }}
+                        onCancelOffer={(entryId) => {
+                          alert(`Cancel offer not implemented yet (waitlistId=${entryId}).`);
+                        }}
+                        isSubmitting={isSubmitting}
+                      />
+                    </div>
+                  )}
+
+                  {homeTab === 'checkout' && session?.sessionToken && (
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll">
+                      <ManualCheckoutPanel
+                        sessionToken={session.sessionToken}
+                        entryMode={checkoutEntryMode}
+                        prefill={checkoutPrefill ?? undefined}
+                        onExit={exitCheckout}
+                        onSuccess={(message) => {
+                          setSuccessToastMessage(message);
+                          if (checkoutReturnToTabRef.current) {
+                            setInventoryRefreshNonce((prev) => prev + 1);
+                            exitCheckout();
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {homeTab === 'roomCleaning' && session?.sessionToken && session?.staffId && (
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll">
+                      <RoomCleaningPanel
+                        sessionToken={session.sessionToken}
+                        staffId={session.staffId}
+                        onSuccess={(message) => setSuccessToastMessage(message)}
+                      />
+                    </div>
+                  )}
+
+                  {homeTab === 'firstTime' && (
+                    <form
+                      className="er-home-panel er-home-panel--top manual-entry-form cs-liquid-card"
+                      onSubmit={(e) => void handleManualSubmit(e)}
+                    >
+                      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>First Time Customer</div>
+                      <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.75rem', fontWeight: 700 }}>
+                        Enter customer details from alternate ID.
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="manualFirstName">First Name *</label>
+                        <input
+                          id="manualFirstName"
+                          type="text"
+                          className="cs-liquid-input"
+                          value={manualFirstName}
+                          onChange={(e) => setManualFirstName(e.target.value)}
+                          placeholder="Enter first name"
+                          disabled={isSubmitting}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="manualLastName">Last Name *</label>
+                        <input
+                          id="manualLastName"
+                          type="text"
+                          className="cs-liquid-input"
+                          value={manualLastName}
+                          onChange={(e) => setManualLastName(e.target.value)}
+                          placeholder="Enter last name"
+                          disabled={isSubmitting}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="manualDob">Date of Birth *</label>
+                        <input
+                          id="manualDob"
+                          type="text"
+                          inputMode="numeric"
+                          className="cs-liquid-input"
+                          value={formatDobMmDdYyyy(manualDobDigits)}
+                          onChange={(e) => setManualDobDigits(extractDobDigits(e.target.value))}
+                          placeholder="MM/DD/YYYY"
+                          disabled={isSubmitting}
+                          required
+                        />
+                      </div>
+                      <div className="form-actions">
+                        <button
+                          type="submit"
+                          className="submit-btn cs-liquid-button"
+                          disabled={
+                            isSubmitting ||
+                            manualEntrySubmitting ||
+                            !manualFirstName.trim() ||
+                            !manualLastName.trim() ||
+                            !parseDobDigitsToIso(manualDobDigits)
+                          }
+                        >
+                          {isSubmitting || manualEntrySubmitting ? 'Submitting...' : 'Add Customer'}
+                        </button>
+                        <button
+                          type="button"
+                          className="cancel-btn cs-liquid-button cs-liquid-button--danger"
+                          onClick={() => {
+                            setManualEntry(false);
+                            setManualFirstName('');
+                            setManualLastName('');
+                            setManualDobDigits('');
+                            selectHomeTab('scan');
+                          }}
+                          disabled={isSubmitting || manualEntrySubmitting}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {homeTab === 'clearSession' && (
+                    <div className="er-home-panel er-home-panel--center cs-liquid-card" style={{ padding: '1rem' }}>
+                      <div style={{ fontWeight: 950, fontSize: '1.1rem' }}>Clear Session</div>
+                      <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
+                        Clears the current lane session and resets the home screen.
+                      </div>
+                      <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          className="cs-liquid-button cs-liquid-button--danger"
+                          onClick={() => void handleClearSession().then(() => selectHomeTab('scan'))}
+                          disabled={isSubmitting}
+                        >
+                          Clear Session
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
-              )}
+              </div>
             </section>
           </main>
 
@@ -3997,6 +4167,7 @@ export function AppRoot() {
             isSubmitting={isSubmitting}
           />
 
+          <SuccessToast message={successToastMessage} onDismiss={() => setSuccessToastMessage(null)} />
           <PaymentDeclineToast message={paymentDeclineError} onDismiss={() => setPaymentDeclineError(null)} />
           {scanToastMessage && (
             <div
@@ -4044,8 +4215,6 @@ export function AppRoot() {
               </div>
             </div>
           )}
-          {topActions.overlays}
-
           {/* Agreement + Assignment Display */}
           <TransactionCompleteModal
             isOpen={Boolean(currentSessionId && customerName && assignedResourceType && assignedResourceNumber)}

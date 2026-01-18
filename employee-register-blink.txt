@@ -1,0 +1,101 @@
+diff --git a/apps/employee-register/index.html b/apps/employee-register/index.html
+index 076708e..9f12325 100644
+--- a/apps/employee-register/index.html
++++ b/apps/employee-register/index.html
+@@ -1,5 +1,5 @@
+ <!doctype html>
+-<html lang="en">
++<html lang="en" data-theme="dark">
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+@@ -18,13 +18,13 @@
+           'Segoe UI',
+           Roboto,
+           sans-serif;
+-        background: #0c1222;
+-        color: #f8fafc;
++        background: #000000;
++        color: #ffffff;
+         min-height: 100vh;
+       }
+     </style>
+   </head>
+-  <body class="theme-dark effect-frosted">
++  <body>
+     <!-- SVG Filter Definition (for Liquid Glass `effect-liquid`) -->
+     <svg style="display: none">
+       <defs>
+diff --git a/apps/employee-register/package.json b/apps/employee-register/package.json
+index 2406b11..2091c6d 100644
+--- a/apps/employee-register/package.json
++++ b/apps/employee-register/package.json
+@@ -23,8 +23,12 @@
+     "@testing-library/react": "^14.1.2",
+     "@types/react": "^18.2.45",
+     "@types/react-dom": "^18.2.17",
++    "@tailwindcss/postcss": "^4.1.17",
+     "@vitejs/plugin-react": "^4.2.1",
++    "daisyui": "^5.5.14",
+     "jsdom": "^23.0.1",
++    "postcss": "^8.5.6",
++    "tailwindcss": "^4.1.17",
+     "typescript": "^5.3.3",
+     "vite": "^5.0.10",
+     "vitest": "^1.1.0"
+diff --git a/apps/employee-register/src/main.tsx b/apps/employee-register/src/main.tsx
+index d7338d1..19ed54c 100644
+--- a/apps/employee-register/src/main.tsx
++++ b/apps/employee-register/src/main.tsx
+@@ -3,8 +3,7 @@ import { createRoot } from 'react-dom/client';
+ import { installTelemetry, TelemetryErrorBoundary } from '@club-ops/ui';
+ import App from './App';
+ import '@club-ops/ui/src/styles/tokens.css';
+-import '@club-ops/ui/src/styles/components.css';
+-import '@club-ops/ui/src/styles/liquid-glass.css';
++import './blink.css';
+ import './styles.css';
+ 
+ const root = document.getElementById('root');
+diff --git a/apps/employee-register/src/styles.css b/apps/employee-register/src/styles.css
+index e628983..7675c0b 100644
+--- a/apps/employee-register/src/styles.css
++++ b/apps/employee-register/src/styles.css
+@@ -304,9 +304,9 @@
+   line-height: 1.1 !important;
+ }
+ 
+-/* Solid black background with very dark overlay */
++/* Background: let the Blink bridge/theme decide the base color */
+ body {
+-  background-color: #000000;
++  background-color: var(--bg);
+   position: relative;
+ }
+ 
+@@ -364,19 +364,19 @@ body::after {
+ 
+ /* Local button variants missing from shared stylesheet */
+ .cs-liquid-button--warning {
+-  background: rgba(245, 158, 11, 0.10);
+-  border-color: rgba(245, 158, 11, 0.60);
++  background: color-mix(in oklch, var(--color-warning) 16%, transparent);
++  border-color: color-mix(in oklch, var(--color-warning) 60%, transparent);
+ }
+ .cs-liquid-button--warning:hover:not(:disabled) {
+-  background: rgba(245, 158, 11, 0.22);
++  background: color-mix(in oklch, var(--color-warning) 28%, transparent);
+ }
+ 
+ .cs-liquid-button--success {
+-  background: rgba(34, 197, 94, 0.10);
+-  border-color: rgba(34, 197, 94, 0.60);
++  background: color-mix(in oklch, var(--color-success) 16%, transparent);
++  border-color: color-mix(in oklch, var(--color-success) 60%, transparent);
+ }
+ .cs-liquid-button--success:hover:not(:disabled) {
+-  background: rgba(34, 197, 94, 0.22);
++  background: color-mix(in oklch, var(--color-success) 28%, transparent);
+ }
+ 
+ /* Inventory cards (rooms/lockers) */

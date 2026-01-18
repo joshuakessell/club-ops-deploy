@@ -3,7 +3,6 @@ import { RoomStatus } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import { getRoomTier } from './utils/getRoomTier';
 import { ModalFrame } from './components/register/modals/ModalFrame';
-import { ManualCheckoutModal } from './components/register/modals/ManualCheckoutModal';
 
 const INVENTORY_COLUMN_HEADER_STYLE: CSSProperties = {
   fontWeight: 700,
@@ -112,6 +111,13 @@ interface InventorySelectorProps {
   onExpandedSectionChange?: (next: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null) => void;
   disableSelection?: boolean;
   onAlertSummaryChange?: (summary: { hasLate: boolean; hasNearing: boolean }) => void;
+  /**
+   * When provided, inventory can request an inline checkout flow (rendered on the main home tab panel),
+   * rather than opening a modal within the drawer.
+   */
+  onRequestCheckout?: (prefill: { occupancyId?: string; number: string }) => void;
+  /** External refresh nonce to force inventory refetch (e.g. after an inline checkout completes). */
+  externalRefreshNonce?: number;
 }
 
 // Map room types to display names
@@ -267,6 +273,8 @@ export function InventorySelector({
   onExpandedSectionChange,
   disableSelection = false,
   onAlertSummaryChange,
+  onRequestCheckout,
+  externalRefreshNonce,
 }: InventorySelectorProps) {
   // When there's no active lane session, treat inventory as a lookup tool (occupied-only details),
   // not an assignment picker.
@@ -289,7 +297,6 @@ export function InventorySelector({
     checkinAt?: string;
     checkoutAt?: string;
   } | null>(null);
-  const [quickCheckout, setQuickCheckout] = useState<null | { occupancyId?: string; number: string }>(null);
   const waitlistEntries: Array<{ desiredTier: string; status: string }> = useMemo(() => [], []);
 
   const API_BASE = '/api';
@@ -430,7 +437,7 @@ export function InventorySelector({
     return () => {
       mounted = false;
     };
-  }, [sessionToken, refreshTrigger]);
+  }, [sessionToken, refreshTrigger, externalRefreshNonce]);
 
   // Auto-select first available when customer selects type
   useEffect(() => {
@@ -540,9 +547,12 @@ export function InventorySelector({
     }
   };
 
-  const toggleSection = (section: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
-    setExpandedSection(expandedSection === section ? null : section);
+  const setActiveSection = (section: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+    setExpandedSection(section);
   };
+
+  const activeSection: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' = (expandedSection ??
+    'LOCKER') as 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL';
 
   const openOccupancyDetails = (payload: {
     type: 'room' | 'locker';
@@ -634,6 +644,45 @@ export function InventorySelector({
   }
 
   const selectionLockedToType: 'room' | 'locker' | null = selectedItem?.type ?? null;
+  const [searchHighlight, setSearchHighlight] = useState<null | { type: 'room' | 'locker'; id: string }>(null);
+
+  useEffect(() => {
+    if (!query) {
+      setSearchHighlight(null);
+      return;
+    }
+
+    // Prefer first match across sections: LOCKER → STANDARD → DOUBLE → SPECIAL
+    const locker = filteredLockers[0];
+    if (locker) {
+      setExpandedSection('LOCKER');
+      setSearchHighlight({ type: 'locker', id: locker.id });
+      return;
+    }
+
+    const standard = roomsByTier.STANDARD[0];
+    if (standard) {
+      setExpandedSection('STANDARD');
+      setSearchHighlight({ type: 'room', id: standard.id });
+      return;
+    }
+
+    const dbl = roomsByTier.DOUBLE[0];
+    if (dbl) {
+      setExpandedSection('DOUBLE');
+      setSearchHighlight({ type: 'room', id: dbl.id });
+      return;
+    }
+
+    const special = roomsByTier.SPECIAL[0];
+    if (special) {
+      setExpandedSection('SPECIAL');
+      setSearchHighlight({ type: 'room', id: special.id });
+      return;
+    }
+
+    setSearchHighlight(null);
+  }, [query, filteredLockers, roomsByTier, setExpandedSection]);
 
   return (
     <>
@@ -661,73 +710,76 @@ export function InventorySelector({
           </button>
         )}
 
-        {/*
-          The drawer panel itself should not scroll.
-          Instead, whichever category is expanded gets a scrollable viewport.
-        */}
+        {/* Single card layout: left buttons + right scrollable list pane */}
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'column',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(140px, 40%) minmax(0, 1fr)',
             gap: '0.75rem',
             flex: 1,
             minHeight: 0,
             overflow: 'hidden',
           }}
         >
-          {/* Lockers */}
-          <LockerSection
-            lockers={filteredLockers}
-            isExpanded={expandedSection === 'LOCKER'}
-            onToggle={() => toggleSection('LOCKER')}
-            onSelectLocker={handleLockerClick}
-            selectedItem={selectedItem}
-            nowMs={nowMs}
-            disableSelection={disableSelection || selectionLockedToType === 'room'}
-            occupancyLookupMode={occupancyLookupMode}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', minWidth: 0 }}>
+            {([
+              ['LOCKER', ROOM_TYPE_LABELS.LOCKER],
+              ['STANDARD', 'Standard'],
+              ['DOUBLE', 'Double'],
+              ['SPECIAL', 'Special'],
+            ] as const).map(([tier, label]) => (
+              <button
+                key={tier}
+                type="button"
+                className={[
+                  'cs-liquid-button',
+                  activeSection === tier ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                ].join(' ')}
+                onClick={() => setActiveSection(tier)}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '0.65rem 0.75rem',
+                  fontWeight: 800,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-          {/* Standard */}
-          <InventorySection
-            title="Standard"
-            rooms={roomsByTier.STANDARD}
-            isExpanded={expandedSection === 'STANDARD'}
-            onToggle={() => toggleSection('STANDARD')}
-            onSelectRoom={handleRoomClick}
-            selectedItem={selectedItem}
-            waitlistEntries={waitlistEntries}
-            nowMs={nowMs}
-            disableSelection={disableSelection || selectionLockedToType === 'locker'}
-            occupancyLookupMode={occupancyLookupMode}
-          />
-
-          {/* Double */}
-          <InventorySection
-            title="Double"
-            rooms={roomsByTier.DOUBLE}
-            isExpanded={expandedSection === 'DOUBLE'}
-            onToggle={() => toggleSection('DOUBLE')}
-            onSelectRoom={handleRoomClick}
-            selectedItem={selectedItem}
-            waitlistEntries={waitlistEntries}
-            nowMs={nowMs}
-            disableSelection={disableSelection || selectionLockedToType === 'locker'}
-            occupancyLookupMode={occupancyLookupMode}
-          />
-
-          {/* Special */}
-          <InventorySection
-            title="Special"
-            rooms={roomsByTier.SPECIAL}
-            isExpanded={expandedSection === 'SPECIAL'}
-            onToggle={() => toggleSection('SPECIAL')}
-            onSelectRoom={handleRoomClick}
-            selectedItem={selectedItem}
-            waitlistEntries={waitlistEntries}
-            nowMs={nowMs}
-            disableSelection={disableSelection || selectionLockedToType === 'locker'}
-            occupancyLookupMode={occupancyLookupMode}
-          />
+          <div style={{ minWidth: 0, minHeight: 0, overflowY: 'auto', paddingRight: '0.25rem' }}>
+            {activeSection === 'LOCKER' ? (
+              <LockerSection
+                lockers={filteredLockers}
+                onSelectLocker={handleLockerClick}
+                selectedItem={selectedItem}
+                nowMs={nowMs}
+                disableSelection={disableSelection || selectionLockedToType === 'room'}
+                occupancyLookupMode={occupancyLookupMode}
+                highlightId={searchHighlight?.type === 'locker' ? searchHighlight.id : null}
+              />
+            ) : (
+              <InventorySection
+                title={activeSection === 'STANDARD' ? 'Standard' : activeSection === 'DOUBLE' ? 'Double' : 'Special'}
+                rooms={
+                  activeSection === 'STANDARD'
+                    ? roomsByTier.STANDARD
+                    : activeSection === 'DOUBLE'
+                      ? roomsByTier.DOUBLE
+                      : roomsByTier.SPECIAL
+                }
+                onSelectRoom={handleRoomClick}
+                selectedItem={selectedItem}
+                waitlistEntries={waitlistEntries}
+                nowMs={nowMs}
+                disableSelection={disableSelection || selectionLockedToType === 'locker'}
+                occupancyLookupMode={occupancyLookupMode}
+                highlightId={searchHighlight?.type === 'room' ? searchHighlight.id : null}
+              />
+            )}
+          </div>
         </div>
 
         {/* Search pinned at the bottom of the same card */}
@@ -813,7 +865,10 @@ export function InventorySelector({
                 type="button"
                 className="cs-liquid-button"
                 onClick={() => {
-                  setQuickCheckout({ occupancyId: occupancyDetails.occupancyId, number: occupancyDetails.number });
+                  onRequestCheckout?.({
+                    occupancyId: occupancyDetails.occupancyId,
+                    number: occupancyDetails.number,
+                  });
                   setOccupancyDetails(null);
                 }}
               >
@@ -823,24 +878,6 @@ export function InventorySelector({
           </div>
         )}
       </ModalFrame>
-
-      {quickCheckout && (
-        <ManualCheckoutModal
-          isOpen={true}
-          sessionToken={sessionToken}
-          entryMode="direct-confirm"
-          prefill={
-            quickCheckout.occupancyId
-              ? { occupancyId: quickCheckout.occupancyId }
-              : { number: quickCheckout.number }
-          }
-          onClose={() => setQuickCheckout(null)}
-          onSuccess={() => {
-            setQuickCheckout(null);
-            setRefreshTrigger((prev) => prev + 1);
-          }}
-        />
-      )}
     </>
   );
 }
@@ -848,26 +885,24 @@ export function InventorySelector({
 interface InventorySectionProps {
   title: string;
   rooms: DetailedRoom[];
-  isExpanded: boolean;
-  onToggle: () => void;
   onSelectRoom: (room: DetailedRoom) => void;
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
   nowMs: number;
   disableSelection?: boolean;
   occupancyLookupMode?: boolean;
+  highlightId?: string | null;
 }
 
 function InventorySection({
   title,
   rooms,
-  isExpanded,
-  onToggle,
   onSelectRoom,
   selectedItem,
   waitlistEntries = [],
   nowMs,
   disableSelection = false,
   occupancyLookupMode = false,
+  highlightId = null,
 }: InventorySectionProps & { waitlistEntries?: Array<{ desiredTier: string; status: string }> }) {
   const grouped = useMemo(() => {
     const groupedRooms = groupRooms(rooms, waitlistEntries, nowMs);
@@ -909,154 +944,95 @@ function InventorySection({
   }, [nowMs, rooms]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.5rem',
-        flex: isExpanded ? '1 1 0' : '0 0 auto',
-        minHeight: 0,
-      }}
-    >
-      <button
-        onClick={onToggle}
-        className={[
-          'cs-liquid-button',
-          sectionAlertLevel === 'danger'
-            ? 'cs-liquid-button--danger'
-            : sectionAlertLevel === 'warning'
-              ? 'cs-liquid-button--warning'
-              : isExpanded
-                ? 'cs-liquid-button--selected'
-                : 'cs-liquid-button--secondary',
-        ].join(' ')}
-        style={{
-          width: '100%',
-          padding: '0.75rem',
-          fontWeight: 600,
-          cursor: 'pointer',
-          position: 'relative',
-          textAlign: 'left',
-        }}
-      >
-        <span
-          aria-hidden={true}
-          style={{
-            position: 'absolute',
-            top: '0.75rem',
-            right: '0.75rem',
-            fontWeight: 900,
-          }}
-        >
-          {isExpanded ? '▼' : '▶'}
-        </span>
+    <div>
+      <div style={{ marginBottom: '0.75rem' }}>
+        <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>{title}</div>
+        <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800, marginTop: '0.25rem' }}>
+          Available: {sectionCounts.availableCount}
+          {sectionCounts.nearing > 0 ? ` • Nearing: ${sectionCounts.nearing}` : ''}
+          {sectionCounts.late > 0 ? ` • Late: ${sectionCounts.late}` : ''}
+        </div>
+      </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', alignItems: 'flex-start' }}>
-          <div style={{ fontWeight: 700 }}>{title}</div>
-          <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800 }}>
-            Available: {sectionCounts.availableCount}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        {/* Occupied */}
+        <div style={{ minWidth: 0 }}>
+          <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+            🔒 Occupied
           </div>
-          {sectionCounts.nearing > 0 && (
-            <div className="er-text-sm" style={{ fontWeight: 900, color: '#f59e0b' }}>
-              Nearing Checkout: {sectionCounts.nearing}
-            </div>
-          )}
-          {sectionCounts.late > 0 && (
-            <div className="er-text-sm" style={{ fontWeight: 900, color: '#ef4444' }}>
-              Late for Checkout: {sectionCounts.late}
-            </div>
+          {occupied.length > 0 ? (
+            occupied.map(({ room }) => (
+              <RoomItem
+                key={room.id}
+                room={room}
+                isSelectable={true}
+                isSelected={false}
+                isHighlighted={highlightId === room.id}
+                onClick={() => onSelectRoom(room)}
+                nowMs={nowMs}
+              />
+            ))
+          ) : (
+            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
           )}
         </div>
-      </button>
 
-      {isExpanded && (
-        <div
-          className="cs-liquid-card"
-          style={{
-            padding: '0.5rem',
-            flex: 1,
-            minHeight: 0,
-            overflow: 'hidden',
-          }}
-        >
-          {/*
-            Single-column layout: Occupied → Dirty/Cleaning → Available
-            Scroll happens within the expanded category, not the drawer panel.
-          */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
-              height: '100%',
-              overflowY: 'auto',
-              paddingRight: '0.25rem',
-            }}
-          >
-            {/* Occupied */}
-            <div style={{ minWidth: 0 }}>
-              <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
-                🔒 Occupied
-              </div>
-              {occupied.length > 0 ? (
-                occupied.map(({ room }) => (
-                  <RoomItem
-                    key={room.id}
-                    room={room}
-                    isSelectable={true}
-                    isSelected={false}
-                    onClick={() => onSelectRoom(room)}
-                    nowMs={nowMs}
-                  />
-                ))
-              ) : (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
-              )}
-            </div>
-
-            {/* Dirty / Cleaning */}
-            <div style={{ minWidth: 0 }}>
-              <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
-                🧹 Dirty / Cleaning
-              </div>
-              {cleaning.map(({ room }) => (
-                <RoomItem key={room.id} room={room} isSelectable={false} isSelected={false} nowMs={nowMs} />
-              ))}
-              {dirty.map(({ room }) => (
-                <RoomItem key={room.id} room={room} isSelectable={false} isSelected={false} nowMs={nowMs} />
-              ))}
-              {cleaning.length === 0 && dirty.length === 0 && (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
-              )}
-            </div>
-
-            {/* Available */}
-            <div style={{ minWidth: 0 }}>
-              <div className="er-text-sm" style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}>
-                ✓ Available
-              </div>
-              {availableForDisplay.length > 0 ? (
-                availableForDisplay.map(({ room, isWaitlistMatch }) => (
-                  <RoomItem
-                    key={room.id}
-                    room={room}
-                    isSelectable={allowAvailableSelection}
-                    isSelected={selectedItem?.type === 'room' && selectedItem.id === room.id}
-                    onClick={() => {
-                      if (!allowAvailableSelection) return;
-                      onSelectRoom(room);
-                    }}
-                    isWaitlistMatch={isWaitlistMatch}
-                    nowMs={nowMs}
-                  />
-                ))
-              ) : (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
-              )}
-            </div>
+        {/* Dirty / Cleaning */}
+        <div style={{ minWidth: 0 }}>
+          <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+            🧹 Dirty / Cleaning
           </div>
+          {cleaning.map(({ room }) => (
+            <RoomItem
+              key={room.id}
+              room={room}
+              isSelectable={false}
+              isSelected={false}
+              isHighlighted={highlightId === room.id}
+              nowMs={nowMs}
+            />
+          ))}
+          {dirty.map(({ room }) => (
+            <RoomItem
+              key={room.id}
+              room={room}
+              isSelectable={false}
+              isSelected={false}
+              isHighlighted={highlightId === room.id}
+              nowMs={nowMs}
+            />
+          ))}
+          {cleaning.length === 0 && dirty.length === 0 && (
+            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+          )}
         </div>
-      )}
+
+        {/* Available */}
+        <div style={{ minWidth: 0 }}>
+          <div className="er-text-sm" style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+            ✓ Available
+          </div>
+          {availableForDisplay.length > 0 ? (
+            availableForDisplay.map(({ room, isWaitlistMatch }) => (
+              <RoomItem
+                key={room.id}
+                room={room}
+                isSelectable={allowAvailableSelection}
+                isSelected={selectedItem?.type === 'room' && selectedItem.id === room.id}
+                isHighlighted={highlightId === room.id}
+                onClick={() => {
+                  if (!allowAvailableSelection) return;
+                  onSelectRoom(room);
+                }}
+                isWaitlistMatch={isWaitlistMatch}
+                nowMs={nowMs}
+              />
+            ))
+          ) : (
+            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -1065,6 +1041,7 @@ interface RoomItemProps {
   room: DetailedRoom;
   isSelectable: boolean;
   isSelected: boolean;
+  isHighlighted?: boolean;
   onClick?: () => void;
   isWaitlistMatch?: boolean;
   nowMs: number;
@@ -1074,6 +1051,7 @@ function RoomItem({
   room,
   isSelectable,
   isSelected,
+  isHighlighted = false,
   onClick,
   isWaitlistMatch,
   nowMs,
@@ -1095,6 +1073,7 @@ function RoomItem({
         'er-inv-item',
         isWaitlistMatch ? 'er-inv-item--waitlist' : '',
         isSelected ? 'er-inv-item--selected' : '',
+        isHighlighted ? 'er-inv-item--highlight' : '',
         dueLevel === 'danger' ? 'er-inv-item--danger' : dueLevel === 'warning' ? 'er-inv-item--warning' : '',
       ]
         .filter(Boolean)
@@ -1168,24 +1147,22 @@ function RoomItem({
 
 interface LockerSectionProps {
   lockers: DetailedLocker[];
-  isExpanded: boolean;
-  onToggle: () => void;
   onSelectLocker: (locker: DetailedLocker) => void;
   selectedItem: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null;
   nowMs: number;
   disableSelection?: boolean;
   occupancyLookupMode?: boolean;
+  highlightId?: string | null;
 }
 
 function LockerSection({
   lockers,
-  isExpanded,
-  onToggle,
   onSelectLocker,
   selectedItem,
   nowMs,
   disableSelection = false,
   occupancyLookupMode = false,
+  highlightId = null,
 }: LockerSectionProps) {
   const availableCount = lockers.filter(
     (l) => l.status === RoomStatus.CLEAN && !l.assignedTo
@@ -1238,222 +1215,130 @@ function LockerSection({
   }, [availableCount, nowMs, occupiedLockers]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.5rem',
-        flex: isExpanded ? '1 1 0' : '0 0 auto',
-        minHeight: 0,
-      }}
-    >
-      <button
-        onClick={onToggle}
-        className={[
-          'cs-liquid-button',
-          sectionAlertLevel === 'danger'
-            ? 'cs-liquid-button--danger'
-            : sectionAlertLevel === 'warning'
-              ? 'cs-liquid-button--warning'
-              : isExpanded
-                ? 'cs-liquid-button--selected'
-                : 'cs-liquid-button--secondary',
-        ].join(' ')}
-        style={{
-          width: '100%',
-          padding: '0.75rem',
-          fontWeight: 600,
-          cursor: 'pointer',
-          position: 'relative',
-          textAlign: 'left',
-        }}
-      >
-        <span
-          aria-hidden={true}
-          style={{
-            position: 'absolute',
-            top: '0.75rem',
-            right: '0.75rem',
-            fontWeight: 900,
-          }}
-        >
-          {isExpanded ? '▼' : '▶'}
-        </span>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', alignItems: 'flex-start' }}>
-          <div style={{ fontWeight: 700 }}>{ROOM_TYPE_LABELS.LOCKER}</div>
-          <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800 }}>
-            Available: {sectionCounts.availableCount}
-          </div>
-          {sectionCounts.nearing > 0 && (
-            <div className="er-text-sm" style={{ fontWeight: 900, color: '#f59e0b' }}>
-              Nearing Checkout: {sectionCounts.nearing}
-            </div>
-          )}
-          {sectionCounts.late > 0 && (
-            <div className="er-text-sm" style={{ fontWeight: 900, color: '#ef4444' }}>
-              Late for Checkout: {sectionCounts.late}
-            </div>
-          )}
+    <div>
+      <div style={{ marginBottom: '0.75rem' }}>
+        <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>{ROOM_TYPE_LABELS.LOCKER}</div>
+        <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800, marginTop: '0.25rem' }}>
+          Available: {sectionCounts.availableCount}
+          {sectionCounts.nearing > 0 ? ` • Nearing: ${sectionCounts.nearing}` : ''}
+          {sectionCounts.late > 0 ? ` • Late: ${sectionCounts.late}` : ''}
         </div>
-      </button>
+      </div>
 
-      {isExpanded && (
-        <div
-          className="cs-liquid-card"
-          style={{
-            padding: '0.5rem',
-            flex: 1,
-            minHeight: 0,
-            overflow: 'hidden',
-          }}
-        >
-          {/* Single-column layout: Occupied → Available */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
-              height: '100%',
-              overflowY: 'auto',
-              paddingRight: '0.25rem',
-            }}
-          >
-            {/* Occupied */}
-            <div style={{ minWidth: 0 }}>
-              <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
-                🔒 Occupied
-              </div>
-
-              {occupiedLockers.length > 0 ? (
-                <>
-                  {occupiedLockers.map((locker) => {
-                    const msUntil = getMsUntil(locker.checkoutAt, nowMs);
-                    const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
-                    const checkoutTime = formatTimeOfDay(locker.checkoutAt);
-                    const customerLabel = locker.assignedMemberName || locker.assignedTo || null;
-                    const dueLevel = alertLevelFromMsUntil(msUntil);
-                    return (
-                      <button
-                        key={locker.id}
-                        onClick={() => onSelectLocker(locker)}
-                        type="button"
-                        className={[
-                          'cs-liquid-card',
-                          'er-inv-item',
-                          dueLevel === 'danger'
-                            ? 'er-inv-item--danger'
-                            : dueLevel === 'warning'
-                              ? 'er-inv-item--warning'
-                              : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                      >
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.25rem 0.75rem' }}>
-                          <div
-                            className="er-text-lg"
-                            style={{
-                              fontWeight: 800,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}
-                          >
-                            Locker {locker.number}
-                          </div>
-                          <div
-                            className="er-text-md er-inv-meta"
-                            style={{
-                              fontWeight: 800,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            Checkout: {checkoutTime ?? '—'}
-                          </div>
-
-                          <div
-                            className="er-text-md er-inv-meta"
-                            style={{
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                            }}
-                          >
-                            {customerLabel ?? '—'}
-                          </div>
-                          <div
-                            className="er-text-md"
-                            style={{
-                              fontWeight: 800,
-                              color: duration?.isOverdue ? '#ef4444' : 'rgba(148, 163, 184, 0.95)',
-                              fontVariantNumeric: 'tabular-nums',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            ({duration ? (duration.isOverdue ? `Overdue ${duration.label}` : duration.label) : '—'})
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </>
-              ) : (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
-              )}
-            </div>
-
-            {/* Available */}
-            <div style={{ minWidth: 0 }}>
-              <div className="er-text-sm" style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}>
-                ✓ Available
-              </div>
-
-              {availableLockers.length > 0 ? (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(5, 1fr)',
-                    gap: '0.5rem',
-                  }}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+            🔒 Occupied
+          </div>
+          {occupiedLockers.length > 0 ? (
+            occupiedLockers.map((locker) => {
+              const msUntil = getMsUntil(locker.checkoutAt, nowMs);
+              const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
+              const checkoutTime = formatTimeOfDay(locker.checkoutAt);
+              const customerLabel = locker.assignedMemberName || locker.assignedTo || null;
+              const dueLevel = alertLevelFromMsUntil(msUntil);
+              return (
+                <button
+                  key={locker.id}
+                  onClick={() => onSelectLocker(locker)}
+                  type="button"
+                  className={[
+                    'cs-liquid-card',
+                    'er-inv-item',
+                    highlightId === locker.id ? 'er-inv-item--highlight' : '',
+                    dueLevel === 'danger' ? 'er-inv-item--danger' : dueLevel === 'warning' ? 'er-inv-item--warning' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                 >
-                  {availableLockers.map((locker) => {
-                    const isSelected = selectedItem?.type === 'locker' && selectedItem.id === locker.id;
-                    return (
-                      <div
-                        key={locker.id}
-                        onClick={() => {
-                          if (disableSelection || occupancyLookupMode) return;
-                          onSelectLocker(locker);
-                        }}
-                        style={{
-                          padding: '0.5rem',
-                          background: isSelected ? '#3b82f6' : '#0f172a',
-                          border: isSelected ? '2px solid #60a5fa' : '1px solid #475569',
-                          borderRadius: '4px',
-                          textAlign: 'center',
-                          fontSize: '0.875rem',
-                          cursor: disableSelection || occupancyLookupMode ? 'default' : 'pointer',
-                          minHeight: '44px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexDirection: 'column',
-                        }}
-                      >
-                        <div style={{ fontWeight: 600 }}>{locker.number}</div>
-                        {isSelected && <div style={{ fontSize: '1rem', marginTop: '0.25rem' }}>✓</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
-              )}
-            </div>
-          </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.25rem 0.75rem' }}>
+                    <div
+                      className="er-text-lg"
+                      style={{
+                        fontWeight: 800,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      Locker {locker.number}
+                    </div>
+                    <div className="er-text-md er-inv-meta" style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>
+                      Checkout: {checkoutTime ?? '—'}
+                    </div>
+
+                    <div
+                      className="er-text-md er-inv-meta"
+                      style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    >
+                      {customerLabel ?? '—'}
+                    </div>
+                    <div
+                      className="er-text-md"
+                      style={{
+                        fontWeight: 800,
+                        color: duration?.isOverdue ? '#ef4444' : 'rgba(148, 163, 184, 0.95)',
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      ({duration ? (duration.isOverdue ? `Overdue ${duration.label}` : duration.label) : '—'})
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          ) : (
+            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+          )}
         </div>
-      )}
+
+        <div style={{ minWidth: 0 }}>
+          <div className="er-text-sm" style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+            ✓ Available
+          </div>
+          {availableLockers.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem' }}>
+              {availableLockers.map((locker) => {
+                const isSelected = selectedItem?.type === 'locker' && selectedItem.id === locker.id;
+                const isHighlighted = highlightId === locker.id;
+                return (
+                  <div
+                    key={locker.id}
+                    onClick={() => {
+                      if (disableSelection || occupancyLookupMode) return;
+                      onSelectLocker(locker);
+                    }}
+                    style={{
+                      padding: '0.5rem',
+                      background: isSelected ? '#3b82f6' : '#0f172a',
+                      border: isSelected
+                        ? '2px solid #60a5fa'
+                        : isHighlighted
+                          ? '2px solid rgba(255,255,255,0.55)'
+                          : '1px solid #475569',
+                      borderRadius: '4px',
+                      textAlign: 'center',
+                      fontSize: '0.875rem',
+                      cursor: disableSelection || occupancyLookupMode ? 'default' : 'pointer',
+                      minHeight: '44px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexDirection: 'column',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600 }}>{locker.number}</div>
+                    {isSelected && <div style={{ fontSize: '1rem', marginTop: '0.25rem' }}>✓</div>}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

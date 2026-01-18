@@ -25,10 +25,26 @@ interface RegisterSession {
 interface RegisterSignInProps {
   deviceId: string;
   onSignedIn: (session: RegisterSession) => void;
+  topTitle?: string;
+  lane?: string;
+  apiStatus?: string | null;
+  wsConnected?: boolean;
+  onSignOut?: () => void;
+  onCloseOut?: () => void;
   children: React.ReactNode;
 }
 
-export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignInProps) {
+export function RegisterSignIn({
+  deviceId,
+  onSignedIn,
+  topTitle = 'Employee Register',
+  lane,
+  apiStatus,
+  wsConnected,
+  onSignOut,
+  onCloseOut,
+  children,
+}: RegisterSignInProps) {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [registerSession, setRegisterSession] = useState<RegisterSession | null>(null);
   const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
@@ -199,11 +215,48 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   return (
     <div className="register-sign-in-container">
       <div className="register-top-bar">
-        <div style={{ width: '40px' }} />
-        <div className="register-top-bar-center">
-          {registerSession.employeeName} • Register {registerSession.registerNumber}
+        <div className="register-top-bar-left">
+          <div className="register-top-bar-title">{topTitle}</div>
         </div>
-        <div style={{ width: '40px' }} /> {/* Spacer for alignment */}
+
+        <div className="register-top-bar-center">
+          <span>
+            {registerSession.employeeName} • Register {registerSession.registerNumber}
+          </span>
+
+          {import.meta.env.DEV && (
+            <span className="register-top-bar-dev">
+              {lane ? <span className="badge badge-info">Lane: {lane}</span> : null}
+              <span className={`badge ${apiStatus === 'ok' ? 'badge-success' : 'badge-error'}`}>
+                API: {apiStatus ?? '...'}
+              </span>
+              <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
+                WS: {wsConnected ? 'Live' : 'Offline'}
+              </span>
+            </span>
+          )}
+        </div>
+
+        <div className="register-top-bar-right">
+          {onSignOut && (
+            <button
+              type="button"
+              onClick={() => void onSignOut()}
+              className="cs-liquid-button cs-liquid-button--secondary er-header-action-btn"
+            >
+              Sign Out
+            </button>
+          )}
+          {onCloseOut && (
+            <button
+              type="button"
+              onClick={() => void onCloseOut()}
+              className="cs-liquid-button cs-liquid-button--danger er-header-action-btn"
+            >
+              Close Out
+            </button>
+          )}
+        </div>
       </div>
 
       {signedInWs}

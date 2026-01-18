@@ -10,6 +10,8 @@ export interface SlideOutDrawerProps {
   onOpenChange(next: boolean): void;
   widthPx?: number;
   tabWidthPx?: number;
+  /** Vertical placement of the drawer tab, as a percentage of the drawer height (CSS top). */
+  tabTopPercent?: number;
   tabVariant?: 'secondary' | 'success' | 'warning' | 'danger';
   tabPulseVariant?: 'success' | 'danger' | null;
   zIndex?: number;
@@ -41,6 +43,7 @@ export function SlideOutDrawer({
   onOpenChange,
   widthPx = DEFAULT_WIDTH_PX,
   tabWidthPx = DEFAULT_TAB_WIDTH_PX,
+  tabTopPercent = 50,
   tabVariant = 'secondary',
   tabPulseVariant = null,
   zIndex = DEFAULT_Z_INDEX,
@@ -164,6 +167,7 @@ export function SlideOutDrawer({
     zIndex,
     transform: `translateX(${translatePx}px)`,
     ['--sod-tab-width' as never]: `${tabWidthPx}px`,
+    ['--sod-tab-top' as never]: `${tabTopPercent}%`,
   };
 
   const rootClasses = [

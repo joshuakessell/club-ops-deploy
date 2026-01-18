@@ -46,16 +46,19 @@ export function InventorySummaryBar({ counts, onOpenInventorySection }: Inventor
         padding: '0.55rem 0.85rem',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
+        justifyContent: 'flex-start',
         gap: '0.75rem',
-        minWidth: 150,
+        width: '100%',
+        textAlign: 'left',
         opacity: disabled ? 0.65 : 1,
       }}
       disabled={disabled}
       onClick={() => onOpenInventorySection(props.section)}
     >
       <span style={{ fontWeight: 800 }}>{props.label}</span>
-      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>{props.ratio}</span>
+      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, marginLeft: 'auto' }}>
+        {props.ratio}
+      </span>
     </button>
   );
 
@@ -65,10 +68,9 @@ export function InventorySummaryBar({ counts, onOpenInventorySection }: Inventor
       style={{
         padding: '0.75rem',
         display: 'flex',
-        gap: '0.5rem',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        flexDirection: 'column',
+        gap: '0.75rem',
+        alignItems: 'stretch',
       }}
       aria-label="Inventory summary"
     >

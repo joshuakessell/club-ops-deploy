@@ -1,7 +1,7 @@
 .sod-root {
   position: fixed;
-  top: var(--er-topbar-height, 60px);
-  bottom: 0;
+  top: calc(var(--er-topbar-height, 60px) + var(--er-rail-gap, 12px));
+  bottom: var(--er-rail-gap, 12px);
   --sod-edge-gap: 12px;
   /* Avoid flex sizing so the panel can't shrink and "detach" from the screen edge. */
   display: block;
@@ -78,14 +78,14 @@
 
 .sod-left .sod-tab {
   position: absolute;
-  top: 50%;
+  top: var(--sod-tab-top, 50%);
   right: 0;
   transform: translateY(-50%);
 }
 
 .sod-right .sod-tab {
   position: absolute;
-  top: 50%;
+  top: var(--sod-tab-top, 50%);
   left: 0;
   transform: translateY(-50%);
 }
