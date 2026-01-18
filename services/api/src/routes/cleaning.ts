@@ -4,6 +4,7 @@ import { transaction, query } from '../db/index.js';
 import { RoomStatus, RoomStatusSchema, validateTransition } from '@club-ops/shared';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import { broadcastInventoryUpdate } from './sessions.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 /**
  * Schema for batch cleaning operations.
@@ -202,36 +203,28 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
 
             // 6. Log to audit log if override was used
             if (isOverrideTransition) {
-              await client.query(
-                `INSERT INTO audit_log 
-               (user_id, user_role, action, entity_type, entity_id, old_value, new_value, override_reason)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [
-                  body.staffId,
-                  'staff',
-                  'OVERRIDE',
-                  'room',
-                  roomId,
-                  JSON.stringify({ status: fromStatus }),
-                  JSON.stringify({ status: toStatus }),
-                  body.overrideReason,
-                ]
-              );
+              await insertAuditLog(client, {
+                staffId: body.staffId,
+                userId: body.staffId,
+                userRole: 'staff',
+                action: 'OVERRIDE',
+                entityType: 'room',
+                entityId: roomId,
+                oldValue: { status: fromStatus },
+                newValue: { status: toStatus },
+                overrideReason: body.overrideReason,
+              });
             } else {
-              await client.query(
-                `INSERT INTO audit_log 
-               (user_id, user_role, action, entity_type, entity_id, old_value, new_value)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [
-                  body.staffId,
-                  'staff',
-                  'STATUS_CHANGE',
-                  'room',
-                  roomId,
-                  JSON.stringify({ status: fromStatus }),
-                  JSON.stringify({ status: toStatus }),
-                ]
-              );
+              await insertAuditLog(client, {
+                staffId: body.staffId,
+                userId: body.staffId,
+                userRole: 'staff',
+                action: 'STATUS_CHANGE',
+                entityType: 'room',
+                entityId: roomId,
+                oldValue: { status: fromStatus },
+                newValue: { status: toStatus },
+              });
             }
 
             results.push({

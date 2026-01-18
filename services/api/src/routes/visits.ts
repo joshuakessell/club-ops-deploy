@@ -6,6 +6,7 @@ import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding.js';
 import { broadcastInventoryUpdate } from './sessions.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -1075,27 +1076,24 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           const paymentIntent = intentResult.rows[0]!;
 
           // 12. Log final extension started
-          await client.query(
-            `INSERT INTO audit_log 
-           (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, 'FINAL_EXTENSION_STARTED', 'visit', $2, $3, $4)`,
-            [
-              staff.staffId,
-              visitId,
-              JSON.stringify({
-                totalHours: totalHours,
-                blockCount: blocks.length,
-              }),
-              JSON.stringify({
-                blockId: block.id,
-                blockType: 'FINAL2H',
-                extensionHours: 2,
-                newEndsAt: extensionEndsAt.toISOString(),
-                paymentIntentId: paymentIntent.id,
-                rentalType,
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'FINAL_EXTENSION_STARTED',
+            entityType: 'visit',
+            entityId: visitId,
+            oldValue: {
+              totalHours: totalHours,
+              blockCount: blocks.length,
+            },
+            newValue: {
+              blockId: block.id,
+              blockType: 'FINAL2H',
+              extensionHours: 2,
+              newEndsAt: extensionEndsAt.toISOString(),
+              paymentIntentId: paymentIntent.id,
+              rentalType,
+            },
+          });
 
           return {
             visit: {

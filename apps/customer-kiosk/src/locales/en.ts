@@ -94,15 +94,15 @@ export const en = {
   'membership.pending': 'Pending',
   'membership.modal.title': 'Membership',
   'membership.modal.body.purchase':
-    'You can save on daily membership fees by purchasing a 6 month membership for $43.',
+    'Ask the employee about current 6-month membership pricing.',
   'membership.modal.body.renew':
-    'You can save on daily membership fees by renewing a 6 month membership for $43.',
+    'Ask the employee about current 6-month membership renewal pricing.',
   'common.continue': 'Continue',
 
   // Purchase cards (Selection)
   'membership.pleaseSelectOne': 'Please select one',
-  'membership.oneTimeOption': 'One-time Membership - {price}',
-  'membership.sixMonthOption': '6-Month Membership - {price}',
+  'membership.oneTimeOption': 'One-time Membership',
+  'membership.sixMonthOption': '6-Month Membership',
   'membership.thankYouMember': 'Thank you for being a member.',
   'membership.expiresOn': 'Your membership expires on {date}.',
   'rental.title': 'Rental',
@@ -165,9 +165,9 @@ export const en = {
   'renewal.bullet.approachingMax':
     '⚠️ You are approaching the 14-hour maximum stay for a single visit.',
   'renewal.bullet.finalExtension':
-    'At the end of this 6-hour renewal, you may extend one final time for 2 additional hours for a flat $20 fee (same for lockers or any room type).',
+    'At the end of this 6-hour renewal, you may extend one final time for 2 additional hours (fee applies).',
   'renewal.bullet.feeNotChargedNow':
-    'The $20 fee is not charged now; it applies only if you choose the final 2-hour extension later.',
+    'The fee is not charged now; it applies only if you choose the final 2-hour extension later.',
 
   // Errors (customer-friendly, generic)
   'error.loadAgreement': 'Failed to load agreement. Please try again.',

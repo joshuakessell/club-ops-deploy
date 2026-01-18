@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 const IsoDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -107,17 +108,15 @@ export async function timeoffRoutes(fastify: FastifyInstance): Promise<void> {
             [request.staff!.staffId, body.day, body.reason ?? null]
           );
 
-          await client.query(
-            `INSERT INTO audit_log (user_id, user_role, staff_id, action, entity_type, entity_id, new_value)
-           VALUES ($1, $2, $3, 'TIME_OFF_REQUESTED', 'time_off_request', $4, $5::jsonb)`,
-            [
-              request.staff!.staffId,
-              request.staff!.role,
-              request.staff!.staffId,
-              res.rows[0]!.id,
-              JSON.stringify({ day: body.day, reason: body.reason ?? null }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: request.staff!.staffId,
+            userId: request.staff!.staffId,
+            userRole: request.staff!.role,
+            action: 'TIME_OFF_REQUESTED',
+            entityType: 'time_off_request',
+            entityId: res.rows[0]!.id,
+            newValue: { day: body.day, reason: body.reason ?? null },
+          });
 
           return res.rows[0]!.id;
         });
@@ -235,18 +234,15 @@ export async function timeoffRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           const action = body.status === 'APPROVED' ? 'TIME_OFF_APPROVED' : 'TIME_OFF_DENIED';
-          await client.query(
-            `INSERT INTO audit_log (user_id, user_role, staff_id, action, entity_type, entity_id, new_value)
-           VALUES ($1, $2, $3, $4, 'time_off_request', $5, $6::jsonb)`,
-            [
-              request.staff!.staffId,
-              request.staff!.role,
-              request.staff!.staffId,
-              action,
-              requestId,
-              JSON.stringify({ status: body.status, decisionNotes: body.decisionNotes ?? null }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: request.staff!.staffId,
+            userId: request.staff!.staffId,
+            userRole: request.staff!.role,
+            action,
+            entityType: 'time_off_request',
+            entityId: requestId,
+            newValue: { status: body.status, decisionNotes: body.decisionNotes ?? null },
+          });
 
           return current.rows[0]!;
         });

@@ -6,7 +6,7 @@ import {
   getCredential,
   authenticationCredentialToJSON,
   verifyAuthentication,
-} from './webauthn';
+} from '@club-ops/ui';
 
 const API_BASE = '/api';
 

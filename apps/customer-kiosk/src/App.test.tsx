@@ -312,8 +312,8 @@ describe('App', () => {
 
     expect(await screen.findByText('Membership')).toBeDefined();
     expect(await screen.findByText('Non-Member')).toBeDefined();
-    expect(screen.getByRole('button', { name: /One-time Membership.*\$13/ })).toBeDefined();
-    expect(screen.getByRole('button', { name: /6-Month Membership.*\$43/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /One-time Membership/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /6-Month Membership/i })).toBeDefined();
   });
 
   it('shows Non-Member and routes 6-month CTA through renew flow when membership is expired', async () => {
@@ -340,7 +340,7 @@ describe('App', () => {
     });
 
     expect(await screen.findByText('Non-Member')).toBeDefined();
-    expect(screen.getByRole('button', { name: /6-Month Membership.*\$43/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /6-Month Membership/i })).toBeDefined();
   });
 
   it('non-member must explicitly choose membership before rentals enable (no implicit one-time selection)', async () => {
@@ -365,8 +365,8 @@ describe('App', () => {
       });
     });
 
-    const oneTime = await screen.findByRole('button', { name: /One-time Membership.*\$13/ });
-    const sixMonth = screen.getByRole('button', { name: /6-Month Membership.*\$43/ });
+    const oneTime = await screen.findByRole('button', { name: /One-time Membership/i });
+    const sixMonth = screen.getByRole('button', { name: /6-Month Membership/i });
     const locker = screen.getByRole('button', { name: /Locker/i });
 
     // No default selection on either membership option.
@@ -443,7 +443,7 @@ describe('App', () => {
     });
 
     act(() => {
-      screen.getByRole('button', { name: /One-time Membership.*\$13/ }).click();
+      screen.getByRole('button', { name: /One-time Membership/i }).click();
     });
 
     // Now rentals enable.
@@ -480,11 +480,11 @@ describe('App', () => {
       });
     });
 
-    expect(await screen.findByRole('button', { name: /Locker.*\$24/ })).toBeDefined();
-    expect(screen.getByRole('button', { name: /Private Dressing Room.*\$30/ })).toBeDefined();
-    expect(screen.getByRole('button', { name: /Deluxe Dressing Room.*\$40/ })).toBeDefined();
-    expect(screen.getByRole('button', { name: /Special Dressing Room.*\$50/ })).toBeDefined();
-    expect(screen.getByRole('button', { name: /6-Month Membership.*\$43/ })).toBeDefined();
+    expect(await screen.findByRole('button', { name: /Locker/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Private Dressing Room/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Deluxe Dressing Room/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Special Dressing Room/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /6-Month Membership/i })).toBeDefined();
 
     expect(screen.queryByText(/Join Waitlist for Upgrade/i)).toBeNull();
   });
@@ -512,8 +512,8 @@ describe('App', () => {
     });
 
     expect(await screen.findByText('Sin membresía')).toBeDefined();
-    expect(screen.getByRole('button', { name: /Membresía 6 meses.*\$43/ })).toBeDefined();
-    expect(screen.getByRole('button', { name: /Membresía por día.*\$13/ })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Membresía 6 meses/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /Membresía por día/i })).toBeDefined();
     // Guard: key screens should not leak obvious English CTAs when in Spanish.
     expect(screen.queryByText('Non-Member')).toBeNull();
     expect(screen.queryByText(/6-Month Membership/i)).toBeNull();
@@ -541,7 +541,7 @@ describe('App', () => {
       });
     });
 
-    const purchaseBtn = await screen.findByRole('button', { name: /Membresía 6 meses.*\$43/ });
+    const purchaseBtn = await screen.findByRole('button', { name: /Membresía 6 meses/i });
     act(() => {
       (purchaseBtn as HTMLButtonElement).click();
     });
@@ -578,7 +578,7 @@ describe('App', () => {
       });
     });
 
-    const purchaseBtn = await screen.findByRole('button', { name: /6-Month Membership.*\$43/ });
+    const purchaseBtn = await screen.findByRole('button', { name: /6-Month Membership/i });
     act(() => {
       (purchaseBtn as HTMLButtonElement).click();
     });

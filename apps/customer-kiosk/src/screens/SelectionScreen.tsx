@@ -4,21 +4,6 @@ import { ScreenShell } from '../components/ScreenShell';
 import { getRentalDisplayName } from '../utils/display';
 import { getMembershipStatus, type SessionState } from '../utils/membership';
 
-const DISPLAY_PRICE_BY_RENTAL: Record<string, number> = {
-  LOCKER: 24,
-  GYM_LOCKER: 0,
-  STANDARD: 30,
-  DOUBLE: 40,
-  SPECIAL: 50,
-};
-
-const SIX_MONTH_MEMBERSHIP_PRICE = 43;
-const ONE_TIME_MEMBERSHIP_PRICE = 13;
-
-function formatWholeDollars(amount: number): string {
-  return `$${Math.round(amount)}`;
-}
-
 function formatMembershipDate(yyyyMmDd: string, lang: SessionState['customerPrimaryLanguage']): string {
   const locale = lang === 'ES' ? 'es-US' : 'en-US';
   const d = new Date(`${yyyyMmDd}T00:00:00Z`);
@@ -186,9 +171,7 @@ export function SelectionScreen({
                         disabled={!canInteract}
                       >
                         <span className="kiosk-option-title">
-                          {t(lang, 'membership.oneTimeOption', {
-                            price: formatWholeDollars(ONE_TIME_MEMBERSHIP_PRICE),
-                          })}
+                          {t(lang, 'membership.oneTimeOption')}
                         </span>
                       </button>
 
@@ -208,9 +191,7 @@ export function SelectionScreen({
                         disabled={!canInteract}
                       >
                         <span className="kiosk-option-title">
-                          {t(lang, 'membership.sixMonthOption', {
-                            price: formatWholeDollars(SIX_MONTH_MEMBERSHIP_PRICE),
-                          })}
+                          {t(lang, 'membership.sixMonthOption')}
                         </span>
                       </button>
                     </div>
@@ -258,9 +239,6 @@ export function SelectionScreen({
                           selectionConfirmedBy === 'EMPLOYEE';
 
                         const displayName = getRentalDisplayName(rental, lang);
-                        const displayPrice = DISPLAY_PRICE_BY_RENTAL[rental];
-                        const displayPriceLabel =
-                          typeof displayPrice === 'number' ? formatWholeDollars(displayPrice) : '';
 
                         const span2 = rental === 'LOCKER' || rental === 'STANDARD';
 
@@ -277,9 +255,6 @@ export function SelectionScreen({
                           >
                             <div className="kiosk-option-stack">
                               <span className="kiosk-option-title">{displayName}</span>
-                              {displayPriceLabel && (
-                                <span className="kiosk-option-price">{displayPriceLabel}</span>
-                              )}
                               {showWarning && !isUnavailable && (
                                 <span className="kiosk-option-subtext">
                                   {t(lang, 'availability.onlyAvailable', { count: availableCount })}

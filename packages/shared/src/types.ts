@@ -58,6 +58,8 @@ export type WebSocketEventType =
   | 'SELECTION_LOCKED'
   | 'SELECTION_ACKNOWLEDGED'
   | 'WAITLIST_CREATED'
+  | 'UPGRADE_HOLD_AVAILABLE'
+  | 'UPGRADE_OFFER_EXPIRED'
   | 'ASSIGNMENT_CREATED'
   | 'ASSIGNMENT_FAILED'
   | 'CUSTOMER_CONFIRMATION_REQUIRED'
@@ -245,6 +247,23 @@ export interface WaitlistCreatedPayload {
   position: number;
   estimatedReadyAt?: string;
   upgradeFee?: number;
+}
+
+export interface UpgradeHoldAvailablePayload {
+  waitlistId: string;
+  customerName: string;
+  desiredTier: string;
+  roomId: string;
+  roomNumber: string;
+  expiresAt: string;
+}
+
+export interface UpgradeOfferExpiredPayload {
+  waitlistId: string;
+  customerName: string;
+  desiredTier: string;
+  roomId: string;
+  roomNumber: string;
 }
 
 /**

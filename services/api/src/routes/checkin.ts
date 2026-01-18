@@ -8,6 +8,7 @@ import { stripSystemLateFeeNotes } from '../utils/lateFeeNotes.js';
 import { roundUpToQuarterHour } from '../time/rounding.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import { broadcastInventoryUpdate } from './sessions.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 import type {
   SessionUpdatedPayload,
   CustomerConfirmationRequiredPayload,
@@ -223,6 +224,22 @@ async function selectRoomForNewCheckin(
          AND assigned_to_customer_id IS NULL
          AND type = $1
          AND id <> ALL($2::uuid[])
+         -- Exclude rooms "selected" by an active lane session (reservation semantics).
+         AND NOT EXISTS (
+           SELECT 1
+           FROM lane_sessions ls
+           WHERE ls.assigned_resource_type = 'room'
+             AND ls.assigned_resource_id = rooms.id
+             AND ls.status = ANY (
+               ARRAY[
+                 'ACTIVE'::public.lane_session_status,
+                 'AWAITING_CUSTOMER'::public.lane_session_status,
+                 'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                 'AWAITING_PAYMENT'::public.lane_session_status,
+                 'AWAITING_SIGNATURE'::public.lane_session_status
+               ]
+             )
+         )
        ORDER BY number ASC
        OFFSET $3
        LIMIT 1
@@ -2670,6 +2687,33 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               };
             }
 
+            // Also prevent "double selection" across lane sessions (we only persist the selection on lane_sessions
+            // until agreement signing completes; treat that selection as a reservation).
+            const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+              `SELECT id, lane_id
+               FROM lane_sessions
+               WHERE id <> $1
+                 AND assigned_resource_type = 'room'
+                 AND assigned_resource_id = $2
+                 AND status = ANY (
+                   ARRAY[
+                     'ACTIVE'::public.lane_session_status,
+                     'AWAITING_CUSTOMER'::public.lane_session_status,
+                     'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                     'AWAITING_PAYMENT'::public.lane_session_status,
+                     'AWAITING_SIGNATURE'::public.lane_session_status
+                   ]
+                 )
+               LIMIT 1`,
+              [session.id, resourceId]
+            );
+            if (selectedByOther.rows.length > 0) {
+              throw {
+                statusCode: 409,
+                message: `Room ${room.number} is already selected by another lane session (race condition)`,
+              };
+            }
+
             // Verify tier matches desired rental type
             const roomTier = getRoomTier(room.number);
             const desiredType = session.desired_rental_type || session.backup_rental_type;
@@ -2686,17 +2730,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             );
 
             // Log audit
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'ASSIGN', 'room', $2, $3, $4)`,
-              [
-                staffId,
-                resourceId,
-                JSON.stringify({ assigned_to_customer_id: null }),
-                JSON.stringify({ selected_for_session_id: session.id }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'ASSIGN',
+              entityType: 'room',
+              entityId: resourceId,
+              oldValue: { assigned_to_customer_id: null },
+              newValue: { selected_for_session_id: session.id },
+            });
 
             // Broadcast assignment created
             const assignmentPayload: AssignmentCreatedPayload = {
@@ -2750,6 +2791,32 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               };
             }
 
+            // Prevent "double selection" across lane sessions (treat lane_sessions selection as reservation).
+            const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+              `SELECT id, lane_id
+               FROM lane_sessions
+               WHERE id <> $1
+                 AND assigned_resource_type = 'locker'
+                 AND assigned_resource_id = $2
+                 AND status = ANY (
+                   ARRAY[
+                     'ACTIVE'::public.lane_session_status,
+                     'AWAITING_CUSTOMER'::public.lane_session_status,
+                     'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                     'AWAITING_PAYMENT'::public.lane_session_status,
+                     'AWAITING_SIGNATURE'::public.lane_session_status
+                   ]
+                 )
+               LIMIT 1`,
+              [session.id, resourceId]
+            );
+            if (selectedByOther.rows.length > 0) {
+              throw {
+                statusCode: 409,
+                message: `Locker ${locker.number} is already selected by another lane session (race condition)`,
+              };
+            }
+
             // Record selected resource on session (actual inventory assignment happens after agreement signing)
             await client.query(
               `UPDATE lane_sessions
@@ -2761,17 +2828,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             );
 
             // Log audit
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'ASSIGN', 'locker', $2, $3, $4)`,
-              [
-                staffId,
-                resourceId,
-                JSON.stringify({ assigned_to_customer_id: null }),
-                JSON.stringify({ selected_for_session_id: session.id }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'ASSIGN',
+              entityType: 'locker',
+              entityId: resourceId,
+              oldValue: { assigned_to_customer_id: null },
+              newValue: { selected_for_session_id: session.id },
+            });
 
             // Broadcast assignment created
             const assignmentPayload: AssignmentCreatedPayload = {
@@ -3076,45 +3140,36 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           if (paymentType === 'UPGRADE' && quote.waitlistId) {
             // Import upgrade completion function (will be called via API)
             // For now, log that upgrade payment is ready
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'UPGRADE_PAID', 'payment_intent', $2, $3, $4)`,
-              [
-                staffId,
-                id,
-                JSON.stringify({ status: 'DUE' }),
-                JSON.stringify({ status: 'PAID', waitlistId: quote.waitlistId }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'UPGRADE_PAID',
+              entityType: 'payment_intent',
+              entityId: id,
+              oldValue: { status: 'DUE' },
+              newValue: { status: 'PAID', waitlistId: quote.waitlistId },
+            });
             // Note: Actual upgrade completion should be called via /v1/upgrades/complete
           }
           // Handle final extension payment completion
           else if (paymentType === 'FINAL_EXTENSION' && quote.visitId && quote.blockId) {
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'FINAL_EXTENSION_PAID', 'payment_intent', $2, $3, $4)`,
-              [
-                staffId,
-                id,
-                JSON.stringify({ status: 'DUE' }),
-                JSON.stringify({ status: 'PAID', visitId: quote.visitId, blockId: quote.blockId }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'FINAL_EXTENSION_PAID',
+              entityType: 'payment_intent',
+              entityId: id,
+              oldValue: { status: 'DUE' },
+              newValue: { status: 'PAID', visitId: quote.visitId, blockId: quote.blockId },
+            });
 
             // Mark final extension as completed
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'FINAL_EXTENSION_COMPLETED', 'visit', $2, $3, $4)`,
-              [
-                staffId,
-                quote.visitId,
-                JSON.stringify({ paymentIntentId: id, status: 'DUE' }),
-                JSON.stringify({ paymentIntentId: id, status: 'PAID', blockId: quote.blockId }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'FINAL_EXTENSION_COMPLETED',
+              entityType: 'visit',
+              entityId: quote.visitId,
+              oldValue: { paymentIntentId: id, status: 'DUE' },
+              newValue: { paymentIntentId: id, status: 'PAID', blockId: quote.blockId },
+            });
           }
           // Handle regular check-in payment
           else {
@@ -3362,6 +3417,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   message: `Selected room ${room.number} is no longer available`,
                 };
               }
+              // Ensure another active lane session did not also "select" this room.
+              const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+                `SELECT id, lane_id
+                 FROM lane_sessions
+                 WHERE id <> $1
+                   AND assigned_resource_type = 'room'
+                   AND assigned_resource_id = $2
+                   AND status = ANY (
+                     ARRAY[
+                       'ACTIVE'::public.lane_session_status,
+                       'AWAITING_CUSTOMER'::public.lane_session_status,
+                       'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                       'AWAITING_PAYMENT'::public.lane_session_status,
+                       'AWAITING_SIGNATURE'::public.lane_session_status
+                     ]
+                   )
+                 LIMIT 1`,
+                [session.id, assignedResourceId]
+              );
+              if (selectedByOther.rows.length > 0) {
+                throw {
+                  statusCode: 409,
+                  message: `Selected room ${room.number} is reserved by another lane session`,
+                };
+              }
               assignedResourceNumber = room.number;
             } else {
               const locker = (
@@ -3380,6 +3460,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   message: `Selected locker ${locker.number} is no longer available`,
                 };
               }
+              // Ensure another active lane session did not also "select" this locker.
+              const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+                `SELECT id, lane_id
+                 FROM lane_sessions
+                 WHERE id <> $1
+                   AND assigned_resource_type = 'locker'
+                   AND assigned_resource_id = $2
+                   AND status = ANY (
+                     ARRAY[
+                       'ACTIVE'::public.lane_session_status,
+                       'AWAITING_CUSTOMER'::public.lane_session_status,
+                       'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                       'AWAITING_PAYMENT'::public.lane_session_status,
+                       'AWAITING_SIGNATURE'::public.lane_session_status
+                     ]
+                   )
+                 LIMIT 1`,
+                [session.id, assignedResourceId]
+              );
+              if (selectedByOther.rows.length > 0) {
+                throw {
+                  statusCode: 409,
+                  message: `Selected locker ${locker.number} is reserved by another lane session`,
+                };
+              }
               assignedResourceNumber = locker.number;
             }
           } else {
@@ -3389,6 +3494,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   `SELECT id, number, status, assigned_to_customer_id
                  FROM lockers
                  WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL
+                 -- Exclude lockers "selected" by an active lane session (reservation semantics).
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM lane_sessions ls
+                   WHERE ls.assigned_resource_type = 'locker'
+                     AND ls.assigned_resource_id = lockers.id
+                     AND ls.status = ANY (
+                       ARRAY[
+                         'ACTIVE'::public.lane_session_status,
+                         'AWAITING_CUSTOMER'::public.lane_session_status,
+                         'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                         'AWAITING_PAYMENT'::public.lane_session_status,
+                         'AWAITING_SIGNATURE'::public.lane_session_status
+                       ]
+                     )
+                 )
                  ORDER BY number
                  LIMIT 1
                  FOR UPDATE SKIP LOCKED`
@@ -3786,6 +3907,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   message: `Selected room ${room.number} is no longer available`,
                 };
               }
+              // Ensure another active lane session did not also "select" this room.
+              const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+                `SELECT id, lane_id
+                 FROM lane_sessions
+                 WHERE id <> $1
+                   AND assigned_resource_type = 'room'
+                   AND assigned_resource_id = $2
+                   AND status = ANY (
+                     ARRAY[
+                       'ACTIVE'::public.lane_session_status,
+                       'AWAITING_CUSTOMER'::public.lane_session_status,
+                       'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                       'AWAITING_PAYMENT'::public.lane_session_status,
+                       'AWAITING_SIGNATURE'::public.lane_session_status
+                     ]
+                   )
+                 LIMIT 1`,
+                [session.id, assignedResourceId]
+              );
+              if (selectedByOther.rows.length > 0) {
+                throw {
+                  statusCode: 409,
+                  message: `Selected room ${room.number} is reserved by another lane session`,
+                };
+              }
               assignedResourceNumber = room.number;
             } else {
               const locker = (
@@ -3804,6 +3950,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   message: `Selected locker ${locker.number} is no longer available`,
                 };
               }
+              // Ensure another active lane session did not also "select" this locker.
+              const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+                `SELECT id, lane_id
+                 FROM lane_sessions
+                 WHERE id <> $1
+                   AND assigned_resource_type = 'locker'
+                   AND assigned_resource_id = $2
+                   AND status = ANY (
+                     ARRAY[
+                       'ACTIVE'::public.lane_session_status,
+                       'AWAITING_CUSTOMER'::public.lane_session_status,
+                       'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                       'AWAITING_PAYMENT'::public.lane_session_status,
+                       'AWAITING_SIGNATURE'::public.lane_session_status
+                     ]
+                   )
+                 LIMIT 1`,
+                [session.id, assignedResourceId]
+              );
+              if (selectedByOther.rows.length > 0) {
+                throw {
+                  statusCode: 409,
+                  message: `Selected locker ${locker.number} is reserved by another lane session`,
+                };
+              }
               assignedResourceNumber = locker.number;
             }
           } else {
@@ -3813,6 +3984,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   `SELECT id, number, status, assigned_to_customer_id
                  FROM lockers
                  WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL
+                 -- Exclude lockers "selected" by an active lane session (reservation semantics).
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM lane_sessions ls
+                   WHERE ls.assigned_resource_type = 'locker'
+                     AND ls.assigned_resource_id = lockers.id
+                     AND ls.status = ANY (
+                       ARRAY[
+                         'ACTIVE'::public.lane_session_status,
+                         'AWAITING_CUSTOMER'::public.lane_session_status,
+                         'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                         'AWAITING_PAYMENT'::public.lane_session_status,
+                         'AWAITING_SIGNATURE'::public.lane_session_status
+                       ]
+                     )
+                 )
                  ORDER BY number
                  LIMIT 1
                  FOR UPDATE SKIP LOCKED`
@@ -3969,23 +4156,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Log audit entry for manual override
-          await client.query(
-            `INSERT INTO audit_logs (staff_id, action, details, created_at)
-           VALUES ($1, 'MANUAL_SIGNATURE_OVERRIDE', $2, NOW())`,
-            [
-              request.staff?.staffId ?? null,
-              JSON.stringify({
-                sessionId: session.id,
-                laneId,
-                customerId: session.customer_id,
-                customerName,
-                blockId,
-                rentalType,
-                assignedResourceType,
-                assignedResourceNumber,
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: request.staff?.staffId ?? null,
+            action: 'OVERRIDE',
+            entityType: 'checkin_block',
+            entityId: blockId,
+            metadata: {
+              overrideType: 'MANUAL_SIGNATURE_OVERRIDE',
+              sessionId: session.id,
+              laneId,
+              customerId: session.customer_id,
+              customerName,
+              rentalType,
+              assignedResourceType,
+              assignedResourceNumber,
+            },
+          });
 
           return {
             success: true,
@@ -4062,12 +4248,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           if (session.assigned_resource_id) {
             if (session.assigned_resource_type === 'room') {
               await client.query(
-                `UPDATE rooms SET assigned_to = NULL, updated_at = NOW() WHERE id = $1`,
+                `UPDATE rooms SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
                 [session.assigned_resource_id]
               );
             } else if (session.assigned_resource_type === 'locker') {
               await client.query(
-                `UPDATE lockers SET assigned_to = NULL, updated_at = NOW() WHERE id = $1`,
+                `UPDATE lockers SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
                 [session.assigned_resource_id]
               );
             }
@@ -4241,21 +4427,18 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       staffId !== 'system' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(staffId)
     ) {
-      await client.query(
-        `INSERT INTO audit_log 
-         (staff_id, action, entity_type, entity_id, old_value, new_value)
-         VALUES ($1, 'CHECK_IN', 'visit', $2, $3, $4)`,
-        [
-          staffId,
-          visitId,
-          JSON.stringify({}),
-          JSON.stringify({
-            visit_id: visitId,
-            block_id: blockId,
-            resource_type: session.assigned_resource_type,
-          }),
-        ]
-      );
+      await insertAuditLog(client, {
+        staffId,
+        action: 'CHECK_IN',
+        entityType: 'visit',
+        entityId: visitId,
+        oldValue: {},
+        newValue: {
+          visit_id: visitId,
+          block_id: blockId,
+          resource_type: session.assigned_resource_type,
+        },
+      });
     }
 
     // Create waitlist entry if waitlist_desired_type is set
@@ -4301,24 +4484,21 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           assignedResourceNumber = l.rows[0]?.number ?? null;
         }
 
-        await client.query(
-          `INSERT INTO audit_log 
-           (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, 'WAITLIST_CREATED', 'waitlist', $2, $3, $4)`,
-          [
-            staffId,
-            waitlistId,
-            JSON.stringify({}),
-            JSON.stringify({
-              visit_id: visitId,
-              checkin_block_id: blockId,
-              desired_tier: session.waitlist_desired_type,
-              backup_tier: session.backup_rental_type,
-              initial_resource_id: session.assigned_resource_id,
-              initial_resource_number: assignedResourceNumber,
-            }),
-          ]
-        );
+        await insertAuditLog(client, {
+          staffId,
+          action: 'WAITLIST_CREATED',
+          entityType: 'waitlist',
+          entityId: waitlistId,
+          oldValue: {},
+          newValue: {
+            visit_id: visitId,
+            checkin_block_id: blockId,
+            desired_tier: session.waitlist_desired_type,
+            backup_tier: session.backup_rental_type,
+            initial_resource_id: session.assigned_resource_id,
+            initial_resource_number: assignedResourceNumber,
+          },
+        });
       }
 
       // Broadcast waitlist update

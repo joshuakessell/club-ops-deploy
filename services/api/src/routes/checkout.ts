@@ -13,6 +13,7 @@ import type {
 } from '@club-ops/shared';
 import { RoomStatus } from '@club-ops/shared';
 import { buildSystemLateFeeNote } from '../utils/lateFeeNotes.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -530,17 +531,14 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
 
             const auditStaffId = looksLikeUuid(staffId) ? staffId : null;
             for (const wl of waitlistResult.rows) {
-              await client.query(
-                `INSERT INTO audit_log
-                 (staff_id, action, entity_type, entity_id, old_value, new_value)
-                 VALUES ($1, 'WAITLIST_CANCELLED', 'waitlist', $2, $3, $4)`,
-                [
-                  auditStaffId,
-                  wl.id,
-                  JSON.stringify({ status: wl.status }),
-                  JSON.stringify({ status: 'CANCELLED', reason: 'CHECKED_OUT' }),
-                ]
-              );
+              await insertAuditLog(client, {
+                staffId: auditStaffId,
+                action: 'WAITLIST_CANCELLED',
+                entityType: 'waitlist',
+                entityId: wl.id,
+                oldValue: { status: wl.status },
+                newValue: { status: 'CANCELLED', reason: 'CHECKED_OUT' },
+              });
             }
           }
 
@@ -1460,17 +1458,14 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
 
             const auditStaffId = looksLikeUuid(staffId) ? staffId : null;
             for (const row of waitlistResult.rows) {
-              await client.query(
-                `INSERT INTO audit_log
-                 (staff_id, action, entity_type, entity_id, old_value, new_value)
-                 VALUES ($1, 'WAITLIST_CANCELLED', 'waitlist', $2, $3, $4)`,
-                [
-                  auditStaffId,
-                  row.id,
-                  JSON.stringify({ status: row.status }),
-                  JSON.stringify({ status: 'CANCELLED', reason: 'CHECKED_OUT' }),
-                ]
-              );
+              await insertAuditLog(client, {
+                staffId: auditStaffId,
+                action: 'WAITLIST_CANCELLED',
+                entityType: 'waitlist',
+                entityId: row.id,
+                oldValue: { status: row.status },
+                newValue: { status: 'CANCELLED', reason: 'CHECKED_OUT' },
+              });
             }
           }
 

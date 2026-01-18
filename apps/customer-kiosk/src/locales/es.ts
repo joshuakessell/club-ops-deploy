@@ -90,15 +90,15 @@ export const es: Record<keyof typeof en, string> = {
   'membership.pending': 'En proceso',
   'membership.modal.title': 'Membresía',
   'membership.modal.body.purchase':
-    'Ahorra en la cuota diaria comprando 6 meses por $43.',
+    'Pregunta al empleado el precio actual de la membresía de 6 meses.',
   'membership.modal.body.renew':
-    'Ahorra en la cuota diaria renovando 6 meses por $43.',
+    'Pregunta al empleado el precio actual de la renovación de 6 meses.',
   'common.continue': 'Continuar',
 
   // Purchase cards (Selection)
   'membership.pleaseSelectOne': 'Elige una',
-  'membership.oneTimeOption': 'Membresía por día - {price}',
-  'membership.sixMonthOption': 'Membresía 6 meses - {price}',
+  'membership.oneTimeOption': 'Membresía por día',
+  'membership.sixMonthOption': 'Membresía 6 meses',
   'membership.thankYouMember': 'Gracias por ser miembro.',
   'membership.expiresOn': 'Vence el {date}.',
   'rental.title': 'Renta',
@@ -162,9 +162,9 @@ export const es: Record<keyof typeof en, string> = {
   'renewal.bullet.approachingMax':
     '⚠️ Se está acercando al máximo de 14 horas de estadía para una sola visita.',
   'renewal.bullet.finalExtension':
-    'Al final de esta renovación de 6 horas, puede extender una última vez por 2 horas adicionales por una tarifa fija de $20 (igual para casilleros o cualquier tipo de habitación).',
+    'Al final de esta renovación de 6 horas, puede extender una última vez por 2 horas adicionales (aplica tarifa).',
   'renewal.bullet.feeNotChargedNow':
-    'La tarifa de $20 no se cobra ahora; solo aplica si elige la extensión final de 2 horas más adelante.',
+    'La tarifa no se cobra ahora; solo aplica si elige la extensión final de 2 horas más adelante.',
 
   // Errors
   'error.loadAgreement': 'No se pudo cargar el acuerdo. Intenta de nuevo.',

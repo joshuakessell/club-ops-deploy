@@ -5,6 +5,7 @@ import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding.js';
 import { computeInventoryAvailable } from '../inventory/available.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 /**
  * Schema for creating a new session.
@@ -269,21 +270,17 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
 
           // 6. Log the check-in to audit log
           const newSession = sessionResult.rows[0]!;
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, new_value)
-           VALUES ($1, $2, $3, $4, $5)`,
-            [
-              null, // TODO: Use actual staff ID from auth when available
-              'CHECK_IN',
-              'session',
-              newSession.id,
-              JSON.stringify({
-                customerId: body.customerId,
-                roomId: assignedRoomId,
-                lockerId: assignedLockerId,
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: null, // TODO: Use actual staff ID from auth when available
+            action: 'CHECK_IN',
+            entityType: 'session',
+            entityId: newSession.id,
+            newValue: {
+              customerId: body.customerId,
+              roomId: assignedRoomId,
+              lockerId: assignedLockerId,
+            },
+          });
 
           return newSession;
         });

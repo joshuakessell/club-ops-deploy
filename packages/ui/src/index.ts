@@ -16,3 +16,5 @@ export * from './components/LiquidGlassPinInput';
 export * from './telemetry/installTelemetry';
 export * from './telemetry/TelemetryErrorBoundary';
 export * from './telemetry/types';
+
+export * from './webauthn/client';

@@ -1,8 +1,13 @@
 /**
- * WebAuthn client utilities for passkey authentication.
+ * Canonical WebAuthn client utilities (passkeys).
+ *
+ * Shared across apps to ensure consistent:
+ * - base64url <-> ArrayBuffer conversions
+ * - request/verify payload shapes
+ * - error handling patterns
  */
 
-const API_BASE = '/api';
+const DEFAULT_API_BASE = '/api';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -47,14 +52,35 @@ export interface AuthenticationOptions {
   userVerification: UserVerificationRequirement;
 }
 
-/**
- * Request registration options from the server.
- */
+export type RegistrationCredentialJSON = ReturnType<typeof credentialToJSON>;
+export type AuthenticationCredentialJSON = ReturnType<typeof authenticationCredentialToJSON>;
+
+export type VerifyAuthenticationResult = {
+  verified: boolean;
+  staffId: string;
+  name: string;
+  role: string;
+  sessionToken: string;
+};
+
+export type VerifyRegistrationResult = { verified: boolean; credentialId: string };
+
+export function isWebAuthnSupported(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    typeof navigator.credentials !== 'undefined' &&
+    typeof navigator.credentials.create !== 'undefined' &&
+    typeof navigator.credentials.get !== 'undefined'
+  );
+}
+
 export async function requestRegistrationOptions(
   staffId: string,
-  deviceId: string
+  deviceId: string,
+  apiBase: string = DEFAULT_API_BASE
 ): Promise<RegistrationOptions> {
-  const response = await fetch(`${API_BASE}/v1/auth/webauthn/registration/options`, {
+  const response = await fetch(`${apiBase}/v1/auth/webauthn/registration/options`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ staffId, deviceId }),
@@ -69,29 +95,34 @@ export async function requestRegistrationOptions(
   return data as RegistrationOptions;
 }
 
-/**
- * Create a credential using WebAuthn API.
- */
+export async function requestAuthenticationOptions(
+  staffLookup: string,
+  deviceId: string,
+  apiBase: string = DEFAULT_API_BASE
+): Promise<AuthenticationOptions> {
+  const response = await fetch(`${apiBase}/v1/auth/webauthn/authentication/options`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ staffLookup, deviceId }),
+  });
+
+  if (!response.ok) {
+    const errorPayload: unknown = await response.json().catch(() => null);
+    throw new Error(getErrorMessage(errorPayload) || 'Failed to get authentication options');
+  }
+
+  const data: unknown = await response.json();
+  return data as AuthenticationOptions;
+}
+
 export async function createCredential(options: RegistrationOptions): Promise<PublicKeyCredential> {
-  // Convert base64url challenge to ArrayBuffer
-  const challengeBuffer = Uint8Array.from(
-    atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')),
-    (c) => c.charCodeAt(0)
-  );
+  const challengeBuffer = base64UrlToUint8Array(options.challenge);
+  const userIdBuffer = base64UrlToUint8Array(options.user.id);
 
-  // Convert user ID to ArrayBuffer
-  const userIdBuffer = Uint8Array.from(
-    atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')),
-    (c) => c.charCodeAt(0)
-  );
-
-  // Convert excludeCredentials IDs if present
   const excludeCredentials: PublicKeyCredentialDescriptor[] | undefined =
     options.excludeCredentials?.map((cred) => ({
       ...cred,
-      id: Uint8Array.from(atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
-        c.charCodeAt(0)
-      ),
+      id: base64UrlToUint8Array(cred.id),
     }));
 
   const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
@@ -120,70 +151,12 @@ export async function createCredential(options: RegistrationOptions): Promise<Pu
   return credential;
 }
 
-/**
- * Convert credential to JSON format for sending to server.
- */
-export function credentialToJSON(credential: PublicKeyCredential): {
-  id: string;
-  rawId: string;
-  response: {
-    clientDataJSON: string;
-    attestationObject: string;
-  };
-  type: string;
-} {
-  const response = credential.response as AuthenticatorAttestationResponse;
-
-  return {
-    id: credential.id,
-    rawId: arrayBufferToBase64URL(credential.rawId),
-    response: {
-      clientDataJSON: arrayBufferToBase64URL(response.clientDataJSON),
-      attestationObject: arrayBufferToBase64URL(response.attestationObject),
-    },
-    type: credential.type,
-  };
-}
-
-/**
- * Request authentication options from the server.
- */
-export async function requestAuthenticationOptions(
-  staffLookup: string,
-  deviceId: string
-): Promise<AuthenticationOptions> {
-  const response = await fetch(`${API_BASE}/v1/auth/webauthn/authentication/options`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ staffLookup, deviceId }),
-  });
-
-  if (!response.ok) {
-    const errorPayload: unknown = await response.json().catch(() => null);
-    throw new Error(getErrorMessage(errorPayload) || 'Failed to get authentication options');
-  }
-
-  const data: unknown = await response.json();
-  return data as AuthenticationOptions;
-}
-
-/**
- * Get a credential using WebAuthn API.
- */
 export async function getCredential(options: AuthenticationOptions): Promise<PublicKeyCredential> {
-  // Convert base64url challenge to ArrayBuffer
-  const challengeBuffer = Uint8Array.from(
-    atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')),
-    (c) => c.charCodeAt(0)
-  );
-
-  // Convert allowCredentials IDs if present
+  const challengeBuffer = base64UrlToUint8Array(options.challenge);
   const allowCredentials: PublicKeyCredentialDescriptor[] | undefined =
     options.allowCredentials?.map((cred) => ({
       ...cred,
-      id: Uint8Array.from(atob(cred.id.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
-        c.charCodeAt(0)
-      ),
+      id: base64UrlToUint8Array(cred.id),
     }));
 
   const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
@@ -205,9 +178,27 @@ export async function getCredential(options: AuthenticationOptions): Promise<Pub
   return credential;
 }
 
-/**
- * Convert authentication credential to JSON format for sending to server.
- */
+export function credentialToJSON(credential: PublicKeyCredential): {
+  id: string;
+  rawId: string;
+  response: {
+    clientDataJSON: string;
+    attestationObject: string;
+  };
+  type: string;
+} {
+  const response = credential.response as AuthenticatorAttestationResponse;
+  return {
+    id: credential.id,
+    rawId: arrayBufferToBase64URL(credential.rawId),
+    response: {
+      clientDataJSON: arrayBufferToBase64URL(response.clientDataJSON),
+      attestationObject: arrayBufferToBase64URL(response.attestationObject),
+    },
+    type: credential.type,
+  };
+}
+
 export function authenticationCredentialToJSON(credential: PublicKeyCredential): {
   id: string;
   rawId: string;
@@ -220,7 +211,6 @@ export function authenticationCredentialToJSON(credential: PublicKeyCredential):
   type: string;
 } {
   const response = credential.response as AuthenticatorAssertionResponse;
-
   return {
     id: credential.id,
     rawId: arrayBufferToBase64URL(credential.rawId),
@@ -234,15 +224,13 @@ export function authenticationCredentialToJSON(credential: PublicKeyCredential):
   };
 }
 
-/**
- * Verify registration with the server.
- */
 export async function verifyRegistration(
   staffId: string,
   deviceId: string,
-  credentialResponse: ReturnType<typeof credentialToJSON>
-): Promise<{ verified: boolean; credentialId: string }> {
-  const response = await fetch(`${API_BASE}/v1/auth/webauthn/registration/verify`, {
+  credentialResponse: RegistrationCredentialJSON,
+  apiBase: string = DEFAULT_API_BASE
+): Promise<VerifyRegistrationResult> {
+  const response = await fetch(`${apiBase}/v1/auth/webauthn/registration/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ staffId, deviceId, credentialResponse }),
@@ -254,23 +242,15 @@ export async function verifyRegistration(
   }
 
   const data: unknown = await response.json();
-  return data as { verified: boolean; credentialId: string };
+  return data as VerifyRegistrationResult;
 }
 
-/**
- * Verify authentication with the server.
- */
 export async function verifyAuthentication(
   deviceId: string,
-  credentialResponse: ReturnType<typeof authenticationCredentialToJSON>
-): Promise<{
-  verified: boolean;
-  staffId: string;
-  name: string;
-  role: string;
-  sessionToken: string;
-}> {
-  const response = await fetch(`${API_BASE}/v1/auth/webauthn/authentication/verify`, {
+  credentialResponse: AuthenticationCredentialJSON,
+  apiBase: string = DEFAULT_API_BASE
+): Promise<VerifyAuthenticationResult> {
+  const response = await fetch(`${apiBase}/v1/auth/webauthn/authentication/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deviceId, credentialResponse }),
@@ -282,31 +262,67 @@ export async function verifyAuthentication(
   }
 
   const data: unknown = await response.json();
-  return data as {
-    verified: boolean;
-    staffId: string;
-    name: string;
-    role: string;
-    sessionToken: string;
-  };
+  return data as VerifyAuthenticationResult;
 }
 
-/**
- * Check if WebAuthn is supported in this browser.
- */
-export function isWebAuthnSupported(): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof navigator !== 'undefined' &&
-    typeof navigator.credentials !== 'undefined' &&
-    typeof navigator.credentials.create !== 'undefined' &&
-    typeof navigator.credentials.get !== 'undefined'
-  );
+export async function requestReauthAuthenticationOptions(
+  sessionToken: string,
+  deviceId: string,
+  apiBase: string = DEFAULT_API_BASE
+): Promise<AuthenticationOptions> {
+  const response = await fetch(`${apiBase}/v1/auth/reauth/webauthn/options`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${sessionToken}`,
+      'x-device-id': deviceId,
+    },
+  });
+
+  if (!response.ok) {
+    const errorPayload: unknown = await response.json().catch(() => null);
+    throw new Error(getErrorMessage(errorPayload) || 'Failed to get WebAuthn options');
+  }
+
+  const data: unknown = await response.json();
+  return data as AuthenticationOptions;
 }
 
-/**
- * Helper to convert ArrayBuffer to base64url string.
- */
+export async function verifyReauthAuthentication(
+  sessionToken: string,
+  deviceId: string,
+  credentialResponse: AuthenticationCredentialJSON,
+  apiBase: string = DEFAULT_API_BASE
+): Promise<{ success: boolean; reauthOkUntil: string }> {
+  const response = await fetch(`${apiBase}/v1/auth/reauth/webauthn/verify`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${sessionToken}`,
+    },
+    body: JSON.stringify({
+      credentialResponse,
+      deviceId,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorPayload: unknown = await response.json().catch(() => null);
+    throw new Error(getErrorMessage(errorPayload) || 'WebAuthn verification failed');
+  }
+
+  const data: unknown = await response.json();
+  return data as { success: boolean; reauthOkUntil: string };
+}
+
+function base64UrlToUint8Array(base64url: string): Uint8Array {
+  const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 function arrayBufferToBase64URL(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
@@ -315,3 +331,4 @@ function arrayBufferToBase64URL(buffer: ArrayBuffer): string {
   }
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
+

@@ -16,6 +16,8 @@ import {
   type SelectionLockedPayload,
   type SelectionAcknowledgedPayload,
   type SelectionForcedPayload,
+  type UpgradeHoldAvailablePayload,
+  type UpgradeOfferExpiredPayload,
   getCustomerMembershipStatus,
 } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
@@ -51,6 +53,10 @@ import {
 } from '../components/register/modals/MultipleMatchesModal';
 import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclineToast';
 import { SuccessToast } from '../components/register/toasts/SuccessToast';
+import {
+  BottomToastStack,
+  type BottomToast,
+} from '../components/register/toasts/BottomToastStack';
 import { ManualCheckoutPanel } from '../components/register/panels/ManualCheckoutPanel';
 import { RoomCleaningPanel } from '../components/register/panels/RoomCleaningPanel';
 import { CustomerDetailsCard } from '../components/register/CustomerDetailsCard';
@@ -220,6 +226,26 @@ export function AppRoot() {
   const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null);
   const successToastTimerRef = useRef<number | null>(null);
 
+  const [bottomToasts, setBottomToasts] = useState<BottomToast[]>([]);
+  const bottomToastTimersRef = useRef<Record<string, number>>({});
+
+  const dismissBottomToast = useCallback((id: string) => {
+    const timer = bottomToastTimersRef.current[id];
+    if (timer) window.clearTimeout(timer);
+    delete bottomToastTimersRef.current[id];
+    setBottomToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const pushBottomToast = useCallback(
+    (toast: Omit<BottomToast, 'id'> & { id?: string }, ttlMs = 12_000) => {
+      const id = toast.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      setBottomToasts((prev) => [{ id, message: toast.message, tone: toast.tone }, ...prev].slice(0, 4));
+      if (bottomToastTimersRef.current[id]) window.clearTimeout(bottomToastTimersRef.current[id]);
+      bottomToastTimersRef.current[id] = window.setTimeout(() => dismissBottomToast(id), ttlMs);
+    },
+    [dismissBottomToast]
+  );
+
   const [inventoryRefreshNonce, setInventoryRefreshNonce] = useState(0);
   const [checkoutPrefill, setCheckoutPrefill] = useState<null | { occupancyId?: string; number?: string }>(null);
   const [checkoutEntryMode, setCheckoutEntryMode] = useState<'default' | 'direct-confirm'>('default');
@@ -248,6 +274,16 @@ export function AppRoot() {
       if (successToastTimerRef.current) window.clearTimeout(successToastTimerRef.current);
     };
   }, [successToastMessage]);
+
+  useEffect(() => {
+    return () => {
+      for (const id of Object.keys(bottomToastTimersRef.current)) {
+        const timer = bottomToastTimersRef.current[id];
+        if (timer) window.clearTimeout(timer);
+      }
+      bottomToastTimersRef.current = {};
+    };
+  }, []);
 
   const selectHomeTab = useCallback(
     (next: HomeTab) => {
@@ -471,6 +507,7 @@ export function AppRoot() {
     waitlistId: string;
     desiredTier: 'STANDARD' | 'DOUBLE' | 'SPECIAL';
     customerLabel?: string;
+    heldRoom?: { id: string; number: string } | null;
   } | null>(null);
   const [inventoryHasLate, setInventoryHasLate] = useState(false);
 
@@ -1789,6 +1826,10 @@ export function AppRoot() {
       waitlistId: entry.id,
       desiredTier: entry.desiredTier,
       customerLabel: entry.customerName || entry.displayIdentifier,
+      heldRoom:
+        entry.status === 'OFFERED' && entry.roomId && entry.offeredRoomNumber
+          ? { id: entry.roomId, number: entry.offeredRoomNumber }
+          : null,
     });
   };
 
@@ -2165,6 +2206,22 @@ export function AppRoot() {
           }
         } else if (message.type === 'WAITLIST_UPDATED') {
           // Refresh waitlist when updated
+          void fetchWaitlistRef.current?.();
+          void fetchInventoryAvailableRef.current?.();
+        } else if (message.type === 'UPGRADE_HOLD_AVAILABLE') {
+          const payload = message.payload as UpgradeHoldAvailablePayload;
+          pushBottomToast({
+            message: `Room ${payload.roomNumber} available for ${payload.customerName}'s ${payload.desiredTier} upgrade.`,
+            tone: 'warning',
+          });
+          void fetchWaitlistRef.current?.();
+          void fetchInventoryAvailableRef.current?.();
+        } else if (message.type === 'UPGRADE_OFFER_EXPIRED') {
+          const payload = message.payload as UpgradeOfferExpiredPayload;
+          pushBottomToast({
+            message: `Upgrade offer expired for ${payload.customerName}.`,
+            tone: 'warning',
+          });
           void fetchWaitlistRef.current?.();
           void fetchInventoryAvailableRef.current?.();
         } else if (message.type === 'SELECTION_PROPOSED') {
@@ -3559,6 +3616,7 @@ export function AppRoot() {
               waitlistId={offerUpgradeModal.waitlistId}
               desiredTier={offerUpgradeModal.desiredTier}
               customerLabel={offerUpgradeModal.customerLabel}
+              heldRoom={offerUpgradeModal.heldRoom ?? null}
               onOffered={() => {
                 void fetchWaitlistRef.current?.();
                 void fetchInventoryAvailableRef.current?.();
@@ -3923,6 +3981,7 @@ export function AppRoot() {
 
           <SuccessToast message={successToastMessage} onDismiss={() => setSuccessToastMessage(null)} />
           <PaymentDeclineToast message={paymentDeclineError} onDismiss={() => setPaymentDeclineError(null)} />
+          <BottomToastStack toasts={bottomToasts} onDismiss={dismissBottomToast} />
           {scanToastMessage && (
             <div
               style={{

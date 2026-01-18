@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { verifyPin, generateSessionToken, getSessionExpiry } from '../auth/utils.js';
 import { requireAuth } from '../auth/middleware.js';
+import { insertAuditLog, insertAuditLogQuery } from '../audit/auditLog.js';
 
 /**
  * Schema for PIN login request.
@@ -130,11 +131,12 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         const sessionId = sessionResult.rows[0]!.id;
 
         // Log audit action (use session UUID id, not the token string)
-        await client.query(
-          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'STAFF_LOGIN_PIN', 'staff_session', $2)`,
-          [staff.id, sessionId]
-        );
+        await insertAuditLog(client, {
+          staffId: staff.id,
+          action: 'STAFF_LOGIN_PIN',
+          entityType: 'staff_session',
+          entityId: sessionId,
+        });
 
         // Create or update timeclock session for office dashboard sign-in
         // Only if employee is not already signed into a register
@@ -294,11 +296,12 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Log audit action (use session UUID id, not the token string)
-          await query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'STAFF_LOGOUT', 'staff_session', $2)`,
-            [staffId, sessionId]
-          );
+          await insertAuditLogQuery(query, {
+            staffId,
+            action: 'STAFF_LOGOUT',
+            entityType: 'staff_session',
+            entityId: sessionId,
+          });
 
           // Close timeclock session if employee is no longer signed into any register or cleaning station
           const otherRegisterSession = await query<{ count: string }>(
@@ -455,11 +458,12 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         );
 
         // Log audit action (use session UUID id, not the token string)
-        await query(
-          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-         VALUES ($1, 'STAFF_REAUTH_PIN', 'staff_session', $2)`,
-          [request.staff.staffId, sessionId]
-        );
+        await insertAuditLogQuery(query, {
+          staffId: request.staff.staffId,
+          action: 'STAFF_REAUTH_PIN',
+          entityType: 'staff_session',
+          entityId: sessionId,
+        });
 
         return reply.send({
           success: true,
@@ -666,11 +670,12 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         );
 
         // Log audit action (use session UUID id, not the token string)
-        await query(
-          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-         VALUES ($1, 'STAFF_REAUTH_WEBAUTHN', 'staff_session', $2)`,
-          [request.staff.staffId, sessionId]
-        );
+        await insertAuditLogQuery(query, {
+          staffId: request.staff.staffId,
+          action: 'STAFF_REAUTH_WEBAUTHN',
+          entityType: 'staff_session',
+          entityId: sessionId,
+        });
 
         return reply.send({
           success: true,

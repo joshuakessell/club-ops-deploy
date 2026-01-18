@@ -279,6 +279,72 @@ describe('Check-in Flow', () => {
     );
   });
 
+  describe('POST /v1/checkin/lane/:laneId/customer-confirm', () => {
+    it(
+      'should unassign the selected resource when customer declines (regression for assigned_to column mismatch)',
+      runIfDbAvailable(async () => {
+        // Create a clean room and assign it to the customer to simulate a pending cross-type assignment.
+        const roomResult = await query<{ id: string }>(
+          `INSERT INTO rooms (number, type, status, floor, assigned_to_customer_id)
+           VALUES ('104', 'STANDARD', 'CLEAN', 1, $1)
+           RETURNING id`,
+          [customerId]
+        );
+        const roomId = roomResult.rows[0]!.id;
+
+        // Start a lane session (authenticated) and then mark it as having a selected resource.
+        const startRes = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
+          payload: {
+            membershipScanValue: '12345',
+          },
+        });
+        expect(startRes.statusCode).toBe(200);
+        const startJson = JSON.parse(startRes.body) as { sessionId: string };
+
+        await query(
+          `UPDATE lane_sessions
+           SET desired_rental_type = 'LOCKER',
+               assigned_resource_type = 'room',
+               assigned_resource_id = $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [roomId, startJson.sessionId]
+        );
+
+        // Customer declines.
+        const declineRes = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/customer-confirm`,
+          payload: {
+            sessionId: startJson.sessionId,
+            confirmed: false,
+          },
+        });
+
+        expect(declineRes.statusCode).toBe(200);
+
+        // Resource should be unassigned using the canonical DB column name assigned_to_customer_id.
+        const roomAfter = await query<{ assigned_to_customer_id: string | null }>(
+          `SELECT assigned_to_customer_id FROM rooms WHERE id = $1`,
+          [roomId]
+        );
+        expect(roomAfter.rows[0]!.assigned_to_customer_id).toBeNull();
+
+        const sessionAfter = await query<{ assigned_resource_id: string | null; assigned_resource_type: string | null }>(
+          `SELECT assigned_resource_id, assigned_resource_type FROM lane_sessions WHERE id = $1`,
+          [startJson.sessionId]
+        );
+        expect(sessionAfter.rows[0]!.assigned_resource_id).toBeNull();
+        expect(sessionAfter.rows[0]!.assigned_resource_type).toBeNull();
+      })
+    );
+  });
+
   describe('POST /v1/checkin/lane/:laneId/select-rental', () => {
     it(
       'should update session with rental selection',

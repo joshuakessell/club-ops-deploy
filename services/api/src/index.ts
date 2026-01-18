@@ -36,6 +36,7 @@ import { cleanupAbandonedRegisterSessions } from './routes/registers.js';
 import { seedDemoData } from './db/seed-demo.js';
 import type { WebSocketEventType } from '@club-ops/shared';
 import { expireWaitlistEntries } from './waitlist/expireWaitlist.js';
+import { processUpgradeHoldsTick } from './waitlist/upgradeHolds.js';
 import { setupTelemetry } from './telemetry/plugin.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -56,6 +57,8 @@ function isWebSocketEventType(value: unknown): value is WebSocketEventType {
     case 'SELECTION_LOCKED':
     case 'SELECTION_ACKNOWLEDGED':
     case 'WAITLIST_CREATED':
+    case 'UPGRADE_HOLD_AVAILABLE':
+    case 'UPGRADE_OFFER_EXPIRED':
     case 'ASSIGNMENT_CREATED':
     case 'ASSIGNMENT_FAILED':
     case 'CUSTOMER_CONFIRMATION_REQUIRED':
@@ -139,6 +142,20 @@ async function main() {
       }
     })();
   }, 60000);
+
+  // Periodic upgrade hold/offer processing (every 5 seconds)
+  const upgradeHoldInterval = setInterval(() => {
+    void (async () => {
+      try {
+        const { expired, held } = await processUpgradeHoldsTick(fastify);
+        if (expired > 0 || held > 0) {
+          fastify.log.info({ expired, held }, 'Processed upgrade holds');
+        }
+      } catch (error) {
+        fastify.log.error(error, 'Error during upgrade hold processing');
+      }
+    })();
+  }, 5000);
 
   // Initialize database connection (unless skipped for testing)
   if (!SKIP_DB) {
@@ -264,6 +281,7 @@ async function main() {
     fastify.log.info('Shutting down...');
     clearInterval(cleanupInterval);
     clearInterval(waitlistExpiryInterval);
+    clearInterval(upgradeHoldInterval);
     await fastify.close();
     if (!SKIP_DB) {
       await closeDatabase();

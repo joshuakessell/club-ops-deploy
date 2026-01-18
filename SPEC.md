@@ -155,6 +155,46 @@ When customer selects an unavailable rental type:
    - Links to visit and checkin_block
    - Status: ACTIVE until upgrade is offered
 
+### Upgrade Holds + Offers (Timed, Rotating)
+
+When a room becomes available (status CLEAN, unassigned) and there is at least one eligible waitlist entry for that room tier:
+
+1. **Immediate hold (server-authoritative)**:
+   - The server immediately holds that specific room for a waitlist upgrade **for at least 15 minutes**.
+   - The hold is associated with exactly one waitlist entry (the “current candidate” for that tier).
+   - This hold makes the room unavailable for new lane check-ins while the hold is active.
+
+2. **Fair rotation without changing queue position**:
+   - If an offer/hold expires for a customer, that customer **stays on the waitlist in place** (policy C).
+   - To prevent immediate re-offer loops while preserving the queue order, the server selects the next candidate for a tier by:
+     - oldest `last_offered_at` first (null treated as oldest), then
+     - `created_at` ascending as a stable tie-breaker.
+
+3. **Employee “Offer Upgrade” action extends TTL**:
+   - When an employee offers the upgrade for the currently held room, the room remains reserved for:
+     - **10 minutes from now**, or
+     - the **remainder of the initial 15-minute hold**,
+     - whichever is longer.
+   - Implemented as `offer_expires_at = max(current_offer_expires_at, now + 10 minutes)`.
+
+4. **Expiry behavior**:
+   - When `offer_expires_at` is reached and the upgrade was not completed, the server:
+     - releases the room from that waitlist entry, and
+     - immediately attempts to hold it for the next eligible waitlist entry for that tier (repeat) until:
+       - there are no eligible waitlist entries remaining, at which point the room returns to the general pool.
+
+5. **Employee-register toast notifications (all registers)**:
+   - When a room becomes held for an upgrade, all employee-registers show a bottom toast:
+     - “Room {roomNumber} is available for {customerName}'s {tier} upgrade (expires {time}).”
+   - When a held/offer expires, all employee-registers show a bottom toast:
+     - “Upgrade offer expired for {customerName}.”
+
+6. **WebSocket events**:
+   - Add:
+     - `UPGRADE_HOLD_AVAILABLE` (toast + UI refresh)
+     - `UPGRADE_OFFER_EXPIRED` (toast + UI refresh)
+   - Existing `WAITLIST_UPDATED` continues to be emitted for list refresh.
+
 ### Agreement Signing
 
 1. **Requirement**: Agreement signature is required **only for INITIAL and RENEWAL checkin_blocks**

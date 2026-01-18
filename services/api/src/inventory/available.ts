@@ -40,13 +40,46 @@ export async function computeInventoryAvailable(queryFn: QueryFn): Promise<Inven
      FROM rooms
      WHERE status = 'CLEAN'
        AND assigned_to_customer_id IS NULL
-       AND type != 'LOCKER'`
+       AND type != 'LOCKER'
+       -- Exclude resources "selected" by an active lane session (reservation semantics).
+       AND NOT EXISTS (
+         SELECT 1
+         FROM lane_sessions ls
+         WHERE ls.assigned_resource_type = 'room'
+           AND ls.assigned_resource_id = rooms.id
+           AND ls.status = ANY (
+             ARRAY[
+               'ACTIVE'::public.lane_session_status,
+               'AWAITING_CUSTOMER'::public.lane_session_status,
+               'AWAITING_ASSIGNMENT'::public.lane_session_status,
+               'AWAITING_PAYMENT'::public.lane_session_status,
+               'AWAITING_SIGNATURE'::public.lane_session_status
+             ]
+           )
+       )`
   );
 
   const lockerResult = await queryFn<{ count: string }>(
     `SELECT COUNT(*) as count
      FROM lockers
-     WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL`
+     WHERE status = 'CLEAN'
+       AND assigned_to_customer_id IS NULL
+       -- Exclude resources "selected" by an active lane session (reservation semantics).
+       AND NOT EXISTS (
+         SELECT 1
+         FROM lane_sessions ls
+         WHERE ls.assigned_resource_type = 'locker'
+           AND ls.assigned_resource_id = lockers.id
+           AND ls.status = ANY (
+             ARRAY[
+               'ACTIVE'::public.lane_session_status,
+               'AWAITING_CUSTOMER'::public.lane_session_status,
+               'AWAITING_ASSIGNMENT'::public.lane_session_status,
+               'AWAITING_PAYMENT'::public.lane_session_status,
+               'AWAITING_SIGNATURE'::public.lane_session_status
+             ]
+           )
+       )`
   );
 
   const rawRooms: Record<RoomTier, number> = {

@@ -235,6 +235,26 @@ CREATE TYPE public.waitlist_status AS ENUM (
 );
 
 
+--
+-- Name: inventory_resource_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.inventory_resource_type AS ENUM (
+    'room',
+    'locker'
+);
+
+
+--
+-- Name: inventory_reservation_kind; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.inventory_reservation_kind AS ENUM (
+    'LANE_SELECTION',
+    'UPGRADE_HOLD'
+);
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -830,9 +850,30 @@ CREATE TABLE public.waitlist (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     offered_at timestamp with time zone,
+    offer_expires_at timestamp with time zone,
+    last_offered_at timestamp with time zone,
+    offer_attempts integer DEFAULT 0 NOT NULL,
     completed_at timestamp with time zone,
     cancelled_at timestamp with time zone,
     cancelled_by_staff_id uuid
+);
+
+
+--
+-- Name: inventory_reservations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_reservations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    resource_type public.inventory_resource_type NOT NULL,
+    resource_id uuid NOT NULL,
+    kind public.inventory_reservation_kind NOT NULL,
+    lane_session_id uuid,
+    waitlist_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone,
+    released_at timestamp with time zone,
+    release_reason text
 );
 
 
@@ -1120,6 +1161,14 @@ ALTER TABLE ONLY public.visits
 
 ALTER TABLE ONLY public.waitlist
     ADD CONSTRAINT waitlist_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: inventory_reservations inventory_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_pkey PRIMARY KEY (id);
 
 
 --
@@ -1804,6 +1853,27 @@ CREATE INDEX idx_waitlist_status ON public.waitlist USING btree (status);
 
 
 --
+-- Name: idx_inventory_reservations_active_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_inventory_reservations_active_expires_at ON public.inventory_reservations USING btree (expires_at) WHERE (released_at IS NULL);
+
+
+--
+-- Name: idx_inventory_reservations_waitlist_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_inventory_reservations_waitlist_active ON public.inventory_reservations USING btree (waitlist_id) WHERE (released_at IS NULL);
+
+
+--
+-- Name: uniq_inventory_reservations_active_resource; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uniq_inventory_reservations_active_resource ON public.inventory_reservations USING btree (resource_type, resource_id) WHERE (released_at IS NULL);
+
+
+--
 -- Name: idx_waitlist_visit; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2183,6 +2253,38 @@ ALTER TABLE ONLY public.waitlist
 
 ALTER TABLE ONLY public.waitlist
     ADD CONSTRAINT waitlist_visit_id_fkey FOREIGN KEY (visit_id) REFERENCES public.visits(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_reservations inventory_reservations_lane_session_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_lane_session_fk FOREIGN KEY (lane_session_id) REFERENCES public.lane_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_reservations inventory_reservations_waitlist_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_waitlist_fk FOREIGN KEY (waitlist_id) REFERENCES public.waitlist(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_reservations inventory_reservations_lane_session_required; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_lane_session_required CHECK (((kind <> 'LANE_SELECTION'::public.inventory_reservation_kind) OR (lane_session_id IS NOT NULL)));
+
+
+--
+-- Name: inventory_reservations inventory_reservations_waitlist_required; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_waitlist_required CHECK (((kind <> 'UPGRADE_HOLD'::public.inventory_reservation_kind) OR (waitlist_id IS NOT NULL)));
 
 
 --

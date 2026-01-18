@@ -1,4 +1,11 @@
 import { useState, useEffect } from 'react';
+import {
+  authenticationCredentialToJSON,
+  getCredential,
+  isWebAuthnSupported,
+  requestReauthAuthenticationOptions,
+  verifyReauthAuthentication,
+} from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -19,10 +26,7 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
 
   useEffect(() => {
     // Check if WebAuthn is supported
-    const supported =
-      typeof window !== 'undefined' &&
-      typeof window.PublicKeyCredential !== 'undefined' &&
-      typeof navigator.credentials !== 'undefined';
+    const supported = isWebAuthnSupported();
     setWebauthnSupported(supported);
 
     // Try WebAuthn first if supported
@@ -45,48 +49,11 @@ export function ReAuthModal({ sessionToken, onSuccess, onCancel }: ReAuthModalPr
     setError(null);
 
     try {
-      // Get WebAuthn options
-      const optionsResponse = await fetch(`${API_BASE}/v1/auth/reauth/webauthn/options`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
-        },
-      });
-
-      if (!optionsResponse.ok) {
-        throw new Error('Failed to get WebAuthn options');
-      }
-
-      const options = await optionsResponse.json();
-
-      // Request WebAuthn authentication
-      const credential = await navigator.credentials.get({
-        publicKey: options,
-      });
-
-      if (!credential) {
-        throw new Error('WebAuthn authentication cancelled');
-      }
-
-      // Verify WebAuthn response
-      const verifyResponse = await fetch(`${API_BASE}/v1/auth/reauth/webauthn/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
-        },
-        body: JSON.stringify({
-          credentialResponse: credential,
-          deviceId: 'office-dashboard',
-        }),
-      });
-
-      if (!verifyResponse.ok) {
-        const errorData = await verifyResponse.json();
-        throw new Error(errorData.message || 'WebAuthn verification failed');
-      }
-
+      const deviceId = 'office-dashboard';
+      const options = await requestReauthAuthenticationOptions(sessionToken, deviceId, API_BASE);
+      const credential = await getCredential(options);
+      const credentialResponse = authenticationCredentialToJSON(credential);
+      await verifyReauthAuthentication(sessionToken, deviceId, credentialResponse, API_BASE);
       onSuccess();
     } catch (error) {
       console.error('WebAuthn re-auth error:', error);
