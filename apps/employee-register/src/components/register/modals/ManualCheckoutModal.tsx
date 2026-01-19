@@ -50,6 +50,15 @@ function formatLateDuration(minutesLate: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
+function formatDeltaMinutesLabel(scheduledCheckoutAt: string | Date): { label: string; color: string } {
+  const scheduled = toDate(scheduledCheckoutAt);
+  const diffMs = scheduled.getTime() - Date.now();
+  const mins = Math.max(0, Math.ceil(Math.abs(diffMs) / 60000));
+  const hmm = formatLateDuration(mins);
+  if (diffMs < 0) return { label: `Past ${hmm}`, color: '#ef4444' };
+  return { label: `In ${hmm}`, color: '#fbbf24' };
+}
+
 export function ManualCheckoutModal({
   isOpen,
   sessionToken,
@@ -63,18 +72,19 @@ export function ManualCheckoutModal({
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [candidatesError, setCandidatesError] = useState<string | null>(null);
 
-  const [selectedOccupancyId, setSelectedOccupancyId] = useState<string | null>(null);
+  const [selectedOccupancyIds, setSelectedOccupancyIds] = useState<string[]>([]);
   const [typedNumber, setTypedNumber] = useState('');
 
-  const [confirmData, setConfirmData] = useState<ResolveResponse | null>(null);
+  const [confirmQueue, setConfirmQueue] = useState<ResolveResponse[]>([]);
+  const [confirmIndex, setConfirmIndex] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCancelWarning, setShowCancelWarning] = useState(false);
   const [autoContinue, setAutoContinue] = useState(false);
 
   const canContinue = useMemo(() => {
-    if (selectedOccupancyId) return true;
+    if (selectedOccupancyIds.length > 0) return true;
     return typedNumber.trim().length > 0;
-  }, [selectedOccupancyId, typedNumber]);
+  }, [selectedOccupancyIds.length, typedNumber]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -84,9 +94,10 @@ export function ManualCheckoutModal({
     setCandidatesError(null);
     const initialOccupancyId = prefill?.occupancyId ?? null;
     const initialNumber = prefill?.number ?? '';
-    setSelectedOccupancyId(initialOccupancyId);
+    setSelectedOccupancyIds(initialOccupancyId ? [initialOccupancyId] : []);
     setTypedNumber(initialOccupancyId ? '' : initialNumber);
-    setConfirmData(null);
+    setConfirmQueue([]);
+    setConfirmIndex(0);
     setIsSubmitting(false);
     setShowCancelWarning(false);
     setAutoContinue(entryMode === 'direct-confirm' && Boolean(initialOccupancyId || initialNumber));
@@ -130,30 +141,41 @@ export function ManualCheckoutModal({
     if (!canContinue) return;
     setIsSubmitting(true);
     try {
-      const payload = selectedOccupancyId
-        ? { occupancyId: selectedOccupancyId }
-        : { number: typedNumber.trim() };
-      const res = await fetch('/api/v1/checkout/manual-resolve', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('Failed to resolve checkout');
-      const data = (await res.json()) as ResolveResponse;
-      setConfirmData(data);
+      const resolveOne = async (payload: { occupancyId?: string; number?: string }) => {
+        const res = await fetch('/api/v1/checkout/manual-resolve', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('Failed to resolve checkout');
+        return (await res.json()) as ResolveResponse;
+      };
+
+      const queue: ResolveResponse[] = [];
+      if (selectedOccupancyIds.length > 0) {
+        for (const occupancyId of selectedOccupancyIds) {
+          queue.push(await resolveOne({ occupancyId }));
+        }
+      } else {
+        queue.push(await resolveOne({ number: typedNumber.trim() }));
+      }
+
+      setConfirmQueue(queue);
+      setConfirmIndex(0);
       setStep('confirm');
     } catch (e) {
       setCandidatesError(e instanceof Error ? e.message : 'Failed to resolve checkout');
     } finally {
       setIsSubmitting(false);
     }
-  }, [canContinue, selectedOccupancyId, sessionToken, typedNumber]);
+  }, [canContinue, selectedOccupancyIds, sessionToken, typedNumber]);
 
   const handleConfirm = useCallback(async () => {
-    if (!confirmData) return;
+    const current = confirmQueue[confirmIndex];
+    if (!current) return;
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/v1/checkout/manual-complete', {
@@ -162,18 +184,24 @@ export function ManualCheckoutModal({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${sessionToken}`,
         },
-        body: JSON.stringify({ occupancyId: confirmData.occupancyId }),
+        body: JSON.stringify({ occupancyId: current.occupancyId }),
       });
       if (!res.ok) throw new Error('Failed to complete checkout');
       const data = (await res.json()) as { alreadyCheckedOut?: boolean };
+      const total = confirmQueue.length || 1;
+      const nextIndex = confirmIndex + 1;
+      if (nextIndex < total) {
+        setConfirmIndex(nextIndex);
+        return;
+      }
       onClose();
-      onSuccess(data.alreadyCheckedOut ? 'Already checked out' : 'Checkout completed');
+      onSuccess(data.alreadyCheckedOut ? 'Already checked out' : total > 1 ? `Checkout completed (${total})` : 'Checkout completed');
     } catch (e) {
       setCandidatesError(e instanceof Error ? e.message : 'Failed to complete checkout');
     } finally {
       setIsSubmitting(false);
     }
-  }, [confirmData, onClose, onSuccess, sessionToken]);
+  }, [confirmIndex, confirmQueue, onClose, onSuccess, sessionToken]);
 
   // If this modal is opened as a "direct confirm" action (e.g. from Inventory occupancy details),
   // automatically resolve and land on the confirm step.
@@ -221,9 +249,9 @@ export function ManualCheckoutModal({
                       className="cs-liquid-input cs-liquid-search__input"
                       placeholder="Type room/locker number…"
                       value={typedNumber}
-                      onFocus={() => setSelectedOccupancyId(null)}
+                      onFocus={() => setSelectedOccupancyIds([])}
                       onChange={(e) => {
-                        setSelectedOccupancyId(null);
+                        setSelectedOccupancyIds([]);
                         setTypedNumber(e.target.value);
                       }}
                       aria-label="Checkout number"
@@ -267,12 +295,9 @@ export function ManualCheckoutModal({
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {candidates.map((c) => {
-                        const selected = selectedOccupancyId === c.occupancyId;
+                        const selected = selectedOccupancyIds.includes(c.occupancyId);
                         const scheduled = toDate(c.scheduledCheckoutAt);
-                        const minutesLate = Math.max(0, Math.floor((Date.now() - scheduled.getTime()) / 60000));
-                        const checkoutLabel = `Checkout: ${formatClockTime(scheduled)}${
-                          c.isOverdue ? ` (${formatLateDuration(minutesLate)} late)` : ''
-                        }`;
+                        const delta = formatDeltaMinutesLabel(scheduled);
                         return (
                           <button
                             key={c.occupancyId}
@@ -283,8 +308,11 @@ export function ManualCheckoutModal({
                             ].join(' ')}
                             aria-pressed={selected}
                             onClick={() => {
-                              setSelectedOccupancyId(c.occupancyId);
                               setTypedNumber('');
+                              setSelectedOccupancyIds((prev) => {
+                                if (prev.includes(c.occupancyId)) return prev.filter((id) => id !== c.occupancyId);
+                                return [...prev, c.occupancyId];
+                              });
                             }}
                             style={{
                               justifyContent: 'space-between',
@@ -306,17 +334,11 @@ export function ManualCheckoutModal({
                                 gap: '1rem',
                               }}
                             >
-                              <div style={{ fontWeight: 900 }}>
-                                {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number} -- {c.customerName}
+                              <div style={{ fontWeight: 900, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number} - {c.customerName} - {formatClockTime(scheduled)}
                               </div>
-                              <div
-                                style={{
-                                  fontWeight: 800,
-                                  color: c.isOverdue ? '#fecaca' : 'rgba(148, 163, 184, 0.95)',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {checkoutLabel}
+                              <div style={{ fontWeight: 900, whiteSpace: 'nowrap', color: delta.color }}>
+                                {delta.label}
                               </div>
                             </div>
                           </button>
@@ -331,39 +353,44 @@ export function ManualCheckoutModal({
         ) : (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ fontWeight: 900, fontSize: '1.15rem' }}>Confirm checkout</div>
-              {confirmData && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'baseline' }}>
+                <div style={{ fontWeight: 900, fontSize: '1.15rem' }}>Confirm checkout</div>
+                <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900 }}>
+                  {confirmIndex + 1} of {confirmQueue.length || 1}
+                </div>
+              </div>
+              {confirmQueue[confirmIndex] && (
                 <div className="er-surface" style={{ padding: '1rem', borderRadius: 12 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Customer</div>
-                      <div style={{ fontWeight: 800 }}>{confirmData.customerName}</div>
+                      <div style={{ fontWeight: 800 }}>{confirmQueue[confirmIndex]!.customerName}</div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Resource</div>
                       <div style={{ fontWeight: 800 }}>
-                        {confirmData.resourceType === 'ROOM' ? 'Room' : 'Locker'} {confirmData.number}
+                        {confirmQueue[confirmIndex]!.resourceType === 'ROOM' ? 'Room' : 'Locker'} {confirmQueue[confirmIndex]!.number}
                       </div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Check-in</div>
-                      <div style={{ fontWeight: 800 }}>{toDate(confirmData.checkinAt).toLocaleString()}</div>
+                      <div style={{ fontWeight: 800 }}>{toDate(confirmQueue[confirmIndex]!.checkinAt).toLocaleString()}</div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Scheduled checkout</div>
                       <div style={{ fontWeight: 800 }}>
-                        {toDate(confirmData.scheduledCheckoutAt).toLocaleString()}
+                        {toDate(confirmQueue[confirmIndex]!.scheduledCheckoutAt).toLocaleString()}
                       </div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Late</div>
-                      <div style={{ fontWeight: 800 }}>{confirmData.lateMinutes} min</div>
+                      <div style={{ fontWeight: 800 }}>{confirmQueue[confirmIndex]!.lateMinutes} min</div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Outcome</div>
-                      <div style={{ fontWeight: 900, color: confirmData.banApplied ? '#f59e0b' : '#10b981' }}>
-                        Fee ${confirmData.fee.toFixed(2)}
-                        {confirmData.banApplied ? ' • 30-day ban' : ''}
+                      <div style={{ fontWeight: 900, color: confirmQueue[confirmIndex]!.banApplied ? '#f59e0b' : '#10b981' }}>
+                        Fee ${confirmQueue[confirmIndex]!.fee.toFixed(2)}
+                        {confirmQueue[confirmIndex]!.banApplied ? ' • 30-day ban' : ''}
                       </div>
                     </div>
                   </div>
@@ -371,21 +398,7 @@ export function ManualCheckoutModal({
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}>
-                <button
-                  type="button"
-                  className="cs-liquid-button cs-liquid-button--secondary"
-                  onClick={() => {
-                    if (entryMode === 'direct-confirm') {
-                      onClose();
-                      return;
-                    }
-                    setStep('select');
-                    setShowCancelWarning(false);
-                  }}
-                  disabled={isSubmitting}
-                >
-                  Back
-                </button>
+                <div />
                 <button
                   type="button"
                   className="cs-liquid-button"

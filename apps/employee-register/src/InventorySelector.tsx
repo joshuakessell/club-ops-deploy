@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type CSSProperties } from 'react';
+import { useState, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
 import { RoomStatus } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
 import { getRoomTier } from './utils/getRoomTier';
@@ -540,19 +540,63 @@ export function InventorySelector({
     return inventory.lockers.filter((l) => matchesQuery(l.number, l.assignedMemberName));
   }, [inventory?.lockers, matchesQuery]);
 
+  const navCounts = useMemo(() => {
+    const base = {
+      LOCKER: { available: 0, nearing: 0, late: 0 },
+      STANDARD: { available: 0, nearing: 0, late: 0 },
+      DOUBLE: { available: 0, nearing: 0, late: 0 },
+      SPECIAL: { available: 0, nearing: 0, late: 0 },
+    };
+
+    if (!inventory) return base;
+
+    for (const r of inventory.rooms) {
+      if (r.tier !== 'STANDARD' && r.tier !== 'DOUBLE' && r.tier !== 'SPECIAL') continue;
+      if (r.status === RoomStatus.CLEAN && !r.assignedTo) {
+        base[r.tier].available += 1;
+        continue;
+      }
+      const isOccupied = !!r.assignedTo || r.status === RoomStatus.OCCUPIED;
+      if (!isOccupied) continue;
+      const lvl = alertLevelFromMsUntil(getMsUntil(r.checkoutAt, nowMs));
+      if (lvl === 'danger') base[r.tier].late += 1;
+      else if (lvl === 'warning') base[r.tier].nearing += 1;
+    }
+
+    for (const l of inventory.lockers) {
+      if (l.status === RoomStatus.CLEAN && !l.assignedTo) {
+        base.LOCKER.available += 1;
+        continue;
+      }
+      const isOccupied = !!l.assignedTo || l.status === RoomStatus.OCCUPIED;
+      if (!isOccupied) continue;
+      const lvl = alertLevelFromMsUntil(getMsUntil(l.checkoutAt, nowMs));
+      if (lvl === 'danger') base.LOCKER.late += 1;
+      else if (lvl === 'warning') base.LOCKER.nearing += 1;
+    }
+
+    return base;
+  }, [inventory, nowMs]);
+
   const expandedSection =
     forcedExpandedSection !== undefined ? forcedExpandedSection : uncontrolledExpandedSection;
 
-  const setExpandedSection = (next: typeof expandedSection) => {
-    onExpandedSectionChange?.(next);
-    if (forcedExpandedSection === undefined) {
-      setUncontrolledExpandedSection(next);
-    }
-  };
+  const setExpandedSection = useCallback(
+    (next: typeof expandedSection) => {
+      onExpandedSectionChange?.(next);
+      if (forcedExpandedSection === undefined) {
+        setUncontrolledExpandedSection(next);
+      }
+    },
+    [forcedExpandedSection, onExpandedSectionChange]
+  );
 
-  const setActiveSection = (section: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
-    setExpandedSection(section);
-  };
+  const setActiveSection = useCallback(
+    (section: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+      setExpandedSection(section);
+    },
+    [setExpandedSection]
+  );
 
   const activeSection: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' = (expandedSection ??
     'LOCKER') as 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL';
@@ -717,105 +761,140 @@ export function InventorySelector({
           style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(140px, 40%) minmax(0, 1fr)',
-            gap: '0.75rem',
+            gap: '1.5rem',
             flex: 1,
             minHeight: 0,
             overflow: 'hidden',
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', minWidth: 0 }}>
-            {([
-              ['LOCKER', ROOM_TYPE_LABELS.LOCKER],
-              ['STANDARD', 'Standard'],
-              ['DOUBLE', 'Double'],
-              ['SPECIAL', 'Special'],
-            ] as const).map(([tier, label]) => (
-              <button
-                key={tier}
-                type="button"
-                className={[
-                  'cs-liquid-button',
-                  activeSection === tier ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
-                ].join(' ')}
-                onClick={() => setActiveSection(tier)}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '0.65rem 0.75rem',
-                  fontWeight: 800,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {label}
-              </button>
-            ))}
+            {(
+              [
+                ['LOCKER', ROOM_TYPE_LABELS.LOCKER],
+                ['STANDARD', 'Standard'],
+                ['DOUBLE', 'Double'],
+                ['SPECIAL', 'Special'],
+              ] as const
+            ).map(([tier, label]) => {
+              const counts = navCounts[tier];
+              return (
+                <button
+                  key={tier}
+                  type="button"
+                  className={[
+                    'cs-liquid-button',
+                    activeSection === tier ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                  ].join(' ')}
+                  onClick={() => setActiveSection(tier)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '0.9rem 0.85rem',
+                    fontWeight: 900,
+                    minHeight: '74px',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                    <div style={{ minWidth: 0, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {label}
+                    </div>
+                    <div
+                      className="er-text-sm"
+                      style={{
+                        textAlign: 'right',
+                        fontWeight: 900,
+                        lineHeight: 1.15,
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                        color: activeSection === tier ? 'rgba(255,255,255,0.92)' : 'rgba(148,163,184,0.95)',
+                      }}
+                    >
+                      <div>Avail {counts.available}</div>
+                      <div>Nearing {counts.nearing}</div>
+                      <div>Past {counts.late}</div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+
+            {/* Search directly beneath the Special button */}
+            <div style={{ marginTop: '0.5rem' }}>
+              <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900, marginBottom: '0.35rem' }}>
+                Search
+              </div>
+              <div className="cs-liquid-search">
+                <input
+                  className="cs-liquid-input cs-liquid-search__input"
+                  type="text"
+                  placeholder="Search by name or number..."
+                  value={effectiveFilterQuery}
+                  onChange={(e) => setLocalFilterQuery(e.target.value)}
+                  aria-label="Inventory search"
+                  disabled={filterQuery !== undefined}
+                />
+                <div className="cs-liquid-search__icon">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M14 14L11.1 11.1"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div style={{ minWidth: 0, minHeight: 0, overflowY: 'auto', paddingRight: '0.25rem' }}>
-            {activeSection === 'LOCKER' ? (
-              <LockerSection
-                lockers={filteredLockers}
-                onSelectLocker={handleLockerClick}
-                selectedItem={selectedItem}
-                nowMs={nowMs}
-                disableSelection={disableSelection || selectionLockedToType === 'room'}
-                occupancyLookupMode={occupancyLookupMode}
-                highlightId={searchHighlight?.type === 'locker' ? searchHighlight.id : null}
-              />
-            ) : (
-              <InventorySection
-                title={activeSection === 'STANDARD' ? 'Standard' : activeSection === 'DOUBLE' ? 'Double' : 'Special'}
-                rooms={
-                  activeSection === 'STANDARD'
-                    ? roomsByTier.STANDARD
-                    : activeSection === 'DOUBLE'
-                      ? roomsByTier.DOUBLE
-                      : roomsByTier.SPECIAL
-                }
-                onSelectRoom={handleRoomClick}
-                selectedItem={selectedItem}
-                waitlistEntries={waitlistEntries}
-                nowMs={nowMs}
-                disableSelection={disableSelection || selectionLockedToType === 'locker'}
-                occupancyLookupMode={occupancyLookupMode}
-                highlightId={searchHighlight?.type === 'room' ? searchHighlight.id : null}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Search pinned at the bottom of the same card */}
-        <div style={{ marginTop: '0.75rem', flexShrink: 0 }}>
-          <div style={{ margin: 0, marginBottom: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
-            Search
-          </div>
-          <div className="cs-liquid-search">
-            <input
-              className="cs-liquid-input cs-liquid-search__input"
-              type="text"
-              placeholder="Search by name or number..."
-              value={effectiveFilterQuery}
-              onChange={(e) => setLocalFilterQuery(e.target.value)}
-              aria-label="Inventory search"
-              disabled={filterQuery !== undefined}
-            />
-            <div className="cs-liquid-search__icon">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+          <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div
+              className="cs-liquid-card"
+              style={{
+                padding: '0.85rem',
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                paddingRight: '0.65rem',
+              }}
+            >
+              {activeSection === 'LOCKER' ? (
+                <LockerSection
+                  lockers={filteredLockers}
+                  onSelectLocker={handleLockerClick}
+                  selectedItem={selectedItem}
+                  nowMs={nowMs}
+                  disableSelection={disableSelection || selectionLockedToType === 'room'}
+                  occupancyLookupMode={occupancyLookupMode}
+                  highlightId={searchHighlight?.type === 'locker' ? searchHighlight.id : null}
                 />
-                <path
-                  d="M14 14L11.1 11.1"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              ) : (
+                <InventorySection
+                  title={activeSection === 'STANDARD' ? 'Standard' : activeSection === 'DOUBLE' ? 'Double' : 'Special'}
+                  rooms={
+                    activeSection === 'STANDARD'
+                      ? roomsByTier.STANDARD
+                      : activeSection === 'DOUBLE'
+                        ? roomsByTier.DOUBLE
+                        : roomsByTier.SPECIAL
+                  }
+                  onSelectRoom={handleRoomClick}
+                  selectedItem={selectedItem}
+                  waitlistEntries={waitlistEntries}
+                  nowMs={nowMs}
+                  disableSelection={disableSelection || selectionLockedToType === 'locker'}
+                  occupancyLookupMode={occupancyLookupMode}
+                  highlightId={searchHighlight?.type === 'room' ? searchHighlight.id : null}
                 />
-              </svg>
+              )}
             </div>
           </div>
         </div>

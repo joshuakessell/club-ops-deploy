@@ -246,8 +246,8 @@ describe('ManualCheckoutModal', () => {
     // Should land on confirm step without clicking Continue.
     expect(await screen.findByText(/Confirm checkout/i)).toBeDefined();
 
-    // Back closes in direct-confirm mode (returns to inventory).
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    // Close (X) closes immediately in direct-confirm mode (returns to inventory).
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
 
     // Resolve call should have used occupancyId.

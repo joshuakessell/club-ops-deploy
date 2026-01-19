@@ -41,10 +41,14 @@
 
   /* Fixed top bar (employee + register number) */
   --er-topbar-height: 60px;
+  /* Minimum breathing room between toolbar/content and content/bottom edge */
+  --er-viewport-gap: 5px;
   /* Small inset so tabs/rails don't touch the toolbar or bottom edge */
   --er-rail-gap: 12px;
   /* Left home rail width (fixed-position, like right drawer tabs) */
   --er-home-rail-width: 210px;
+  /* Space between left rail buttons and the right-side card content */
+  --er-home-content-gap: 14px;
 }
 
 /* ------------------------------------------------------------
@@ -352,10 +356,12 @@ body::after {
 }
 
 .container {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 var(--er-right-safe) 1.5rem var(--er-left-safe);
+  /* Let internal panels control scrolling; keep the overall app pinned to the viewport. */
+  padding: 0 var(--er-right-safe) 0 var(--er-left-safe);
   background: transparent;
   position: relative;
   z-index: 1;
@@ -511,8 +517,10 @@ body::after {
   overflow: hidden;
   padding-left: var(--er-body-gutter);
   padding-right: var(--er-body-gutter);
-  padding-top: var(--er-rail-gap);
-  padding-bottom: var(--er-rail-gap);
+  /* Guarantee at least 5px between toolbar and the top of the active card,
+     and at least 5px between the bottom of the active card and the viewport bottom. */
+  padding-top: var(--er-viewport-gap);
+  padding-bottom: var(--er-viewport-gap);
 }
 
 /* Make the home actions area occupy the remaining height so the left rail is height-stable
@@ -545,8 +553,8 @@ body::after {
   /* Fixed-position left rail (behaves like the right drawer tabs) */
   position: fixed;
   left: 0;
-  top: calc(var(--er-topbar-height) + var(--er-rail-gap));
-  bottom: var(--er-rail-gap);
+  top: calc(var(--er-topbar-height) + var(--er-viewport-gap));
+  bottom: var(--er-viewport-gap);
   width: var(--er-home-rail-width);
 
   display: flex;
@@ -582,6 +590,12 @@ body::after {
   /* Keep content fully visible to the right of the fixed rail,
      with a gutter that matches the right edge gutter. */
   margin-left: var(--er-home-rail-width);
+  padding-left: var(--er-home-content-gap);
+}
+
+.er-home-tab-btn--checkout {
+  font-size: 22px !important;
+  letter-spacing: 0.01em;
 }
 
 /* Right-panel panels: always fill available height.
@@ -1077,12 +1091,14 @@ body::after {
 
 /* Register Sign-In Styles */
 .register-sign-in-container {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: transparent;
   color: var(--cs-text);
   position: relative;
+  overflow: hidden;
 }
 
 .register-sign-in-logo {

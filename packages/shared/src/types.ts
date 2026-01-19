@@ -167,6 +167,11 @@ export interface SessionUpdatedPayload {
   customerDobMonthDay?: string;
   customerLastVisitAt?: string;
   customerNotes?: string;
+  /**
+   * True when the customer has an encrypted lookup marker (e.g., hashed ID scan) stored on file.
+   * This enables faster and more reliable future lookup from ID scans without storing raw scan data.
+   */
+  customerHasEncryptedLookupMarker?: boolean;
   pastDueBalance?: number;
   pastDueBlocked?: boolean;
   pastDueBypassed?: boolean;

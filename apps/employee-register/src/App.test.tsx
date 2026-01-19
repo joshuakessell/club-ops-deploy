@@ -229,7 +229,7 @@ describe('App', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Customer Details')).toBeDefined();
+      expect(screen.getByText('Customer Profile')).toBeDefined();
       expect(screen.getByText('Alex Rivera')).toBeDefined();
     });
   });
@@ -571,7 +571,7 @@ describe('App', () => {
 
     // The app auto-switches to Scan tab when a session becomes active.
     await waitFor(() => {
-      expect(screen.getByText('Customer Details')).toBeDefined();
+      expect(screen.getByText('Customer Profile')).toBeDefined();
     });
 
     // Simulate kiosk prerequisites already resolved (language + membership choice) so we land on RENTAL step.

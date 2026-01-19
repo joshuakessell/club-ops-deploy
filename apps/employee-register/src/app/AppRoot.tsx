@@ -46,7 +46,7 @@ import {
 } from '../components/register/toasts/BottomToastStack';
 import { ManualCheckoutPanel } from '../components/register/panels/ManualCheckoutPanel';
 import { RoomCleaningPanel } from '../components/register/panels/RoomCleaningPanel';
-import { CustomerDetailsCard } from '../components/register/CustomerDetailsCard';
+import { CustomerProfileCard, type CheckinStage } from '../components/register/CustomerProfileCard';
 import { EmployeeAssistPanel } from '../components/register/EmployeeAssistPanel';
 import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerContent';
 import { InventoryDrawer, type InventoryDrawerSection } from '../components/inventory/InventoryDrawer';
@@ -485,6 +485,61 @@ export function AppRoot() {
     (value: string | null) => laneSessionActions.setPaymentDeclineError(value),
     [laneSessionActions]
   );
+
+  const checkinStage: CheckinStage | null = useMemo(() => {
+    if (!currentSessionId || !customerName) return null;
+
+    // 6 - Assigned
+    if (assignedResourceType && assignedResourceNumber) {
+      return { number: 6, label: 'Locker/Room Assigned' };
+    }
+
+    // 5 - Signing agreement (after rental confirmation, before assignment)
+    if (agreementSigned) {
+      // In practice assignment follows immediately; treat as stage 6 when agreement is already signed.
+      return { number: 6, label: 'Locker/Room Assigned' };
+    }
+    if (selectionConfirmed) {
+      return { number: 5, label: 'Signing Member Agreement' };
+    }
+
+    // 4 - Employee confirms customer selection
+    if (proposedBy === 'CUSTOMER' && proposedRentalType) {
+      return { number: 4, label: 'Employee Rental Confirmation' };
+    }
+
+    // 1 - Language selection
+    if (!customerPrimaryLanguage) {
+      return { number: 1, label: 'Language Selection' };
+    }
+
+    // 2 - Membership options (only when needed)
+    const membershipStatus = getCustomerMembershipStatus(
+      { membershipNumber: membershipNumber || null, membershipValidUntil: customerMembershipValidUntil || null },
+      new Date()
+    );
+    const isMember = membershipPurchaseIntent ? true : membershipStatus === 'ACTIVE';
+    if (!isMember && !membershipChoice) {
+      return { number: 2, label: 'Membership Options' };
+    }
+
+    // 3 - Rental options
+    return { number: 3, label: 'Rental Options' };
+  }, [
+    agreementSigned,
+    assignedResourceNumber,
+    assignedResourceType,
+    customerMembershipValidUntil,
+    customerName,
+    customerPrimaryLanguage,
+    currentSessionId,
+    membershipChoice,
+    membershipNumber,
+    membershipPurchaseIntent,
+    proposedBy,
+    proposedRentalType,
+    selectionConfirmed,
+  ]);
   const [pendingCreateFromScan, setPendingCreateFromScan] = useState<{
     idScanValue: string;
     idScanHash: string | null;
@@ -3085,6 +3140,7 @@ export function AppRoot() {
                     className={[
                       'er-home-tab-btn',
                       'cs-liquid-button',
+                      'er-home-tab-btn--checkout',
                       homeTab === 'checkout' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
                     ].join(' ')}
                     onClick={() => startCheckoutFromHome()}
@@ -3143,11 +3199,17 @@ export function AppRoot() {
                             minHeight: 0,
                           }}
                         >
-                          <CustomerDetailsCard
+                          <CustomerProfileCard
                             name={customerName}
+                            preferredLanguage={customerPrimaryLanguage || null}
                             dobMonthDay={customerDobMonthDay || null}
-                            language={customerPrimaryLanguage || null}
                             membershipNumber={membershipNumber || null}
+                            membershipValidUntil={customerMembershipValidUntil || null}
+                            lastVisitAt={customerLastVisitAt || null}
+                            hasEncryptedLookupMarker={Boolean(laneSession.customerHasEncryptedLookupMarker)}
+                            checkinStage={checkinStage}
+                            waitlistDesiredTier={waitlistDesiredTier}
+                            waitlistBackupType={waitlistBackupType}
                           />
 
                           <EmployeeAssistPanel

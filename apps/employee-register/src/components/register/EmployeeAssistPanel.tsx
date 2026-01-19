@@ -150,25 +150,6 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
       </div>
 
       <div style={{ flex: 1, minHeight: 0, marginTop: '0.75rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
-        {waitlistDesiredTier && waitlistBackupType ? (
-          <div
-            className="cs-liquid-card"
-            style={{
-              padding: '0.75rem',
-              background: '#fef3c7',
-              border: '2px solid #f59e0b',
-              borderRadius: '10px',
-              color: '#92400e',
-              marginBottom: '0.75rem',
-            }}
-          >
-            <div style={{ fontWeight: 900, marginBottom: '0.35rem' }}>Customer Waitlisted</div>
-            <div className="er-text-sm" style={{ fontWeight: 700 }}>
-              Requested <strong>{waitlistDesiredTier}</strong>; assigning <strong>{waitlistBackupType}</strong> as backup.
-            </div>
-          </div>
-        ) : null}
-
         {step === 'LANGUAGE' && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
