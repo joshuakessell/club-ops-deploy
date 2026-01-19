@@ -51,6 +51,7 @@ interface CustomerRow {
   past_due_balance?: number;
   primary_language?: string;
   notes?: string;
+  id_scan_hash?: string | null;
 }
 
 interface PaymentIntentRow {
@@ -172,7 +173,7 @@ export async function buildFullSessionUpdatedPayload(
   const customer = session.customer_id
     ? (
         await client.query<CustomerRow>(
-          `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, past_due_balance, primary_language, notes
+          `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, past_due_balance, primary_language, notes, id_scan_hash
              FROM customers
              WHERE id = $1
              LIMIT 1`,
@@ -212,6 +213,8 @@ export async function buildFullSessionUpdatedPayload(
       customerLastVisitAt = lastVisitResult.rows[0]!.starts_at.toISOString();
     }
   }
+
+  const customerHasEncryptedLookupMarker = Boolean(customer?.id_scan_hash);
 
   // Prefer a check-in block created by this lane session (when completed)
   const blockForSession = (
@@ -319,6 +322,7 @@ export async function buildFullSessionUpdatedPayload(
     customerDobMonthDay,
     customerLastVisitAt,
     customerNotes: customer?.notes || undefined,
+    customerHasEncryptedLookupMarker,
     pastDueBalance: pastDueBalance > 0 ? pastDueBalance : undefined,
     pastDueBlocked,
     pastDueBypassed,

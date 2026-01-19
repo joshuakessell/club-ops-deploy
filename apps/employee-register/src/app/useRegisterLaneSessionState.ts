@@ -32,6 +32,7 @@ export type RegisterLaneSessionState = {
   customerDobMonthDay: string | undefined;
   customerLastVisitAt: string | undefined;
   customerNotes: string | undefined;
+  customerHasEncryptedLookupMarker: boolean;
 
   assignedResourceType: 'room' | 'locker' | null;
   assignedResourceNumber: string | null;
@@ -71,6 +72,7 @@ const initialState: RegisterLaneSessionState = {
   customerDobMonthDay: undefined,
   customerLastVisitAt: undefined,
   customerNotes: undefined,
+  customerHasEncryptedLookupMarker: false,
 
   assignedResourceType: null,
   assignedResourceNumber: null,
@@ -146,6 +148,9 @@ function reducer(state: RegisterLaneSessionState, action: Action): RegisterLaneS
       if (p.customerDobMonthDay !== undefined) next.customerDobMonthDay = p.customerDobMonthDay;
       if (p.customerLastVisitAt !== undefined) next.customerLastVisitAt = p.customerLastVisitAt;
       if (p.customerNotes !== undefined) next.customerNotes = p.customerNotes;
+      if (p.customerHasEncryptedLookupMarker !== undefined) {
+        next.customerHasEncryptedLookupMarker = Boolean(p.customerHasEncryptedLookupMarker);
+      }
 
       if (p.assignedResourceType !== undefined) next.assignedResourceType = p.assignedResourceType ?? null;
       if (p.assignedResourceNumber !== undefined) next.assignedResourceNumber = p.assignedResourceNumber ?? null;

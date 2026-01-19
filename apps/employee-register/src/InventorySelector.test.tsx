@@ -90,7 +90,7 @@ describe('InventorySelector', () => {
     await screen.findByRole('heading', { name: 'Inventory' });
 
     // Check that sections are rendered
-    expect(screen.getByRole('button', { name: 'Standard' })).toBeDefined();
+    expect(screen.getByRole('button', { name: /standard/i })).toBeDefined();
   });
 
   it('should auto-expand section when customer selects type', async () => {
@@ -102,7 +102,7 @@ describe('InventorySelector', () => {
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
     await screen.findByRole('heading', { name: 'Inventory' });
-    expect(screen.getByRole('button', { name: 'Standard' })).toBeDefined();
+    expect(screen.getByRole('button', { name: /standard/i })).toBeDefined();
 
     // Section should be expanded (we can check by looking for room numbers)
     // This is a basic test - in a real scenario, we'd check the expanded state

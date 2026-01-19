@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface ModalFrameProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ export function ModalFrame({
 }: ModalFrameProps) {
   if (!isOpen) return null;
 
-  return (
+  const modal = (
     <div
       style={{
         position: 'fixed',
@@ -29,11 +30,13 @@ export function ModalFrame({
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0, 0, 0, 0.5)',
+        background: 'rgba(0, 0, 0, 0.68)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 2000,
+        zIndex: 4000,
       }}
       onClick={closeOnOverlayClick ? onClose : undefined}
     >
@@ -88,5 +91,8 @@ export function ModalFrame({
       </div>
     </div>
   );
+
+  // Render in a portal so it's not clipped/stacked under panels that use overflow/transform.
+  return createPortal(modal, document.body);
 }
 
