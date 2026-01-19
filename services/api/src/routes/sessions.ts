@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { serializableTransaction, query } from '../db/index.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
@@ -6,6 +6,8 @@ import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding.js';
 import { computeInventoryAvailable } from '../inventory/available.js';
 import { insertAuditLog } from '../audit/auditLog.js';
+import { requireAuth } from '../auth/middleware.js';
+import { LaneIdSchema } from '../utils/lane.js';
 
 /**
  * Schema for creating a new session.
@@ -143,9 +145,11 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    * Creates a session for a member, optionally assigning a room and/or locker.
    * Uses serializable transactions to prevent double-booking.
    */
-  fastify.post(
+  fastify.post<{ Body: CreateSessionInput }>(
     '/v1/sessions',
-    async (request: FastifyRequest<{ Body: CreateSessionInput }>, reply: FastifyReply) => {
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const staffId = request.staff?.staffId ?? null;
       let body: CreateSessionInput;
 
       try {
@@ -271,7 +275,9 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
           // 6. Log the check-in to audit log
           const newSession = sessionResult.rows[0]!;
           await insertAuditLog(client, {
-            staffId: null, // TODO: Use actual staff ID from auth when available
+            staffId,
+            userId: staffId,
+            userRole: staffId ? 'staff' : null,
             action: 'CHECK_IN',
             entityType: 'session',
             entityId: newSession.id,
@@ -370,15 +376,13 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    */
   const ScanIdSchema = z.object({
     idNumber: z.string().min(1),
-    lane: z.string().min(1),
+    lane: LaneIdSchema,
   });
 
-  fastify.post(
+  fastify.post<{ Body: z.infer<typeof ScanIdSchema> }>(
     '/v1/sessions/scan-id',
-    async (
-      request: FastifyRequest<{ Body: z.infer<typeof ScanIdSchema> }>,
-      reply: FastifyReply
-    ) => {
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
       try {
         const body = ScanIdSchema.parse(request.body);
 
@@ -483,16 +487,14 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    */
   const ScanMembershipSchema = z.object({
     membershipNumber: z.string().min(1),
-    lane: z.string().min(1),
+    lane: LaneIdSchema,
     sessionId: z.string().uuid().optional(),
   });
 
-  fastify.post(
+  fastify.post<{ Body: z.infer<typeof ScanMembershipSchema> }>(
     '/v1/sessions/scan-membership',
-    async (
-      request: FastifyRequest<{ Body: z.infer<typeof ScanMembershipSchema> }>,
-      reply: FastifyReply
-    ) => {
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
       try {
         const body = ScanMembershipSchema.parse(request.body);
 

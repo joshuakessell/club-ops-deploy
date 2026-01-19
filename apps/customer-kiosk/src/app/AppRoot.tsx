@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   safeParseWebSocketEvent,
-  type SessionUpdatedPayload,
   type CustomerConfirmationRequiredPayload,
-  type AssignmentCreatedPayload,
-  type InventoryUpdatedPayload,
-  type SelectionProposedPayload,
-  type SelectionLockedPayload,
-  type SelectionForcedPayload,
-  type CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { t, type Language } from '../i18n';

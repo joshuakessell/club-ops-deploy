@@ -1,22 +1,10 @@
-import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
+import { getRoomTierFromNumber } from '@club-ops/shared';
 import type { transaction } from '../db/index.js';
 
 type PoolClient = Parameters<Parameters<typeof transaction>[0]>[0];
 
 export function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
-  const num = parseInt(roomNumber, 10);
-
-  if (isSpecialRoom(num)) {
-    return 'SPECIAL';
-  }
-
-  // "Deluxe" rooms in the facility contract map to DB tier/type "DOUBLE"
-  if (isDeluxeRoom(num)) {
-    return 'DOUBLE';
-  }
-
-  // All else standard
-  return 'STANDARD';
+  return getRoomTierFromNumber(parseInt(roomNumber, 10));
 }
 
 /**
@@ -40,8 +28,7 @@ export async function computeWaitlistInfo(
   // IMPORTANT: We must filter by tier. A naive "Nth block by end time" is wrong when multiple
   // tiers are occupied with different end times.
   //
-  // We compute tier using facility contract mapping (by room number), not DB room.type, because
-  // "deluxe" rooms map to DB tier/type "DOUBLE" and the canonical mapping is number-based.
+  // We compute tier using facility contract mapping (by room number), not DB room.type.
   const blocksResult = await client.query<{
     ends_at: Date;
     room_number: string;

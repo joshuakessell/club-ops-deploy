@@ -48,7 +48,7 @@ export default function EventLogOverlay() {
           try {
             return JSON.stringify(e.payload ?? '');
           } catch {
-            return String(e.payload ?? '');
+            return '[Unserializable payload]';
           }
         })(),
       ]
@@ -89,7 +89,10 @@ export default function EventLogOverlay() {
           <button onClick={() => setPaused((p) => !p)} style={btn}>
             {paused ? 'Resume' : 'Pause'}
           </button>
-          <button onClick={() => navigator.clipboard.writeText(JSON.stringify(filtered, null, 2))} style={btn}>
+          <button
+            onClick={() => void navigator.clipboard.writeText(JSON.stringify(filtered, null, 2))}
+            style={btn}
+          >
             Copy
           </button>
           <button onClick={() => setEvents([])} style={btn}>

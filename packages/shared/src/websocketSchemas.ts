@@ -24,7 +24,6 @@ import type {
   UpgradeOfferExpiredPayload,
   WaitlistCreatedPayload,
   WebSocketEvent,
-  WebSocketEventType,
 } from './types.js';
 
 const WebSocketEventBaseSchema = z.object({
@@ -357,7 +356,7 @@ export type ParsedWebSocketEvent =
   | ({ type: 'CHECKOUT_CLAIMED'; payload: CheckoutClaimedPayload } & Pick<WebSocketEvent, 'timestamp'>)
   | ({ type: 'CHECKOUT_UPDATED'; payload: CheckoutUpdatedPayload } & Pick<WebSocketEvent, 'timestamp'>)
   | ({ type: 'CHECKOUT_COMPLETED'; payload: CheckoutCompletedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | { type: WebSocketEventType | string; payload: unknown; timestamp: string };
+  ;
 
 export function safeParseWebSocketEvent(input: unknown): ParsedWebSocketEvent | null {
   const base = WebSocketEventBaseSchema.safeParse(input);
@@ -415,7 +414,8 @@ export function safeParseWebSocketEvent(input: unknown): ParsedWebSocketEvent | 
     case 'CHECKOUT_COMPLETED':
       return wrap(CheckoutCompletedPayloadSchema);
     default:
-      return { type, payload, timestamp };
+      // Unknown / forward-compatible event types are ignored by default.
+      return null;
   }
 }
 

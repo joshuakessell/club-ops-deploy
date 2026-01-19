@@ -124,7 +124,7 @@ export const en = {
   specialRoom: 'Special Room',
   gymLocker: 'Gym Locker',
   'rental.standardDisplay': 'Private Dressing Room',
-  'rental.doubleDisplay': 'Deluxe Dressing Room',
+  'rental.doubleDisplay': 'Double Dressing Room',
   'rental.specialDisplay': 'Special Dressing Room',
 
   // Waitlist

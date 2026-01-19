@@ -17,7 +17,7 @@ export type InsertAuditLogInput = {
   metadata?: unknown;
 };
 
-function toJsonb(value: unknown): unknown | null {
+function toJsonb(value: unknown): unknown {
   if (value === undefined) return null;
   if (value === null) return null;
   return value;

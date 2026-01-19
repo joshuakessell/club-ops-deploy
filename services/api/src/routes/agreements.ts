@@ -1,9 +1,11 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { generateAgreementPdf } from '../utils/pdf-generator.js';
 import { roundUpToQuarterHour } from '../time/rounding.js';
 import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG } from '@club-ops/shared';
+import { optionalAuth } from '../auth/middleware.js';
+import { requireKioskTokenOrStaff } from '../auth/kioskToken.js';
 
 /**
  * Schema for signing an agreement.
@@ -97,15 +99,14 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
    * This endpoint is accessible without authentication for customer kiosks.
    * Security is provided by validating the session exists and hasn't been signed.
    */
-  fastify.post(
+  fastify.post<{ Params: { checkinId: string }; Body: SignAgreementInput }>(
     '/v1/checkins/:checkinId/agreement-sign',
-    async (
-      request: FastifyRequest<{
-        Params: { checkinId: string };
-        Body: SignAgreementInput;
-      }>,
-      reply: FastifyReply
-    ) => {
+    { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
+    async (request, reply) => {
+      const checkinIdParsed = z.string().uuid().safeParse(request.params.checkinId);
+      if (!checkinIdParsed.success) {
+        return reply.status(400).send({ error: 'Validation failed', message: 'Invalid checkinId' });
+      }
       let body: SignAgreementInput;
 
       try {
@@ -125,7 +126,7 @@ export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
            FROM sessions
            WHERE id = $1
            FOR UPDATE`,
-            [request.params.checkinId]
+            [checkinIdParsed.data]
           );
 
           if (sessionResult.rows.length === 0) {
