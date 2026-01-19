@@ -122,14 +122,17 @@ export async function createCredential(options: RegistrationOptions): Promise<Pu
   const excludeCredentials: PublicKeyCredentialDescriptor[] | undefined =
     options.excludeCredentials?.map((cred) => ({
       ...cred,
-      id: base64UrlToUint8Array(cred.id),
+      // WebAuthn types are strict about ArrayBuffer (not ArrayBufferLike).
+      id: toArrayBuffer(base64UrlToUint8Array(cred.id)),
     }));
 
   const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
-    challenge: challengeBuffer.buffer,
+    // WebAuthn types are strict about ArrayBuffer (not ArrayBufferLike).
+    challenge: toArrayBuffer(challengeBuffer),
     rp: options.rp,
     user: {
-      id: userIdBuffer.buffer,
+      // WebAuthn types are strict about ArrayBuffer (not ArrayBufferLike).
+      id: toArrayBuffer(userIdBuffer),
       name: options.user.name,
       displayName: options.user.displayName,
     },
@@ -156,11 +159,13 @@ export async function getCredential(options: AuthenticationOptions): Promise<Pub
   const allowCredentials: PublicKeyCredentialDescriptor[] | undefined =
     options.allowCredentials?.map((cred) => ({
       ...cred,
-      id: base64UrlToUint8Array(cred.id),
+      // WebAuthn types are strict about ArrayBuffer (not ArrayBufferLike).
+      id: toArrayBuffer(base64UrlToUint8Array(cred.id)),
     }));
 
   const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
-    challenge: challengeBuffer.buffer,
+    // WebAuthn types are strict about ArrayBuffer (not ArrayBufferLike).
+    challenge: toArrayBuffer(challengeBuffer),
     timeout: options.timeout,
     rpId: options.rpId,
     allowCredentials,
@@ -321,6 +326,16 @@ function base64UrlToUint8Array(base64url: string): Uint8Array {
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
+}
+
+/**
+ * WebAuthn TS DOM types expect ArrayBuffer (not ArrayBufferLike / SharedArrayBuffer),
+ * so we defensively copy bytes into a fresh ArrayBuffer.
+ */
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const ab = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(ab).set(bytes);
+  return ab;
 }
 
 function arrayBufferToBase64URL(buffer: ArrayBuffer): string {
