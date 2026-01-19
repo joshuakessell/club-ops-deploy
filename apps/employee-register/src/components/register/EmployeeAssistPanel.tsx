@@ -125,7 +125,7 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     return [
       { id: 'LOCKER' as const, label: 'Propose Locker', count: lockers, allowed: allowed.has('LOCKER') },
       { id: 'STANDARD' as const, label: 'Propose Standard', count: standard, allowed: allowed.has('STANDARD') },
-      { id: 'DOUBLE' as const, label: 'Propose Deluxe', count: deluxe, allowed: allowed.has('DOUBLE') },
+      { id: 'DOUBLE' as const, label: 'Propose Double', count: deluxe, allowed: allowed.has('DOUBLE') },
       { id: 'SPECIAL' as const, label: 'Propose Special', count: special, allowed: allowed.has('SPECIAL') },
     ];
   }, [allowedRentals, inventoryAvailable]);

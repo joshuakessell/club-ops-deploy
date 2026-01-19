@@ -1,4 +1,4 @@
-import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
+import { getRoomTierFromNumber } from '@club-ops/shared';
 import type pg from 'pg';
 
 type RoomTier = 'SPECIAL' | 'DOUBLE' | 'STANDARD';
@@ -18,11 +18,7 @@ export type QueryFn = <T extends pg.QueryResultRow = pg.QueryResultRow>(
 
 function getRoomTier(roomNumber: string): RoomTier {
   const num = parseInt(roomNumber, 10);
-
-  if (isSpecialRoom(num)) return 'SPECIAL';
-  // "Deluxe" rooms in the facility contract map to DB tier/type "DOUBLE"
-  if (isDeluxeRoom(num)) return 'DOUBLE';
-  return 'STANDARD';
+  return getRoomTierFromNumber(num);
 }
 
 /**

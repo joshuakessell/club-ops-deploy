@@ -12,5 +12,7 @@
       "name": "test",
       "command": "bash -lc \"if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then pnpm test; else echo 'Docker not available; running unit tests only (no Postgres)'; pnpm --filter @club-ops/shared test; fi\""
     }
-  ]
+  ],
+  "install": "pnpm install",
+  "start": "pnpm demo:dev"
 }

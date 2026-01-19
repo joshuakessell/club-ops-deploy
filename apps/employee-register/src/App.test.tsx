@@ -51,7 +51,7 @@ describe('App', () => {
   });
 
   it('renders lock screen when not authenticated', async () => {
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
     // When not authenticated, LockScreen is shown instead of the main app
@@ -101,7 +101,7 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
     expect(await screen.findByText('Employee Register')).toBeDefined();
@@ -148,7 +148,7 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
     expect(await screen.findByText('Scan Now')).toBeDefined();
@@ -195,7 +195,7 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
     expect(await screen.findByText('Scan Now')).toBeDefined();
@@ -212,7 +212,7 @@ describe('App', () => {
       expect(wsWithHandler).not.toBeNull();
     });
 
-    await act(async () => {
+    act(() => {
       wsWithHandler?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -274,7 +274,7 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
     expect(await screen.findByText('Scan Now')).toBeDefined();
@@ -289,7 +289,7 @@ describe('App', () => {
       expect(wsWithHandler).not.toBeNull();
     });
 
-    await act(async () => {
+    act(() => {
       wsWithHandler?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -400,17 +400,17 @@ describe('App', () => {
       }
     );
 
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
 
     const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
-    await act(async () => {
+    act(() => {
       fireEvent.click(searchTab);
     });
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    await act(async () => {
+    act(() => {
       fireEvent.change(searchInput, { target: { value: 'Ale' } });
     });
 
@@ -420,12 +420,12 @@ describe('App', () => {
     });
 
     const suggestion = await screen.findByText(/Rivera, Alex/);
-    await act(async () => {
+    act(() => {
       fireEvent.click(suggestion);
     });
 
     const confirmButton = await screen.findByText(/Confirm/);
-    await act(async () => {
+    act(() => {
       fireEvent.click(confirmButton);
     });
 
@@ -447,7 +447,7 @@ describe('App', () => {
 
     const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
 
-    fetchMock.mockImplementation((url: RequestInfo | URL, init?: RequestInit) => {
+    fetchMock.mockImplementation((url: RequestInfo | URL, _init?: RequestInit) => {
       const u =
         typeof url === 'string'
           ? url
@@ -542,27 +542,27 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
 
     const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
-    await act(async () => {
+    act(() => {
       fireEvent.click(searchTab);
     });
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    await act(async () => {
+    act(() => {
       fireEvent.change(searchInput, { target: { value: 'Ale' } });
     });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
     });
     const suggestion = await screen.findByText(/Rivera, Alex/);
-    await act(async () => {
+    act(() => {
       fireEvent.click(suggestion);
     });
     const confirmButton = await screen.findByText(/Confirm/);
-    await act(async () => {
+    act(() => {
       fireEvent.click(confirmButton);
     });
     await waitFor(() => {
@@ -586,7 +586,7 @@ describe('App', () => {
       expect(wsWithHandler).not.toBeNull();
     });
 
-    await act(async () => {
+    act(() => {
       wsWithHandler?.onmessage?.({
         data: JSON.stringify({
           type: 'SESSION_UPDATED',
@@ -604,15 +604,15 @@ describe('App', () => {
     });
 
     const proposeLocker = await screen.findByRole('button', { name: /Propose Locker/i });
-    await act(async () => {
+    act(() => {
       fireEvent.click(proposeLocker); // first tap highlights
     });
-    await act(async () => {
+    act(() => {
       fireEvent.click(proposeLocker); // second tap selects as customer (approval step)
     });
 
     // Drive the app to APPROVAL step (normally via WS after /propose-selection).
-    await act(async () => {
+    act(() => {
       wsWithHandler?.onmessage?.({
         data: JSON.stringify({
           type: 'SELECTION_PROPOSED',
@@ -627,7 +627,7 @@ describe('App', () => {
     });
 
     const ok = await screen.findByRole('button', { name: 'OK' });
-    await act(async () => {
+    act(() => {
       fireEvent.click(ok);
     });
 
@@ -759,28 +759,28 @@ describe('App', () => {
       }
     );
 
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
 
     const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
-    await act(async () => {
+    act(() => {
       fireEvent.click(searchTab);
     });
 
     const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    await act(async () => {
+    act(() => {
       fireEvent.change(searchInput, { target: { value: 'Ale' } });
     });
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
     });
     const suggestion = await screen.findByText(/Rivera, Alex/);
-    await act(async () => {
+    act(() => {
       fireEvent.click(suggestion);
     });
     const confirmButton = await screen.findByText(/Confirm/);
-    await act(async () => {
+    act(() => {
       fireEvent.click(confirmButton);
     });
     await waitFor(() => {
@@ -789,7 +789,7 @@ describe('App', () => {
 
     // Upgrades now live in the left drawer; they should remain accessible during an active session.
     const upgradesTab = await screen.findByRole('button', { name: 'Upgrades' });
-    await act(async () => {
+    act(() => {
       fireEvent.click(upgradesTab);
     });
 
@@ -867,7 +867,7 @@ describe('App', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
 
-    await act(async () => {
+    act(() => {
       render(<App />);
     });
 

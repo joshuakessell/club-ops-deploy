@@ -1,6 +1,8 @@
 import { emitEvent } from './eventBus';
 
-function tryParse(x: any) {
+type WsSendData = Parameters<WebSocket['send']>[0];
+
+function tryParse(x: unknown): unknown {
   try {
     return typeof x === 'string' ? JSON.parse(x) : x;
   } catch {
@@ -12,7 +14,7 @@ export function createLoggedWebSocket(url: string, protocols?: string | string[]
   const ws = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
 
   const originalSend = ws.send.bind(ws);
-  ws.send = (data: any) => {
+  ws.send = (data: WsSendData) => {
     emitEvent({
       kind: 'ws-out',
       channel: url,
@@ -40,16 +42,16 @@ export function createLoggedWebSocket(url: string, protocols?: string | string[]
       kind: 'ws-in',
       channel: url,
       title: 'WS error',
-      payload: String(ev),
+      payload: { type: ev.type },
     });
   });
 
-  ws.addEventListener?.('message', (msg) => {
+  ws.addEventListener?.('message', (msg: MessageEvent) => {
     emitEvent({
       kind: 'ws-in',
       channel: url,
       title: 'WS ←',
-      payload: tryParse((msg as MessageEvent).data),
+      payload: tryParse(msg.data),
     });
   });
 

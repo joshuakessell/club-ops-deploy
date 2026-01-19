@@ -5,6 +5,7 @@ import { RoomStatus, RoomStatusSchema, validateTransition } from '@club-ops/shar
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import { broadcastInventoryUpdate } from './sessions.js';
 import { insertAuditLog } from '../audit/auditLog.js';
+import { requireAuth } from '../auth/middleware.js';
 
 /**
  * Schema for batch cleaning operations.
@@ -12,7 +13,8 @@ import { insertAuditLog } from '../audit/auditLog.js';
 const CleaningBatchSchema = z.object({
   roomIds: z.array(z.string().uuid()).min(1).max(50),
   targetStatus: RoomStatusSchema,
-  staffId: z.string().min(1),
+  // Deprecated: staff identity is derived from request.staff when staff-authenticated.
+  staffId: z.string().min(1).optional(),
   override: z.boolean().default(false),
   overrideReason: z.string().optional(),
 });
@@ -23,7 +25,7 @@ const CleaningBatchSchema = z.object({
 type CleaningBatchInput = {
   roomIds: string[];
   targetStatus: RoomStatus;
-  staffId: string;
+  staffId?: string;
   override: boolean;
   overrideReason?: string;
 };
@@ -70,9 +72,10 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
    * - CLEAN → CLEANING (re-clean)
    * - DIRTY → CLEAN (requires override)
    */
-  fastify.post(
+  fastify.post<{ Body: CleaningBatchInput }>(
     '/v1/cleaning/batch',
-    async (request: FastifyRequest<{ Body: CleaningBatchInput }>, reply: FastifyReply) => {
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
       let body: CleaningBatchInput;
 
       try {
@@ -92,6 +95,17 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
+      if (!request.staff) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+      const staffId = request.staff.staffId;
+      if (body.staffId && body.staffId !== staffId) {
+        request.log.warn(
+          { claimedStaffId: body.staffId, authStaffId: staffId },
+          'Ignoring claimed staffId; using authenticated staff'
+        );
+      }
+
       try {
         const result = await transaction(async (client) => {
           // 1. Create the cleaning batch record
@@ -99,7 +113,7 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
             `INSERT INTO cleaning_batches (staff_id, room_count)
            VALUES ($1, $2)
            RETURNING id`,
-            [body.staffId, body.roomIds.length]
+            [staffId, body.roomIds.length]
           );
           const batchId = batchResult.rows[0]!.id;
 
@@ -204,8 +218,8 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
             // 6. Log to audit log if override was used
             if (isOverrideTransition) {
               await insertAuditLog(client, {
-                staffId: body.staffId,
-                userId: body.staffId,
+                staffId,
+                userId: staffId,
                 userRole: 'staff',
                 action: 'OVERRIDE',
                 entityType: 'room',
@@ -216,8 +230,8 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
               });
             } else {
               await insertAuditLog(client, {
-                staffId: body.staffId,
-                userId: body.staffId,
+                staffId,
+                userId: staffId,
                 userRole: 'staff',
                 action: 'STATUS_CHANGE',
                 entityType: 'room',
@@ -271,7 +285,7 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
                 roomId: transition.roomId,
                 previousStatus: transition.previousStatus,
                 newStatus: transition.newStatus,
-                changedBy: body.staffId,
+                changedBy: staffId,
                 override: body.override,
                 reason: body.overrideReason,
               },

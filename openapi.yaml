@@ -2181,6 +2181,134 @@ paths:
         '401':
           description: Unauthorized
 
+  /v1/sessions:
+    post:
+      tags: [Sessions]
+      summary: (Legacy) Create a new check-in session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId]
+              properties:
+                customerId:
+                  type: string
+                  format: uuid
+                roomId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                lockerId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                expectedDuration:
+                  type: integer
+                  description: Minutes (UPGRADE only); non-upgrade check-ins use 360 minutes server-side
+                checkinType:
+                  type: string
+                  enum: [INITIAL, RENEWAL, UPGRADE]
+      responses:
+        '201':
+          description: Session created
+        '401':
+          description: Unauthorized
+
+  /v1/sessions/scan-id:
+    post:
+      tags: [Sessions]
+      summary: (Legacy) Scan an ID to create/update a lane session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idNumber, lane]
+              properties:
+                idNumber:
+                  type: string
+                lane:
+                  type: string
+                  description: Lane identifier (e.g. lane-1 or lane-2)
+      responses:
+        '200':
+          description: Session updated
+        '401':
+          description: Unauthorized
+
+  /v1/sessions/scan-membership:
+    post:
+      tags: [Sessions]
+      summary: (Legacy) Scan a membership card to update a lane session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [membershipNumber, lane]
+              properties:
+                membershipNumber:
+                  type: string
+                lane:
+                  type: string
+                  description: Lane identifier (e.g. lane-1 or lane-2)
+                sessionId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '200':
+          description: Session updated
+        '401':
+          description: Unauthorized
+
+  /v1/checkins/{checkinId}/agreement-sign:
+    post:
+      tags: [Agreements]
+      summary: (Legacy) Sign the agreement for a check-in
+      security:
+        - kioskToken: []
+        - bearerAuth: []
+      parameters:
+        - name: checkinId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agreed]
+              properties:
+                agreed:
+                  type: boolean
+                signaturePngBase64:
+                  type: string
+                  nullable: true
+                signatureStrokesJson:
+                  type: object
+                  nullable: true
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Agreement signed
+        '401':
+          description: Unauthorized
+
 components:
   securitySchemes:
     bearerAuth:

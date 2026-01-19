@@ -85,13 +85,13 @@ describe('EmployeeAssistPanel', () => {
 
     const buttons = screen.getAllByRole('button');
     const rentalButtons = buttons.filter((b) =>
-      /Propose (Locker|Standard|Deluxe|Special)/.test(b.textContent || '')
+      /Propose (Locker|Standard|Double|Special)/.test(b.textContent || '')
     );
 
     expect(rentalButtons.map((b) => b.textContent)).toEqual([
       expect.stringContaining('Propose Locker'),
       expect.stringContaining('Propose Standard'),
-      expect.stringContaining('Propose Deluxe'),
+      expect.stringContaining('Propose Double'),
       expect.stringContaining('Propose Special'),
     ]);
 

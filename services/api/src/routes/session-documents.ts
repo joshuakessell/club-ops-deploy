@@ -8,7 +8,7 @@ type SessionDocumentRow = {
   created_at: Date;
   agreement_pdf: Buffer | null;
   signature_png_base64: string | null;
-  signature_strokes_json: unknown | null;
+  signature_strokes_json: unknown;
   signature_created_at: Date | null;
 };
 

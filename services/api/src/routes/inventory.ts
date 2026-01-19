@@ -1,26 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
-import { isDeluxeRoom, isSpecialRoom } from '@club-ops/shared';
+import { getRoomTierFromNumber } from '@club-ops/shared';
 import { computeInventoryAvailable } from '../inventory/available.js';
 
 /**
  * Map room number to tier (Special, Double, or Standard).
  */
 function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
-  const num = parseInt(roomNumber, 10);
-
-  if (isSpecialRoom(num)) {
-    return 'SPECIAL';
-  }
-
-  // "Deluxe" rooms in the facility contract map to DB tier/type "DOUBLE"
-  if (isDeluxeRoom(num)) {
-    return 'DOUBLE';
-  }
-
-  // All else standard
-  return 'STANDARD';
+  return getRoomTierFromNumber(parseInt(roomNumber, 10));
 }
 
 type RoomTier = 'SPECIAL' | 'DOUBLE' | 'STANDARD';

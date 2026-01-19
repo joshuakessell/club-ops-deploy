@@ -1,6 +1,13 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import { safeParseWebSocketEvent, type AssignmentFailedPayload, type CheckoutRequestSummary } from '@club-ops/shared';
+import {
+  safeParseWebSocketEvent,
+  type AssignmentFailedPayload,
+  type CheckoutChecklist,
+  type CheckoutRequestSummary,
+  type SessionUpdatedPayload,
+} from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import type { BottomToastTone } from '../components/register/toasts/BottomToastStack';
 
 export function useRegisterWebSocketEvents(params: {
   lane: string;
@@ -10,7 +17,7 @@ export function useRegisterWebSocketEvents(params: {
 
   // lane session reducer actions
   laneSessionActions: {
-    applySessionUpdated: (payload: any) => void;
+    applySessionUpdated: (payload: SessionUpdatedPayload) => void;
     applySelectionProposed: (payload: { rentalType: string; proposedBy: 'CUSTOMER' | 'EMPLOYEE' }) => void;
     applySelectionLocked: (payload: { rentalType: string; confirmedBy: 'CUSTOMER' | 'EMPLOYEE' }) => void;
     applySelectionForced: (payload: { rentalType: string }) => void;
@@ -22,13 +29,13 @@ export function useRegisterWebSocketEvents(params: {
   setCheckoutItemsConfirmed: Dispatch<SetStateAction<boolean>>;
   setCheckoutFeePaid: Dispatch<SetStateAction<boolean>>;
   setSelectedCheckoutRequest: Dispatch<SetStateAction<string | null>>;
-  setCheckoutChecklist: Dispatch<SetStateAction<Record<string, boolean>>>;
+  setCheckoutChecklist: Dispatch<SetStateAction<CheckoutChecklist>>;
 
   // other UI state effects
   onWaitlistUpdated: () => void;
   onInventoryUpdated: () => void;
   onLaneSessionCleared: () => void;
-  pushBottomToast: (toast: { message: string; tone: 'warning' | 'success' | 'error' }) => void;
+  pushBottomToast: (toast: { message: string; tone?: BottomToastTone }) => void;
   onAssignmentFailed: (payload: AssignmentFailedPayload) => void;
   onCustomerConfirmed: () => void;
   onCustomerDeclined: () => void;

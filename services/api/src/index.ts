@@ -1,7 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
-import type { WebSocket } from 'ws';
 
 import {
   healthRoutes,
@@ -34,47 +33,15 @@ import { createBroadcaster, type Broadcaster } from './websocket/broadcaster.js'
 import { initializeDatabase, closeDatabase } from './db/index.js';
 import { cleanupAbandonedRegisterSessions } from './routes/registers.js';
 import { seedDemoData } from './db/seed-demo.js';
-import type { WebSocketEventType } from '@club-ops/shared';
 import { expireWaitlistEntries } from './waitlist/expireWaitlist.js';
 import { processUpgradeHoldsTick } from './waitlist/upgradeHolds.js';
 import { setupTelemetry } from './telemetry/plugin.js';
+import { registerWsRoute } from './websocket/wsRoute.js';
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const SKIP_DB = process.env.SKIP_DB === 'true';
 const SEED_ON_STARTUP = process.env.SEED_ON_STARTUP === 'true';
-
-function isWebSocketEventType(value: unknown): value is WebSocketEventType {
-  if (typeof value !== 'string') return false;
-  switch (value) {
-    case 'ROOM_STATUS_CHANGED':
-    case 'INVENTORY_UPDATED':
-    case 'ROOM_ASSIGNED':
-    case 'ROOM_RELEASED':
-    case 'SESSION_UPDATED':
-    case 'SELECTION_PROPOSED':
-    case 'SELECTION_FORCED':
-    case 'SELECTION_LOCKED':
-    case 'SELECTION_ACKNOWLEDGED':
-    case 'WAITLIST_CREATED':
-    case 'UPGRADE_HOLD_AVAILABLE':
-    case 'UPGRADE_OFFER_EXPIRED':
-    case 'ASSIGNMENT_CREATED':
-    case 'ASSIGNMENT_FAILED':
-    case 'CUSTOMER_CONFIRMATION_REQUIRED':
-    case 'CUSTOMER_CONFIRMED':
-    case 'CUSTOMER_DECLINED':
-    case 'CHECKOUT_REQUESTED':
-    case 'CHECKOUT_CLAIMED':
-    case 'CHECKOUT_UPDATED':
-    case 'CHECKOUT_COMPLETED':
-    case 'WAITLIST_UPDATED':
-    case 'REGISTER_SESSION_UPDATED':
-      return true;
-    default:
-      return false;
-  }
-}
 
 // Augment FastifyInstance with broadcaster
 declare module 'fastify' {
@@ -207,74 +174,8 @@ async function main() {
   await fastify.register(scheduleRoutes);
   await fastify.register(timeoffRoutes);
 
-  // WebSocket endpoint
-  fastify.get('/ws', { websocket: true }, (connection, req) => {
-    const clientId = crypto.randomUUID();
-    const socket = connection.socket as unknown as WebSocket;
-    type AliveWebSocket = WebSocket & { isAlive?: boolean };
-    const alive = socket as AliveWebSocket;
-
-    // Extract lane from query string if present
-    const url = req.url || '';
-    const urlObj = new URL(url, `http://${req.headers.host || 'localhost'}`);
-    const lane = urlObj.searchParams.get('lane') || undefined;
-
-    fastify.log.info({ clientId, lane }, 'WebSocket client connected');
-
-    broadcaster.addClient(clientId, alive, lane);
-
-    // Keepalive: send ping frames to prevent idle timeouts and detect half-open connections.
-    alive.isAlive = true;
-    alive.on('pong', () => {
-      alive.isAlive = true;
-    });
-
-    const keepaliveInterval = setInterval(() => {
-      if (alive.readyState !== alive.OPEN) return;
-      if (alive.isAlive === false) {
-        alive.terminate();
-        broadcaster.removeClient(clientId);
-        clearInterval(keepaliveInterval);
-        return;
-      }
-      alive.isAlive = false;
-      alive.ping();
-    }, 30000); // 30s
-
-    connection.on('message', (message: Buffer) => {
-      try {
-        const data = JSON.parse(message.toString()) as Record<string, unknown>;
-        fastify.log.info({ clientId, data }, 'Received message from client');
-
-        // Handle subscription messages
-        if (data.type === 'subscribe' && Array.isArray(data.events)) {
-          const events = data.events.filter(isWebSocketEventType);
-          fastify.log.info({ clientId, events }, 'Client subscribed to events');
-          broadcaster.subscribeClient(clientId, events);
-        }
-
-        // Handle lane update
-        if (data.type === 'setLane' && typeof data.lane === 'string') {
-          fastify.log.info({ clientId, lane: data.lane }, 'Client lane updated');
-          broadcaster.updateClientLane(clientId, data.lane);
-        }
-      } catch {
-        fastify.log.warn({ clientId }, 'Received invalid JSON from client');
-      }
-    });
-
-    connection.on('close', () => {
-      clearInterval(keepaliveInterval);
-      broadcaster.removeClient(clientId);
-      fastify.log.info({ clientId }, 'WebSocket client disconnected');
-    });
-
-    connection.on('error', (err) => {
-      clearInterval(keepaliveInterval);
-      fastify.log.error({ clientId, err }, 'WebSocket error');
-      broadcaster.removeClient(clientId);
-    });
-  });
+  // WebSocket endpoint (authenticated; see websocket/wsRoute.ts)
+  await registerWsRoute(fastify, broadcaster);
 
   // Graceful shutdown
   const shutdown = async () => {
