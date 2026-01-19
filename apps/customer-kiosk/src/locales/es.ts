@@ -90,9 +90,9 @@ export const es: Record<keyof typeof en, string> = {
   'membership.pending': 'En proceso',
   'membership.modal.title': 'Membresía',
   'membership.modal.body.purchase':
-    'Pregunta al empleado el precio actual de la membresía de 6 meses.',
+    'Ahorra en la membresía por día con la membresía de 6 meses. Pregunta al empleado el precio actual de la membresía de 6 meses.',
   'membership.modal.body.renew':
-    'Pregunta al empleado el precio actual de la renovación de 6 meses.',
+    'Ahorra en la membresía por día con la renovación de 6 meses. Pregunta al empleado el precio actual de la renovación de 6 meses.',
   'common.continue': 'Continuar',
 
   // Purchase cards (Selection)

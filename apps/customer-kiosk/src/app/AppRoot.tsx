@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  SessionUpdatedPayload,
-  WebSocketEvent,
-  CustomerConfirmationRequiredPayload,
-  AssignmentCreatedPayload,
-  InventoryUpdatedPayload,
-  SelectionProposedPayload,
-  SelectionLockedPayload,
-  SelectionForcedPayload,
-  CheckinOptionHighlightedPayload,
+import {
+  safeParseWebSocketEvent,
+  type SessionUpdatedPayload,
+  type CustomerConfirmationRequiredPayload,
+  type AssignmentCreatedPayload,
+  type InventoryUpdatedPayload,
+  type SelectionProposedPayload,
+  type SelectionLockedPayload,
+  type SelectionForcedPayload,
+  type CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { t, type Language } from '../i18n';
@@ -218,16 +218,26 @@ export function AppRoot() {
   ) : null;
 
   const API_BASE = '/api';
+  const KIOSK_TOKEN = (import.meta as unknown as { env?: Record<string, unknown> }).env?.[
+    'VITE_KIOSK_TOKEN'
+  ];
+  const kioskAuthHeaders = (extra?: Record<string, string>) => {
+    const token = typeof KIOSK_TOKEN === 'string' && KIOSK_TOKEN.trim() ? KIOSK_TOKEN.trim() : null;
+    return {
+      ...(extra ?? {}),
+      ...(token ? { 'x-kiosk-token': token } : {}),
+    };
+  };
 
   const onWsMessage = useCallback((event: MessageEvent) => {
     try {
       const parsed: unknown = safeJsonParse(String(event.data));
-      if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-      const message = parsed as unknown as WebSocketEvent;
+      const message = safeParseWebSocketEvent(parsed);
+      if (!message) return;
       console.log('WebSocket message:', message);
 
       if (message.type === 'SESSION_UPDATED') {
-        const payload = message.payload as SessionUpdatedPayload;
+        const payload = message.payload;
 
         // Update session state with all fields
         setSession((prev) => ({
@@ -352,13 +362,13 @@ export function AppRoot() {
           setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
         }
       } else if (message.type === 'SELECTION_PROPOSED') {
-        const payload = message.payload as SelectionProposedPayload;
+        const payload = message.payload;
         if (payload.sessionId === sessionIdRef.current) {
           setProposedRentalType(payload.rentalType);
           setProposedBy(payload.proposedBy);
         }
       } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
-        const payload = message.payload as SelectionLockedPayload | SelectionForcedPayload;
+        const payload = message.payload;
         if (payload.sessionId === sessionIdRef.current) {
           setSelectionConfirmed(true);
           setSelectionConfirmedBy('EMPLOYEE');
@@ -369,7 +379,7 @@ export function AppRoot() {
       } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
         setSelectionAcknowledged(true);
       } else if (message.type === 'CHECKIN_OPTION_HIGHLIGHTED') {
-        const payload = message.payload as CheckinOptionHighlightedPayload;
+        const payload = message.payload;
         if (payload.sessionId !== sessionIdRef.current) return;
         if (payload.step === 'LANGUAGE') {
           const opt = payload.option === 'EN' || payload.option === 'ES' ? payload.option : null;
@@ -380,15 +390,15 @@ export function AppRoot() {
           setHighlightedMembershipChoice(opt);
         }
       } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
-        const payload = message.payload as CustomerConfirmationRequiredPayload;
+        const payload = message.payload;
         setCustomerConfirmationData(payload);
         setShowCustomerConfirmation(true);
       } else if (message.type === 'ASSIGNMENT_CREATED') {
-        const payload = message.payload as AssignmentCreatedPayload;
+        const payload = message.payload;
         // Assignment successful - could show confirmation message
         console.log('Assignment created:', payload);
       } else if (message.type === 'INVENTORY_UPDATED') {
-        const payload = message.payload as InventoryUpdatedPayload;
+        const payload = message.payload;
         // Update inventory counts for availability warnings
         if (payload.inventory) {
           const rooms: Record<string, number> = {};
@@ -593,6 +603,7 @@ export function AppRoot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
         },
         body: JSON.stringify({
           rentalType: rental,
@@ -630,6 +641,7 @@ export function AppRoot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
         },
         body: JSON.stringify({
           rentalType: backupType,
@@ -794,6 +806,7 @@ export function AppRoot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
         },
         body: JSON.stringify({
           signaturePayload: signatureData, // Full data URL or base64
@@ -828,6 +841,7 @@ export function AppRoot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
         },
         body: JSON.stringify({
           language,
@@ -856,7 +870,7 @@ export function AppRoot() {
     try {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/customer-confirm`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
         body: JSON.stringify({
           sessionId: customerConfirmationData.sessionId,
           confirmed,
@@ -890,7 +904,7 @@ export function AppRoot() {
       try {
         await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
           body: JSON.stringify({ choice: 'ONE_TIME', sessionId: session.sessionId }),
         });
         // SESSION_UPDATED will reconcile; we don't need to block UX on this.
@@ -909,7 +923,7 @@ export function AppRoot() {
         `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
           body: JSON.stringify({ intent: 'NONE', sessionId: session.sessionId }),
         }
       );
@@ -936,7 +950,7 @@ export function AppRoot() {
         `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
           body: JSON.stringify({ intent: membershipModalIntent, sessionId: session.sessionId }),
         }
       );
@@ -1058,7 +1072,7 @@ export function AppRoot() {
                 // Kiosk acknowledgement: UI-only. Must NOT end/clear the lane session.
                 await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
                   body: JSON.stringify({}),
                 });
               } catch (error) {

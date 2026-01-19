@@ -3,24 +3,11 @@ import {
   type ActiveVisit,
   type CheckoutRequestSummary,
   type CheckoutChecklist,
-  type WebSocketEvent,
-  type CheckoutRequestedPayload,
-  type CheckoutClaimedPayload,
-  type CheckoutUpdatedPayload,
   type SessionUpdatedPayload,
-  type AssignmentCreatedPayload,
   type AssignmentFailedPayload,
-  type CustomerConfirmedPayload,
-  type CustomerDeclinedPayload,
-  type SelectionProposedPayload,
-  type SelectionLockedPayload,
-  type SelectionAcknowledgedPayload,
-  type SelectionForcedPayload,
-  type UpgradeHoldAvailablePayload,
-  type UpgradeOfferExpiredPayload,
   getCustomerMembershipStatus,
 } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
+import { safeJsonParse, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { RegisterSignIn } from '../RegisterSignIn';
 import type { IdScanPayload } from '@club-ops/shared';
 type ScanResult =
@@ -65,6 +52,8 @@ import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerCont
 import { InventoryDrawer, type InventoryDrawerSection } from '../components/inventory/InventoryDrawer';
 import { InventorySummaryBar } from '../components/inventory/InventorySummaryBar';
 import { usePassiveScannerInput } from '../usePassiveScannerInput';
+import { useRegisterLaneSessionState } from './useRegisterLaneSessionState';
+import { useRegisterWebSocketEvents } from './useRegisterWebSocketEvents';
 
 interface HealthStatus {
   status: string;
@@ -327,8 +316,175 @@ export function AppRoot() {
     }
     selectHomeTab('scan');
   }, [selectHomeTab]);
-  const [customerName, setCustomerName] = useState('');
-  const [membershipNumber, setMembershipNumber] = useState('');
+
+  // ---------------------------------------------------------------------------
+  // Lane-session view model (reducer) + WS-driven updates
+  // ---------------------------------------------------------------------------
+  const { state: laneSession, actions: laneSessionActions } = useRegisterLaneSessionState();
+  const {
+    customerName,
+    membershipNumber,
+    currentSessionId,
+    agreementSigned,
+    customerSelectedType,
+    waitlistDesiredTier,
+    waitlistBackupType,
+    proposedRentalType,
+    proposedBy,
+    selectionConfirmed,
+    selectionConfirmedBy,
+    selectionAcknowledged,
+    paymentIntentId,
+    paymentQuote,
+    paymentStatus,
+    membershipPurchaseIntent,
+    membershipChoice,
+    customerMembershipValidUntil,
+    allowedRentals,
+    pastDueBlocked,
+    pastDueBalance,
+    customerPrimaryLanguage,
+    customerDobMonthDay,
+    customerLastVisitAt,
+    customerNotes,
+    assignedResourceType,
+    assignedResourceNumber,
+    checkoutAt,
+    paymentDeclineError,
+  } = laneSession;
+
+  // Keep naming stable throughout the existing component by providing setter wrappers.
+  const setCustomerName = useCallback(
+    (value: string) => laneSessionActions.patch({ customerName: value }),
+    [laneSessionActions]
+  );
+  const setMembershipNumber = useCallback(
+    (value: string) => laneSessionActions.patch({ membershipNumber: value }),
+    [laneSessionActions]
+  );
+  const setCurrentSessionId = useCallback(
+    (value: string | null) => laneSessionActions.patch({ currentSessionId: value }),
+    [laneSessionActions]
+  );
+  const setAgreementSigned = useCallback(
+    (value: boolean) => laneSessionActions.patch({ agreementSigned: value }),
+    [laneSessionActions]
+  );
+  const setCustomerSelectedType = useCallback(
+    (value: string | null) => laneSessionActions.patch({ customerSelectedType: value }),
+    [laneSessionActions]
+  );
+  const setWaitlistDesiredTier = useCallback(
+    (value: string | null) => laneSessionActions.patch({ waitlistDesiredTier: value }),
+    [laneSessionActions]
+  );
+  const setWaitlistBackupType = useCallback(
+    (value: string | null) => laneSessionActions.patch({ waitlistBackupType: value }),
+    [laneSessionActions]
+  );
+  const setProposedRentalType = useCallback(
+    (value: string | null) => laneSessionActions.patch({ proposedRentalType: value }),
+    [laneSessionActions]
+  );
+  const setProposedBy = useCallback(
+    (value: 'CUSTOMER' | 'EMPLOYEE' | null) => laneSessionActions.patch({ proposedBy: value }),
+    [laneSessionActions]
+  );
+  const setSelectionConfirmed = useCallback(
+    (value: boolean) => laneSessionActions.patch({ selectionConfirmed: value }),
+    [laneSessionActions]
+  );
+  const setSelectionConfirmedBy = useCallback(
+    (value: 'CUSTOMER' | 'EMPLOYEE' | null) => laneSessionActions.patch({ selectionConfirmedBy: value }),
+    [laneSessionActions]
+  );
+  const setSelectionAcknowledged = useCallback(
+    (value: boolean) => laneSessionActions.patch({ selectionAcknowledged: value }),
+    [laneSessionActions]
+  );
+  const setPaymentIntentId = useCallback(
+    (value: string | null) => laneSessionActions.patch({ paymentIntentId: value }),
+    [laneSessionActions]
+  );
+  const setPaymentQuote = useCallback(
+    (
+      value:
+        | null
+        | {
+            total: number;
+            lineItems: Array<{ description: string; amount: number }>;
+            messages: string[];
+          }
+        | ((prev: any) => any)
+    ) => {
+      if (typeof value === 'function') {
+        laneSessionActions.patch({ paymentQuote: value(laneSession.paymentQuote) });
+        return;
+      }
+      laneSessionActions.patch({ paymentQuote: value });
+    },
+    [laneSessionActions, laneSession.paymentQuote]
+  );
+  const setPaymentStatus = useCallback(
+    (value: 'DUE' | 'PAID' | null) => laneSessionActions.patch({ paymentStatus: value }),
+    [laneSessionActions]
+  );
+  const setMembershipPurchaseIntent = useCallback(
+    (value: 'PURCHASE' | 'RENEW' | null) => laneSessionActions.patch({ membershipPurchaseIntent: value }),
+    [laneSessionActions]
+  );
+  const setMembershipChoice = useCallback(
+    (value: 'ONE_TIME' | 'SIX_MONTH' | null) => laneSessionActions.patch({ membershipChoice: value }),
+    [laneSessionActions]
+  );
+  const setCustomerMembershipValidUntil = useCallback(
+    (value: string | null) => laneSessionActions.patch({ customerMembershipValidUntil: value }),
+    [laneSessionActions]
+  );
+  const setAllowedRentals = useCallback(
+    (value: string[]) => laneSessionActions.patch({ allowedRentals: value }),
+    [laneSessionActions]
+  );
+  const setPastDueBlocked = useCallback(
+    (value: boolean) => laneSessionActions.patch({ pastDueBlocked: value }),
+    [laneSessionActions]
+  );
+  const setPastDueBalance = useCallback(
+    (value: number) => laneSessionActions.patch({ pastDueBalance: value }),
+    [laneSessionActions]
+  );
+  const setCustomerPrimaryLanguage = useCallback(
+    (value: 'EN' | 'ES' | undefined) => laneSessionActions.patch({ customerPrimaryLanguage: value }),
+    [laneSessionActions]
+  );
+  const setCustomerDobMonthDay = useCallback(
+    (value: string | undefined) => laneSessionActions.patch({ customerDobMonthDay: value }),
+    [laneSessionActions]
+  );
+  const setCustomerLastVisitAt = useCallback(
+    (value: string | undefined) => laneSessionActions.patch({ customerLastVisitAt: value }),
+    [laneSessionActions]
+  );
+  const setCustomerNotes = useCallback(
+    (value: string | undefined) => laneSessionActions.patch({ customerNotes: value }),
+    [laneSessionActions]
+  );
+  const setAssignedResourceType = useCallback(
+    (value: 'room' | 'locker' | null) => laneSessionActions.patch({ assignedResourceType: value }),
+    [laneSessionActions]
+  );
+  const setAssignedResourceNumber = useCallback(
+    (value: string | null) => laneSessionActions.patch({ assignedResourceNumber: value }),
+    [laneSessionActions]
+  );
+  const setCheckoutAt = useCallback(
+    (value: string | null) => laneSessionActions.patch({ checkoutAt: value }),
+    [laneSessionActions]
+  );
+  const setPaymentDeclineError = useCallback(
+    (value: string | null) => laneSessionActions.setPaymentDeclineError(value),
+    [laneSessionActions]
+  );
   const [pendingCreateFromScan, setPendingCreateFromScan] = useState<{
     idScanValue: string;
     idScanHash: string | null;
@@ -367,8 +523,6 @@ export function AppRoot() {
   const [scanResolutionSubmitting, setScanResolutionSubmitting] = useState(false);
   const [scanToastMessage, setScanToastMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [agreementSigned, setAgreementSigned] = useState(false);
   // Check-in mode is now auto-detected server-side based on active visits/assignments.
   const [selectedRentalType, setSelectedRentalType] = useState<string | null>(null);
   const [checkoutRequests, setCheckoutRequests] = useState<Map<string, CheckoutRequestSummary>>(
@@ -378,22 +532,12 @@ export function AppRoot() {
   const [, setCheckoutChecklist] = useState<CheckoutChecklist>({});
   const [checkoutItemsConfirmed, setCheckoutItemsConfirmed] = useState(false);
   const [checkoutFeePaid, setCheckoutFeePaid] = useState(false);
-  const [customerSelectedType, setCustomerSelectedType] = useState<string | null>(null);
-  const [waitlistDesiredTier, setWaitlistDesiredTier] = useState<string | null>(null);
-  const [waitlistBackupType, setWaitlistBackupType] = useState<string | null>(null);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState<{
     type: 'room' | 'locker';
     id: string;
     number: string;
     tier: string;
   } | null>(null);
-  const [proposedRentalType, setProposedRentalType] = useState<string | null>(null);
-  const [proposedBy, setProposedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
-  const [selectionConfirmed, setSelectionConfirmed] = useState(false);
-  const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(
-    null
-  );
-  const [selectionAcknowledged, setSelectionAcknowledged] = useState(true);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [alreadyCheckedIn, setAlreadyCheckedIn] = useState<null | {
     customerLabel: string | null;
@@ -405,19 +549,7 @@ export function AppRoot() {
     selected: string;
     number: string;
   } | null>(null);
-  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
-  const [paymentQuote, setPaymentQuote] = useState<{
-    total: number;
-    lineItems: Array<{ description: string; amount: number }>;
-    messages: string[];
-  } | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<'DUE' | 'PAID' | null>(null);
-  const [membershipPurchaseIntent, setMembershipPurchaseIntent] = useState<'PURCHASE' | 'RENEW' | null>(
-    null
-  );
-  const [membershipChoice, setMembershipChoice] = useState<'ONE_TIME' | 'SIX_MONTH' | null>(null);
-  const [customerMembershipValidUntil, setCustomerMembershipValidUntil] = useState<string | null>(null);
-  const [allowedRentals, setAllowedRentals] = useState<string[]>([]);
+  // payment + membership state lives in laneSession reducer
 
   // Agreement/PDF verification (staff-only)
   const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
@@ -460,8 +592,7 @@ export function AppRoot() {
   const [membershipIdPromptedForSessionId, setMembershipIdPromptedForSessionId] = useState<string | null>(
     null
   );
-  const [pastDueBlocked, setPastDueBlocked] = useState(false);
-  const [pastDueBalance, setPastDueBalance] = useState<number>(0);
+  // past-due state lives in laneSession reducer
   const [waitlistEntries, setWaitlistEntries] = useState<
     Array<{
       id: string;
@@ -511,13 +642,7 @@ export function AppRoot() {
   } | null>(null);
   const [inventoryHasLate, setInventoryHasLate] = useState(false);
 
-  // Customer info state
-  const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(
-    undefined
-  );
-  const [customerDobMonthDay, setCustomerDobMonthDay] = useState<string | undefined>(undefined);
-  const [customerLastVisitAt, setCustomerLastVisitAt] = useState<string | undefined>(undefined);
-  const [customerNotes, setCustomerNotes] = useState<string | undefined>(undefined);
+  // Customer info state lives in laneSession reducer
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
 
@@ -527,8 +652,15 @@ export function AppRoot() {
   const [managerId, setManagerId] = useState('');
   const [managerPin, setManagerPin] = useState('');
   const [managerList, setManagerList] = useState<Array<{ id: string; name: string }>>([]);
-  const [paymentDeclineError, setPaymentDeclineError] = useState<string | null>(null);
+  // payment decline state lives in laneSession reducer
   const paymentIntentCreateInFlightRef = useRef(false);
+
+  // Keep past-due modal behavior consistent with prior WS handler: auto-open when server blocks.
+  useEffect(() => {
+    if (pastDueBlocked && pastDueBalance > 0) {
+      setShowPastDueModal(true);
+    }
+  }, [pastDueBlocked, pastDueBalance]);
   const fetchWaitlistRef = useRef<(() => Promise<void>) | null>(null);
   const fetchInventoryAvailableRef = useRef<(() => Promise<void>) | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
@@ -548,10 +680,7 @@ export function AppRoot() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedCustomerLabel, setSelectedCustomerLabel] = useState<string | null>(null);
 
-  // Assignment completion state
-  const [assignedResourceType, setAssignedResourceType] = useState<'room' | 'locker' | null>(null);
-  const [assignedResourceNumber, setAssignedResourceNumber] = useState<string | null>(null);
-  const [checkoutAt, setCheckoutAt] = useState<string | null>(null);
+  // Assignment completion state lives in laneSession reducer
 
   const deviceId = useState(() => {
     try {
@@ -2007,282 +2136,55 @@ export function AppRoot() {
     };
   }, [lane]);
 
-  const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
-  const ws = useReconnectingWebSocket({
-    url: wsUrl,
-    onOpenSendJson: [
-      {
-        type: 'subscribe',
-        events: [
-          'CHECKOUT_REQUESTED',
-          'CHECKOUT_CLAIMED',
-          'CHECKOUT_UPDATED',
-          'CHECKOUT_COMPLETED',
-          'SESSION_UPDATED',
-          'ROOM_STATUS_CHANGED',
-          'INVENTORY_UPDATED',
-          'ASSIGNMENT_CREATED',
-          'ASSIGNMENT_FAILED',
-          'CUSTOMER_CONFIRMED',
-          'CUSTOMER_DECLINED',
-          'WAITLIST_UPDATED',
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'SELECTION_ACKNOWLEDGED',
-        ],
-      },
-    ],
-    onMessage: (event) => {
-      try {
-        const parsed: unknown = safeJsonParse(String(event.data));
-        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-        const message = parsed as unknown as WebSocketEvent;
-        console.log('WebSocket message:', message);
-
-        if (message.type === 'CHECKOUT_REQUESTED') {
-          const payload = message.payload as CheckoutRequestedPayload;
-          setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.set(payload.request.requestId, payload.request);
-            return next;
-          });
-        } else if (message.type === 'CHECKOUT_CLAIMED') {
-          const payload = message.payload as CheckoutClaimedPayload;
-          setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.delete(payload.requestId);
-            return next;
-          });
-        } else if (message.type === 'CHECKOUT_UPDATED') {
-          const payload = message.payload as CheckoutUpdatedPayload;
-          if (selectedCheckoutRequestRef.current === payload.requestId) {
-            setCheckoutItemsConfirmed(payload.itemsConfirmed);
-            setCheckoutFeePaid(payload.feePaid);
-          }
-        } else if (message.type === 'CHECKOUT_COMPLETED') {
-          const payload = message.payload as { requestId: string };
-          setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.delete(payload.requestId);
-            return next;
-          });
-          if (selectedCheckoutRequestRef.current === payload.requestId) {
-            setSelectedCheckoutRequest(null);
-            setCheckoutChecklist({});
-            setCheckoutItemsConfirmed(false);
-            setCheckoutFeePaid(false);
-          }
-        } else if (message.type === 'SESSION_UPDATED') {
-          const payload = message.payload as SessionUpdatedPayload;
-          // Core identity/session fields (keep register in sync without manual refresh)
-          if (payload.sessionId !== undefined) {
-            setCurrentSessionId(payload.sessionId || null);
-          }
-          if (payload.customerName !== undefined) {
-            setCustomerName(payload.customerName || '');
-          }
-          if (payload.membershipNumber !== undefined) {
-            setMembershipNumber(payload.membershipNumber || '');
-          }
-          if (payload.customerMembershipValidUntil !== undefined) {
-            setCustomerMembershipValidUntil(payload.customerMembershipValidUntil || null);
-          }
-          if (payload.membershipChoice !== undefined) {
-            setMembershipChoice(payload.membershipChoice || null);
-          }
-          if (payload.membershipPurchaseIntent !== undefined) {
-            setMembershipPurchaseIntent(payload.membershipPurchaseIntent || null);
-          }
-          if (Array.isArray(payload.allowedRentals)) {
-            setAllowedRentals(payload.allowedRentals);
-          }
-
-          // Agreement completion sync
-          if (payload.agreementSigned !== undefined) {
-            setAgreementSigned(Boolean(payload.agreementSigned));
-          }
-
-          // Update selection state
-          if (payload.proposedRentalType) {
-            setProposedRentalType(payload.proposedRentalType);
-            setProposedBy(payload.proposedBy || null);
-          }
-          if (payload.selectionConfirmed !== undefined) {
-            setSelectionConfirmed(payload.selectionConfirmed);
-            setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
-            if (payload.selectionConfirmed) {
-              setCustomerSelectedType(payload.proposedRentalType || null);
-            }
-          }
-          // Waitlist intent (customer requested unavailable tier + backup choice)
-          if (payload.waitlistDesiredType !== undefined) {
-            setWaitlistDesiredTier(payload.waitlistDesiredType || null);
-          }
-          if (payload.backupRentalType !== undefined) {
-            setWaitlistBackupType(payload.backupRentalType || null);
-          }
-          // Update customer info
-          if (payload.customerPrimaryLanguage !== undefined) {
-            setCustomerPrimaryLanguage(payload.customerPrimaryLanguage);
-          }
-          if (payload.customerDobMonthDay !== undefined) {
-            setCustomerDobMonthDay(payload.customerDobMonthDay);
-          }
-          if (payload.customerLastVisitAt !== undefined) {
-            setCustomerLastVisitAt(payload.customerLastVisitAt);
-          }
-          if (payload.customerNotes !== undefined) {
-            setCustomerNotes(payload.customerNotes);
-          }
-          // Update assignment info
-          if (payload.assignedResourceType !== undefined) {
-            setAssignedResourceType(payload.assignedResourceType);
-          }
-          if (payload.assignedResourceNumber !== undefined) {
-            setAssignedResourceNumber(payload.assignedResourceNumber);
-          }
-          if (payload.checkoutAt !== undefined) {
-            setCheckoutAt(payload.checkoutAt);
-          }
-          // Update payment status
-          if (payload.paymentIntentId !== undefined) {
-            setPaymentIntentId(payload.paymentIntentId || null);
-          }
-          if (payload.paymentStatus !== undefined) {
-            setPaymentStatus(payload.paymentStatus);
-          }
-          // Keep payment quote view in sync with server-authoritative quote updates (e.g., kiosk membership purchase intent).
-          if (payload.paymentTotal !== undefined || payload.paymentLineItems !== undefined) {
-            setPaymentQuote((prev) => {
-              const total = payload.paymentTotal ?? prev?.total ?? 0;
-              const lineItems = payload.paymentLineItems ?? prev?.lineItems ?? [];
-              const messages = prev?.messages ?? [];
-              return { total, lineItems, messages };
-            });
-          }
-          if (payload.paymentFailureReason) {
-            setPaymentDeclineError(payload.paymentFailureReason);
-          }
-          // Update past-due blocking
-          if (payload.pastDueBlocked !== undefined) {
-            setPastDueBlocked(payload.pastDueBlocked);
-            if (payload.pastDueBalance !== undefined) {
-              setPastDueBalance(payload.pastDueBalance || 0);
-            }
-            if (payload.pastDueBlocked && payload.pastDueBalance && payload.pastDueBalance > 0) {
-              setShowPastDueModal(true);
-            }
-          }
-
-          // If server cleared the lane session (COMPLETED with empty customer name), reset local UI.
-          if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
-            setCurrentSessionId(null);
-            setCustomerName('');
-            setMembershipNumber('');
-            setAgreementSigned(false);
-            setAssignedResourceType(null);
-            setAssignedResourceNumber(null);
-            setSelectedInventoryItem(null);
-            setPaymentIntentId(null);
-            setPaymentQuote(null);
-            setPaymentStatus(null);
-            setMembershipPurchaseIntent(null);
-            setMembershipChoice(null);
-            setCustomerMembershipValidUntil(null);
-            setAllowedRentals([]);
-            setShowMembershipIdPrompt(false);
-            setMembershipIdInput('');
-            setMembershipIdError(null);
-            setMembershipIdPromptedForSessionId(null);
-            setProposedRentalType(null);
-            setProposedBy(null);
-            setSelectionConfirmed(false);
-            setSelectionConfirmedBy(null);
-            setSelectionAcknowledged(true);
-            setWaitlistDesiredTier(null);
-            setWaitlistBackupType(null);
-            setShowWaitlistModal(false);
-          }
-        } else if (message.type === 'WAITLIST_UPDATED') {
-          // Refresh waitlist when updated
-          void fetchWaitlistRef.current?.();
-          void fetchInventoryAvailableRef.current?.();
-        } else if (message.type === 'UPGRADE_HOLD_AVAILABLE') {
-          const payload = message.payload as UpgradeHoldAvailablePayload;
-          pushBottomToast({
-            message: `Room ${payload.roomNumber} available for ${payload.customerName}'s ${payload.desiredTier} upgrade.`,
-            tone: 'warning',
-          });
-          void fetchWaitlistRef.current?.();
-          void fetchInventoryAvailableRef.current?.();
-        } else if (message.type === 'UPGRADE_OFFER_EXPIRED') {
-          const payload = message.payload as UpgradeOfferExpiredPayload;
-          pushBottomToast({
-            message: `Upgrade offer expired for ${payload.customerName}.`,
-            tone: 'warning',
-          });
-          void fetchWaitlistRef.current?.();
-          void fetchInventoryAvailableRef.current?.();
-        } else if (message.type === 'SELECTION_PROPOSED') {
-          const payload = message.payload as SelectionProposedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setProposedRentalType(payload.rentalType);
-            setProposedBy(payload.proposedBy);
-          }
-        } else if (message.type === 'SELECTION_LOCKED') {
-          const payload = message.payload as SelectionLockedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setSelectionConfirmed(true);
-            setSelectionConfirmedBy(payload.confirmedBy);
-            setCustomerSelectedType(payload.rentalType);
-            setSelectionAcknowledged(true);
-          }
-        } else if (message.type === 'SELECTION_FORCED') {
-          const payload = message.payload as SelectionForcedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setSelectionConfirmed(true);
-            setSelectionConfirmedBy('EMPLOYEE');
-            setCustomerSelectedType(payload.rentalType);
-            setSelectionAcknowledged(true);
-          }
-        } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
-          setSelectionAcknowledged(true);
-        } else if (message.type === 'INVENTORY_UPDATED' || message.type === 'ROOM_STATUS_CHANGED') {
-          void fetchInventoryAvailableRef.current?.();
-        } else if (message.type === 'ASSIGNMENT_CREATED') {
-          const payload = message.payload as AssignmentCreatedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            // Assignment successful - payment should already be handled before agreement + assignment.
-            // SessionUpdated will carry assigned resource details.
-          }
-        } else if (message.type === 'ASSIGNMENT_FAILED') {
-          const payload = message.payload as AssignmentFailedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            // Handle race condition - refresh and re-select
-            alert('Assignment failed: ' + payload.reason);
-            setSelectedInventoryItem(null);
-          }
-        } else if (message.type === 'CUSTOMER_CONFIRMED') {
-          const payload = message.payload as CustomerConfirmedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setShowCustomerConfirmationPending(false);
-            setCustomerConfirmationType(null);
-          }
-        } else if (message.type === 'CUSTOMER_DECLINED') {
-          const payload = message.payload as CustomerDeclinedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setShowCustomerConfirmationPending(false);
-            setCustomerConfirmationType(null);
-            // Revert to customer's requested type
-            if (customerSelectedTypeRef.current) {
-              setSelectedInventoryItem(null);
-              // This will trigger auto-selection in InventorySelector
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+  const ws = useRegisterWebSocketEvents({
+    lane,
+    currentSessionIdRef,
+    selectedCheckoutRequestRef,
+    customerSelectedTypeRef,
+    laneSessionActions: {
+      applySessionUpdated: laneSessionActions.applySessionUpdated,
+      applySelectionProposed: ({ rentalType, proposedBy }) =>
+        laneSessionActions.applySelectionProposed({ rentalType, proposedBy }),
+      applySelectionLocked: ({ rentalType, confirmedBy }) =>
+        laneSessionActions.applySelectionLocked({ rentalType, confirmedBy }),
+      applySelectionForced: ({ rentalType }) => laneSessionActions.applySelectionForced({ rentalType }),
+      selectionAcknowledged: laneSessionActions.selectionAcknowledged,
+    },
+    setCheckoutRequests,
+    setCheckoutItemsConfirmed,
+    setCheckoutFeePaid,
+    setSelectedCheckoutRequest,
+    setCheckoutChecklist,
+    onWaitlistUpdated: () => {
+      void fetchWaitlistRef.current?.();
+      void fetchInventoryAvailableRef.current?.();
+    },
+    onInventoryUpdated: () => {
+      void fetchInventoryAvailableRef.current?.();
+    },
+    onLaneSessionCleared: () => {
+      setSelectedInventoryItem(null);
+      setShowMembershipIdPrompt(false);
+      setMembershipIdInput('');
+      setMembershipIdError(null);
+      setMembershipIdPromptedForSessionId(null);
+      setShowWaitlistModal(false);
+      // Any additional per-session UI state resets remain here (outside reducer).
+    },
+    pushBottomToast,
+    onAssignmentFailed: (payload: AssignmentFailedPayload) => {
+      alert('Assignment failed: ' + payload.reason);
+      setSelectedInventoryItem(null);
+    },
+    onCustomerConfirmed: () => {
+      setShowCustomerConfirmationPending(false);
+      setCustomerConfirmationType(null);
+    },
+    onCustomerDeclined: () => {
+      setShowCustomerConfirmationPending(false);
+      setCustomerConfirmationType(null);
+      if (customerSelectedTypeRef.current) {
+        setSelectedInventoryItem(null);
       }
     },
   });

@@ -94,9 +94,9 @@ export const en = {
   'membership.pending': 'Pending',
   'membership.modal.title': 'Membership',
   'membership.modal.body.purchase':
-    'Ask the employee about current 6-month membership pricing.',
+    'Save on daily membership fees with a 6-month membership. Ask the employee about current 6-month membership pricing.',
   'membership.modal.body.renew':
-    'Ask the employee about current 6-month membership renewal pricing.',
+    'Save on daily membership fees with a 6-month membership. Ask the employee about current 6-month membership renewal pricing.',
   'common.continue': 'Continue',
 
   // Purchase cards (Selection)

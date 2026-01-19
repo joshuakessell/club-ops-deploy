@@ -962,6 +962,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Propose a rental type selection (customer or employee)
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -1029,6 +1032,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Customer kiosk requests a 6-month membership purchase/renewal to include in the payment quote
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -1070,6 +1076,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Persist the kiosk membership-step choice (ONE_TIME vs SIX_MONTH) for the active lane session
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -1337,6 +1346,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Store agreement signature
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -1362,10 +1374,52 @@ paths:
         '200':
           description: Signature stored
 
+  /v1/checkin/lane/{laneId}/set-language:
+    post:
+      tags: [Check-in]
+      summary: Set customer primary language preference for the active lane session
+      security:
+        - kioskToken: []
+        - bearerAuth: []
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language:
+                  type: string
+                  enum: [EN, ES]
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
+                customerName:
+                  type: string
+                  description: Optional customer display name for fallback session resolution.
+      responses:
+        '200':
+          description: Language stored
+        '400':
+          description: Invalid input
+        '404':
+          description: No active session found
+
   /v1/checkin/lane/{laneId}/kiosk-ack:
     post:
       tags: [Check-in]
       summary: Kiosk acknowledgement of completion (UI-only; does not end/clear the lane session)
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -1384,6 +1438,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Customer confirms cross-type assignment
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -1396,8 +1453,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [confirmed]
+              required: [sessionId, confirmed]
               properties:
+                sessionId:
+                  type: string
+                  format: uuid
                 confirmed:
                   type: boolean
       responses:
@@ -2128,6 +2188,11 @@ components:
       scheme: bearer
       bearerFormat: opaque
       description: Opaque session token from PIN or WebAuthn login (stored/validated server-side; not a JWT)
+    kioskToken:
+      type: apiKey
+      in: header
+      name: x-kiosk-token
+      description: Shared kiosk token for kiosk-facing, state-mutating endpoints (configured on the API as KIOSK_TOKEN and in kiosk frontends as VITE_KIOSK_TOKEN)
 
   schemas:
     Staff:

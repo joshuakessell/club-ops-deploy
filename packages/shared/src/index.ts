@@ -45,6 +45,8 @@ export type {
   SelectionLockedPayload,
   SelectionAcknowledgedPayload,
   WaitlistCreatedPayload,
+  UpgradeHoldAvailablePayload,
+  UpgradeOfferExpiredPayload,
   RegisterSessionUpdatedPayload,
 } from './types.js';
 
@@ -67,6 +69,16 @@ export {
   type BatchStatusUpdateInput,
   type IdScanPayload,
 } from './schemas.js';
+
+// WebSocket runtime validation
+export {
+  safeParseWebSocketEvent,
+  type ParsedWebSocketEvent,
+  SessionUpdatedPayloadSchema,
+  InventoryUpdatedPayloadSchema,
+  UpgradeHoldAvailablePayloadSchema,
+  UpgradeOfferExpiredPayloadSchema,
+} from './websocketSchemas.js';
 
 // Facility inventory contract (rooms + lockers)
 export {

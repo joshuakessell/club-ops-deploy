@@ -26,6 +26,12 @@ global.WebSocket = vi.fn(() => {
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Tests run in jsdom, which often defaults to a "landscape" viewport.
+    // The kiosk UI hard-blocks landscape with an orientation overlay, which would hide all controls.
+    // Force a portrait-like viewport so tests can exercise the flow.
+    Object.defineProperty(window, 'innerWidth', { value: 800, writable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 1200, writable: true });
+    window.dispatchEvent(new Event('resize'));
     const storage = {
       getItem: vi.fn(() => null),
       setItem: vi.fn(),

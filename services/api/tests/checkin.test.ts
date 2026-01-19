@@ -9,7 +9,7 @@ import { customerRoutes } from '../src/routes/customers.js';
 import { inventoryRoutes } from '../src/routes/inventory.js';
 import { sessionDocumentsRoutes } from '../src/routes/session-documents.js';
 import { hashPin, generateSessionToken } from '../src/auth/utils.js';
-import type { SessionUpdatedPayload } from '@club-ops/shared';
+import type { SessionUpdatedPayload, CustomerConfirmedPayload } from '@club-ops/shared';
 import { truncateAllTables } from './testDb.js';
 
 // Augment FastifyInstance with broadcaster
@@ -20,6 +20,7 @@ declare module 'fastify' {
 }
 
 describe('Check-in Flow', () => {
+  const TEST_KIOSK_TOKEN = 'test-kiosk-token';
   let app: FastifyInstance;
   let staffToken: string;
   let staffId: string;
@@ -27,8 +28,10 @@ describe('Check-in Flow', () => {
   let customerId: string;
   let dbAvailable = false;
   let sessionUpdatedEvents: Array<{ lane: string; payload: SessionUpdatedPayload }> = [];
+  let customerConfirmedEvents: Array<{ lane: string; payload: CustomerConfirmedPayload }> = [];
 
   beforeAll(async () => {
+    process.env.KIOSK_TOKEN = TEST_KIOSK_TOKEN;
     // Check if database is available
     try {
       await initializeDatabase();
@@ -56,6 +59,12 @@ describe('Check-in Flow', () => {
       sessionUpdatedEvents.push({ lane, payload });
       return originalBroadcastSessionUpdated(payload, lane);
     };
+    // Capture CUSTOMER_CONFIRMED payloads for assertions.
+    const originalBroadcastCustomerConfirmed = broadcaster.broadcastCustomerConfirmed.bind(broadcaster);
+    broadcaster.broadcastCustomerConfirmed = (payload, lane) => {
+      customerConfirmedEvents.push({ lane, payload });
+      return originalBroadcastCustomerConfirmed(payload, lane);
+    };
     app.decorate('broadcaster', broadcaster);
 
     // Register check-in routes
@@ -71,6 +80,7 @@ describe('Check-in Flow', () => {
   beforeEach(async () => {
     if (!dbAvailable) return;
     sessionUpdatedEvents = [];
+    customerConfirmedEvents = [];
 
     // Ensure each test starts from a clean DB state (integration tests share one DB).
     await truncateAllTables((text, params) => query(text, params));
@@ -300,7 +310,7 @@ describe('Check-in Flow', () => {
             Authorization: `Bearer ${staffToken}`,
           },
           payload: {
-            membershipScanValue: '12345',
+            customerId,
           },
         });
         expect(startRes.statusCode).toBe(200);
@@ -320,6 +330,9 @@ describe('Check-in Flow', () => {
         const declineRes = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/customer-confirm`,
+          headers: {
+            'x-kiosk-token': TEST_KIOSK_TOKEN,
+          },
           payload: {
             sessionId: startJson.sessionId,
             confirmed: false,
@@ -341,6 +354,67 @@ describe('Check-in Flow', () => {
         );
         expect(sessionAfter.rows[0]!.assigned_resource_id).toBeNull();
         expect(sessionAfter.rows[0]!.assigned_resource_type).toBeNull();
+      })
+    );
+
+    it(
+      'should broadcast confirmedType/confirmedNumber using the assigned resource number (not UUID)',
+      runIfDbAvailable(async () => {
+        // Create a SPECIAL room and assign it to the customer to simulate a pending cross-type assignment.
+        const roomResult = await query<{ id: string }>(
+          `INSERT INTO rooms (number, type, status, floor, assigned_to_customer_id)
+           VALUES ('201', 'SPECIAL', 'CLEAN', 1, $1)
+           RETURNING id`,
+          [customerId]
+        );
+        const roomId = roomResult.rows[0]!.id;
+
+        // Start a lane session (authenticated) for the customer.
+        const startRes = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
+          payload: {
+            customerId,
+          },
+        });
+        expect(startRes.statusCode).toBe(200);
+        const startJson = JSON.parse(startRes.body) as { sessionId: string };
+
+        // Mark the session as having a selected room (cross-type selection simulation).
+        await query(
+          `UPDATE lane_sessions
+           SET desired_rental_type = 'LOCKER',
+               assigned_resource_type = 'room',
+               assigned_resource_id = $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [roomId, startJson.sessionId]
+        );
+
+        // Customer confirms.
+        const confirmRes = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/customer-confirm`,
+          headers: {
+            'x-kiosk-token': TEST_KIOSK_TOKEN,
+          },
+          payload: {
+            sessionId: startJson.sessionId,
+            confirmed: true,
+          },
+        });
+        expect(confirmRes.statusCode).toBe(200);
+
+        // Should broadcast CUSTOMER_CONFIRMED with tier+number (not UUID).
+        expect(customerConfirmedEvents.length).toBeGreaterThanOrEqual(1);
+        const last = customerConfirmedEvents[customerConfirmedEvents.length - 1]!;
+        expect(last.lane).toBe(laneId);
+        expect(last.payload.sessionId).toBe(startJson.sessionId);
+        expect(last.payload.confirmedType).toBe('SPECIAL');
+        expect(last.payload.confirmedNumber).toBe('201');
       })
     );
   });
@@ -586,6 +660,7 @@ describe('Check-in Flow', () => {
         await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/set-language`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: { language: 'ES' },
         });
 
@@ -736,6 +811,7 @@ describe('Check-in Flow', () => {
         const purchaseResp = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/membership-purchase-intent`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: { intent: 'PURCHASE', sessionId: startData.sessionId },
         });
         expect(purchaseResp.statusCode).toBe(200);
@@ -762,6 +838,7 @@ describe('Check-in Flow', () => {
         const clearResp = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/membership-purchase-intent`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: { intent: 'NONE', sessionId: startData.sessionId },
         });
         expect(clearResp.statusCode).toBe(200);
@@ -808,6 +885,7 @@ describe('Check-in Flow', () => {
         const proposeResponse = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             rentalType: 'STANDARD',
             proposedBy: 'CUSTOMER',
@@ -879,6 +957,7 @@ describe('Check-in Flow', () => {
         await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             rentalType: 'STANDARD',
             proposedBy: 'CUSTOMER',
@@ -1003,6 +1082,59 @@ describe('Check-in Flow', () => {
         });
         expect(startResponse.statusCode).toBe(200);
 
+        // Seed two occupied room blocks with different tiers and different end times:
+        // - STANDARD ends sooner
+        // - SPECIAL ends later
+        //
+        // The waitlist ETA for desiredTier=SPECIAL must be based on the SPECIAL block,
+        // not the earliest-ending block overall.
+        const standardRoomId = (
+          await query<{ id: string }>(
+            `INSERT INTO rooms (number, type, status, floor)
+             VALUES ('200', 'STANDARD', 'OCCUPIED', 1)
+             RETURNING id`
+          )
+        ).rows[0]!.id;
+        const specialRoomId = (
+          await query<{ id: string }>(
+            `INSERT INTO rooms (number, type, status, floor)
+             VALUES ('201', 'SPECIAL', 'OCCUPIED', 1)
+             RETURNING id`
+          )
+        ).rows[0]!.id;
+
+        const visitStandardId = (
+          await query<{ id: string }>(
+            `INSERT INTO visits (customer_id, started_at)
+             VALUES ($1, NOW())
+             RETURNING id`,
+            [customerId]
+          )
+        ).rows[0]!.id;
+        const visitSpecialId = (
+          await query<{ id: string }>(
+            `INSERT INTO visits (customer_id, started_at)
+             VALUES ($1, NOW())
+             RETURNING id`,
+            [customerId]
+          )
+        ).rows[0]!.id;
+
+        const now = new Date();
+        const standardEndsAt = new Date(now.getTime() + 30 * 60 * 1000);
+        const specialEndsAt = new Date(now.getTime() + 90 * 60 * 1000);
+
+        await query(
+          `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, room_id, rental_type)
+           VALUES ($1, 'INITIAL', $2, $3, $4, 'STANDARD')`,
+          [visitStandardId, now, standardEndsAt, standardRoomId]
+        );
+        await query(
+          `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, room_id, rental_type)
+           VALUES ($1, 'INITIAL', $2, $3, $4, 'SPECIAL')`,
+          [visitSpecialId, now, specialEndsAt, specialRoomId]
+        );
+
         // Get waitlist info
         const waitlistResponse = await app.inject({
           method: 'GET',
@@ -1010,9 +1142,11 @@ describe('Check-in Flow', () => {
         });
         expect(waitlistResponse.statusCode).toBe(200);
         const waitlistData = JSON.parse(waitlistResponse.body);
-        expect(waitlistData).toHaveProperty('position');
+        expect(waitlistData.position).toBe(1);
         expect(waitlistData).toHaveProperty('upgradeFee');
-        // ETA may be null if no occupied rooms
+
+        const expectedEta = new Date(specialEndsAt.getTime() + 15 * 60 * 1000).toISOString();
+        expect(waitlistData.estimatedReadyAt).toBe(expectedEta);
       })
     );
   });
@@ -1185,6 +1319,7 @@ describe('Check-in Flow', () => {
         const response = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/kiosk-ack`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
         });
         expect(response.statusCode).toBe(200);
 
@@ -1629,6 +1764,7 @@ describe('Check-in Flow', () => {
         const signResponse = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload: 'data:image/png;base64,test',
             sessionId: session.sessionId,
@@ -1727,6 +1863,7 @@ describe('Check-in Flow', () => {
         const response = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload:
               'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -1880,6 +2017,7 @@ describe('Check-in Flow', () => {
         const response = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload:
               'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -1964,6 +2102,7 @@ describe('Check-in Flow', () => {
         const response = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload:
               'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -2061,6 +2200,7 @@ describe('Check-in Flow', () => {
         const sign = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload:
               'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',

@@ -2,7 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, optionalAuth } from '../auth/middleware.js';
+import { requireKioskTokenOrStaff } from '../auth/kioskToken.js';
 import { verifyPin } from '../auth/utils.js';
+import { HttpError } from '../errors/HttpError.js';
 import { generateAgreementPdf } from '../utils/pdf-generator.js';
 import { stripSystemLateFeeNotes } from '../utils/lateFeeNotes.js';
 import { roundUpToQuarterHour } from '../time/rounding.js';
@@ -10,7 +12,6 @@ import type { Broadcaster } from '../websocket/broadcaster.js';
 import { broadcastInventoryUpdate } from './sessions.js';
 import { insertAuditLog } from '../audit/auditLog.js';
 import type {
-  SessionUpdatedPayload,
   CustomerConfirmationRequiredPayload,
   CustomerConfirmedPayload,
   CustomerDeclinedPayload,
@@ -22,15 +23,20 @@ import type {
   CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
 import { calculatePriceQuote, type PricingInput } from '../pricing/engine.js';
+import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG, IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
 import {
-  AGREEMENT_LEGAL_BODY_HTML_BY_LANG,
-  IdScanPayloadSchema,
-  type IdScanPayload,
-  isDeluxeRoom,
-  isSpecialRoom,
-} from '@club-ops/shared';
-import crypto from 'crypto';
-import { Parse as ParseAamva } from 'aamva-parser';
+  calculateAge,
+  computeSha256Hex,
+  extractAamvaIdentity,
+  isLikelyAamvaPdf417Text,
+  normalizeScanText,
+  parseMembershipNumber,
+  passesFuzzyThresholds,
+  scoreNameMatch,
+  splitNamePartsForMatch,
+} from '../checkin/identity.js';
+import { computeWaitlistInfo, getRoomTier } from '../checkin/waitlist.js';
+import { buildFullSessionUpdatedPayload, getAllowedRentals } from '../checkin/payload.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -148,10 +154,8 @@ async function assertAssignedResourcePersistedAndUnavailable(params: {
     const assignedOk = row?.assigned_to_customer_id === customerId;
     const qualifiesForAvailable = row?.status === 'CLEAN' && row?.assigned_to_customer_id === null;
     if (!assignedOk || qualifiesForAvailable) {
-      throw {
-        statusCode: 500,
-        message: `Check-in persistence assertion failed (room): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`,
-      };
+      const detail = `Check-in persistence assertion failed (room): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`;
+      throw new HttpError(500, 'Check-in persistence assertion failed', { cause: new Error(detail) });
     }
     return;
   }
@@ -174,10 +178,8 @@ async function assertAssignedResourcePersistedAndUnavailable(params: {
   const assignedOk = row?.assigned_to_customer_id === customerId;
   const qualifiesForAvailable = row?.status === 'CLEAN' && row?.assigned_to_customer_id === null;
   if (!assignedOk || qualifiesForAvailable) {
-    throw {
-      statusCode: 500,
-      message: `Check-in persistence assertion failed (locker): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`,
-    };
+    const detail = `Check-in persistence assertion failed (locker): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`;
+    throw new HttpError(500, 'Check-in persistence assertion failed', { cause: new Error(detail) });
   }
 }
 
@@ -265,336 +267,6 @@ function toDate(value: unknown): Date | undefined {
   return Number.isFinite(d.getTime()) ? d : undefined;
 }
 
-function normalizeScanText(raw: string): string {
-  // Normalize line endings and whitespace while preserving line breaks.
-  // Honeywell scanners often emit already-decoded PDF417 text that may include \r\n or \r.
-  const lf = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const lines = lf.split('\n').map((line) => line.replace(/[ \t]+/g, ' ').trimEnd());
-  return lines.join('\n').trim();
-}
-
-function computeSha256Hex(value: string): string {
-  return crypto.createHash('sha256').update(value).digest('hex');
-}
-
-function isLikelyAamvaPdf417Text(raw: string): boolean {
-  // Heuristic detection for AAMVA DL/ID text payloads.
-  const s = raw;
-  return (
-    s.startsWith('@') ||
-    s.includes('ANSI ') ||
-    s.includes('AAMVA') ||
-    /\nDCS/.test(s) ||
-    /\nDAC/.test(s) ||
-    /\nDBD/.test(s) ||
-    /\nDAQ/.test(s)
-  );
-}
-
-type ExtractedIdIdentity = {
-  firstName?: string;
-  lastName?: string;
-  fullName?: string;
-  dob?: string; // YYYY-MM-DD
-  idNumber?: string;
-  issuer?: string;
-  jurisdiction?: string;
-};
-
-const AAMVA_CODES = new Set([
-  // core identity fields
-  'DCS',
-  'DAC',
-  'DAD',
-  'DAA',
-  'DBB',
-  'DBD',
-  'DAQ',
-  'DAJ',
-  'DCI',
-  // common truncation/flags that often appear between name fields
-  'DDE',
-  'DDF',
-  'DDG',
-  // other common fields that can appear and must be treated as boundaries
-  'DBA',
-  'DBC',
-  'DCA',
-  'DCB',
-  'DCD',
-  'DCF',
-  'DCG',
-  'DCK',
-  'DCL',
-  'DDA',
-  'DDB',
-  'DDC',
-  'DDD',
-  'DAG',
-  'DAI',
-  'DAK',
-  'DAR',
-  'DAS',
-  'DAT',
-  'DAU',
-]);
-
-function extractAamvaFieldMap(raw: string): Record<string, string> {
-  // Scan raw (already normalized) for occurrences of known AAMVA 3-letter codes.
-  // Record positions and slice values between consecutive codes.
-  // Trim whitespace/newlines from values.
-  // If a code appears multiple times, keep the first non-empty value (or prefer the longest non-empty).
-  const s = raw;
-  const hits: Array<{ code: string; idx: number }> = [];
-
-  for (let i = 0; i <= s.length - 3; i++) {
-    const code = s.slice(i, i + 3);
-    if (AAMVA_CODES.has(code)) {
-      hits.push({ code, idx: i });
-    }
-  }
-
-  hits.sort((a, b) => a.idx - b.idx);
-
-  const out: Record<string, string> = {};
-  for (let i = 0; i < hits.length; i++) {
-    const cur = hits[i]!;
-    const nextIdx = hits[i + 1]?.idx ?? s.length;
-    const rawValue = s.slice(cur.idx + 3, nextIdx);
-    const value = rawValue.replace(/\s+/g, ' ').trim();
-    if (!value) continue;
-
-    const existing = out[cur.code];
-    if (!existing) {
-      out[cur.code] = value;
-      continue;
-    }
-    // Prefer longest non-empty (helps when a code repeats with a fuller value).
-    if (value.length > existing.length) out[cur.code] = value;
-  }
-
-  return out;
-}
-
-function parseAamvaDateToISO(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const digits = value.replace(/\D/g, '');
-  if (!/^\d{8}$/.test(digits)) return undefined;
-
-  const tryYyyyMmDd = () => {
-    const yyyy = Number(digits.slice(0, 4));
-    const mm = Number(digits.slice(4, 6));
-    const dd = Number(digits.slice(6, 8));
-    if (yyyy < 1900 || yyyy > 2100) return undefined;
-    if (mm < 1 || mm > 12) return undefined;
-    if (dd < 1 || dd > 31) return undefined;
-    return `${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
-  };
-
-  const tryMmDdYyyy = () => {
-    const mm = Number(digits.slice(0, 2));
-    const dd = Number(digits.slice(2, 4));
-    const yyyy = Number(digits.slice(4, 8));
-    if (yyyy < 1900 || yyyy > 2100) return undefined;
-    if (mm < 1 || mm > 12) return undefined;
-    if (dd < 1 || dd > 31) return undefined;
-    return `${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
-  };
-
-  // First try YYYYMMDD if year looks plausible, otherwise MMDDYYYY.
-  const yyyy = Number(digits.slice(0, 4));
-  if (yyyy >= 1900 && yyyy <= 2100) {
-    return tryYyyyMmDd() ?? tryMmDdYyyy();
-  }
-  return tryMmDdYyyy() ?? tryYyyyMmDd();
-}
-
-function isCleanParsedAamvaValue(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  const s = value.trim();
-  if (!s) return false;
-  if (s.length > 64) return false;
-  // Guard against concatenated AAMVA codes leaking into parsed strings.
-  if (/(?:^|[^A-Z])D[A-Z]{2}(?:[^A-Z]|$)/.test(s)) return false;
-  if (/\b(DAQ|DBB|DBD|DCS|DAC|DAA|DAJ|DCI)\b/.test(s)) return false;
-  return true;
-}
-
-function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity {
-  const fieldMap = extractAamvaFieldMap(rawNormalized);
-  const fromMap: ExtractedIdIdentity = {
-    lastName: fieldMap['DCS'] || undefined,
-    firstName: fieldMap['DAC'] || undefined,
-    fullName: fieldMap['DAA'] || undefined,
-    dob:
-      parseAamvaDateToISO(fieldMap['DBB']) ||
-      parseAamvaDateToISO(fieldMap['DBD']) ||
-      undefined,
-    idNumber: fieldMap['DAQ'] || undefined,
-    jurisdiction: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
-    issuer: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
-  };
-
-  if (!fromMap.fullName && fromMap.firstName && fromMap.lastName) {
-    fromMap.fullName = `${fromMap.firstName} ${fromMap.lastName}`.trim();
-  }
-
-  try {
-    const parsed = ParseAamva(rawNormalized) as unknown as {
-      firstName?: string | null;
-      lastName?: string | null;
-      dateOfBirth?: Date | string | null;
-      driversLicenseId?: string | null;
-      state?: string | null;
-      pdf417?: string | null;
-    };
-
-    // Only trust parsed values if they look clean AND we are missing that field from fieldMap.
-    const parsedDob =
-      parsed?.dateOfBirth instanceof Date
-        ? parsed.dateOfBirth.toISOString().slice(0, 10)
-        : typeof parsed?.dateOfBirth === 'string'
-          ? parseAamvaDateToISO(parsed.dateOfBirth)
-          : undefined;
-
-    const out: ExtractedIdIdentity = { ...fromMap };
-    if (!out.firstName && isCleanParsedAamvaValue(parsed?.firstName)) out.firstName = parsed.firstName!.trim();
-    if (!out.lastName && isCleanParsedAamvaValue(parsed?.lastName)) out.lastName = parsed.lastName!.trim();
-    if (!out.idNumber && isCleanParsedAamvaValue(parsed?.driversLicenseId))
-      out.idNumber = parsed.driversLicenseId!.trim();
-    if (!out.jurisdiction && isCleanParsedAamvaValue(parsed?.state)) out.jurisdiction = parsed.state!.trim();
-    if (!out.issuer && isCleanParsedAamvaValue(parsed?.state)) out.issuer = parsed.state!.trim();
-    if (!out.dob && parsedDob) out.dob = parsedDob;
-    if (!out.fullName && out.firstName && out.lastName) out.fullName = `${out.firstName} ${out.lastName}`.trim();
-    return out;
-  } catch {
-    return fromMap;
-  }
-}
-
-type NormalizedNameParts = {
-  normalizedFull: string;
-  firstToken: string;
-  lastToken: string;
-};
-
-function normalizePersonNameForMatch(input: string): string {
-  // Rules:
-  // - lower-case
-  // - trim
-  // - remove punctuation (keep letters, numbers, spaces)
-  // - collapse whitespace
-  // - remove common suffix tokens at end: jr, sr, ii, iii, iv
-  const lowered = input.toLowerCase().trim();
-  const noPunct = lowered.replace(/[^a-z0-9 ]+/g, ' ');
-  const collapsed = noPunct.replace(/\s+/g, ' ').trim();
-  if (!collapsed) return '';
-  const tokens = collapsed.split(' ').filter(Boolean);
-  const suffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
-  while (tokens.length > 1 && suffixes.has(tokens[tokens.length - 1]!)) {
-    tokens.pop();
-  }
-  return tokens.join(' ');
-}
-
-function splitNamePartsForMatch(input: string): NormalizedNameParts | null {
-  const normalizedFull = normalizePersonNameForMatch(input);
-  if (!normalizedFull) return null;
-  const tokens = normalizedFull.split(' ').filter(Boolean);
-  if (tokens.length === 0) return null;
-  const firstToken = tokens[0]!;
-  const lastToken = tokens[tokens.length - 1]!;
-  return { normalizedFull, firstToken, lastToken };
-}
-
-function jaroWinklerSimilarity(aRaw: string, bRaw: string): number {
-  // Deterministic lightweight string similarity. Returns 0..1.
-  const a = aRaw;
-  const b = bRaw;
-  if (a === b) return a.length === 0 ? 0 : 1;
-  const aLen = a.length;
-  const bLen = b.length;
-  if (aLen === 0 || bLen === 0) return 0;
-
-  const matchDistance = Math.max(0, Math.floor(Math.max(aLen, bLen) / 2) - 1);
-  const aMatches = new Array<boolean>(aLen).fill(false);
-  const bMatches = new Array<boolean>(bLen).fill(false);
-
-  let matches = 0;
-  for (let i = 0; i < aLen; i++) {
-    const start = Math.max(0, i - matchDistance);
-    const end = Math.min(i + matchDistance + 1, bLen);
-    for (let j = start; j < end; j++) {
-      if (bMatches[j]) continue;
-      if (a[i] !== b[j]) continue;
-      aMatches[i] = true;
-      bMatches[j] = true;
-      matches++;
-      break;
-    }
-  }
-  if (matches === 0) return 0;
-
-  let t = 0;
-  let k = 0;
-  for (let i = 0; i < aLen; i++) {
-    if (!aMatches[i]) continue;
-    while (k < bLen && !bMatches[k]) k++;
-    if (k < bLen && a[i] !== b[k]) t++;
-    k++;
-  }
-  const transpositions = t / 2;
-
-  const jaro =
-    (matches / aLen + matches / bLen + (matches - transpositions) / matches) / 3;
-
-  // Winkler adjustment
-  const prefixMax = 4;
-  let prefix = 0;
-  for (let i = 0; i < Math.min(prefixMax, aLen, bLen); i++) {
-    if (a[i] === b[i]) prefix++;
-    else break;
-  }
-  const p = 0.1;
-  const jw = jaro + prefix * p * (1 - jaro);
-  return Math.max(0, Math.min(1, jw));
-}
-
-const FUZZY_MIN_OVERALL = 0.88;
-const FUZZY_MIN_LAST = 0.9;
-const FUZZY_MIN_FIRST = 0.85;
-
-function scoreNameMatch(params: {
-  scannedFirst: string;
-  scannedLast: string;
-  storedFirst: string;
-  storedLast: string;
-}): {
-  score: number;
-  firstMax: number;
-  lastMax: number;
-} {
-  const firstDirect = jaroWinklerSimilarity(params.scannedFirst, params.storedFirst);
-  const lastDirect = jaroWinklerSimilarity(params.scannedLast, params.storedLast);
-  const direct = (firstDirect + lastDirect) / 2;
-
-  const firstSwapped = jaroWinklerSimilarity(params.scannedFirst, params.storedLast);
-  const lastSwapped = jaroWinklerSimilarity(params.scannedLast, params.storedFirst);
-  const swapped = (firstSwapped + lastSwapped) / 2;
-
-  const score = Math.max(direct, swapped);
-  const firstMax = Math.max(firstDirect, firstSwapped);
-  const lastMax = Math.max(lastDirect, lastSwapped);
-  return { score, firstMax, lastMax };
-}
-
-function passesFuzzyThresholds(score: { score: number; firstMax: number; lastMax: number }): boolean {
-  return (
-    score.score >= FUZZY_MIN_OVERALL &&
-    score.lastMax >= FUZZY_MIN_LAST &&
-    score.firstMax >= FUZZY_MIN_FIRST
-  );
-}
 
 async function maybeAttachScanIdentifiers(params: {
   client: PoolClient;
@@ -616,37 +288,6 @@ async function maybeAttachScanIdentifiers(params: {
   );
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function extractPaymentLineItems(
-  raw: unknown
-): Array<{ description: string; amount: number }> | undefined {
-  if (raw === null || raw === undefined) return undefined;
-  let parsed: unknown = raw;
-  if (typeof parsed === 'string') {
-    try {
-      parsed = JSON.parse(parsed);
-    } catch {
-      return undefined;
-    }
-  }
-  if (!isRecord(parsed)) return undefined;
-  const items = parsed['lineItems'];
-  if (!Array.isArray(items)) return undefined;
-
-  const normalized: Array<{ description: string; amount: number }> = [];
-  for (const it of items) {
-    if (!isRecord(it)) continue;
-    const description = it['description'];
-    const amount = toNumber(it['amount']);
-    if (typeof description !== 'string' || amount === undefined) continue;
-    normalized.push({ description, amount });
-  }
-  return normalized.length > 0 ? normalized : undefined;
-}
-
 function getHttpError(error: unknown): { statusCode: number; message?: string } | null {
   if (!error || typeof error !== 'object') return null;
   if (!('statusCode' in error)) return null;
@@ -656,335 +297,7 @@ function getHttpError(error: unknown): { statusCode: number; message?: string } 
   return { statusCode, message: typeof message === 'string' ? message : undefined };
 }
 
-async function buildFullSessionUpdatedPayload(
-  client: PoolClient,
-  sessionId: string
-): Promise<{ laneId: string; payload: SessionUpdatedPayload }> {
-  const sessionResult = await client.query<LaneSessionRow>(
-    `SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`,
-    [sessionId]
-  );
 
-  if (sessionResult.rows.length === 0) {
-    throw new Error(`Lane session not found: ${sessionId}`);
-  }
-
-  const session = sessionResult.rows[0]!;
-  const laneId = session.lane_id;
-
-  const customer = session.customer_id
-    ? (
-        await client.query<CustomerRow>(
-          `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, past_due_balance, primary_language, notes
-             FROM customers
-             WHERE id = $1
-             LIMIT 1`,
-          [session.customer_id]
-        )
-      ).rows[0]
-    : undefined;
-
-  const membershipNumber = customer?.membership_number || session.membership_number || undefined;
-
-  const allowedRentals = getAllowedRentals(membershipNumber);
-
-  const pastDueBalance = toNumber(customer?.past_due_balance) || 0;
-  const pastDueBypassed = !!session.past_due_bypassed;
-  const pastDueBlocked = pastDueBalance > 0 && !pastDueBypassed;
-
-  let customerDobMonthDay: string | undefined;
-  const customerDob = toDate(customer?.dob);
-  if (customerDob) {
-    customerDobMonthDay = `${String(customerDob.getMonth() + 1).padStart(2, '0')}/${String(
-      customerDob.getDate()
-    ).padStart(2, '0')}`;
-  }
-
-  let customerLastVisitAt: string | undefined;
-  if (session.customer_id) {
-    const lastVisitResult = await client.query<{ starts_at: Date }>(
-      `SELECT cb.starts_at
-       FROM checkin_blocks cb
-       JOIN visits v ON v.id = cb.visit_id
-       WHERE v.customer_id = $1
-       ORDER BY cb.starts_at DESC
-       LIMIT 1`,
-      [session.customer_id]
-    );
-    if (lastVisitResult.rows.length > 0) {
-      customerLastVisitAt = lastVisitResult.rows[0]!.starts_at.toISOString();
-    }
-  }
-
-  // Prefer a check-in block created by this lane session (when completed)
-  const blockForSession = (
-    await client.query<{
-      visit_id: string;
-      ends_at: Date;
-      agreement_signed: boolean;
-    }>(
-      `SELECT visit_id, ends_at, agreement_signed
-       FROM checkin_blocks
-       WHERE session_id = $1
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [session.id]
-    )
-  ).rows[0];
-
-  // Active visit info (useful for RENEWAL mode pre-completion)
-  let activeVisitId: string | undefined;
-  let activeBlockEndsAt: string | undefined;
-  if (session.customer_id) {
-    const activeVisitResult = await client.query<{ visit_id: string; ends_at: Date }>(
-      `SELECT v.id as visit_id, cb.ends_at
-       FROM visits v
-       JOIN checkin_blocks cb ON cb.visit_id = v.id
-       WHERE v.customer_id = $1 AND v.ended_at IS NULL
-       ORDER BY cb.ends_at DESC
-       LIMIT 1`,
-      [session.customer_id]
-    );
-    if (activeVisitResult.rows.length > 0) {
-      activeVisitId = activeVisitResult.rows[0]!.visit_id;
-      activeBlockEndsAt = activeVisitResult.rows[0]!.ends_at.toISOString();
-    }
-  }
-
-  let assignedResourceType = session.assigned_resource_type as 'room' | 'locker' | null;
-  let assignedResourceNumber: string | undefined;
-
-  if (session.assigned_resource_id && assignedResourceType) {
-    if (assignedResourceType === 'room') {
-      const roomResult = await client.query<{ number: string }>(
-        `SELECT number FROM rooms WHERE id = $1 LIMIT 1`,
-        [session.assigned_resource_id]
-      );
-      assignedResourceNumber = roomResult.rows[0]?.number;
-    } else if (assignedResourceType === 'locker') {
-      const lockerResult = await client.query<{ number: string }>(
-        `SELECT number FROM lockers WHERE id = $1 LIMIT 1`,
-        [session.assigned_resource_id]
-      );
-      assignedResourceNumber = lockerResult.rows[0]?.number;
-    }
-  }
-
-  // Payment intent: prefer the one pinned on the session, otherwise latest for session
-  let paymentIntent: PaymentIntentRow | undefined;
-  if (session.payment_intent_id) {
-    const intentResult = await client.query<PaymentIntentRow>(
-      `SELECT * FROM payment_intents WHERE id = $1 LIMIT 1`,
-      [session.payment_intent_id]
-    );
-    paymentIntent = intentResult.rows[0];
-  } else {
-    const intentResult = await client.query<PaymentIntentRow>(
-      `SELECT * FROM payment_intents
-       WHERE lane_session_id = $1
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [session.id]
-    );
-    paymentIntent = intentResult.rows[0];
-  }
-
-  const paymentTotal = toNumber(paymentIntent?.amount);
-  const paymentLineItems =
-    extractPaymentLineItems(session.price_quote_json) ??
-    extractPaymentLineItems(paymentIntent?.quote_json);
-
-  const membershipValidUntilRaw = (customer as any)?.membership_valid_until as unknown;
-  const customerMembershipValidUntil =
-    membershipValidUntilRaw instanceof Date
-      ? membershipValidUntilRaw.toISOString().slice(0, 10)
-      : typeof membershipValidUntilRaw === 'string'
-        ? membershipValidUntilRaw
-        : undefined;
-
-  const payload: SessionUpdatedPayload = {
-    sessionId: session.id,
-    customerName: customer?.name || session.customer_display_name || '',
-    membershipNumber,
-    customerMembershipValidUntil,
-    membershipChoice: (session.membership_choice as 'ONE_TIME' | 'SIX_MONTH' | null) ?? null,
-    membershipPurchaseIntent: (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
-    kioskAcknowledgedAt: session.kiosk_acknowledged_at ? session.kiosk_acknowledged_at.toISOString() : undefined,
-    allowedRentals,
-    mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
-    status: session.status,
-    proposedRentalType: session.proposed_rental_type || undefined,
-    proposedBy: (session.proposed_by as 'CUSTOMER' | 'EMPLOYEE' | null) || undefined,
-    selectionConfirmed: !!session.selection_confirmed,
-    selectionConfirmedBy:
-      (session.selection_confirmed_by as 'CUSTOMER' | 'EMPLOYEE' | null) || undefined,
-    customerPrimaryLanguage: (customer?.primary_language as 'EN' | 'ES' | undefined) || undefined,
-    customerDobMonthDay,
-    customerLastVisitAt,
-    customerNotes: customer?.notes || undefined,
-    pastDueBalance: pastDueBalance > 0 ? pastDueBalance : undefined,
-    pastDueBlocked,
-    pastDueBypassed,
-    paymentIntentId: paymentIntent?.id,
-    paymentStatus: (paymentIntent?.status as 'DUE' | 'PAID' | undefined) || undefined,
-    paymentMethod: (paymentIntent?.payment_method as 'CASH' | 'CREDIT' | undefined) || undefined,
-    paymentTotal,
-    paymentLineItems,
-    paymentFailureReason: paymentIntent?.failure_reason || undefined,
-    agreementSigned: blockForSession ? !!blockForSession.agreement_signed : false,
-    assignedResourceType: assignedResourceType || undefined,
-    assignedResourceNumber,
-    visitId: blockForSession?.visit_id || activeVisitId,
-    waitlistDesiredType: session.waitlist_desired_type || undefined,
-    backupRentalType: session.backup_rental_type || undefined,
-    blockEndsAt: blockForSession?.ends_at
-      ? blockForSession.ends_at.toISOString()
-      : activeBlockEndsAt,
-    checkoutAt: blockForSession?.ends_at ? blockForSession.ends_at.toISOString() : undefined,
-  };
-
-  return { laneId, payload };
-}
-
-/**
- * Check if a membership number is eligible for Gym Locker rental.
- */
-function isGymLockerEligible(membershipNumber: string | null | undefined): boolean {
-  if (!membershipNumber) {
-    return false;
-  }
-
-  const rangesEnv = process.env.GYM_LOCKER_ELIGIBLE_RANGES || '';
-  if (!rangesEnv.trim()) {
-    return false;
-  }
-
-  const membershipNum = parseInt(membershipNumber, 10);
-  if (isNaN(membershipNum)) {
-    return false;
-  }
-
-  const ranges = rangesEnv
-    .split(',')
-    .map((range) => range.trim())
-    .filter(Boolean);
-
-  for (const range of ranges) {
-    const [startStr, endStr] = range.split('-').map((s) => s.trim());
-    const start = parseInt(startStr || '', 10);
-    const end = parseInt(endStr || '', 10);
-
-    if (!isNaN(start) && !isNaN(end) && membershipNum >= start && membershipNum <= end) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Determine allowed rentals based on membership eligibility.
- */
-function getAllowedRentals(membershipNumber: string | null | undefined): string[] {
-  const allowed: string[] = ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'];
-
-  if (isGymLockerEligible(membershipNumber)) {
-    allowed.push('GYM_LOCKER');
-  }
-
-  return allowed;
-}
-
-/**
- * Parse membership number from scan input.
- * Supports configurable regex pattern.
- */
-function parseMembershipNumber(scanValue: string): string | null {
-  // Default: extract digits only
-  const pattern = process.env.MEMBERSHIP_SCAN_PATTERN || '\\d+';
-  const regex = new RegExp(pattern);
-  const match = scanValue.match(regex);
-  return match ? match[0] : null;
-}
-
-/**
- * Calculate customer age from date of birth.
- */
-function calculateAge(dob: Date | string | null): number | undefined {
-  const d = toDate(dob);
-  if (!d) {
-    return undefined;
-  }
-  const today = new Date();
-  let age = today.getFullYear() - d.getFullYear();
-  const monthDiff = today.getMonth() - d.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < d.getDate())) {
-    age--;
-  }
-  return age;
-}
-
-/**
- * Map room number to tier (Special, Double, or Standard).
- */
-function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
-  const num = parseInt(roomNumber, 10);
-
-  if (isSpecialRoom(num)) {
-    return 'SPECIAL';
-  }
-
-  // "Deluxe" rooms in the facility contract map to DB tier/type "DOUBLE"
-  if (isDeluxeRoom(num)) {
-    return 'DOUBLE';
-  }
-
-  // All else standard
-  return 'STANDARD';
-}
-
-/**
- * Compute waitlist position and ETA for a desired tier.
- * Position is 1-based. ETA is computed from Nth occupied block's end time + 15 min buffer.
- */
-async function computeWaitlistInfo(
-  client: Parameters<Parameters<typeof transaction>[0]>[0],
-  desiredTier: string
-): Promise<{ position: number; estimatedReadyAt: Date | null }> {
-  // Count active waitlist entries for this tier (position = count + 1)
-  const waitlistCountResult = await client.query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM waitlist 
-     WHERE desired_tier = $1 AND status = 'ACTIVE'`,
-    [desiredTier]
-  );
-  const position = parseInt(waitlistCountResult.rows[0]?.count || '0', 10) + 1;
-
-  // Find Nth occupied checkin_block where N = position
-  // Get blocks that will end and could free up a room of the desired tier
-  const blocksResult = await client.query<{
-    id: string;
-    ends_at: Date;
-    room_id: string | null;
-  }>(
-    `SELECT cb.id, cb.ends_at, cb.room_id
-     FROM checkin_blocks cb
-     LEFT JOIN rooms r ON cb.room_id = r.id
-     WHERE cb.ends_at > NOW()
-       AND (cb.room_id IS NOT NULL OR cb.locker_id IS NOT NULL)
-     ORDER BY cb.ends_at ASC
-     LIMIT $1`,
-    [position]
-  );
-
-  let estimatedReadyAt: Date | null = null;
-  if (blocksResult.rows.length >= position) {
-    // Found Nth block - ETA = block end + 15 min buffer
-    const nthBlock = blocksResult.rows[position - 1]!;
-    estimatedReadyAt = new Date(nthBlock.ends_at.getTime() + 15 * 60 * 1000);
-  }
-
-  return { position, estimatedReadyAt };
-}
 
 /**
  * Check-in flow routes.
@@ -2203,7 +1516,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/checkin/lane/:laneId/propose-selection',
     {
-      preHandler: [optionalAuth],
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
     },
     async (request, reply) => {
       const { laneId } = request.params;
@@ -3246,7 +2559,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/checkin/lane/:laneId/sign-agreement',
     {
-      preHandler: [optionalAuth],
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
     },
     async (request, reply) => {
       const { laneId } = request.params;
@@ -4215,7 +3528,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post<{
     Params: { laneId: string };
     Body: { sessionId: string; confirmed: boolean };
-  }>('/v1/checkin/lane/:laneId/customer-confirm', async (request, reply) => {
+  }>(
+    '/v1/checkin/lane/:laneId/customer-confirm',
+    { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
+    async (request, reply) => {
     const { laneId } = request.params;
     const { sessionId, confirmed } = request.body;
 
@@ -4233,14 +3549,46 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         const session = sessionResult.rows[0]!;
 
         if (confirmed) {
-          // Customer confirmed - broadcast confirmation
+          // Customer confirmed - broadcast confirmation.
+          //
+          // IMPORTANT: assigned_resource_id is a UUID. The customer-confirm event payload expects
+          // a human-facing type+number (room tier + room number, or locker number). Do NOT derive
+          // tier/number from the UUID.
+          if (!session.assigned_resource_type || !session.assigned_resource_id) {
+            throw { statusCode: 400, message: 'No assigned resource to confirm' };
+          }
+
+          let confirmedType: string;
+          let confirmedNumber: string;
+
+          if (session.assigned_resource_type === 'room') {
+            const roomRes = await client.query<{ number: string }>(
+              `SELECT number FROM rooms WHERE id = $1 LIMIT 1`,
+              [session.assigned_resource_id]
+            );
+            if (roomRes.rows.length === 0) {
+              throw { statusCode: 404, message: 'Assigned room not found' };
+            }
+            confirmedNumber = roomRes.rows[0]!.number;
+            confirmedType = getRoomTier(confirmedNumber);
+          } else if (session.assigned_resource_type === 'locker') {
+            const lockerRes = await client.query<{ number: string }>(
+              `SELECT number FROM lockers WHERE id = $1 LIMIT 1`,
+              [session.assigned_resource_id]
+            );
+            if (lockerRes.rows.length === 0) {
+              throw { statusCode: 404, message: 'Assigned locker not found' };
+            }
+            confirmedNumber = lockerRes.rows[0]!.number;
+            confirmedType = 'LOCKER';
+          } else {
+            throw { statusCode: 400, message: 'Invalid assigned resource type' };
+          }
+
           const confirmedPayload: CustomerConfirmedPayload = {
             sessionId: session.id,
-            confirmedType:
-              session.assigned_resource_type === 'room'
-                ? getRoomTier(session.assigned_resource_id || '')
-                : 'LOCKER',
-            confirmedNumber: session.assigned_resource_id || '',
+            confirmedType,
+            confirmedNumber,
           };
           fastify.broadcaster.broadcastCustomerConfirmed(confirmedPayload, laneId);
         } else {
@@ -4288,7 +3636,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         message: 'Failed to process customer confirmation',
       });
     }
-  });
+    }
+  );
 
   /**
    * Complete check-in: create visit, check-in block, and transition resources.
@@ -4886,7 +4235,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post<{
     Params: { laneId: string };
     Body: { language: 'EN' | 'ES'; sessionId?: string; customerName?: string };
-  }>('/v1/checkin/lane/:laneId/set-language', async (request, reply) => {
+  }>(
+    '/v1/checkin/lane/:laneId/set-language',
+    { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
+    async (request, reply) => {
     const { laneId } = request.params;
     const { language, sessionId, customerName } = request.body;
 
@@ -4907,7 +4259,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         message: 'Failed to set language',
       });
     }
-  });
+    }
+  );
 
   /**
    * POST /v1/checkin/lane/:laneId/membership-purchase-intent
@@ -4926,7 +4279,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/checkin/lane/:laneId/membership-purchase-intent',
     {
-      preHandler: [optionalAuth],
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
     },
     async (request, reply) => {
       const { laneId } = request.params;
@@ -5160,7 +4513,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     Body: { choice: 'ONE_TIME' | 'NONE' | 'SIX_MONTH'; sessionId?: string };
   }>(
     '/v1/checkin/lane/:laneId/membership-choice',
-    { preHandler: [optionalAuth] },
+    { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
     async (request, reply) => {
       const { laneId } = request.params;
       const bodySchema = z.object({
@@ -5724,7 +5077,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/checkin/lane/:laneId/kiosk-ack',
     {
-      preHandler: [optionalAuth],
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
     },
     async (request, reply) => {
       const { laneId } = request.params;
