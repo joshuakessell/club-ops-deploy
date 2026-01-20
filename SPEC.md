@@ -34,6 +34,7 @@ Canonical event types and payload schemas:
 ## Where details live
 - API contract: openapi.yaml
 - DB meaning/contracts: docs/database/*
+- Monorepo structure (canonical): docs/FILE_STRUCTURE.md
 - Check-in / lane session flows: docs/specs/* (add new spec docs here)
 - Register/timeclock system: docs/specs/registers.md, docs/specs/timeclock.md
 

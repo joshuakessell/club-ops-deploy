@@ -1,0 +1,55 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": [
+    "tsconfig.base.json",
+    "tsconfig.json",
+    "eslint.config.js",
+    "pnpm-lock.yaml",
+    "openapi.yaml",
+    "SPEC.md"
+  ],
+  "globalPassThroughEnv": [
+    "KIOSK_TOKEN",
+    "DEMO_MODE",
+    "SEED_ON_STARTUP",
+    "SKIP_DB",
+    "LOG_LEVEL",
+    "HOST",
+    "PORT",
+    "DB_HOST",
+    "DB_PORT",
+    "DB_NAME",
+    "DB_USER",
+    "DB_PASSWORD",
+    "DB_SSL",
+    "DB_POOL_MAX",
+    "DB_LOG_QUERIES",
+    "GYM_LOCKER_ELIGIBLE_RANGES",
+    "MEMBERSHIP_SCAN_PATTERN",
+    "WEBAUTHN_*",
+    "CLUB_DALLAS_LOGO_PATH"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**", "build/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": ["^build"]
+    },
+    "lint": {
+      "dependsOn": ["^build"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "test": {
+      "cache": false,
+      "dependsOn": ["^build"]
+    }
+  }
+}
+
