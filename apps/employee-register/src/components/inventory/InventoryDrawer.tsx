@@ -32,7 +32,7 @@ export function InventoryDrawer({
   waitlistDesiredTier = null,
   waitlistBackupType = null,
   onSelect,
-  onClearSelection,
+  onClearSelection: _onClearSelection,
   selectedItem = null,
   sessionId = null,
   disableSelection = true,

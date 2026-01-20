@@ -86,6 +86,8 @@ export function ManualCheckoutModal({
     return typedNumber.trim().length > 0;
   }, [selectedOccupancyIds.length, typedNumber]);
 
+  const confirmCurrent = confirmQueue[confirmIndex] ?? null;
+
   useEffect(() => {
     if (!isOpen) return;
     // Reset per open
@@ -101,7 +103,7 @@ export function ManualCheckoutModal({
     setIsSubmitting(false);
     setShowCancelWarning(false);
     setAutoContinue(entryMode === 'direct-confirm' && Boolean(initialOccupancyId || initialNumber));
-  }, [isOpen]);
+  }, [entryMode, isOpen, prefill?.number, prefill?.occupancyId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -359,38 +361,38 @@ export function ManualCheckoutModal({
                   {confirmIndex + 1} of {confirmQueue.length || 1}
                 </div>
               </div>
-              {confirmQueue[confirmIndex] && (
+              {confirmCurrent && (
                 <div className="er-surface" style={{ padding: '1rem', borderRadius: 12 }}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Customer</div>
-                      <div style={{ fontWeight: 800 }}>{confirmQueue[confirmIndex]!.customerName}</div>
+                      <div style={{ fontWeight: 800 }}>{confirmCurrent.customerName}</div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Resource</div>
                       <div style={{ fontWeight: 800 }}>
-                        {confirmQueue[confirmIndex]!.resourceType === 'ROOM' ? 'Room' : 'Locker'} {confirmQueue[confirmIndex]!.number}
+                        {confirmCurrent.resourceType === 'ROOM' ? 'Room' : 'Locker'} {confirmCurrent.number}
                       </div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Check-in</div>
-                      <div style={{ fontWeight: 800 }}>{toDate(confirmQueue[confirmIndex]!.checkinAt).toLocaleString()}</div>
+                      <div style={{ fontWeight: 800 }}>{toDate(confirmCurrent.checkinAt).toLocaleString()}</div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Scheduled checkout</div>
                       <div style={{ fontWeight: 800 }}>
-                        {toDate(confirmQueue[confirmIndex]!.scheduledCheckoutAt).toLocaleString()}
+                        {toDate(confirmCurrent.scheduledCheckoutAt).toLocaleString()}
                       </div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Late</div>
-                      <div style={{ fontWeight: 800 }}>{confirmQueue[confirmIndex]!.lateMinutes} min</div>
+                      <div style={{ fontWeight: 800 }}>{confirmCurrent.lateMinutes} min</div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Outcome</div>
-                      <div style={{ fontWeight: 900, color: confirmQueue[confirmIndex]!.banApplied ? '#f59e0b' : '#10b981' }}>
-                        Fee ${confirmQueue[confirmIndex]!.fee.toFixed(2)}
-                        {confirmQueue[confirmIndex]!.banApplied ? ' • 30-day ban' : ''}
+                      <div style={{ fontWeight: 900, color: confirmCurrent.banApplied ? '#f59e0b' : '#10b981' }}>
+                        Fee ${confirmCurrent.fee.toFixed(2)}
+                        {confirmCurrent.banApplied ? ' • 30-day ban' : ''}
                       </div>
                     </div>
                   </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SignInModal } from './SignInModal';
 import type { WebSocketEvent, RegisterSessionUpdatedPayload } from '@club-ops/shared';
 import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
@@ -47,14 +47,18 @@ export function RegisterSignIn({
 }: RegisterSignInProps) {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [registerSession, setRegisterSession] = useState<RegisterSession | null>(null);
-  const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
 
   const handleSessionInvalidated = useCallback(() => {
     // Clear heartbeat interval
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      setHeartbeatInterval(null);
-    }
+    stopHeartbeat();
 
     // Clear register session state
     setRegisterSession(null);
@@ -63,7 +67,7 @@ export function RegisterSignIn({
     localStorage.removeItem('staff_session');
 
     // Return to splash (component will re-render showing sign-in modal)
-  }, [heartbeatInterval]);
+  }, [stopHeartbeat]);
 
   const checkRegisterStatus = useCallback(async (): Promise<boolean> => {
     try {
@@ -90,7 +94,6 @@ export function RegisterSignIn({
           registerNumber: data.registerNumber,
           deviceId,
         });
-        startHeartbeat();
         onSignedIn({
           employeeId: data.employee.id,
           employeeName: data.employee.name,
@@ -115,11 +118,8 @@ export function RegisterSignIn({
     <RegisterSessionWs deviceId={deviceId} onInvalidated={handleSessionInvalidated} />
   ) : null;
 
-  const startHeartbeat = () => {
-    // Clear existing interval
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-    }
+  const startHeartbeat = useCallback(() => {
+    stopHeartbeat();
 
     // Send heartbeat every 60 seconds (90 second TTL on server)
     const interval = setInterval(() => {
@@ -155,8 +155,18 @@ export function RegisterSignIn({
       })();
     }, 60000);
 
-    setHeartbeatInterval(interval);
-  };
+    heartbeatIntervalRef.current = interval;
+  }, [checkRegisterStatus, deviceId, handleSessionInvalidated, stopHeartbeat]);
+
+  // Start/stop heartbeat based on register session
+  useEffect(() => {
+    if (registerSession) {
+      startHeartbeat();
+      return () => stopHeartbeat();
+    }
+    stopHeartbeat();
+    return;
+  }, [registerSession, startHeartbeat, stopHeartbeat]);
 
   const handleSignIn = async (session: RegisterSession) => {
     // After register sign-in, also create a staff session for API calls
@@ -187,7 +197,6 @@ export function RegisterSignIn({
     const { pin, ...sessionWithoutPin } = session;
     void pin;
     setRegisterSession(sessionWithoutPin);
-    startHeartbeat();
     onSignedIn(sessionWithoutPin);
   };
 

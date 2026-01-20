@@ -7,7 +7,7 @@ export interface SlideOutDrawerProps {
   side: SlideOutDrawerSide;
   label: string;
   isOpen: boolean;
-  onOpenChange(next: boolean): void;
+  onOpenChange: (next: boolean) => void;
   widthPx?: number;
   tabWidthPx?: number;
   /** Vertical placement of the drawer tab, as a percentage of the drawer height (CSS top). */

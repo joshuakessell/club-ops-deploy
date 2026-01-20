@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type UpgradeWaitlistStatus = 'ACTIVE' | 'OFFERED' | string;
+export type UpgradeWaitlistStatus = string;
 
 export type UpgradeWaitlistEntry = {
   id: string;
@@ -23,10 +23,10 @@ export type UpgradeWaitlistEntry = {
 export interface UpgradesDrawerContentProps {
   waitlistEntries: UpgradeWaitlistEntry[];
   hasEligibleEntries: boolean;
-  isEntryOfferEligible(entryId: string, status: string, desiredTier: string): boolean;
-  onOffer(entryId: string, desiredTier: string, customerLabel: string): void;
-  onStartPayment(entry: UpgradeWaitlistEntry): void;
-  onCancelOffer(entryId: string): void;
+  isEntryOfferEligible: (entryId: string, status: string, desiredTier: string) => boolean;
+  onOffer: (entryId: string, desiredTier: string, customerLabel: string) => void;
+  onStartPayment: (entry: UpgradeWaitlistEntry) => void;
+  onCancelOffer: (entryId: string) => void;
   isSubmitting?: boolean;
   headerRightSlot?: ReactNode;
 }

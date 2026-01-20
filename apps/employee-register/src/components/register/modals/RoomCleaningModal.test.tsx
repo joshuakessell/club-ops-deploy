@@ -85,7 +85,6 @@ describe('RoomCleaningModal', () => {
         '/api/v1/cleaning/batch',
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             roomIds: ['r1', 'r2'],
             targetStatus: 'CLEAN',

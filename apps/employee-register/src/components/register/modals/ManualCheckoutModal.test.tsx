@@ -251,8 +251,8 @@ describe('ManualCheckoutModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
 
     // Resolve call should have used occupancyId.
-    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
-    expect(calls.some((url) => String(url).includes('/api/v1/checkout/manual-resolve'))).toBe(true);
+    const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+    expect(urls.some((url) => url.includes('/api/v1/checkout/manual-resolve'))).toBe(true);
   });
 });
 

@@ -1,6 +1,6 @@
 export interface RegisterTopActionsBarProps {
-  onCheckout(): void;
-  onRoomCleaning(): void;
+  onCheckout: () => void;
+  onRoomCleaning: () => void;
 }
 
 export function RegisterTopActionsBar({ onCheckout, onRoomCleaning }: RegisterTopActionsBarProps) {
