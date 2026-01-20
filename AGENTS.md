@@ -18,6 +18,7 @@ Paused (do not modify unless explicitly requested):
 - openapi.yaml (API contract)
 - docs/database/DATABASE_SOURCE_OF_TRUTH.md + DATABASE_ENTITY_DETAILS.md (DB meaning)
 - db/schema.sql + services/api/migrations (schema history + snapshot)
+- docs/FILE_STRUCTURE.md (canonical monorepo layout map; keep updated when structure changes)
 
 If code conflicts with these, either:
 1) change code to match, or
@@ -50,3 +51,7 @@ From repo root:
 - SPEC.md and AGENTS.md should remain short and stable
 - Put detailed flows in docs/specs/*.md and link from SPEC.md
 - Don’t duplicate openapi.yaml or DB docs inside SPEC.md
+
+## Monorepo structure requirement (for all agents)
+- `docs/FILE_STRUCTURE.md` is the **canonical** repository layout reference used by ChatGPT/agents.
+- Any change that **adds/moves/renames** a top-level area or a major app/package/service **must** update `docs/FILE_STRUCTURE.md` in the same PR.

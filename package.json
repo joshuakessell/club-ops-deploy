@@ -20,7 +20,7 @@
     "dev:cloud": "concurrently -n api,kiosk,register,dashboard,cleaning,checkout -c blue,green,yellow,magenta,cyan,red \"pnpm --filter @club-ops/api dev\" \"pnpm --filter @club-ops/customer-kiosk dev\" \"pnpm --filter @club-ops/employee-register dev\" \"pnpm --filter @club-ops/office-dashboard dev\" \"pnpm --filter @club-ops/cleaning-station-kiosk dev\" \"pnpm --filter @club-ops/checkout-kiosk dev\"",
     "dev-test": "pnpm kill-ports && concurrently -n api,kiosk,register -c blue,green,yellow \"pnpm --filter @club-ops/api dev\" \"pnpm --filter @club-ops/customer-kiosk dev\" \"pnpm --filter @club-ops/employee-register dev\"",
     "build": "pnpm -r build",
-    "test": "pnpm kill-ports && pnpm -r --filter '!@club-ops/checkout-kiosk' --filter '!@club-ops/cleaning-station-kiosk' test",
+    "test": "pnpm kill-ports && pnpm -r --workspace-concurrency=1 --filter '!@club-ops/checkout-kiosk' --filter '!@club-ops/cleaning-station-kiosk' test",
     "lint": "pnpm -r --filter '!@club-ops/checkout-kiosk' --filter '!@club-ops/cleaning-station-kiosk' lint",
     "doctor": "node scripts/doctor.cjs",
     "typecheck": "pnpm -r --filter '!@club-ops/checkout-kiosk' --filter '!@club-ops/cleaning-station-kiosk' typecheck",
@@ -44,6 +44,7 @@
     "eslint-plugin-react-refresh": "^0.4.12",
     "globals": "^15.11.0",
     "prettier": "^3.1.1",
+    "turbo": "^2.0.0",
     "tsx": "^4.6.2",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.0.0"

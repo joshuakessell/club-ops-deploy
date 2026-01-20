@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { initializeDatabase, query } from '../src/db/index.js';
+import { initializeDatabase, query, closeDatabase } from '../src/db/index.js';
 import { truncateAllTables } from './testDb.js';
 import { setupTelemetry } from '../src/telemetry/plugin.js';
 
@@ -24,7 +24,12 @@ describe('Telemetry', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    try {
+      await app.close();
+    } finally {
+      // Critical: DB pool keeps TCP handles open and can cause Vitest to hang.
+      await closeDatabase();
+    }
   });
 
   it('ingests a single event and echoes x-request-id', async () => {

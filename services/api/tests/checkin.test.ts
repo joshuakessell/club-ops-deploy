@@ -42,6 +42,12 @@ describe('Check-in Flow', () => {
       console.warn('   1. Start Docker Desktop');
       console.warn('   2. cd services/api && docker compose up -d');
       console.warn('   3. pnpm db:migrate\n');
+      // initializeDatabase() creates the pool before attempting to connect; ensure we don't leak it.
+      try {
+        await closeDatabase();
+      } catch {
+        // ignore
+      }
       return;
     }
 
@@ -192,8 +198,11 @@ describe('Check-in Flow', () => {
   });
 
   afterAll(async () => {
-    await app.close();
-    await closeDatabase();
+    try {
+      if (app) await app.close();
+    } finally {
+      await closeDatabase();
+    }
   });
 
   // Helper to skip tests when DB is unavailable

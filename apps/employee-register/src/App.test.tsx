@@ -84,6 +84,9 @@ global.fetch = vi.fn();
 describe('App', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    // Prevent cross-test contamination from module singletons (event buses, cached clients, etc).
+    // This also helps avoid memory growth across the suite.
+    vi.resetModules();
     vi.useRealTimers();
     createdWs.length = 0;
     const store: Record<string, string> = {};
@@ -237,6 +240,7 @@ describe('App', () => {
   });
 
   it('updates agreement status when receiving SESSION_UPDATED with agreementSigned=true', async () => {
+    const STEP_TIMEOUT_MS = 2000;
     localStorage.setItem(
       'staff_session',
       JSON.stringify({
@@ -280,16 +284,18 @@ describe('App', () => {
     act(() => {
       render(<App />);
     });
-    expect(await screen.findByText('Scan Now')).toBeDefined();
+    console.info('[test] rendered App; waiting for Scan Now');
+    expect(await screen.findByText('Scan Now', undefined, { timeout: STEP_TIMEOUT_MS })).toBeDefined();
+    console.info('[test] Scan Now visible; waiting for websocket instance');
 
     // Wait until App has attached its onmessage handler, then simulate an agreement-signed update.
     // React StrictMode can create multiple WS instances; use the one that has the handler attached.
     let wsWithHandler: MockWebSocket | null = null;
-    await waitFor(() => {
-      expect(createdWs.length).toBeGreaterThan(0);
-      wsWithHandler = createdWs.find((w) => w.url.includes('lane=lane-1')) ?? createdWs[0] ?? null;
-      expect(wsWithHandler).not.toBeNull();
-    });
+    // Fail fast if no websocket instance was created; retry loops can hang if timers are misbehaving.
+    expect(createdWs.length).toBeGreaterThan(0);
+    wsWithHandler = createdWs.find((w) => w.url.includes('lane=lane-1')) ?? createdWs[0] ?? null;
+    expect(wsWithHandler).not.toBeNull();
+    console.info('[test] websocket located; sending SESSION_UPDATED');
 
     act(() => {
       wsWithHandler?.onmessage?.({
@@ -306,11 +312,13 @@ describe('App', () => {
         }),
       });
     });
+    console.info('[test] SESSION_UPDATED sent; waiting for Customer Profile');
 
     await waitFor(() => {
       expect(screen.getByText('Customer Profile')).toBeDefined();
       expect(screen.getByText('Alex Rivera')).toBeDefined();
-    });
+    }, { timeout: STEP_TIMEOUT_MS });
+    console.info('[test] Customer Profile visible');
   });
 
   it('shows transaction completion modal (with PDF verify + complete) after assignment + agreement signed', async () => {
