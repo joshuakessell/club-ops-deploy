@@ -5,6 +5,8 @@ import { checkinRoutes } from '../src/routes/checkin.js';
 import { createBroadcaster } from '../src/websocket/broadcaster.js';
 import { truncateAllTables } from './testDb.js';
 
+const TEST_KIOSK_TOKEN = 'test-kiosk-token';
+
 // Mock auth middleware to allow test requests
 const testStaffId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 vi.mock('../src/auth/middleware.js', () => ({
@@ -30,6 +32,7 @@ describe('Membership purchase/renew integration', () => {
   let dbAvailable = false;
 
   beforeAll(async () => {
+    process.env.KIOSK_TOKEN = TEST_KIOSK_TOKEN;
     const dbConfig = {
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT || '5433', 10),
@@ -108,6 +111,7 @@ describe('Membership purchase/renew integration', () => {
       const intentRes = await fastify.inject({
         method: 'POST',
         url: `/v1/checkin/lane/lane-1/membership-purchase-intent`,
+        headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
         payload: { intent: 'PURCHASE', sessionId },
       });
       expect(intentRes.statusCode).toBe(200);
@@ -185,6 +189,7 @@ describe('Membership purchase/renew integration', () => {
       const intentRes = await fastify.inject({
         method: 'POST',
         url: `/v1/checkin/lane/lane-2/membership-purchase-intent`,
+        headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
         payload: { intent: 'RENEW', sessionId },
       });
       expect(intentRes.statusCode).toBe(200);
@@ -243,6 +248,7 @@ describe('Membership purchase/renew integration', () => {
       const intentRes = await fastify.inject({
         method: 'POST',
         url: `/v1/checkin/lane/lane-3/membership-purchase-intent`,
+        headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
         payload: { intent: 'RENEW', sessionId },
       });
       expect(intentRes.statusCode).toBe(200);

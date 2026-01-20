@@ -133,7 +133,7 @@ describe('Checkout Flow', () => {
 
     const roomResult = await pool.query(
       `INSERT INTO rooms (number, type, status, floor)
-       VALUES ('101', 'STANDARD', 'CLEAN', 1)
+       VALUES ('200', 'STANDARD', 'CLEAN', 1)
        RETURNING id`
     );
     testRoomId = roomResult.rows[0]!.id;

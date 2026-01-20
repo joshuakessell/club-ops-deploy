@@ -327,7 +327,6 @@ export function AppRoot() {
     (value: string | null) => laneSessionActions.patch({ paymentIntentId: value }),
     [laneSessionActions]
   );
-  const paymentQuote = laneSession.paymentQuote;
   const setPaymentQuote = useCallback(
     (value: PaymentQuote | ((prev: PaymentQuote) => PaymentQuote)) => {
       if (typeof value === 'function') {

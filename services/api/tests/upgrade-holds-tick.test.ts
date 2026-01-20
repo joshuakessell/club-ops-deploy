@@ -42,7 +42,7 @@ describe('processUpgradeHoldsTick (locking + expiry)', () => {
   it('expires OFFERED entries and releases UPGRADE_HOLD reservations (no outer-join FOR UPDATE error)', async () => {
     const room = await pool.query<{ id: string }>(
       `INSERT INTO rooms (number, type, status, floor)
-       VALUES ('101', 'STANDARD', 'CLEAN', 1)
+       VALUES ('200', 'STANDARD', 'CLEAN', 1)
        RETURNING id`
     );
     const customer = await pool.query<{ id: string }>(`INSERT INTO customers (name) VALUES ('Tick Customer') RETURNING id`);
