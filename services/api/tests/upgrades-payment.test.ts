@@ -127,7 +127,7 @@ describe('Upgrade payment flow attaches charges', () => {
 
     const room = await pool.query<{ id: string }>(
       `INSERT INTO rooms (number, type, status, floor)
-       VALUES ('101', 'STANDARD', 'CLEAN', 1)
+       VALUES ('200', 'STANDARD', 'CLEAN', 1)
        RETURNING id`
     );
 

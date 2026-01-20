@@ -115,7 +115,7 @@ describe('Manual Checkout APIs', () => {
 
     const roomResult = await pool.query(
       `INSERT INTO rooms (number, type, status, floor, assigned_to_customer_id)
-       VALUES ('101', 'STANDARD', 'OCCUPIED', 1, $1)
+       VALUES ('200', 'STANDARD', 'OCCUPIED', 1, $1)
        RETURNING id`,
       [testCustomerId]
     );
@@ -205,7 +205,7 @@ describe('Manual Checkout APIs', () => {
     const match = data.candidates.find((c: any) => c.occupancyId === testBlockId);
     expect(match).toBeDefined();
     expect(match.resourceType).toBe('ROOM');
-    expect(match.number).toBe('101');
+    expect(match.number).toBe('200');
     expect(match.isOverdue).toBe(true);
   });
 

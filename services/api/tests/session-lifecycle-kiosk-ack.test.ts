@@ -5,6 +5,8 @@ import { checkinRoutes } from '../src/routes/checkin.js';
 import { createBroadcaster } from '../src/websocket/broadcaster.js';
 import { truncateAllTables } from './testDb.js';
 
+const TEST_KIOSK_TOKEN = 'test-kiosk-token';
+
 const testStaffId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
 vi.mock('../src/auth/middleware.js', () => ({
   requireAuth: async (request: any, _reply: any) => {
@@ -28,6 +30,7 @@ describe('Lane session lifecycle: kiosk-ack must not end session', () => {
   let dbAvailable = false;
 
   beforeAll(async () => {
+    process.env.KIOSK_TOKEN = TEST_KIOSK_TOKEN;
     const dbConfig = {
       host: process.env.DB_HOST || 'localhost',
       port: parseInt(process.env.DB_PORT || '5433', 10),
@@ -103,6 +106,7 @@ describe('Lane session lifecycle: kiosk-ack must not end session', () => {
       const ackRes = await fastify.inject({
         method: 'POST',
         url: `/v1/checkin/lane/lane-1/kiosk-ack`,
+        headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
       });
       expect(ackRes.statusCode).toBe(200);
 
