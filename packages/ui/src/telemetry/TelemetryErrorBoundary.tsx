@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import React from 'react';
-import { getInstalledTelemetry } from './global';
+import { getInstalledTelemetry } from './global.js';
 
 export class TelemetryErrorBoundary extends React.Component<{ children: ReactNode }> {
   override componentDidCatch(error: Error, info: React.ErrorInfo): void {

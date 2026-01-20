@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { InventoryUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
 import { useNavigate } from 'react-router-dom';
@@ -57,26 +58,36 @@ export function DemoOverview({ session }: { session: StaffSession }) {
       .catch(() => setWaitlistMetrics(null));
   }, [session.sessionToken]);
 
-  useReconnectingWebSocket({
-    url: wsBaseUrl(),
-    onOpenSendJson: [{ type: 'subscribe', events: ['INVENTORY_UPDATED', 'WAITLIST_UPDATED'] }],
-    onMessage: (event) => {
-      const msg = safeJsonParse<WebSocketEvent>(String(event.data));
-      if (!msg) return;
-      if (msg.type === 'INVENTORY_UPDATED') {
-        const payload = msg.payload as InventoryUpdatedPayload;
-        setInventory(payload.inventory as unknown as InventorySummaryResponse);
-      }
-      if (msg.type === 'WAITLIST_UPDATED') {
-        apiJson<{ activeCount: number; offeredCount: number; averageWaitTimeMinutes: number }>(
-          '/v1/metrics/waitlist',
-          { sessionToken: session.sessionToken }
-        )
-          .then((m) => setWaitlistMetrics({ activeCount: m.activeCount, offeredCount: m.offeredCount }))
-          .catch(() => setWaitlistMetrics(null));
-      }
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : '';
+  void wsBaseUrl;
+  const { lastMessage } = useLaneSession({
+    laneId: '',
+    role: 'employee',
+    kioskToken,
+    enabled: !!kioskToken,
   });
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    const msg = safeJsonParse<WebSocketEvent>(String(lastMessage.data));
+    if (!msg) return;
+    if (msg.type === 'INVENTORY_UPDATED') {
+      const payload = msg.payload as InventoryUpdatedPayload;
+      setInventory(payload.inventory as unknown as InventorySummaryResponse);
+    }
+    if (msg.type === 'WAITLIST_UPDATED') {
+      apiJson<{ activeCount: number; offeredCount: number; averageWaitTimeMinutes: number }>(
+        '/v1/metrics/waitlist',
+        { sessionToken: session.sessionToken }
+      )
+        .then((m) => setWaitlistMetrics({ activeCount: m.activeCount, offeredCount: m.offeredCount }))
+        .catch(() => setWaitlistMetrics(null));
+    }
+  }, [lastMessage, session.sessionToken]);
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>

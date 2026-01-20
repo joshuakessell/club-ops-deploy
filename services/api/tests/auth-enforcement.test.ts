@@ -21,7 +21,14 @@ describe('Auth enforcement (unauthenticated mutations)', () => {
     process.env.KIOSK_TOKEN = TEST_KIOSK_TOKEN;
 
     app = Fastify({ logger: false });
-    await app.register(websocket);
+    await app.register(websocket, {
+      options: {
+        handleProtocols: (protocols) => {
+          for (const p of protocols) return p;
+          return false;
+        },
+      },
+    });
 
     const broadcaster = createBroadcaster();
     app.decorate('broadcaster', broadcaster);
@@ -105,6 +112,17 @@ describe('Auth enforcement (unauthenticated mutations)', () => {
       method: 'GET',
       url: '/ws?lane=lane-1',
       headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
+    });
+    // Not a real websocket upgrade, but the auth/lane preHandlers ran and accepted it.
+    expect(res.statusCode).not.toBe(401);
+    expect(res.statusCode).not.toBe(400);
+  });
+
+  it('allows /ws auth + lane validation to pass with kiosk token in Sec-WebSocket-Protocol', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/ws?lane=lane-1',
+      headers: { 'sec-websocket-protocol': `kiosk-token.${TEST_KIOSK_TOKEN}` },
     });
     // Not a real websocket upgrade, but the auth/lane preHandlers ran and accepted it.
     expect(res.statusCode).not.toBe(401);

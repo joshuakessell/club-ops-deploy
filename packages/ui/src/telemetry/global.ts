@@ -1,4 +1,4 @@
-import type { TelemetryClient } from './types';
+import type { TelemetryClient } from './types.js';
 
 const TELEMETRY_KEY = '__clubOpsTelemetryClient';
 

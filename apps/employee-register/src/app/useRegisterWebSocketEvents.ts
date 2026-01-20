@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import {
   safeParseWebSocketEvent,
@@ -5,8 +6,9 @@ import {
   type CheckoutChecklist,
   type CheckoutRequestSummary,
   type SessionUpdatedPayload,
+  useLaneSession,
 } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { safeJsonParse } from '@club-ops/ui';
 import type { BottomToastTone } from '../components/register/toasts/BottomToastStack';
 
 export function useRegisterWebSocketEvents(params: {
@@ -43,39 +45,27 @@ export function useRegisterWebSocketEvents(params: {
   const { lane } = params;
   const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : null;
+  void wsUrl;
 
-  const ws = useReconnectingWebSocket({
-    url: wsUrl,
-    onOpenSendJson: [
-      {
-        type: 'subscribe',
-        events: [
-          'CHECKOUT_REQUESTED',
-          'CHECKOUT_CLAIMED',
-          'CHECKOUT_UPDATED',
-          'CHECKOUT_COMPLETED',
-          'SESSION_UPDATED',
-          'ROOM_STATUS_CHANGED',
-          'INVENTORY_UPDATED',
-          'ASSIGNMENT_CREATED',
-          'ASSIGNMENT_FAILED',
-          'CUSTOMER_CONFIRMED',
-          'CUSTOMER_DECLINED',
-          'WAITLIST_UPDATED',
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'SELECTION_ACKNOWLEDGED',
-          'SELECTION_FORCED',
-          'UPGRADE_HOLD_AVAILABLE',
-          'UPGRADE_OFFER_EXPIRED',
-        ],
-      },
-    ],
-    onMessage: (event) => {
-      try {
-        const parsed: unknown = safeJsonParse(String(event.data));
-        const message = safeParseWebSocketEvent(parsed);
-        if (!message) return;
+  const { connected, lastMessage } = useLaneSession({
+    laneId: lane,
+    role: 'employee',
+    kioskToken: kioskToken ?? '',
+    enabled: true,
+  });
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    const event = lastMessage;
+    try {
+      const parsed: unknown = safeJsonParse(String(event.data));
+      const message = safeParseWebSocketEvent(parsed);
+      if (!message) return;
 
         if (message.type === 'CHECKOUT_REQUESTED') {
           const payload = message.payload;
@@ -173,12 +163,11 @@ export function useRegisterWebSocketEvents(params: {
             params.onCustomerDeclined();
           }
         }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    },
-  });
+    } catch (error) {
+      console.error('Failed to parse WebSocket message:', error);
+    }
+  }, [lastMessage, params]);
 
-  return { connected: ws.connected };
+  return { connected };
 }
 

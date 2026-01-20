@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { RegisterSessionUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 import { wsBaseUrl } from './api';
 
 const API_BASE = '/api';
@@ -54,36 +55,45 @@ export function RegistersView({ session }: RegistersViewProps) {
     fetchRegisters();
   }, []);
 
-  useReconnectingWebSocket({
-    url: wsBaseUrl(),
-    onOpenSendJson: [{ type: 'subscribe', events: ['REGISTER_SESSION_UPDATED'] }],
-    onMessage: (event) => {
-      const message = safeJsonParse<WebSocketEvent>(String(event.data));
-      if (!message) return;
-      if (message.type === 'REGISTER_SESSION_UPDATED') {
-        const payload = message.payload as RegisterSessionUpdatedPayload;
-        // Update the specific register in state
-        setRegisters((prev) =>
-          prev.map((reg) =>
-            reg.registerNumber === payload.registerNumber
-              ? {
-                  registerNumber: payload.registerNumber,
-                  active: payload.active,
-                  sessionId: payload.sessionId,
-                  employee: payload.employee,
-                  deviceId: payload.deviceId,
-                  createdAt: payload.createdAt,
-                  lastHeartbeatAt: payload.lastHeartbeatAt,
-                  secondsSinceHeartbeat: payload.lastHeartbeatAt
-                    ? Math.floor((Date.now() - new Date(payload.lastHeartbeatAt).getTime()) / 1000)
-                    : null,
-                }
-              : reg
-          )
-        );
-      }
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : '';
+  void wsBaseUrl;
+  const { lastMessage } = useLaneSession({
+    laneId: '',
+    role: 'employee',
+    kioskToken,
+    enabled: !!kioskToken,
   });
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    const message = safeJsonParse<WebSocketEvent>(String(lastMessage.data));
+    if (!message) return;
+    if (message.type === 'REGISTER_SESSION_UPDATED') {
+      const payload = message.payload as RegisterSessionUpdatedPayload;
+      setRegisters((prev) =>
+        prev.map((reg) =>
+          reg.registerNumber === payload.registerNumber
+            ? {
+                registerNumber: payload.registerNumber,
+                active: payload.active,
+                sessionId: payload.sessionId,
+                employee: payload.employee,
+                deviceId: payload.deviceId,
+                createdAt: payload.createdAt,
+                lastHeartbeatAt: payload.lastHeartbeatAt,
+                secondsSinceHeartbeat: payload.lastHeartbeatAt
+                  ? Math.floor((Date.now() - new Date(payload.lastHeartbeatAt).getTime()) / 1000)
+                  : null,
+              }
+            : reg
+        )
+      );
+    }
+  }, [lastMessage]);
 
   const handleForceSignOut = async (registerNumber: number) => {
     setForceSignOutLoading(registerNumber);

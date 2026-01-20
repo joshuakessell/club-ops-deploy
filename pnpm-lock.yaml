@@ -330,6 +330,12 @@ importers:
         specifier: ^3.22.4
         version: 3.25.76
     devDependencies:
+      '@types/react':
+        specifier: ^18.2.0
+        version: 18.3.27
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
@@ -339,6 +345,9 @@ importers:
 
   packages/ui:
     dependencies:
+      '@club-ops/shared':
+        specifier: workspace:*
+        version: link:../shared
       react:
         specifier: ^18.0.0
         version: 18.3.1

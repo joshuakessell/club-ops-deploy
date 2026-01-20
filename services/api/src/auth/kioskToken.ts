@@ -11,6 +11,31 @@ function getHeader(request: FastifyRequest, name: string): string | undefined {
   return undefined;
 }
 
+function getKioskTokenFromWebSocketProtocol(request: FastifyRequest): string | undefined {
+  // Browser WebSockets cannot set arbitrary headers (like `x-kiosk-token`), but they *can*
+  // negotiate a subprotocol via the `Sec-WebSocket-Protocol` header.
+  //
+  // We accept a protocol entry shaped like: `kiosk-token.<token>`.
+  // (The token should be a "token" per RFC6455; avoid spaces/commas.)
+  const raw = getHeader(request, 'sec-websocket-protocol');
+  if (!raw) return undefined;
+
+  // Header is a comma-separated list of protocol names.
+  const parts = raw
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  for (const p of parts) {
+    if (p.startsWith('kiosk-token.')) {
+      const token = p.slice('kiosk-token.'.length).trim();
+      if (token) return token;
+    }
+  }
+
+  return undefined;
+}
+
 function timingSafeEquals(a: string, b: string): boolean {
   const aa = Buffer.from(a);
   const bb = Buffer.from(b);
@@ -23,7 +48,10 @@ function timingSafeEquals(a: string, b: string): boolean {
  *
  * Policy:
  * - If a valid staff Bearer token is present (optionalAuth already ran), allow.
- * - Else require an x-kiosk-token header matching process.env.KIOSK_TOKEN.
+ * - Else require either:
+ *   - an `x-kiosk-token` header matching process.env.KIOSK_TOKEN, OR
+ *   - a WebSocket subprotocol entry `kiosk-token.<token>` (via `Sec-WebSocket-Protocol`)
+ *     matching process.env.KIOSK_TOKEN.
  *
  * This is a pragmatic LAN threat-model guard to prevent unauthenticated callers from mutating
  * lane session / inventory state.
@@ -44,7 +72,7 @@ export async function requireKioskTokenOrStaff(
     return;
   }
 
-  const provided = getHeader(request, 'x-kiosk-token');
+  const provided = getHeader(request, 'x-kiosk-token') ?? getKioskTokenFromWebSocketProtocol(request);
   if (!provided || !timingSafeEquals(provided, expected)) {
     reply.status(401).send({
       error: 'Unauthorized',

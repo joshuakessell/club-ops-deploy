@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
 import { RoomStatus } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { safeJsonParse } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
 import { getRoomTier } from './utils/getRoomTier';
 import { ModalFrame } from './components/register/modals/ModalFrame';
 
@@ -294,24 +295,29 @@ export function InventorySelector({
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : null;
+  void wsUrl;
 
-  useReconnectingWebSocket({
-    url: wsUrl,
-    onOpenSendJson: [
-      {
-        type: 'subscribe',
-        events: ['ROOM_STATUS_CHANGED', 'INVENTORY_UPDATED', 'ROOM_ASSIGNED', 'ROOM_RELEASED'],
-      },
-    ],
-    onMessage: (event) => {
-      const parsed = safeJsonParse<unknown>(String(event.data));
-      if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-      const t = parsed.type;
-      if (t === 'ROOM_STATUS_CHANGED' || t === 'INVENTORY_UPDATED' || t === 'ROOM_ASSIGNED' || t === 'ROOM_RELEASED') {
-        setRefreshTrigger((prev) => prev + 1);
-      }
-    },
+  const { lastMessage } = useLaneSession({
+    laneId: lane,
+    role: 'employee',
+    kioskToken: kioskToken ?? '',
+    enabled: true,
   });
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    const parsed = safeJsonParse<unknown>(String(lastMessage.data));
+    if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+    const t = parsed.type;
+    if (t === 'ROOM_STATUS_CHANGED' || t === 'INVENTORY_UPDATED' || t === 'ROOM_ASSIGNED' || t === 'ROOM_RELEASED') {
+      setRefreshTrigger((prev) => prev + 1);
+    }
+  }, [lastMessage]);
 
   // Determine which section to auto-expand
   useEffect(() => {

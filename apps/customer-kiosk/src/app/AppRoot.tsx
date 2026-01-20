@@ -3,7 +3,8 @@ import {
   safeParseWebSocketEvent,
   type CustomerConfirmationRequiredPayload,
 } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { t, type Language } from '../i18n';
 import { getMembershipStatus, type SessionState } from '../utils/membership';
 import { IdleScreen } from '../screens/IdleScreen';
@@ -211,14 +212,15 @@ export function AppRoot() {
   ) : null;
 
   const API_BASE = '/api';
-  const KIOSK_TOKEN = (import.meta as unknown as { env?: Record<string, unknown> }).env?.[
-    'VITE_KIOSK_TOKEN'
-  ];
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : null;
   const kioskAuthHeaders = (extra?: Record<string, string>) => {
-    const token = typeof KIOSK_TOKEN === 'string' && KIOSK_TOKEN.trim() ? KIOSK_TOKEN.trim() : null;
     return {
       ...(extra ?? {}),
-      ...(token ? { 'x-kiosk-token': token } : {}),
+      ...(kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
     };
   };
 
@@ -414,30 +416,24 @@ export function AppRoot() {
   // Use the local Vite origin + proxy (/ws -> API) so dev/prod behavior stays consistent.
   const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
-  const ws = useReconnectingWebSocket({
-    url: wsUrl,
-    onMessage: onWsMessage,
-    onOpenSendJson: [
-      {
-        type: 'subscribe',
-        events: [
-          'SESSION_UPDATED',
-          'CHECKIN_OPTION_HIGHLIGHTED',
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'SELECTION_ACKNOWLEDGED',
-          'CUSTOMER_CONFIRMATION_REQUIRED',
-          'ASSIGNMENT_CREATED',
-          'INVENTORY_UPDATED',
-          'WAITLIST_CREATED',
-        ],
-      },
-    ],
+  const wsProtocols = kioskToken ? [`kiosk-token.${kioskToken}`] : undefined;
+  void wsUrl;
+  void wsProtocols;
+  const { connected: wsConnected, lastMessage } = useLaneSession({
+    laneId: lane,
+    role: 'customer',
+    kioskToken: kioskToken ?? '',
+    enabled: true,
   });
 
   useEffect(() => {
-    setWsConnected(ws.connected);
-  }, [ws.connected]);
+    if (!lastMessage) return;
+    onWsMessage(lastMessage);
+  }, [lastMessage, onWsMessage]);
+
+  useEffect(() => {
+    setWsConnected(wsConnected);
+  }, [wsConnected]);
 
   useEffect(() => {
     // Check API health (avoid JSON parse crashes on empty/non-JSON responses)

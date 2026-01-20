@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { WebSocketEvent } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
-import { wsBaseUrl } from './api';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -735,30 +735,36 @@ function AdminWs({
   loadOperationsDataRef: { current: () => Promise<void> };
   onConnectedChange: (connected: boolean) => void;
 }) {
-  const ws = useReconnectingWebSocket({
-    url: wsBaseUrl(),
-    onOpenSendJson: [
-      { type: 'subscribe', events: ['INVENTORY_UPDATED', 'ROOM_STATUS_CHANGED', 'SESSION_UPDATED'] },
-    ],
-    onMessage: (event) => {
-      const message = safeJsonParse<WebSocketEvent>(String(event.data));
-      if (!message) return;
-      if (
-        message.type === 'INVENTORY_UPDATED' ||
-        message.type === 'ROOM_STATUS_CHANGED' ||
-        message.type === 'SESSION_UPDATED'
-      ) {
-        // Avoid socket recreation on tab changes.
-        if (activeTabRef.current === 'operations') {
-          loadOperationsDataRef.current().catch(console.error);
-        }
-      }
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : '';
+  const { connected, lastMessage } = useLaneSession({
+    laneId: '',
+    role: 'employee',
+    kioskToken,
+    enabled: !!kioskToken,
   });
 
   useEffect(() => {
-    onConnectedChange(ws.connected);
-  }, [onConnectedChange, ws.connected]);
+    if (!lastMessage) return;
+    const message = safeJsonParse<WebSocketEvent>(String(lastMessage.data));
+    if (!message) return;
+    if (
+      message.type === 'INVENTORY_UPDATED' ||
+      message.type === 'ROOM_STATUS_CHANGED' ||
+      message.type === 'SESSION_UPDATED'
+    ) {
+      if (activeTabRef.current === 'operations') {
+        loadOperationsDataRef.current().catch(console.error);
+      }
+    }
+  }, [lastMessage, loadOperationsDataRef, activeTabRef]);
+
+  useEffect(() => {
+    onConnectedChange(connected);
+  }, [onConnectedChange, connected]);
 
   return null;
 }

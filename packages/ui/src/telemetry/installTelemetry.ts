@@ -1,5 +1,5 @@
-import { getInstalledTelemetry, setInstalledTelemetry } from './global';
-import type { TelemetryClient, TelemetryEvent } from './types';
+import { getInstalledTelemetry, setInstalledTelemetry } from './global.js';
+import type { TelemetryClient, TelemetryEvent } from './types.js';
 
 export type InstallTelemetryOptions = {
   app: 'customer-kiosk' | 'employee-register' | string;

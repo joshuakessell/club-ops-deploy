@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { LiquidGlassNumpad } from './LiquidGlassNumpad';
+import { LiquidGlassNumpad } from './LiquidGlassNumpad.js';
 
 export type LiquidGlassPinInputProps = {
   /** Fixed PIN length (e.g. 6). If set, submit is disabled until exact length is reached. */
