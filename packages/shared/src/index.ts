@@ -102,7 +102,6 @@ export {
 export { AGREEMENT_LEGAL_BODY_HTML_BY_LANG, type AgreementLanguage } from './agreementContent.js';
 
 // Realtime (guard + React hook wrapper)
-export type { LaneRole, LaneSessionClientOptions } from '../realtime/laneSessionClient.js';
-export { getLaneSessionClient, closeLaneSessionClient } from '../realtime/laneSessionClient.js';
+export * from '../realtime/laneSessionClient.js';
 export { useLaneSession } from '../realtime/useLaneSession.js';
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { ManualCheckoutModal } from './ManualCheckoutModal';
 
 global.fetch = vi.fn();
@@ -37,9 +37,14 @@ describe('ManualCheckoutModal', () => {
       />
     );
 
-    expect(await screen.findByText(/Suggested/i)).toBeDefined();
-    expect(await screen.findByRole('button', { name: /Room 101/i })).toBeDefined();
-    expect(screen.getByText(/John Smith/i)).toBeDefined();
+    const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
+    const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
+    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    const m = within(checkoutModalEl);
+
+    expect(await m.findByText(/Suggested/i)).toBeDefined();
+    expect(await m.findByRole('button', { name: /Room 101/i })).toBeDefined();
+    expect(m.getByText(/John Smith/i)).toBeDefined();
   });
 
   it('typing in number input clears selected candidate and gates Continue', async () => {
@@ -70,15 +75,20 @@ describe('ManualCheckoutModal', () => {
       />
     );
 
-    const continueBtn = await screen.findByRole('button', { name: 'Continue' });
+    const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
+    const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
+    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    const m = within(checkoutModalEl);
+
+    const continueBtn = await m.findByRole('button', { name: 'Continue' });
     expect(continueBtn).toHaveProperty('disabled', true);
 
-    const candidateBtn = await screen.findByRole('button', { name: /Room 101/i });
+    const candidateBtn = await m.findByRole('button', { name: /Room 101/i });
     fireEvent.click(candidateBtn);
     expect(continueBtn).toHaveProperty('disabled', false);
     expect(candidateBtn.getAttribute('aria-pressed')).toBe('true');
 
-    const input = screen.getByLabelText('Checkout number');
+    const input = m.getByLabelText('Checkout number');
     fireEvent.change(input, { target: { value: '102' } });
     expect(candidateBtn.getAttribute('aria-pressed')).toBe('false');
     expect(continueBtn).toHaveProperty('disabled', false);
@@ -130,19 +140,24 @@ describe('ManualCheckoutModal', () => {
       />
     );
 
-    const candidateBtn = await screen.findByRole('button', { name: /Room 101/i });
+    const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
+    const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
+    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    const m = within(checkoutModalEl);
+
+    const candidateBtn = await m.findByRole('button', { name: /Room 101/i });
     fireEvent.click(candidateBtn);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    fireEvent.click(m.getByRole('button', { name: 'Continue' }));
 
-    expect(await screen.findByText(/Confirm checkout/i)).toBeDefined();
-    expect(screen.getByText(/John Smith/i)).toBeDefined();
+    expect(await m.findByText(/Confirm checkout/i)).toBeDefined();
+    expect(m.getByText(/John Smith/i)).toBeDefined();
     expect(
-      screen.getAllByText((_, el) => (el?.textContent ?? '').includes('Fee $35.00')).length
+      m.getAllByText((_, el) => (el?.textContent ?? '').includes('Fee $35.00')).length
     ).toBeGreaterThan(0);
 
     // Close (X) triggers warning instead of closing
-    const closeBtn = screen.getByRole('button', { name: 'Close' });
+    const closeBtn = m.getByRole('button', { name: 'Close' });
     fireEvent.click(closeBtn);
 
     expect(await screen.findByRole('heading', { name: /Cancel checkout/i })).toBeDefined();
@@ -193,11 +208,16 @@ describe('ManualCheckoutModal', () => {
 
     render(<ManualCheckoutModal isOpen={true} sessionToken="tok" onClose={onClose} onSuccess={onSuccess} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Room 101/i }));
-    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    await screen.findByText(/Confirm checkout/i);
+    const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
+    const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
+    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    const m = within(checkoutModalEl);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    fireEvent.click(await m.findByRole('button', { name: /Room 101/i }));
+    fireEvent.click(m.getByRole('button', { name: 'Continue' }));
+    await m.findByText(/Confirm checkout/i);
+
+    fireEvent.click(m.getByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {
       expect(onClose).toHaveBeenCalledTimes(1);
@@ -244,10 +264,15 @@ describe('ManualCheckoutModal', () => {
     );
 
     // Should land on confirm step without clicking Continue.
-    expect(await screen.findByText(/Confirm checkout/i)).toBeDefined();
+    const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
+    const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
+    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    const m = within(checkoutModalEl);
+
+    expect(await m.findByText(/Confirm checkout/i)).toBeDefined();
 
     // Close (X) closes immediately in direct-confirm mode (returns to inventory).
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(m.getByRole('button', { name: 'Close' }));
     expect(onClose).toHaveBeenCalledTimes(1);
 
     // Resolve call should have used occupancyId.

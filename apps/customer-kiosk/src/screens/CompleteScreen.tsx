@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { I18nProvider, t, type Language } from '../i18n';
 import { ScreenShell } from '../components/ScreenShell';
 
@@ -20,10 +20,18 @@ export function CompleteScreen({
   checkoutAt,
   orientationOverlay,
   welcomeOverlay,
-  onComplete: _onComplete,
+  onComplete,
 }: CompleteScreenProps) {
   const lang = customerPrimaryLanguage;
   const locale = lang ?? undefined;
+
+  // Fire completion callback exactly once (React StrictMode can double-invoke effects in dev).
+  const didCompleteRef = useRef(false);
+  useEffect(() => {
+    if (didCompleteRef.current) return;
+    didCompleteRef.current = true;
+    onComplete();
+  }, [onComplete]);
 
   const checkoutDate = checkoutAt ? new Date(checkoutAt) : null;
   const hasValidCheckoutDate = checkoutDate != null && !Number.isNaN(checkoutDate.getTime());

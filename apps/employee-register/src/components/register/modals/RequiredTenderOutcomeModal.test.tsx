@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { RequiredTenderOutcomeModal } from './RequiredTenderOutcomeModal';
 
 describe('RequiredTenderOutcomeModal', () => {
@@ -14,10 +14,12 @@ describe('RequiredTenderOutcomeModal', () => {
       />
     );
 
-    const continueBtn = screen.getByRole<HTMLButtonElement>('button', { name: 'Continue' });
+    const dialog = screen.getByRole('dialog', { name: /select tender outcome/i });
+    const m = within(dialog);
+    const continueBtn = m.getByRole<HTMLButtonElement>('button', { name: 'Continue' });
     expect(continueBtn.disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Credit Success' }));
+    fireEvent.click(m.getByRole('button', { name: 'Credit Success' }));
     expect(continueBtn.disabled).toBe(false);
 
     fireEvent.click(continueBtn);
@@ -29,11 +31,11 @@ describe('RequiredTenderOutcomeModal', () => {
     expect(overlay).toBeTruthy();
     if (!overlay) throw new Error('Expected overlay to exist');
     fireEvent.click(overlay);
-    expect(screen.getByText('Select Tender Outcome')).toBeDefined();
+    expect(m.getByText('Select Tender Outcome')).toBeDefined();
 
     // ESC should not dismiss or change selection
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.getByText('Select Tender Outcome')).toBeDefined();
+    expect(m.getByText('Select Tender Outcome')).toBeDefined();
   });
 });
 

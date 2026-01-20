@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { RoomCleaningModal } from './RoomCleaningModal';
 
 global.fetch = vi.fn();
@@ -32,11 +32,16 @@ describe('RoomCleaningModal', () => {
       />
     );
 
-    expect(await screen.findByText(/Select rooms to begin or finish cleaning/i)).toBeDefined();
-    expect(screen.getByText(/DIRTY \(ready to begin cleaning\)/i)).toBeDefined();
-    expect(screen.getByText(/CLEANING \(ready to finish cleaning\)/i)).toBeDefined();
-    expect(await screen.findByRole('button', { name: /Room 101/i })).toBeDefined();
-    expect(screen.queryByRole('button', { name: /Room 102/i })).toBeNull();
+    const cleaningHeading = await screen.findByRole('heading', { name: 'Room Cleaning' });
+    const cleaningModalEl = cleaningHeading.closest('.cs-liquid-card');
+    if (!(cleaningModalEl instanceof HTMLElement)) throw new Error('Expected room cleaning modal container');
+    const m = within(cleaningModalEl);
+
+    expect(await m.findByText(/Select rooms to begin or finish cleaning/i)).toBeDefined();
+    expect(m.getByText(/DIRTY \(ready to begin cleaning\)/i)).toBeDefined();
+    expect(m.getByText(/CLEANING \(ready to finish cleaning\)/i)).toBeDefined();
+    expect(await m.findByRole('button', { name: /Room 101/i })).toBeDefined();
+    expect(m.queryByRole('button', { name: /Room 102/i })).toBeNull();
   });
 
   it('multi-select CLEANING rooms enables Finish Cleaning and calls /v1/cleaning/batch with expected payload', async () => {
@@ -70,12 +75,17 @@ describe('RoomCleaningModal', () => {
       />
     );
 
-    const primaryBtn = await screen.findByRole('button', { name: 'Continue' });
+    const cleaningHeading = await screen.findByRole('heading', { name: 'Room Cleaning' });
+    const cleaningModalEl = cleaningHeading.closest('.cs-liquid-card');
+    if (!(cleaningModalEl instanceof HTMLElement)) throw new Error('Expected room cleaning modal container');
+    const m = within(cleaningModalEl);
+
+    const primaryBtn = await m.findByRole('button', { name: 'Continue' });
     expect(primaryBtn).toHaveProperty('disabled', true);
 
-    fireEvent.click(await screen.findByRole('button', { name: /Room 101/i }));
-    fireEvent.click(await screen.findByRole('button', { name: /Room 103/i }));
-    const finishBtn = await screen.findByRole('button', { name: 'Finish Cleaning' });
+    fireEvent.click(await m.findByRole('button', { name: /Room 101/i }));
+    fireEvent.click(await m.findByRole('button', { name: /Room 103/i }));
+    const finishBtn = await m.findByRole('button', { name: 'Finish Cleaning' });
     expect(finishBtn).toHaveProperty('disabled', false);
 
     fireEvent.click(finishBtn);

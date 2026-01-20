@@ -188,3 +188,26 @@ export function closeLaneSessionClient(laneId: string, role: LaneRole): void {
   }
 }
 
+/**
+ * Test helper: closes and clears ALL cached lane session clients (and retry timers).
+ *
+ * In app code, clients are intentionally cached globally to allow reuse across screens.
+ * In tests, this caching can keep timers/sockets alive after a test completes, which
+ * prevents Vitest from exiting cleanly.
+ */
+export function closeAllLaneSessionClients(): void {
+  for (const [key, client] of clients.entries()) {
+    if (client.retryTimer) {
+      clearTimeout(client.retryTimer);
+      client.retryTimer = undefined;
+    }
+
+    try {
+      client.socket.close();
+    } catch {
+      // ignore
+    }
+
+    clients.delete(key);
+  }
+}
