@@ -309,13 +309,14 @@ export function AppRoot() {
         }
 
         // If kiosk acknowledged, stay idle (lane still locked until employee-register completes/reset).
-        if (payload.kioskAcknowledgedAt && payload.customerName && payload.status !== 'COMPLETED') {
+        if (payload.kioskAcknowledgedAt && payload.status !== 'COMPLETED') {
           setView('idle');
           return;
         }
 
-        // Language selection (first visit, before past-due check)
-        if (payload.customerName && !payload.customerPrimaryLanguage && !payload.pastDueBlocked) {
+        // Language selection (first visit). This should happen before any other customer-facing step,
+        // including past-due messaging, so customers can read everything in their preferred language.
+        if (payload.sessionId && payload.status !== 'COMPLETED' && !payload.customerPrimaryLanguage) {
           setView('language');
           return;
         }
@@ -343,7 +344,7 @@ export function AppRoot() {
         }
 
         // Selection view (default active session state)
-        if (payload.customerName) {
+        if (payload.sessionId && payload.status !== 'COMPLETED') {
           setView('selection');
         }
 

@@ -500,11 +500,6 @@ describe('App', () => {
       fireEvent.click(suggestion);
     });
 
-    const confirmButton = await screen.findByText(/Confirm/);
-    act(() => {
-      fireEvent.click(confirmButton);
-    });
-
     await waitFor(() => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
     });
@@ -616,11 +611,6 @@ describe('App', () => {
     const suggestion = await screen.findByText(/Rivera, Alex/);
     act(() => {
       fireEvent.click(suggestion);
-    });
-
-    const confirmButton = await screen.findByText(/Confirm/);
-    act(() => {
-      fireEvent.click(confirmButton);
     });
 
     expect(await screen.findByText('Currently Checked In')).toBeDefined();
@@ -754,10 +744,6 @@ describe('App', () => {
     const suggestion = await screen.findByText(/Rivera, Alex/);
     act(() => {
       fireEvent.click(suggestion);
-    });
-    const confirmButton = await screen.findByText(/Confirm/);
-    act(() => {
-      fireEvent.click(confirmButton);
     });
     await waitFor(() => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
@@ -969,10 +955,6 @@ describe('App', () => {
     const suggestion = await screen.findByText(/Rivera, Alex/);
     act(() => {
       fireEvent.click(suggestion);
-    });
-    const confirmButton = await screen.findByText(/Confirm/);
-    act(() => {
-      fireEvent.click(confirmButton);
     });
     await waitFor(() => {
       expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);

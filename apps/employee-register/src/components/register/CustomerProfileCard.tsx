@@ -14,6 +14,7 @@ export interface CustomerProfileCardProps {
   checkinStage?: CheckinStage | null;
   waitlistDesiredTier?: string | null;
   waitlistBackupType?: string | null;
+  footer?: ReactNode;
 }
 
 function Detail({ label, value }: { label: string; value: ReactNode }) {
@@ -114,6 +115,10 @@ export function CustomerProfileCard(props: CustomerProfileCardProps) {
             Requested <strong>{props.waitlistDesiredTier}</strong>; backup <strong>{props.waitlistBackupType}</strong>.
           </div>
         </div>
+      ) : null}
+
+      {props.footer ? (
+        <div style={{ marginTop: '0.85rem', display: 'flex', justifyContent: 'center' }}>{props.footer}</div>
       ) : null}
     </div>
   );

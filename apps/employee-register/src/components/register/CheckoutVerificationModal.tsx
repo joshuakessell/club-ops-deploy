@@ -7,6 +7,7 @@ export interface CheckoutVerificationModalProps {
   isSubmitting: boolean;
   checkoutItemsConfirmed: boolean;
   checkoutFeePaid: boolean;
+  onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
   onConfirmItems: () => void;
   onMarkFeePaid: () => void;
   onComplete: () => void;
@@ -18,6 +19,7 @@ export function CheckoutVerificationModal({
   isSubmitting,
   checkoutItemsConfirmed,
   checkoutFeePaid,
+  onOpenCustomerAccount,
   onConfirmItems,
   onMarkFeePaid,
   onComplete,
@@ -35,6 +37,7 @@ export function CheckoutVerificationModal({
 
   const number = request.roomNumber || request.lockerNumber || 'N/A';
   const numberLabel = request.roomNumber ? 'Room' : request.lockerNumber ? 'Locker' : 'Rental';
+  const canOpenCustomer = Boolean(request.customerId && onOpenCustomerAccount);
 
   return (
     <div
@@ -78,9 +81,24 @@ export function CheckoutVerificationModal({
               {numberLabel} {number}
             </div>
             <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
-              {request.customerName}
-              {request.membershipNumber && (
-                <span style={{ fontWeight: 700, color: '#94a3b8' }}> ({request.membershipNumber})</span>
+              {canOpenCustomer ? (
+                <button
+                  type="button"
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  onClick={() => onOpenCustomerAccount?.(request.customerId!, request.customerName)}
+                  style={{ padding: '0.25rem 0.65rem', minHeight: 'unset', fontWeight: 900 }}
+                  title="Open Customer Account"
+                >
+                  {request.customerName}
+                  {request.membershipNumber ? ` (${request.membershipNumber})` : ''}
+                </button>
+              ) : (
+                <>
+                  {request.customerName}
+                  {request.membershipNumber && (
+                    <span style={{ fontWeight: 700, color: '#94a3b8' }}> ({request.membershipNumber})</span>
+                  )}
+                </>
               )}
             </div>
             <div style={{ marginTop: '0.5rem', color: '#cbd5e1', fontWeight: 700 }}>

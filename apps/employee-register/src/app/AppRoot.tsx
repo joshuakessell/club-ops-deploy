@@ -142,8 +142,7 @@ export function AppRoot() {
     | 'upgrades'
     | 'checkout'
     | 'roomCleaning'
-    | 'firstTime'
-    | 'clearSession';
+    | 'firstTime';
   const [homeTab, setHomeTab] = useState<HomeTab>('scan');
   const [accountCustomerId, setAccountCustomerId] = useState<string | null>(null);
   const [accountCustomerLabel, setAccountCustomerLabel] = useState<string | null>(null);
@@ -235,6 +234,17 @@ export function AppRoot() {
       checkoutReturnToTabRef.current = 'inventory';
       setCheckoutEntryMode('direct-confirm');
       setCheckoutPrefill(prefill);
+      selectHomeTab('checkout');
+    },
+    [selectHomeTab]
+  );
+
+  const startCheckoutFromCustomerAccount = useCallback(
+    (prefill?: { number?: string | null }) => {
+      checkoutReturnToTabRef.current = 'account';
+      const number = prefill?.number ?? null;
+      setCheckoutEntryMode(number ? 'direct-confirm' : 'default');
+      setCheckoutPrefill(number ? { number } : null);
       selectHomeTab('checkout');
     },
     [selectHomeTab]
@@ -548,6 +558,7 @@ export function AppRoot() {
       id: string;
       visitId: string;
       checkinBlockId: string;
+      customerId?: string;
       desiredTier: string;
       backupTier: string;
       status: string;
@@ -627,8 +638,6 @@ export function AppRoot() {
     }>
   >([]);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [selectedCustomerLabel, setSelectedCustomerLabel] = useState<string | null>(null);
 
   // Assignment completion state lives in laneSession reducer
 
@@ -777,34 +786,11 @@ export function AppRoot() {
 
   useEffect(() => {
     if (customerSearch.trim().length >= 3) {
-      setSelectedCustomerId(null);
-      setSelectedCustomerLabel(null);
       runCustomerSearch(customerSearch);
     } else {
       setCustomerSuggestions([]);
-      setSelectedCustomerId(null);
-      setSelectedCustomerLabel(null);
     }
   }, [customerSearch, runCustomerSearch]);
-
-  const handleConfirmCustomerSelection = () => {
-    if (!session?.sessionToken || !selectedCustomerId) return;
-    setIsSubmitting(true);
-    try {
-      // The Customer Account page owns the "start lane check-in if not visiting" behavior.
-      // This keeps 200 vs 409 handling consistent across scan/search/first-time.
-      openCustomerAccount(selectedCustomerId, selectedCustomerLabel || selectedCustomerId);
-
-      // Clear search UI
-      setCustomerSearch('');
-      setCustomerSuggestions([]);
-    } catch (error) {
-      console.error('Failed to open customer account:', error);
-      alert(error instanceof Error ? error.message : 'Failed to open customer account');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   // Load staff session from localStorage (created after register sign-in)
   useEffect(() => {
@@ -2590,6 +2576,7 @@ export function AppRoot() {
             <CheckoutRequestsBanner
               requests={Array.from(checkoutRequests.values())}
               onClaim={(id) => void handleClaimCheckout(id)}
+              onOpenCustomerAccount={(customerId, label) => openCustomerAccount(customerId, label)}
             />
           )}
 
@@ -2604,6 +2591,7 @@ export function AppRoot() {
                   isSubmitting={isSubmitting}
                   checkoutItemsConfirmed={checkoutItemsConfirmed}
                   checkoutFeePaid={checkoutFeePaid}
+                  onOpenCustomerAccount={(customerId, label) => openCustomerAccount(customerId, label)}
                   onConfirmItems={() => void handleConfirmItems(selectedCheckoutRequest)}
                   onMarkFeePaid={() => void handleMarkFeePaid(selectedCheckoutRequest)}
                   onComplete={() => void handleCompleteCheckout(selectedCheckoutRequest)}
@@ -2726,23 +2714,11 @@ export function AppRoot() {
                   >
                     First Time Customer
                   </button>
-                  <button
-                    type="button"
-                    className={[
-                      'er-home-tab-btn',
-                      'cs-liquid-button',
-                      'cs-liquid-button--danger',
-                      homeTab === 'clearSession' ? 'cs-liquid-button--selected' : '',
-                    ].join(' ')}
-                    onClick={() => selectHomeTab('clearSession')}
-                  >
-                    Clear Session
-                  </button>
                 </nav>
 
                 <div className="er-home-content">
                   {homeTab === 'scan' && (
-                    <div className="er-home-panel er-home-panel--center cs-liquid-card" style={{ padding: '1rem' }}>
+                    <div className="er-home-panel er-home-panel--center cs-liquid-card er-main-panel-card">
                       <div style={{ fontSize: '4rem', lineHeight: 1 }} aria-hidden="true">
                         📷
                       </div>
@@ -2775,6 +2751,8 @@ export function AppRoot() {
                         sessionToken={session?.sessionToken}
                         customerId={accountCustomerId}
                         customerLabel={accountCustomerLabel}
+                        onStartCheckout={startCheckoutFromCustomerAccount}
+                        onClearSession={() => void handleClearSession().then(() => selectHomeTab('scan'))}
                         currentSessionId={currentSessionId}
                         currentSessionCustomerId={laneSession.customerId}
                         customerName={customerName}
@@ -2819,8 +2797,7 @@ export function AppRoot() {
                       />
                     ) : currentSessionId && customerName ? (
                       <div
-                        className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card"
-                        style={{ padding: '0.9rem' }}
+                        className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card"
                       >
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', minHeight: 0 }}>
                           <div style={{ fontWeight: 950, fontSize: '1.05rem' }}>Customer Account</div>
@@ -2835,6 +2812,18 @@ export function AppRoot() {
                             checkinStage={checkinStage}
                             waitlistDesiredTier={waitlistDesiredTier}
                             waitlistBackupType={waitlistBackupType}
+                            footer={
+                              checkinStage ? (
+                                <button
+                                  type="button"
+                                  className="cs-liquid-button cs-liquid-button--danger"
+                                  onClick={() => void handleClearSession().then(() => selectHomeTab('scan'))}
+                                  style={{ width: '100%', maxWidth: 320, padding: '0.7rem', fontWeight: 900 }}
+                                >
+                                  Clear Session
+                                </button>
+                              ) : null
+                            }
                           />
                           <EmployeeAssistPanel
                             sessionId={currentSessionId}
@@ -2866,7 +2855,7 @@ export function AppRoot() {
                         </div>
                       </div>
                     ) : (
-                      <div className="er-home-panel er-home-panel--center cs-liquid-card" style={{ padding: '1rem' }}>
+                      <div className="er-home-panel er-home-panel--center cs-liquid-card er-main-panel-card">
                         <div style={{ fontWeight: 950, fontSize: '1.35rem' }}>Customer Account</div>
                         <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
                           Select a customer (scan, search, or first-time) to view their account.
@@ -2877,8 +2866,8 @@ export function AppRoot() {
 
                   {homeTab === 'search' && (
                     <div
-                      className="er-home-panel er-home-panel--top typeahead-section cs-liquid-card"
-                      style={{ marginTop: 0, padding: '1rem' }}
+                      className="er-home-panel er-home-panel--top typeahead-section cs-liquid-card er-main-panel-card"
+                      style={{ marginTop: 0 }}
                     >
                       <div
                         style={{
@@ -2919,19 +2908,25 @@ export function AppRoot() {
                         >
                           {customerSuggestions.map((s) => {
                             const label = `${s.lastName}, ${s.firstName}`;
-                            const active = selectedCustomerId === s.id;
                             return (
-                              <div
+                              <button
                                 key={s.id}
+                                type="button"
+                                className="cs-liquid-button cs-liquid-button--secondary"
                                 onClick={() => {
-                                  setSelectedCustomerId(s.id);
-                                  setSelectedCustomerLabel(label);
+                                  // Direct navigation: selecting a customer name anywhere should open Customer Account.
+                                  openCustomerAccount(s.id, label);
+                                  setCustomerSearch('');
+                                  setCustomerSuggestions([]);
                                 }}
                                 style={{
                                   padding: '0.5rem 0.75rem',
-                                  cursor: 'pointer',
-                                  background: active ? '#1e293b' : 'transparent',
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  borderRadius: 0,
+                                  border: 'none',
                                   borderBottom: '1px solid #1f2937',
+                                  justifyContent: 'space-between',
                                 }}
                               >
                                 <div style={{ fontWeight: 600 }}>{label}</div>
@@ -2947,42 +2942,16 @@ export function AppRoot() {
                                   {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
                                   {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
                                 </div>
-                              </div>
+                              </button>
                             );
                           })}
                         </div>
                       )}
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'center',
-                          gap: '0.75rem',
-                          marginTop: '0.75rem',
-                          alignItems: 'center',
-                          flexDirection: 'column',
-                        }}
-                      >
-                        <div className="er-search-help">
-                          {selectedCustomerLabel ? `Selected: ${selectedCustomerLabel}` : 'Select a customer above'}
-                        </div>
-                        <button
-                          onClick={() => void handleConfirmCustomerSelection()}
-                          disabled={!selectedCustomerId || isSubmitting}
-                          className="cs-liquid-button"
-                          style={{
-                            padding: '0.55rem 0.9rem',
-                            fontWeight: 700,
-                            opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
-                          }}
-                        >
-                          Confirm
-                        </button>
-                      </div>
                     </div>
                   )}
 
                   {homeTab === 'inventory' && session?.sessionToken && (
-                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card" style={{ padding: '0.75rem' }}>
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
                       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
                         <InventoryDrawer
                           lane={lane}
@@ -2999,6 +2968,7 @@ export function AppRoot() {
                           disableSelection={false}
                           onAlertSummaryChange={({ hasLate }) => setInventoryHasLate(hasLate)}
                           onRequestCheckout={startCheckoutFromInventory}
+                          onOpenCustomerAccount={openCustomerAccount}
                           externalRefreshNonce={inventoryRefreshNonce}
                         />
                       </div>
@@ -3006,7 +2976,7 @@ export function AppRoot() {
                   )}
 
                   {homeTab === 'upgrades' && (
-                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card" style={{ padding: '0.75rem' }}>
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
                       <UpgradesDrawerContent
                         waitlistEntries={waitlistEntries}
                         hasEligibleEntries={hasEligibleEntries}
@@ -3031,6 +3001,7 @@ export function AppRoot() {
                         onCancelOffer={(entryId) => {
                           alert(`Cancel offer not implemented yet (waitlistId=${entryId}).`);
                         }}
+                        onOpenCustomerAccount={openCustomerAccount}
                         isSubmitting={isSubmitting}
                       />
                     </div>
@@ -3066,7 +3037,7 @@ export function AppRoot() {
 
                   {homeTab === 'firstTime' && (
                     <form
-                      className="er-home-panel er-home-panel--top manual-entry-form cs-liquid-card"
+                      className="er-home-panel er-home-panel--top manual-entry-form cs-liquid-card er-main-panel-card"
                       onSubmit={(e) => void handleManualSubmit(e)}
                     >
                       <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>First Time Customer</div>
@@ -3143,25 +3114,6 @@ export function AppRoot() {
                         </button>
                       </div>
                     </form>
-                  )}
-
-                  {homeTab === 'clearSession' && (
-                    <div className="er-home-panel er-home-panel--center cs-liquid-card" style={{ padding: '1rem' }}>
-                      <div style={{ fontWeight: 950, fontSize: '1.1rem' }}>Clear Session</div>
-                      <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
-                        Clears the current lane session and resets the home screen.
-                      </div>
-                      <div style={{ marginTop: '0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
-                        <button
-                          type="button"
-                          className="cs-liquid-button cs-liquid-button--danger"
-                          onClick={() => void handleClearSession().then(() => selectHomeTab('scan'))}
-                          disabled={isSubmitting}
-                        >
-                          Clear Session
-                        </button>
-                      </div>
-                    </div>
                   )}
 
                 </div>

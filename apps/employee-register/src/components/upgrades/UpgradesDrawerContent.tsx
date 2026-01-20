@@ -6,6 +6,7 @@ export type UpgradeWaitlistEntry = {
   id: string;
   visitId: string;
   checkinBlockId: string;
+  customerId?: string;
   desiredTier: string;
   backupTier: string;
   status: string;
@@ -27,6 +28,7 @@ export interface UpgradesDrawerContentProps {
   onOffer: (entryId: string, desiredTier: string, customerLabel: string) => void;
   onStartPayment: (entry: UpgradeWaitlistEntry) => void;
   onCancelOffer: (entryId: string) => void;
+  onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
   isSubmitting?: boolean;
   headerRightSlot?: ReactNode;
 }
@@ -38,6 +40,7 @@ export function UpgradesDrawerContent({
   onOffer,
   onStartPayment,
   onCancelOffer,
+  onOpenCustomerAccount,
   isSubmitting = false,
   headerRightSlot,
 }: UpgradesDrawerContentProps) {
@@ -100,6 +103,7 @@ export function UpgradesDrawerContent({
                     {entries.map((entry) => {
                       const customerLabel = entry.customerName || entry.displayIdentifier;
                       const eligible = isEntryOfferEligible(entry.id, entry.status, entry.desiredTier);
+                      const canOpenCustomer = Boolean(entry.customerId && onOpenCustomerAccount);
 
                       return (
                         <div
@@ -121,8 +125,30 @@ export function UpgradesDrawerContent({
                             }}
                           >
                             <div>
-                              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
-                                {customerLabel} → {entry.desiredTier}
+                              <div style={{ fontWeight: 700, marginBottom: '0.25rem', display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                  type="button"
+                                  disabled={!canOpenCustomer}
+                                  onClick={() => {
+                                    if (!entry.customerId) return;
+                                    onOpenCustomerAccount?.(entry.customerId, customerLabel);
+                                  }}
+                                  className="cs-liquid-button cs-liquid-button--secondary"
+                                  style={{
+                                    padding: '0.3rem 0.6rem',
+                                    minHeight: 'unset',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 800,
+                                    opacity: canOpenCustomer ? 1 : 0.6,
+                                  }}
+                                  title={canOpenCustomer ? 'Open Customer Account' : 'Customer id not available'}
+                                >
+                                  {customerLabel}
+                                </button>
+                                <span aria-hidden="true" style={{ color: '#94a3b8' }}>
+                                  →
+                                </span>
+                                <span>{entry.desiredTier}</span>
                               </div>
                               <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
                                 Assigned: {entry.displayIdentifier} • Backup: {entry.backupTier} • Current:{' '}
