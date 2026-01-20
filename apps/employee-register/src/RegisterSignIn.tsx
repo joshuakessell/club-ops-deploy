@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { SignInModal } from './SignInModal';
 import type { WebSocketEvent, RegisterSessionUpdatedPayload } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { closeLaneSessionClient, useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -283,26 +284,36 @@ function RegisterSessionWs({
 }) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws`;
-
-  const ws = useReconnectingWebSocket({
-    url: wsUrl,
-    onOpenSendJson: [{ type: 'subscribe', events: ['REGISTER_SESSION_UPDATED'] }],
-    onMessage: (event) => {
-      const parsed = safeJsonParse<unknown>(String(event.data));
-      if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-      const message = parsed as unknown as WebSocketEvent;
-      if (message.type !== 'REGISTER_SESSION_UPDATED') return;
-      const payload = message.payload as RegisterSessionUpdatedPayload;
-      if (payload.deviceId === deviceId && !payload.active) {
-        ws.close();
-        onInvalidated();
-      }
-    },
-    onError: (error) => {
-      console.error('WebSocket connection error:', error);
-      // Don't disconnect on error - connection might recover
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : null;
+  void wsUrl;
+  const { lastMessage, lastError } = useLaneSession({
+    laneId: '',
+    role: 'employee',
+    kioskToken: kioskToken ?? '',
+    enabled: true,
   });
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    const parsed = safeJsonParse<unknown>(String(lastMessage.data));
+    if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+    const message = parsed as unknown as WebSocketEvent;
+    if (message.type !== 'REGISTER_SESSION_UPDATED') return;
+    const payload = message.payload as RegisterSessionUpdatedPayload;
+    if (payload.deviceId === deviceId && !payload.active) {
+      closeLaneSessionClient('', 'employee');
+      onInvalidated();
+    }
+  }, [deviceId, lastMessage, onInvalidated]);
+
+  useEffect(() => {
+    if (!lastError) return;
+    console.error('WebSocket connection error:', lastError);
+  }, [lastError]);
 
   return null;
 }

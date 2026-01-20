@@ -9,6 +9,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./realtime/laneSessionClient": {
+      "types": "./dist/realtime/laneSessionClient.d.ts",
+      "import": "./dist/realtime/laneSessionClient.js"
+    },
+    "./realtime/useLaneSession": {
+      "types": "./dist/realtime/useLaneSession.d.ts",
+      "import": "./dist/realtime/useLaneSession.js"
     }
   },
   "scripts": {
@@ -25,7 +33,12 @@
   "dependencies": {
     "zod": "^3.22.4"
   },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
   "devDependencies": {
+    "@types/react": "^18.2.0",
+    "react": "^18.2.0",
     "typescript": "^5.3.3",
     "vitest": "^1.1.0"
   }

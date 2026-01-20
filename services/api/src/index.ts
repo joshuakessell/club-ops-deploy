@@ -2,6 +2,8 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 
+import { loadEnvFromDotEnvIfPresent } from './env/loadEnv.js';
+
 import {
   healthRoutes,
   authRoutes,
@@ -38,10 +40,20 @@ import { processUpgradeHoldsTick } from './waitlist/upgradeHolds.js';
 import { setupTelemetry } from './telemetry/plugin.js';
 import { registerWsRoute } from './websocket/wsRoute.js';
 
+loadEnvFromDotEnvIfPresent();
+
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const SKIP_DB = process.env.SKIP_DB === 'true';
 const SEED_ON_STARTUP = process.env.SEED_ON_STARTUP === 'true';
+
+// Fail-fast: the API must never start without a kiosk token configured.
+// This is required for kiosk-facing authenticated WebSockets and state-mutating endpoints.
+const KIOSK_TOKEN = process.env.KIOSK_TOKEN?.trim();
+if (!KIOSK_TOKEN) {
+  console.error('FATAL: Missing required env var KIOSK_TOKEN. Refusing to start API server.');
+  process.exit(1);
+}
 
 // Augment FastifyInstance with broadcaster
 declare module 'fastify' {
@@ -74,7 +86,19 @@ async function main() {
   });
 
   // Register WebSocket support
-  await fastify.register(websocket);
+  await fastify.register(websocket, {
+    // If the browser supplies `protocols` when constructing the WebSocket, the server must
+    // select one in the handshake response or the connection will fail.
+    //
+    // We only use this to allow clients to pass the kiosk token via a subprotocol value
+    // (see `auth/kioskToken.ts`), but selecting the first offered protocol is sufficient.
+    options: {
+      handleProtocols: (protocols) => {
+        for (const p of protocols) return p;
+        return false;
+      },
+    },
+  });
 
   // Create broadcaster for WebSocket events
   const broadcaster = createBroadcaster();

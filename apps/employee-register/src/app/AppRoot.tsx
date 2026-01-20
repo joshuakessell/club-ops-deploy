@@ -638,11 +638,9 @@ export function AppRoot() {
       // In development, you may have multiple tabs open; we add a per-tab instance suffix
       // (stored in sessionStorage) so two tabs on the same machine can sign into
       // different registers without colliding on deviceId.
-      const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
-      const envDeviceId = env?.['VITE_DEVICE_ID'];
-      if (typeof envDeviceId === 'string' && envDeviceId.trim()) {
-        return envDeviceId;
-      }
+      const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+      const envDeviceId = typeof rawEnv.VITE_DEVICE_ID === 'string' ? rawEnv.VITE_DEVICE_ID : null;
+      if (envDeviceId && envDeviceId.trim()) return envDeviceId.trim();
 
       let baseId: string | null = null;
       try {
