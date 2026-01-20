@@ -1044,6 +1044,7 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         if (fastify.broadcaster) {
           const summary: CheckoutRequestSummary = {
             requestId: result.id,
+            customerId: customer.id,
             customerName: customer.name,
             membershipNumber: customer.membership_number || undefined,
             rentalType: block.rental_type,

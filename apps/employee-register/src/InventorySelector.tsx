@@ -54,6 +54,11 @@ function formatTimeOfDay(iso: string | undefined): string | null {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function isUuid(value: string | undefined | null): boolean {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 interface DetailedRoom {
   id: string;
   number: string;
@@ -105,6 +110,7 @@ interface InventorySelectorProps {
    * rather than opening a modal within the drawer.
    */
   onRequestCheckout?: (prefill: { occupancyId?: string; number: string }) => void;
+  onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
   /** External refresh nonce to force inventory refetch (e.g. after an inline checkout completes). */
   externalRefreshNonce?: number;
 }
@@ -257,6 +263,7 @@ export function InventorySelector({
   disableSelection = false,
   onAlertSummaryChange,
   onRequestCheckout,
+  onOpenCustomerAccount,
   externalRefreshNonce,
 }: InventorySelectorProps) {
   // When there's no active lane session, treat inventory as a lookup tool (occupied-only details),
@@ -276,6 +283,7 @@ export function InventorySelector({
     type: 'room' | 'locker';
     number: string;
     occupancyId?: string;
+    customerId?: string;
     customerName?: string;
     checkinAt?: string;
     checkoutAt?: string;
@@ -594,6 +602,7 @@ export function InventorySelector({
     type: 'room' | 'locker';
     number: string;
     occupancyId?: string;
+    customerId?: string;
     customerName?: string;
     checkinAt?: string;
     checkoutAt?: string;
@@ -608,6 +617,7 @@ export function InventorySelector({
         type: 'room',
         number: room.number,
         occupancyId: room.occupancyId,
+        customerId: isUuid(room.assignedTo) ? room.assignedTo : undefined,
         customerName: room.assignedMemberName || room.assignedTo,
         checkinAt: room.checkinAt,
         checkoutAt: room.checkoutAt,
@@ -626,6 +636,7 @@ export function InventorySelector({
         type: 'locker',
         number: locker.number,
         occupancyId: locker.occupancyId,
+        customerId: isUuid(locker.assignedTo) ? locker.assignedTo : undefined,
         customerName: locker.assignedMemberName || locker.assignedTo,
         checkinAt: locker.checkinAt,
         checkoutAt: locker.checkoutAt,
@@ -864,6 +875,7 @@ export function InventorySelector({
                   disableSelection={disableSelection || selectionLockedToType === 'room'}
                   occupancyLookupMode={occupancyLookupMode}
                   highlightId={searchHighlight?.type === 'locker' ? searchHighlight.id : null}
+                  onOpenCustomerAccount={onOpenCustomerAccount}
                 />
               ) : (
                 <InventorySection
@@ -882,6 +894,7 @@ export function InventorySelector({
                   disableSelection={disableSelection || selectionLockedToType === 'locker'}
                   occupancyLookupMode={occupancyLookupMode}
                   highlightId={searchHighlight?.type === 'room' ? searchHighlight.id : null}
+                  onOpenCustomerAccount={onOpenCustomerAccount}
                 />
               )}
             </div>
@@ -909,7 +922,18 @@ export function InventorySelector({
                 fontWeight: 600,
               }}
             >
-              {occupancyDetails.customerName || '—'}
+              {occupancyDetails.customerId && onOpenCustomerAccount ? (
+                <button
+                  type="button"
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  style={{ padding: '0.35rem 0.7rem', minHeight: 'unset', fontWeight: 900 }}
+                  onClick={() => onOpenCustomerAccount(occupancyDetails.customerId!, occupancyDetails.customerName)}
+                >
+                  {occupancyDetails.customerName || 'Customer'}
+                </button>
+              ) : (
+                <span>{occupancyDetails.customerName || '—'}</span>
+              )}
             </div>
 
             <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
@@ -961,6 +985,7 @@ interface InventorySectionProps {
   disableSelection?: boolean;
   occupancyLookupMode?: boolean;
   highlightId?: string | null;
+  onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
 }
 
 function InventorySection({
@@ -973,6 +998,7 @@ function InventorySection({
   disableSelection = false,
   occupancyLookupMode = false,
   highlightId = null,
+  onOpenCustomerAccount,
 }: InventorySectionProps & { waitlistEntries?: Array<{ desiredTier: string; status: string }> }) {
   const grouped = useMemo(() => {
     const groupedRooms = groupRooms(rooms, waitlistEntries, nowMs);
@@ -1028,6 +1054,7 @@ function InventorySection({
                 isHighlighted={highlightId === room.id}
                 onClick={() => onSelectRoom(room)}
                 nowMs={nowMs}
+                onOpenCustomerAccount={onOpenCustomerAccount}
               />
             ))
           ) : (
@@ -1084,6 +1111,7 @@ function InventorySection({
                 }}
                 isWaitlistMatch={isWaitlistMatch}
                 nowMs={nowMs}
+                onOpenCustomerAccount={onOpenCustomerAccount}
               />
             ))
           ) : (
@@ -1103,6 +1131,7 @@ interface RoomItemProps {
   onClick?: () => void;
   isWaitlistMatch?: boolean;
   nowMs: number;
+  onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
 }
 
 function RoomItem({
@@ -1113,6 +1142,7 @@ function RoomItem({
   onClick,
   isWaitlistMatch,
   nowMs,
+  onOpenCustomerAccount,
 }: RoomItemProps) {
   const isOccupied = !!room.assignedTo || room.status === RoomStatus.OCCUPIED;
   const isCleaning = room.status === RoomStatus.CLEANING;
@@ -1121,6 +1151,7 @@ function RoomItem({
   const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
   const checkoutTime = isOccupied ? formatTimeOfDay(room.checkoutAt) : null;
   const customerLabel = room.assignedMemberName || room.assignedTo || null;
+  const customerId = isUuid(room.assignedTo) ? room.assignedTo : null;
   const dueLevel = isOccupied ? alertLevelFromMsUntil(msUntil) : null;
 
   return (
@@ -1150,7 +1181,22 @@ function RoomItem({
           </div>
 
           <div className="er-text-md er-inv-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {customerLabel ?? '—'}
+            {customerId && onOpenCustomerAccount ? (
+              <button
+                type="button"
+                className="cs-liquid-button cs-liquid-button--secondary"
+                style={{ padding: '0.2rem 0.5rem', minHeight: 'unset', fontWeight: 900 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenCustomerAccount(customerId, customerLabel ?? undefined);
+                }}
+                title="Open Customer Account"
+              >
+                {customerLabel ?? 'Customer'}
+              </button>
+            ) : (
+              <span>{customerLabel ?? '—'}</span>
+            )}
           </div>
           <div
             className="er-text-md"
@@ -1211,6 +1257,7 @@ interface LockerSectionProps {
   disableSelection?: boolean;
   occupancyLookupMode?: boolean;
   highlightId?: string | null;
+  onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
 }
 
 function LockerSection({
@@ -1221,6 +1268,7 @@ function LockerSection({
   disableSelection = false,
   occupancyLookupMode = false,
   highlightId = null,
+  onOpenCustomerAccount,
 }: LockerSectionProps) {
   const availableCount = lockers.filter(
     (l) => l.status === RoomStatus.CLEAN && !l.assignedTo
@@ -1285,6 +1333,7 @@ function LockerSection({
               const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
               const checkoutTime = formatTimeOfDay(locker.checkoutAt);
               const customerLabel = locker.assignedMemberName || locker.assignedTo || null;
+                const customerId = isUuid(locker.assignedTo) ? locker.assignedTo : null;
               const dueLevel = alertLevelFromMsUntil(msUntil);
               return (
                 <button
@@ -1320,7 +1369,22 @@ function LockerSection({
                       className="er-text-md er-inv-meta"
                       style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     >
-                      {customerLabel ?? '—'}
+                      {customerId && onOpenCustomerAccount ? (
+                        <button
+                          type="button"
+                          className="cs-liquid-button cs-liquid-button--secondary"
+                          style={{ padding: '0.2rem 0.5rem', minHeight: 'unset', fontWeight: 900 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenCustomerAccount(customerId, customerLabel ?? undefined);
+                          }}
+                          title="Open Customer Account"
+                        >
+                          {customerLabel ?? 'Customer'}
+                        </button>
+                      ) : (
+                        <span>{customerLabel ?? '—'}</span>
+                      )}
                     </div>
                     <div
                       className="er-text-md"

@@ -144,6 +144,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           id: row.id,
           visitId: row.visit_id,
           checkinBlockId: row.checkin_block_id,
+          customerId: row.customer_id,
           desiredTier: row.desired_tier,
           backupTier: row.backup_tier,
           status: row.status,

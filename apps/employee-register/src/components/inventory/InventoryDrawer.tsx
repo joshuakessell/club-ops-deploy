@@ -19,6 +19,7 @@ export interface InventoryDrawerProps {
   disableSelection?: boolean;
   onAlertSummaryChange?: (summary: { hasLate: boolean; hasNearing: boolean }) => void;
   onRequestCheckout?: (prefill: { occupancyId?: string; number: string }) => void;
+  onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
   externalRefreshNonce?: number;
 }
 
@@ -38,6 +39,7 @@ export function InventoryDrawer({
   disableSelection = true,
   onAlertSummaryChange,
   onRequestCheckout,
+  onOpenCustomerAccount,
   externalRefreshNonce,
 }: InventoryDrawerProps) {
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState<InventoryDrawerSection>(null);
@@ -78,6 +80,7 @@ export function InventoryDrawer({
           disableSelection={disableSelection}
           onAlertSummaryChange={onAlertSummaryChange}
           onRequestCheckout={onRequestCheckout}
+          onOpenCustomerAccount={onOpenCustomerAccount}
           externalRefreshNonce={externalRefreshNonce}
         />
       </div>

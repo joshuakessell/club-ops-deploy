@@ -14,6 +14,8 @@ export function CustomerAccountPanel(props: {
   sessionToken: string | null | undefined;
   customerId: string;
   customerLabel?: string | null;
+  onStartCheckout: (prefill?: { number?: string | null }) => void;
+  onClearSession: () => void;
 
   // lane session state (server-authoritative via WS)
   currentSessionId: string | null;
@@ -67,7 +69,7 @@ export function CustomerAccountPanel(props: {
   });
 
   return (
-    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card" style={{ padding: '0.9rem' }}>
+    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'baseline' }}>
         <div style={{ fontWeight: 950, fontSize: '1.05rem' }}>Customer Account</div>
         {props.customerLabel ? (
@@ -108,21 +110,42 @@ export function CustomerAccountPanel(props: {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div>
-                  <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-                    Check-in
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div>
+                    <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+                      Check-in
+                    </div>
+                    <div style={{ fontWeight: 800 }}>{formatLocal(state.activeCheckin.checkinAt)}</div>
                   </div>
-                  <div style={{ fontWeight: 800 }}>{formatLocal(state.activeCheckin.checkinAt)}</div>
+                  <div>
+                    <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+                      Checkout
+                    </div>
+                    <div style={{ fontWeight: 800 }}>
+                      {formatLocal(state.activeCheckin.checkoutAt)}{' '}
+                      {state.activeCheckin.overdue ? <span style={{ color: '#f59e0b' }}>(overdue)</span> : null}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+
+                <div style={{ display: 'flex', justifyContent: 'center', flex: 1, minWidth: 220 }}>
+                  <button
+                    type="button"
+                    className="cs-liquid-button"
+                    onClick={() => props.onStartCheckout({ number: state.activeCheckin.assignedResourceNumber })}
+                    style={{ width: '100%', maxWidth: 260, padding: '0.7rem', fontWeight: 900 }}
+                  >
                     Checkout
-                  </div>
-                  <div style={{ fontWeight: 800 }}>
-                    {formatLocal(state.activeCheckin.checkoutAt)}{' '}
-                    {state.activeCheckin.overdue ? <span style={{ color: '#f59e0b' }}>(overdue)</span> : null}
-                  </div>
+                  </button>
                 </div>
               </div>
 
@@ -178,6 +201,18 @@ export function CustomerAccountPanel(props: {
                 checkinStage={props.checkinStage}
                 waitlistDesiredTier={props.waitlistDesiredTier}
                 waitlistBackupType={props.waitlistBackupType}
+                footer={
+                  props.checkinStage ? (
+                    <button
+                      type="button"
+                      className="cs-liquid-button cs-liquid-button--danger"
+                      onClick={props.onClearSession}
+                      style={{ width: '100%', maxWidth: 320, padding: '0.7rem', fontWeight: 900 }}
+                    >
+                      Clear Session
+                    </button>
+                  ) : null
+                }
               />
 
               <EmployeeAssistPanel

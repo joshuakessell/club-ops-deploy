@@ -34,7 +34,7 @@
   --er-edge-safe: 0px;
   --er-drawer-tab-width: 54px;
   /* Main content gutter (header + right panel content). */
-  --er-body-gutter: 0.75rem;
+  --er-body-gutter: 1rem;
   /* Left edge should be flush so the left tabs can hit the screen edge. */
   --er-left-safe: 0px;
   --er-right-safe: 0.75rem;
@@ -42,13 +42,13 @@
   /* Fixed top bar (employee + register number) */
   --er-topbar-height: 60px;
   /* Minimum breathing room between toolbar/content and content/bottom edge */
-  --er-viewport-gap: 5px;
+  --er-viewport-gap: 16px;
   /* Small inset so tabs/rails don't touch the toolbar or bottom edge */
   --er-rail-gap: 12px;
   /* Left home rail width (fixed-position, like right drawer tabs) */
   --er-home-rail-width: 210px;
   /* Space between left rail buttons and the right-side card content */
-  --er-home-content-gap: 14px;
+  --er-home-content-gap: 16px;
 }
 
 /* ------------------------------------------------------------
@@ -591,6 +591,12 @@ body::after {
      with a gutter that matches the right edge gutter. */
   margin-left: var(--er-home-rail-width);
   padding-left: var(--er-home-content-gap);
+  padding-right: var(--er-home-content-gap);
+}
+
+/* Standardized right-panel "main card" padding across all home tabs. */
+.er-main-panel-card {
+  padding: 1rem;
 }
 
 .er-home-tab-btn--checkout {

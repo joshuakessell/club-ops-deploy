@@ -221,7 +221,7 @@ export function ManualCheckoutPanel({
   }, [autoContinue, canContinue, entryMode, handleContinue, step]);
 
   return (
-    <div className="cs-liquid-card" style={{ padding: '1rem' }}>
+    <div className="cs-liquid-card er-main-panel-card">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
         <div style={{ fontWeight: 900, fontSize: '1.3rem' }}>{title}</div>
         <div />

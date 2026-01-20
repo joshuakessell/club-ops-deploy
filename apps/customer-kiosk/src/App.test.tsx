@@ -338,6 +338,98 @@ describe('App', () => {
     expect(screen.queryByText(/select language/i)).toBeNull();
   });
 
+  it('shows language prompt even when customer is past-due blocked (so messaging can be localized)', async () => {
+    // Make set-language succeed
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
+      const u =
+        typeof url === 'string'
+          ? url
+          : url instanceof URL
+            ? url.toString()
+            : url instanceof Request
+              ? url.url
+              : '';
+      if (u.includes('/health')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/inventory/available')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              rooms: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              rawRooms: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              waitlistDemand: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
+              lockers: 0,
+              total: 0,
+            }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/set-language')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
+    });
+
+    render(<App />);
+
+    // Past-due blocked session with no language set should still show language prompt.
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: true,
+            pastDueBalance: 12.34,
+            // customerPrimaryLanguage intentionally omitted
+          },
+        }),
+      });
+    });
+
+    expect(await screen.findByText(/select language/i)).toBeDefined();
+
+    // Select English.
+    const englishBtn = await screen.findByText(/english/i);
+    act(() => {
+      (englishBtn as HTMLButtonElement).click();
+    });
+
+    // After language is set, we should transition to selection view (still blocked) and show the localized message.
+    act(() => {
+      lastWs?.onmessage?.({
+        data: JSON.stringify({
+          type: 'SESSION_UPDATED',
+          timestamp: new Date().toISOString(),
+          payload: {
+            sessionId: 'session-1',
+            customerName: 'Test Customer',
+            membershipNumber: null,
+            allowedRentals: ['LOCKER'],
+            pastDueBlocked: true,
+            pastDueBalance: 12.34,
+            customerPrimaryLanguage: 'EN',
+          },
+        }),
+      });
+    });
+
+    expect(screen.queryByText(/select language/i)).toBeNull();
+    expect(await screen.findByText(/please see the front desk/i)).toBeDefined();
+  });
+
   it('shows Active Member status (no purchase/renew CTA) when membership is not expired', async () => {
     act(() => {
       render(<App />);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { LockScreen, type StaffSession } from './LockScreen';
 import { ShiftsView } from './ShiftsView';
@@ -10,6 +10,7 @@ import { CustomerAdminToolsView } from './CustomerAdminToolsView';
 import { ReportsDemoView } from './ReportsDemoView';
 import { MessagesView } from './MessagesView';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
 
 // Material Design Dark Theme - Matching Dashboard Aesthetic
@@ -315,6 +316,13 @@ function App() {
     return null;
   });
 
+  // If we boot with a stored session, validate it once before mounting the app views.
+  // This avoids spamming 401s when the token is expired/revoked.
+  const [isValidatingSession, setIsValidatingSession] = useState<boolean>(() =>
+    Boolean(window.localStorage.getItem('staff_session'))
+  );
+  const [sessionValidationError, setSessionValidationError] = useState<string | null>(null);
+
   const deviceId = useState(() => {
     // Generate or retrieve device ID
     const storage = window.localStorage;
@@ -326,27 +334,147 @@ function App() {
     return id;
   })[0];
 
+  const clearSession = () => {
+    setSession(null);
+    window.localStorage.removeItem('staff_session');
+    setSessionValidationError(null);
+    setIsValidatingSession(false);
+  };
+
+  useEffect(() => {
+    if (!session?.sessionToken) {
+      setIsValidatingSession(false);
+      setSessionValidationError(null);
+      return;
+    }
+    if (!isValidatingSession) return;
+
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/auth/me`, {
+          headers: { Authorization: `Bearer ${session.sessionToken}` },
+          signal: ac.signal,
+        });
+
+        if (res.ok) {
+          setSessionValidationError(null);
+          setIsValidatingSession(false);
+          return;
+        }
+
+        // Most common case: stale localStorage token.
+        if (res.status === 401) {
+          clearSession();
+          return;
+        }
+
+        setSessionValidationError(`Failed to validate session (${res.status})`);
+        setIsValidatingSession(false);
+      } catch (e) {
+        if (ac.signal.aborted) return;
+        setSessionValidationError('Could not reach the API to validate your session.');
+        setIsValidatingSession(false);
+      }
+    })();
+
+    return () => ac.abort();
+  }, [session?.sessionToken, isValidatingSession]);
+
   const handleLogin = (newSession: StaffSession) => {
     setSession(newSession);
     window.localStorage.setItem('staff_session', JSON.stringify(newSession));
+    setSessionValidationError(null);
+    setIsValidatingSession(false);
   };
 
   const handleLogout = async () => {
     if (session?.sessionToken) {
       try {
-        await fetch(`/api/v1/auth/logout`, {
+        const res = await fetch(`/api/v1/auth/logout`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${session.sessionToken}`,
           },
         });
+        // If the token is already invalid/expired, treat as logged out.
+        if (!res.ok && res.status !== 401) {
+          console.error('Logout failed:', res.status);
+        }
       } catch (error) {
         console.error('Logout error:', error);
       }
     }
-    setSession(null);
-    window.localStorage.removeItem('staff_session');
+    clearSession();
   };
+
+  // Gate app mounting on validating any stored session.
+  if (session && isValidatingSession) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box
+          sx={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 2,
+            p: 3,
+          }}
+        >
+          <CircularProgress />
+          <Typography variant="h6">Validating session…</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520, textAlign: 'center' }}>
+            If you see this for more than a few seconds, the API may be down or your token may have
+            expired.
+          </Typography>
+          <Button variant="outlined" color="inherit" onClick={clearSession}>
+            Return to Lock Screen
+          </Button>
+        </Box>
+      </ThemeProvider>
+    );
+  }
+
+  if (session && sessionValidationError) {
+    return (
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <Box
+          sx={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 2,
+            p: 3,
+          }}
+        >
+          <Typography variant="h6">Session check failed</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 640, textAlign: 'center' }}>
+            {sessionValidationError}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setSessionValidationError(null);
+                setIsValidatingSession(true);
+              }}
+            >
+              Retry
+            </Button>
+            <Button variant="outlined" color="inherit" onClick={clearSession}>
+              Return to Lock Screen
+            </Button>
+          </Box>
+        </Box>
+      </ThemeProvider>
+    );
+  }
 
   // Show lock screen if not authenticated
   if (!session) {

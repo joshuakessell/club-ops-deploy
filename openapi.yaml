@@ -1926,6 +1926,7 @@ paths:
                       type: object
                       properties:
                         id: { type: string, format: uuid }
+                        customerId: { type: string, format: uuid }
                         desiredTier: { type: string, enum: [STANDARD, DOUBLE, SPECIAL] }
                         backupTier: { type: string }
                         status: { type: string }

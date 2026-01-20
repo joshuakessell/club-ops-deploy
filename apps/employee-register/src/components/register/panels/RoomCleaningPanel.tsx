@@ -121,7 +121,7 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
   };
 
   return (
-    <div className="cs-liquid-card" style={{ padding: '1rem' }}>
+    <div className="cs-liquid-card er-main-panel-card">
       <div style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: '0.75rem' }}>Room Cleaning</div>
 
       {error && (

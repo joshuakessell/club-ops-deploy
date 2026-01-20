@@ -375,6 +375,7 @@ export interface ResolvedCheckoutKey {
 
 export interface CheckoutRequestSummary {
   requestId: string;
+  customerId?: string;
   customerName: string;
   membershipNumber?: string;
   rentalType: string;

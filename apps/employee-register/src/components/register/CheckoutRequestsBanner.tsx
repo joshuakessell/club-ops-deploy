@@ -3,9 +3,10 @@ import type { CheckoutRequestSummary } from '@club-ops/shared';
 export interface CheckoutRequestsBannerProps {
   requests: CheckoutRequestSummary[];
   onClaim: (requestId: string) => void;
+  onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
 }
 
-export function CheckoutRequestsBanner({ requests, onClaim }: CheckoutRequestsBannerProps) {
+export function CheckoutRequestsBanner({ requests, onClaim, onOpenCustomerAccount }: CheckoutRequestsBannerProps) {
   return (
     <div
       style={{
@@ -25,6 +26,7 @@ export function CheckoutRequestsBanner({ requests, onClaim }: CheckoutRequestsBa
         const lateMinutes = request.lateMinutes;
         const feeAmount = request.lateFeeAmount;
         const banApplied = request.banApplied;
+        const canOpenCustomer = Boolean(request.customerId && onOpenCustomerAccount);
 
         return (
           <div
@@ -57,8 +59,30 @@ export function CheckoutRequestsBanner({ requests, onClaim }: CheckoutRequestsBa
                 <div
                   style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}
                 >
-                  {request.customerName}
-                  {request.membershipNumber && ` (${request.membershipNumber})`}
+                  {canOpenCustomer ? (
+                    <button
+                      type="button"
+                      className="cs-liquid-button cs-liquid-button--secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenCustomerAccount?.(request.customerId!, request.customerName);
+                      }}
+                      style={{
+                        padding: '0.2rem 0.55rem',
+                        minHeight: 'unset',
+                        fontWeight: 900,
+                      }}
+                      title="Open Customer Account"
+                    >
+                      {request.customerName}
+                      {request.membershipNumber ? ` (${request.membershipNumber})` : ''}
+                    </button>
+                  ) : (
+                    <>
+                      {request.customerName}
+                      {request.membershipNumber && ` (${request.membershipNumber})`}
+                    </>
+                  )}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
                   {request.rentalType} •{' '}
