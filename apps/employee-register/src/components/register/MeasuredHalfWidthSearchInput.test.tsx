@@ -13,13 +13,15 @@ describe('MeasuredHalfWidthSearchInput', () => {
       />
     );
 
-    const visible = screen.getByPlaceholderText('Start typing name...') as HTMLInputElement;
-    const measure = document.querySelector('.er-search-half__measure input') as HTMLInputElement;
+    const visible = screen.getByPlaceholderText('Start typing name...');
+    const measure = document.querySelector<HTMLInputElement>('.er-search-half__measure input');
     expect(measure).toBeTruthy();
+    if (!measure) {
+      throw new Error('Expected measurement input to exist');
+    }
 
     // Stub baseline width
-    measure.getBoundingClientRect = () =>
-      ({ width: 600, height: 0, top: 0, left: 0, right: 600, bottom: 0, x: 0, y: 0, toJSON: () => {} }) as any;
+    measure.getBoundingClientRect = () => new DOMRect(0, 0, 600, 0);
 
     // Wait for effect's rAF tick to apply half-width
     await waitFor(() => {

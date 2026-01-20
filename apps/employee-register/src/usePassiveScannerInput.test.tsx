@@ -96,7 +96,7 @@ describe('usePassiveScannerInput', () => {
     expect(onCapture).toHaveBeenCalledWith('ABCD\n1234');
   });
 
-  it('finalizes immediately on Tab terminator without including a tab character', async () => {
+  it('finalizes immediately on Tab terminator without including a tab character', () => {
     const onCapture = vi.fn();
     render(<Harness enabled={true} onCapture={onCapture} />);
 

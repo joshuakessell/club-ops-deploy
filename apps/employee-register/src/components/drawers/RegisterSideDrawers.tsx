@@ -3,9 +3,9 @@ import { SlideOutDrawer } from './SlideOutDrawer';
 
 export interface RegisterSideDrawersProps {
   upgradesOpen: boolean;
-  onUpgradesOpenChange(next: boolean): void;
+  onUpgradesOpenChange: (next: boolean) => void;
   inventoryOpen: boolean;
-  onInventoryOpenChange(next: boolean): void;
+  onInventoryOpenChange: (next: boolean) => void;
   upgradesAttention?: boolean;
   inventoryAttention?: boolean;
   upgradesTabVariant?: 'secondary' | 'success' | 'warning' | 'danger';

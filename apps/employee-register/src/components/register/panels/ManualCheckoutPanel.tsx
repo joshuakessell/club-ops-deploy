@@ -130,18 +130,6 @@ export function ManualCheckoutPanel({
     };
   }, [entryMode, sessionToken, candidatesReloadNonce]);
 
-  const attemptExit = () => {
-    if (entryMode === 'direct-confirm') {
-      onExit();
-      return;
-    }
-    if (step === 'confirm') {
-      setShowCancelWarning(true);
-      return;
-    }
-    onExit();
-  };
-
   const handleContinue = useCallback(async () => {
     if (!canContinue) return;
     setIsSubmitting(true);
@@ -217,7 +205,7 @@ export function ManualCheckoutPanel({
     } finally {
       setIsSubmitting(false);
     }
-  }, [confirmIndex, confirmQueue, entryMode, onSuccess, sessionToken, selectedOccupancyIds.length]);
+  }, [confirmIndex, confirmQueue, entryMode, onSuccess, sessionToken]);
 
   // In direct-confirm entry mode, automatically resolve and land on confirm.
   useEffect(() => {

@@ -83,7 +83,7 @@ export function usePassiveScannerInput({
     lastKeyAtRef.current = null;
     clearTimer();
     if (wasCapturing) onCaptureEnd?.();
-  }, [clearTimer]);
+  }, [clearTimer, onCaptureEnd]);
 
   const finalize = useCallback(() => {
     clearTimer();
@@ -218,6 +218,7 @@ export function usePassiveScannerInput({
     onCaptureEnd,
     onCaptureStart,
     reset,
+    scannerInterKeyMaxMs,
     scheduleFinalize,
     scheduleFinalizeAfterEnter,
   ]);

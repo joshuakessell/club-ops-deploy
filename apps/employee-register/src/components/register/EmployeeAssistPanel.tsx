@@ -65,8 +65,6 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     proposedRentalType,
     proposedBy,
     selectionConfirmed,
-    waitlistDesiredTier,
-    waitlistBackupType,
     inventoryAvailable,
     isSubmitting = false,
     onHighlightLanguage,

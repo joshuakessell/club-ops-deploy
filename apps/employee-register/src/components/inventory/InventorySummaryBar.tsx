@@ -8,7 +8,7 @@ export type InventoryAvailableCounts = null | {
 
 export interface InventorySummaryBarProps {
   counts: InventoryAvailableCounts;
-  onOpenInventorySection(section: InventorySummarySection): void;
+  onOpenInventorySection: (section: InventorySummarySection) => void;
 }
 
 function getCount(rec: Record<string, number> | undefined, key: string): number | null {

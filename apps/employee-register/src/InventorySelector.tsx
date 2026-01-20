@@ -30,18 +30,6 @@ function getMsUntil(iso: string | undefined, nowMs: number): number | null {
   return t - nowMs;
 }
 
-function formatCountdownHMM5Min(msUntil: number): { label: string; isOverdue: boolean } {
-  const isOverdue = msUntil < 0;
-  // Display in 5-minute increments and update on a 5-minute tick.
-  // Example: 3 hours 20 minutes => "320"
-  const minutesTotalRaw = Math.max(0, Math.ceil(Math.abs(msUntil) / (60 * 1000)));
-  const minutesTotal = Math.ceil(minutesTotalRaw / 5) * 5;
-  const hours = Math.floor(minutesTotal / 60);
-  const minutes = minutesTotal % 60;
-  const hmm = `${String(hours)}${String(minutes).padStart(2, '0')}`;
-  return { label: hmm, isOverdue };
-}
-
 function formatDurationHuman(msUntil: number): { label: string; isOverdue: boolean } {
   const isOverdue = msUntil < 0;
   const minutesTotalRaw = Math.max(0, Math.ceil(Math.abs(msUntil) / (60 * 1000)));
@@ -147,12 +135,6 @@ function alertLevelFromMsUntil(msUntil: number | null | undefined): AlertLevel {
   if (!Number.isFinite(msUntil)) return null;
   if (msUntil < 0) return 'danger';
   if (msUntil <= DUE_SOON_MS) return 'warning';
-  return null;
-}
-
-function maxAlert(a: AlertLevel, b: AlertLevel): AlertLevel {
-  if (a === 'danger' || b === 'danger') return 'danger';
-  if (a === 'warning' || b === 'warning') return 'warning';
   return null;
 }
 
@@ -515,7 +497,8 @@ export function InventorySelector({
   }, [query]);
 
   const roomsByTier = useMemo(() => {
-    if (!inventory) {
+    const rooms = inventory?.rooms;
+    if (!rooms) {
       return { SPECIAL: [], DOUBLE: [], STANDARD: [] };
     }
     const grouped: Record<'SPECIAL' | 'DOUBLE' | 'STANDARD', DetailedRoom[]> = {
@@ -524,7 +507,7 @@ export function InventorySelector({
       STANDARD: [],
     };
 
-    for (const room of inventory.rooms) {
+    for (const room of rooms) {
       if (room.tier === 'SPECIAL' || room.tier === 'DOUBLE' || room.tier === 'STANDARD') {
         if (matchesQuery(room.number, room.assignedMemberName)) {
           grouped[room.tier].push(room);
@@ -536,8 +519,9 @@ export function InventorySelector({
   }, [inventory?.rooms, matchesQuery]);
 
   const filteredLockers = useMemo(() => {
-    if (!inventory) return [];
-    return inventory.lockers.filter((l) => matchesQuery(l.number, l.assignedMemberName));
+    const lockers = inventory?.lockers;
+    if (!lockers) return [];
+    return lockers.filter((l) => matchesQuery(l.number, l.assignedMemberName));
   }, [inventory?.lockers, matchesQuery]);
 
   const navCounts = useMemo(() => {
@@ -598,8 +582,7 @@ export function InventorySelector({
     [setExpandedSection]
   );
 
-  const activeSection: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' = (expandedSection ??
-    'LOCKER') as 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL';
+  const activeSection: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' = expandedSection ?? 'LOCKER';
 
   const openOccupancyDetails = (payload: {
     type: 'room' | 'locker';
@@ -998,18 +981,6 @@ function InventorySection({
   const availableForDisplay = [...upgradeRequests, ...available];
   const allowAvailableSelection = !disableSelection && !occupancyLookupMode;
 
-  const sectionAlertLevel = useMemo(() => {
-    let level: AlertLevel = null;
-    for (const r of rooms) {
-      const isOccupied = !!r.assignedTo || r.status === RoomStatus.OCCUPIED;
-      if (!isOccupied) continue;
-      const ms = getMsUntil(r.checkoutAt, nowMs);
-      level = maxAlert(level, alertLevelFromMsUntil(ms));
-      if (level === 'danger') return 'danger';
-    }
-    return level;
-  }, [nowMs, rooms]);
-
   const sectionCounts = useMemo(() => {
     const availableCount = rooms.filter((r) => r.status === RoomStatus.CLEAN && !r.assignedTo).length;
     let nearing = 0;
@@ -1274,15 +1245,6 @@ function LockerSection({
         }),
     [lockers, nowMs]
   );
-
-  const sectionAlertLevel = useMemo(() => {
-    let level: AlertLevel = null;
-    for (const l of occupiedLockers) {
-      level = maxAlert(level, alertLevelFromMsUntil(getMsUntil(l.checkoutAt, nowMs)));
-      if (level === 'danger') return 'danger';
-    }
-    return level;
-  }, [nowMs, occupiedLockers]);
 
   const sectionCounts = useMemo(() => {
     let nearing = 0;

@@ -14,7 +14,7 @@ describe('RequiredTenderOutcomeModal', () => {
       />
     );
 
-    const continueBtn = screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement;
+    const continueBtn = screen.getByRole<HTMLButtonElement>('button', { name: 'Continue' });
     expect(continueBtn.disabled).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Credit Success' }));
@@ -25,7 +25,10 @@ describe('RequiredTenderOutcomeModal', () => {
     expect(onConfirm).toHaveBeenCalledWith('CREDIT_SUCCESS');
 
     // Clicking outside should not dismiss (modal remains rendered)
-    fireEvent.click(container.querySelector('.er-required-modal__overlay') as Element);
+    const overlay = container.querySelector('.er-required-modal__overlay');
+    expect(overlay).toBeTruthy();
+    if (!overlay) throw new Error('Expected overlay to exist');
+    fireEvent.click(overlay);
     expect(screen.getByText('Select Tender Outcome')).toBeDefined();
 
     // ESC should not dismiss or change selection

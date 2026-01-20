@@ -24,7 +24,7 @@ describe('LiquidGlassPinInput', () => {
     expect(countFilledDots(container)).toBe(3);
 
     // Submit disabled until length is reached
-    const submit = screen.getByRole('button', { name: 'Enter' }) as HTMLButtonElement;
+    const submit = screen.getByRole<HTMLButtonElement>('button', { name: 'Enter' });
     expect(submit.disabled).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Digit 4' }));

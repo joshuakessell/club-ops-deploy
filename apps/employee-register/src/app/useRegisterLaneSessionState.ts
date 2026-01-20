@@ -9,6 +9,12 @@ export type PaymentQuoteViewModel = {
 
 export type RegisterLaneSessionState = {
   currentSessionId: string | null;
+  /**
+   * Client-side context for which customer this lane session is for.
+   * Note: server WS payloads do not currently include customerId, so this is set by the UI when
+   * starting/loading a session from a known customerId.
+   */
+  customerId: string | null;
   customerName: string;
   membershipNumber: string;
   customerMembershipValidUntil: string | null;
@@ -49,6 +55,7 @@ export type RegisterLaneSessionState = {
 
 const initialState: RegisterLaneSessionState = {
   currentSessionId: null,
+  customerId: null,
   customerName: '',
   membershipNumber: '',
   customerMembershipValidUntil: null,
@@ -88,7 +95,10 @@ const initialState: RegisterLaneSessionState = {
 };
 
 type Action =
-  | { type: 'start_or_replace'; payload: { sessionId?: string | null; customerName?: string; membershipNumber?: string } }
+  | {
+      type: 'start_or_replace';
+      payload: { sessionId?: string | null; customerId?: string | null; customerName?: string; membershipNumber?: string };
+    }
   | { type: 'patch'; payload: Partial<RegisterLaneSessionState> }
   | { type: 'apply_session_updated'; payload: SessionUpdatedPayload }
   | { type: 'apply_selection_proposed'; payload: { rentalType: string; proposedBy: 'CUSTOMER' | 'EMPLOYEE' } }
@@ -103,6 +113,7 @@ function reducer(state: RegisterLaneSessionState, action: Action): RegisterLaneS
     case 'start_or_replace': {
       const next = { ...state };
       if (action.payload.sessionId !== undefined) next.currentSessionId = action.payload.sessionId || null;
+      if (action.payload.customerId !== undefined) next.customerId = action.payload.customerId || null;
       if (action.payload.customerName !== undefined) next.customerName = action.payload.customerName || '';
       if (action.payload.membershipNumber !== undefined) next.membershipNumber = action.payload.membershipNumber || '';
       return next;
