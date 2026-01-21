@@ -4,6 +4,8 @@ import { installTelemetry, TelemetryErrorBoundary } from '@club-ops/ui';
 import App from './App';
 import '@club-ops/ui/styles/index.css';
 import './styles.css';
+import { OrientationGuard } from './ui/orientation/OrientationGuard';
+import './ui/orientation/orientation.css';
 import { FatalEnvScreen } from './components/FatalEnvScreen';
 import { getApiUrl } from '@/lib/apiBase';
 
@@ -33,7 +35,13 @@ if (!kioskToken) {
   createRoot(root).render(
     <StrictMode>
       <TelemetryErrorBoundary>
-        <App />
+        <OrientationGuard
+          required="portrait"
+          title="Rotate iPad"
+          message="This screen must be used in portrait mode."
+        >
+          <App />
+        </OrientationGuard>
       </TelemetryErrorBoundary>
     </StrictMode>
   );

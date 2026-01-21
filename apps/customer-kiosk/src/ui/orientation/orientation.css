@@ -1,0 +1,85 @@
+.orientation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 24px;
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+.orientation-card {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 22px 18px 18px;
+}
+
+.orientation-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.orientation-message {
+  font-size: 16px;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.orientation-icon {
+  position: relative;
+  width: 96px;
+  height: 66px;
+  margin: 0 auto 16px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 14px;
+}
+
+.orientation-icon-home {
+  position: absolute;
+  left: 50%;
+  bottom: 7px;
+  transform: translateX(-50%);
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  opacity: 0.9;
+}
+
+.orientation-icon::before {
+  content: '';
+  position: absolute;
+  right: -18px;
+  top: -22px;
+  width: 48px;
+  height: 48px;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  transform: rotate(15deg);
+  opacity: 0.9;
+}
+
+.orientation-icon::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  top: 4px;
+  width: 0;
+  height: 0;
+  border-left: 11px solid rgba(255, 255, 255, 0.9);
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  transform: rotate(20deg);
+  opacity: 0.9;
+}
+
