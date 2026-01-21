@@ -128,7 +128,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
         const error = await response.json();
         showToast(error.error || 'Failed to create staff', 'error');
       }
-    } catch (error) {
+    } catch {
       showToast('Failed to create staff', 'error');
     }
   };
@@ -153,7 +153,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
         const error = await response.json();
         showToast(error.error || 'Failed to update staff', 'error');
       }
-    } catch (error) {
+    } catch {
       showToast('Failed to update staff', 'error');
     }
   };
@@ -197,7 +197,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
           showToast(error.error || 'Failed to revoke passkey', 'error');
         }
       }
-    } catch (error) {
+    } catch {
       showToast('Failed to revoke passkey', 'error');
     }
   };
@@ -247,7 +247,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
         }
         return false;
       }
-    } catch (error) {
+    } catch {
       showToast('Failed to reset PIN', 'error');
       return false;
     }

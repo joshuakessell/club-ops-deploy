@@ -14,8 +14,7 @@ export class HttpError extends Error {
     this.message = publicMessage;
     if (opts?.cause !== undefined) {
       // Node 16+ supports Error.cause; keep it on the instance for structured logs.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this as any).cause = opts.cause;
+      (this as Error & { cause?: unknown }).cause = opts.cause;
     }
   }
 }

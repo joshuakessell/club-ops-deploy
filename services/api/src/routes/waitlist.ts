@@ -60,7 +60,6 @@ interface RoomRow {
 /**
  * Waitlist management routes.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/waitlist - Get waitlist entries
@@ -428,7 +427,6 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
-      const { id: _id } = request.params;
       let body: z.infer<typeof CompleteUpgradeSchema>;
 
       try {

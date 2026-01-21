@@ -136,7 +136,6 @@ function calculateUpgradeFee(fromTier: string, toTier: 'STANDARD' | 'DOUBLE' | '
 /**
  * Upgrade routes for waitlist and upgrade management.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/upgrades/waitlist - Join waitlist for upgrade
@@ -199,8 +198,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
             },
           });
 
-          // TODO: Actually implement waitlist table if needed
-          // For now, we just log the disclaimer acknowledgment
+          // NOTE: Waitlist persistence is not implemented; we only record the disclaimer acknowledgment.
         });
 
         return reply.status(200).send({

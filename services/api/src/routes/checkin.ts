@@ -2529,7 +2529,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           );
         }
 
-        const { laneSessionToBroadcast: _laneSessionToBroadcast, ...apiResult } = result;
+        const { laneSessionToBroadcast, ...apiResult } = result;
+        void laneSessionToBroadcast;
         return reply.send(apiResult);
       } catch (error: unknown) {
         request.log.error(error, 'Failed to mark payment as paid');

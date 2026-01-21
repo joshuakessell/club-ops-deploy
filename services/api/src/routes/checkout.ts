@@ -177,7 +177,6 @@ function looksLikeUuid(value: string): boolean {
 /**
  * Checkout routes for customer-operated checkout kiosk and employee verification.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/checkout/manual-candidates

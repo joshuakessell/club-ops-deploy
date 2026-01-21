@@ -5,7 +5,6 @@ import { requireAuth } from '../auth/middleware.js';
 /**
  * Metrics routes for upgrades and waitlist analytics.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function metricsRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/metrics/upgrades - Get upgrade metrics

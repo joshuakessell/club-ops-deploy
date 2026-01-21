@@ -18,7 +18,6 @@ type RoomRow = {
 /**
  * Room routes (offerable rooms for waitlist upgrades).
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function roomsRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/rooms/offerable?tier=STANDARD|DOUBLE|SPECIAL

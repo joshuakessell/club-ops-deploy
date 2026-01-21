@@ -29,7 +29,7 @@ const UPLOADS_DIR = join(process.cwd(), 'services', 'api', 'uploads');
 async function ensureUploadsDir(): Promise<void> {
   try {
     await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  } catch (error) {
+  } catch {
     // Directory might already exist, ignore
   }
 }

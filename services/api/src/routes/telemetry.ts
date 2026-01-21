@@ -38,7 +38,6 @@ const TelemetryIngestSchema = z.union([
   TelemetryEventSchema,
 ]);
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function telemetryRoutes(fastify: FastifyInstance): Promise<void> {
   // Ingest (public, never throws; we do not want telemetry to break the app)
   fastify.post('/v1/telemetry', { bodyLimit: 256 * 1024 }, async (request, reply) => {

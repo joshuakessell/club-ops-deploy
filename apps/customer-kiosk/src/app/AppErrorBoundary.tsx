@@ -19,7 +19,6 @@ export class AppErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: unknown) {
     // Keep console logging; if you have telemetry, wire it here later.
-    // eslint-disable-next-line no-console
     console.error('App crashed:', error);
   }
 
@@ -30,7 +29,9 @@ export class AppErrorBoundary extends React.Component<Props, State> {
           <div style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
             <h2 style={{ marginTop: 0 }}>Something went wrong</h2>
             <p>Please reload the page. If the issue persists, contact support.</p>
-            <button className="cs-liquid-button" onClick={() => window.location.reload()}>Reload</button>
+            <button className="cs-liquid-button" onClick={() => window.location.reload()}>
+              Reload
+            </button>
           </div>
         )
       );

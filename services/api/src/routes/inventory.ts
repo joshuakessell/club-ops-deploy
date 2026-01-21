@@ -27,7 +27,6 @@ interface LockerCountRow {
 /**
  * Inventory routes for room and locker availability.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/inventory/summary - Get inventory summary by status and type

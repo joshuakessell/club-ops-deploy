@@ -63,7 +63,6 @@ function splitNamePartsForMatch(input: string): NormalizedNameParts | null {
   return { normalizedFull, firstToken, lastToken };
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/customers/search - Prefix search by first or last name (case-insensitive).

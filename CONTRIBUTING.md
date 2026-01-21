@@ -55,6 +55,27 @@ From repo root:
 - Avoid “god files”: split modules when they grow too large to review safely.
 - Every change that touches business rules needs tests + SPEC/OpenAPI updates.
 
+## Code Style Conventions (lightweight)
+
+These are the existing dominant patterns in this repo—prefer aligning new code to them.
+
+- **Exports**: Prefer **named exports** for components/hooks/utils. Default exports are typically only used for app-level `App`.
+- **Imports**: Keep imports grouped and stable:
+  - Third-party
+  - Workspace packages (`@club-ops/*`)
+  - Relative imports
+  - Prefer `import type { ... }` for type-only imports.
+- **Errors**:
+  - If you don’t use the error value, prefer `catch { ... }` (avoids unused vars).
+  - If you do, use `catch (error: unknown)` and narrow with `instanceof Error` or structural checks.
+- **Boundaries**: Apps should import through package exports (e.g. `@club-ops/ui`, `@club-ops/ui/styles/index.css`), not deep paths like `@club-ops/ui/src/...`.
+- **Styling**: Apps should import the shared stylesheet once in `main.tsx`:
+
+```ts
+import '@club-ops/ui/styles/index.css';
+import './styles.css';
+```
+
 ## Documentation Discipline
 
 - Keep `SPEC.md` as an index; put detailed flows in `docs/specs/*.md` and link from `SPEC.md`.

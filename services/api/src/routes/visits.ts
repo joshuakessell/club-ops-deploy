@@ -198,7 +198,6 @@ function getLatestBlockEnd(blocks: CheckinBlockRow[]): Date | null {
  * Visit management routes.
  * Handles visit creation, renewal, and active visit search.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/visits - Create an initial visit with initial block

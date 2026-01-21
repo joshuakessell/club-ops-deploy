@@ -51,7 +51,6 @@ interface CustomerRow {
 /**
  * Agreement routes for managing club agreements and signatures.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function agreementRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/agreements/active - Get the active agreement

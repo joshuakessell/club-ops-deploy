@@ -827,7 +827,6 @@ export async function seedDemoData(): Promise<void> {
         );
       }
       if (within15Ratio < 0.85 || earlyRatio > 0.15) {
-        // eslint-disable-next-line no-console
         console.warn(
           `⚠️  Checkout timing realism (non-fatal): within15=${within15Completed}/${totalCompleted} (${Math.round(
             within15Ratio * 100
@@ -1140,7 +1139,6 @@ const isDirectRun =
 
 if (isDirectRun) {
   seedDemoData().catch((err) => {
-    // eslint-disable-next-line no-console
     console.error('❌ seed-demo CLI failed:', err);
     process.exitCode = 1;
   });

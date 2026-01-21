@@ -371,7 +371,7 @@ function App() {
 
         setSessionValidationError(`Failed to validate session (${res.status})`);
         setIsValidatingSession(false);
-      } catch (e) {
+      } catch {
         if (ac.signal.aborted) return;
         setSessionValidationError('Could not reach the API to validate your session.');
         setIsValidatingSession(false);
