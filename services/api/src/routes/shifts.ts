@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction } from '../db/index.js';
-import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { insertAuditLog } from '../audit/auditLog.js';
-import { computeCompliance } from '../services/compliance.js';
+import { query, transaction } from '../db';
+import { requireAuth, requireAdmin } from '../auth/middleware';
+import { insertAuditLog } from '../audit/auditLog';
+import { computeCompliance } from '../services/compliance';
 
 interface ShiftRow {
   id: string;

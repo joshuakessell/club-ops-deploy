@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { query } from '../db/index.js';
-import { requireAuth } from '../auth/middleware.js';
+import { query } from '../db';
+import { requireAuth } from '../auth/middleware';
 import { getRoomTierFromNumber } from '@club-ops/shared';
-import { computeInventoryAvailable } from '../inventory/available.js';
+import { computeInventoryAvailable } from '../inventory/available';
 
 /**
  * Map room number to tier (Special, Double, or Standard).

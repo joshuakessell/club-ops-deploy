@@ -1,5 +1,5 @@
-import { query } from '../db/index.js';
-import type { TelemetryEventRow } from './types.js';
+import { query } from '../db';
+import type { TelemetryEventRow } from './types';
 
 export async function insertTelemetryEvents(events: TelemetryEventRow[]): Promise<void> {
   if (process.env.SKIP_DB === 'true') return;

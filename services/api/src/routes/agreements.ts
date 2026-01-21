@@ -1,11 +1,11 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { query, transaction } from '../db/index.js';
-import { generateAgreementPdf } from '../utils/pdf-generator.js';
-import { roundUpToQuarterHour } from '../time/rounding.js';
+import { query, transaction } from '../db';
+import { generateAgreementPdf } from '../utils/pdf-generator';
+import { roundUpToQuarterHour } from '../time/rounding';
 import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG } from '@club-ops/shared';
-import { optionalAuth } from '../auth/middleware.js';
-import { requireKioskTokenOrStaff } from '../auth/kioskToken.js';
+import { optionalAuth } from '../auth/middleware';
+import { requireKioskTokenOrStaff } from '../auth/kioskToken';
 
 /**
  * Schema for signing an agreement.

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query } from '../db/index.js';
-import { requireAuth } from '../auth/middleware.js';
+import { query } from '../db';
+import { requireAuth } from '../auth/middleware';
 
 const OfferableRoomsQuerySchema = z.object({
   tier: z.enum(['STANDARD', 'DOUBLE', 'SPECIAL']),

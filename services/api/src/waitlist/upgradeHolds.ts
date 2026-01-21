@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { serializableTransaction } from '../db/index.js';
+import { serializableTransaction } from '../db';
 import type { UpgradeHoldAvailablePayload, UpgradeOfferExpiredPayload } from '@club-ops/shared';
 
 type ExpiredOfferRow = {
