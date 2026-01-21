@@ -209,7 +209,7 @@ Fastify-based REST API server with WebSocket support:
 4. **Concurrency is safe** - Transactional updates with row locking
 5. **Realtime is push-based** - WebSocket broadcasts, no polling
 
-See [AGENTS.md](./AGENTS.md) for complete coding guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for complete coding guidelines.
 
 ## 🎬 Demo flow overview (single source for demo walkthrough)
 
@@ -232,7 +232,7 @@ For the full behavioral source of truth, see `SPEC.md` → **"Counter Check-in F
 ### Key Specification Files
 
 - **SPEC.md** - Technical specification and business rules (canonical)
-- **AGENTS.md** - Agent coding guidelines and project architecture
+- **CONTRIBUTING.md** - Engineering guide and project architecture rules
 - **openapi.yaml** - API contract (should match implemented endpoints)
 - **db/schema.sql** - Database schema snapshot (should match current migrations)
 
@@ -293,16 +293,6 @@ pnpm --filter @club-ops/shared test:watch
 
 **Deprecated / superseded**: The detailed “local test flow” walkthrough previously lived here and drifted into schema/audit specifics. Use the **Demo flow overview** above plus the authoritative flow spec in `SPEC.md` instead.
 
-## ☁️ Cursor Cloud Agents (optional)
-
-This repo includes a conservative `.cursor/environment.json` that runs:
-
-- `pnpm install`
-- `pnpm typecheck`
-- `pnpm test` (if Docker is available; otherwise runs unit tests that don’t require Postgres)
-
-To snapshot and reuse the environment, use Cursor’s **Cloud Agent Setup** workflow and commit any generated config files you want to keep reproducible.
-
 ## 📝 License
 
-Private - Internal use only.
+MIT. See `LICENSE`.

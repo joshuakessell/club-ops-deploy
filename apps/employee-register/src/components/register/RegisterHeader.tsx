@@ -45,15 +45,15 @@ export function RegisterHeader({
           style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
         >
           <span
-            className={`badge ${health?.status === 'ok' ? 'badge-success' : 'badge-error'}`}
+            className={`cs-badge ${health?.status === 'ok' ? 'cs-badge--success' : 'cs-badge--error'}`}
           >
             API: {health?.status ?? '...'}
           </span>
-          <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
+          <span className={`cs-badge ${wsConnected ? 'cs-badge--success' : 'cs-badge--error'}`}>
             WS: {wsConnected ? 'Live' : 'Offline'}
           </span>
-          <span className="badge badge-info">Lane: {lane}</span>
-          <span className="badge badge-info">
+          <span className="cs-badge cs-badge--info">Lane: {lane}</span>
+          <span className="cs-badge cs-badge--info">
             {staffName} ({staffRole})
           </span>
         </div>

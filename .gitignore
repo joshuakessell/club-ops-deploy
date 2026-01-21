@@ -11,6 +11,7 @@ build/
 # IDE
 .vscode/
 .idea/
+.cursor/
 *.swp
 *.swo
 tools/
@@ -36,5 +37,4 @@ Thumbs.db
 # TypeScript cache
 *.tsbuildinfo
 
-services/api/tests/_artifacts/agreement.generated.pdf
 services/api/tests/_artifacts/agreement.generated.pdf

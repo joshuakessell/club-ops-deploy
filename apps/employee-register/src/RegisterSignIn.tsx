@@ -236,11 +236,11 @@ export function RegisterSignIn({
 
           {import.meta.env.DEV && (
             <span className="register-top-bar-dev">
-              {lane ? <span className="badge badge-info">Lane: {lane}</span> : null}
-              <span className={`badge ${apiStatus === 'ok' ? 'badge-success' : 'badge-error'}`}>
+              {lane ? <span className="cs-badge cs-badge--info">Lane: {lane}</span> : null}
+              <span className={`cs-badge ${apiStatus === 'ok' ? 'cs-badge--success' : 'cs-badge--error'}`}>
                 API: {apiStatus ?? '...'}
               </span>
-              <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
+              <span className={`cs-badge ${wsConnected ? 'cs-badge--success' : 'cs-badge--error'}`}>
                 WS: {wsConnected ? 'Live' : 'Offline'}
               </span>
             </span>

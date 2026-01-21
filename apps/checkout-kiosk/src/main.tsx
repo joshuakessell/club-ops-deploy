@@ -1,9 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
-import '@club-ops/ui/src/styles/tokens.css';
-import '@club-ops/ui/src/styles/components.css';
-import '@club-ops/ui/src/styles/liquid-glass.css';
+import '@club-ops/ui/styles/index.css';
 import './styles.css';
 
 const root = document.getElementById('root');
