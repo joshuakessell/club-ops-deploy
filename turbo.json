@@ -1,6 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalEnv": [
+  "env": [
     "VITE_KIOSK_TOKEN",
     "VITE_API_BASE_URL"
   ],
@@ -70,4 +70,3 @@
     }
   }
 }
-
