@@ -67,6 +67,8 @@ pnpm db:seed
 pnpm dev
 ```
 
+**Note on monorepo orchestration:** `pnpm dev`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, and `pnpm test` are **Turbo-orchestrated** at the repo root (Turborepo / Turbo 2). Turbo ensures dependency build order (e.g. `@club-ops/shared` / `@club-ops/ui`) before starting apps/services that import `dist` exports.
+
 ### Development
 
 After setup, you can start all services with:
@@ -106,6 +108,8 @@ pnpm test
 pnpm build
 ```
 
+`pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm build` are **Turbo-orchestrated** root scripts (they fan out into the workspace packages, with the same exclusions described below).
+
 ### Commands
 
 | Command           | Description                                                     |
@@ -113,16 +117,16 @@ pnpm build
 | `pnpm install`    | Install all dependencies                                        |
 | `pnpm dev`        | Start all services in development mode                          |
 | `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check)          |
-| `pnpm doctor`     | Repo health scan (builds deps, runs typecheck/lint/tests/build) |
+| `pnpm doctor`     | Repo health scan (installs, builds shared/ui, runs checks)      |
 | `pnpm db:start`   | Start Postgres via `services/api/docker-compose.yml`            |
 | `pnpm db:stop`    | Stop Postgres                                                   |
 | `pnpm db:reset`   | Recreate Postgres volume and restart                            |
 | `pnpm db:migrate` | Run DB migrations                                               |
 | `pnpm db:seed`    | Seed DB with sample data                                        |
-| `pnpm build`      | Build all packages and apps                                     |
-| `pnpm test`       | Run all tests                                                   |
-| `pnpm lint`       | Lint all packages                                               |
-| `pnpm typecheck`  | TypeScript type checking                                        |
+| `pnpm build`      | Build all packages and apps (Turbo-orchestrated)                |
+| `pnpm test`       | Run all tests (Turbo-orchestrated)                              |
+| `pnpm lint`       | Lint all packages (Turbo-orchestrated)                          |
+| `pnpm typecheck`  | TypeScript type checking (Turbo-orchestrated)                   |
 | `pnpm format`     | Format code with Prettier                                       |
 
 ### Database Setup
