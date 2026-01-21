@@ -1,0 +1,10 @@
+{
+  "name": "Customer Kiosk - Club Operations",
+  "short_name": "Customer Kiosk",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000"
+}
+

@@ -77,7 +77,17 @@ export async function runMigrations(): Promise<void> {
   const config = loadDatabaseConfig();
   const pool = new pg.Pool(config);
 
-  console.log(`Connecting to database: ${config.host}:${config.port}/${config.database}`);
+  if (config.connectionString) {
+    if (config.host && typeof config.port === 'number' && config.database) {
+      console.log(
+        `Connecting to database (DATABASE_URL): ${config.host}:${config.port}/${config.database}`
+      );
+    } else {
+      console.log('Connecting to database (DATABASE_URL): [connection string provided]');
+    }
+  } else {
+    console.log(`Connecting to database (DB_*): ${config.host}:${config.port}/${config.database}`);
+  }
 
   const client = await pool.connect();
 
