@@ -24,7 +24,6 @@
     "check:esm": "node ./scripts/check-esm.mjs",
     "build": "pnpm clean && pnpm exec tsc --build --force && pnpm check:esm",
     "dev": "tsc --watch",
-    "pretest": "pnpm build",
     "test": "pnpm exec vitest run",
     "test:watch": "pnpm exec vitest",
     "lint": "npx eslint src",

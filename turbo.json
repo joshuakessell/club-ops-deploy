@@ -35,12 +35,26 @@
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["dist/**", "build/**"]
     },
+    "db:reset": {
+      "cache": false
+    },
+    "db:migrate": {
+      "cache": false
+    },
     "dev": {
       "cache": false,
       "persistent": true,
       "dependsOn": ["^build"]
     },
     "lint": {
+      "dependsOn": ["^build"]
+    },
+    "seed": {
+      "cache": false,
+      "dependsOn": ["^build"]
+    },
+    "seed:demo": {
+      "cache": false,
       "dependsOn": ["^build"]
     },
     "typecheck": {
