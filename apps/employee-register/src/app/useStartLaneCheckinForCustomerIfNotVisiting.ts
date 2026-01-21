@@ -13,6 +13,7 @@ type StartLaneResponse = {
   blockEndsAt?: string;
   activeAssignedResourceType?: 'room' | 'locker';
   activeAssignedResourceNumber?: string;
+  customerHasEncryptedLookupMarker?: boolean;
 };
 
 export type StartLaneCheckinState =

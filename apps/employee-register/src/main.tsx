@@ -17,8 +17,20 @@ const kioskToken =
   typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
     ? rawEnv.VITE_KIOSK_TOKEN.trim()
     : null;
+const apiBaseUrl =
+  typeof rawEnv.VITE_API_BASE_URL === 'string' && rawEnv.VITE_API_BASE_URL.trim()
+    ? rawEnv.VITE_API_BASE_URL.trim()
+    : null;
 if (!kioskToken) {
   const err = new Error('Missing required env var VITE_KIOSK_TOKEN (employee-register).');
+  createRoot(root).render(<FatalEnvScreen message={err.message} />);
+  queueMicrotask(() => {
+    throw err;
+  });
+} else if (import.meta.env.PROD && !apiBaseUrl) {
+  const err = new Error(
+    'Missing required env var VITE_API_BASE_URL. This must point to the API host (Render) so WebSockets connect to the backend instead of the Vercel site origin.'
+  );
   createRoot(root).render(<FatalEnvScreen message={err.message} />);
   queueMicrotask(() => {
     throw err;

@@ -363,10 +363,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           // Look up or create customer (customers is canonical identity; members is deprecated)
           let customerId: string | null = null;
           let customerName = 'Customer';
+          let customerHasEncryptedLookupMarker = false;
 
           if (requestedCustomerId) {
             const customerResult = await client.query<CustomerRow>(
-              `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until
+              `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until, id_scan_hash
              FROM customers
              WHERE id = $1
              LIMIT 1`,
@@ -379,6 +380,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             customerId = customer.id;
             customerName = customer.name;
             membershipNumber = customer.membership_number || null;
+            customerHasEncryptedLookupMarker = Boolean((customer as unknown as { id_scan_hash?: unknown }).id_scan_hash);
 
             const bannedUntil = toDate(customer.banned_until);
             if (bannedUntil && new Date() < bannedUntil) {
@@ -391,7 +393,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             // Try to find existing customer by membership number
             if (membershipNumber) {
               const customerResult = await client.query<CustomerRow>(
-                `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until
+                `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until, id_scan_hash
                FROM customers
                WHERE membership_number = $1
                LIMIT 1`,
@@ -402,6 +404,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 const customer = customerResult.rows[0]!;
                 customerId = customer.id;
                 customerName = customer.name;
+                customerHasEncryptedLookupMarker = Boolean(
+                  (customer as unknown as { id_scan_hash?: unknown }).id_scan_hash
+                );
 
                 // Check if banned
                 const bannedUntil = toDate(customer.banned_until);
@@ -654,6 +659,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             activeAssignedResourceType: activeAssignedResourceType || undefined,
             activeAssignedResourceNumber: activeAssignedResourceNumber || undefined,
             activeRentalType: activeRentalType || undefined,
+            customerHasEncryptedLookupMarker,
           };
         });
 
@@ -682,6 +688,47 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           message: 'Failed to start lane session',
         });
       }
+    }
+  );
+
+  /**
+   * GET /v1/checkin/lane/:laneId/session-snapshot
+   *
+   * Lightweight polling fallback for kiosks when WS is unavailable.
+   * Returns the latest active-ish lane session payload (same as SESSION_UPDATED) or null.
+   */
+  fastify.get<{ Params: { laneId: string } }>(
+    '/v1/checkin/lane/:laneId/session-snapshot',
+    { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
+    async (request, reply) => {
+      const { laneId } = request.params;
+
+      const result = await transaction(async (client) => {
+        const row = (
+          await client.query<{ id: string }>(
+            `SELECT id
+             FROM lane_sessions
+             WHERE lane_id = $1
+               AND status IN (
+                 'ACTIVE',
+                 'AWAITING_CUSTOMER',
+                 'AWAITING_ASSIGNMENT',
+                 'AWAITING_PAYMENT',
+                 'AWAITING_SIGNATURE'
+               )
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [laneId]
+          )
+        ).rows[0];
+
+        if (!row) return { session: null as null | unknown };
+
+        const { payload } = await buildFullSessionUpdatedPayload(client, row.id);
+        return { session: payload };
+      });
+
+      return reply.send(result);
     }
   );
 

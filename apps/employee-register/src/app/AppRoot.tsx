@@ -2781,6 +2781,11 @@ export function AppRoot() {
                           if (data.customerName) setCustomerName(data.customerName);
                           if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
                           if (data.sessionId) setCurrentSessionId(data.sessionId);
+                          if (data.customerHasEncryptedLookupMarker !== undefined) {
+                            laneSessionActions.patch({
+                              customerHasEncryptedLookupMarker: Boolean(data.customerHasEncryptedLookupMarker),
+                            });
+                          }
                           if (data.mode === 'RENEWAL' && typeof data.blockEndsAt === 'string') {
                             if (data.activeAssignedResourceType) setAssignedResourceType(data.activeAssignedResourceType);
                             if (data.activeAssignedResourceNumber) setAssignedResourceNumber(data.activeAssignedResourceNumber);

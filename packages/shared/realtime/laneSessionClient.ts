@@ -4,30 +4,29 @@ export interface LaneSessionClientOptions {
   laneId: string;
   role: LaneRole;
   kioskToken: string;
+  /**
+   * Deprecated: consumers should attach listeners on the returned WebSocket instance.
+   * These are kept only for backwards compatibility with older callers.
+   */
   onMessage?: (event: MessageEvent) => void;
+  /** @deprecated */
   onOpen?: () => void;
+  /** @deprecated */
   onClose?: (event: CloseEvent) => void;
+  /** @deprecated */
   onError?: (event: Event) => void;
 }
 
 interface InternalClient {
   socket: WebSocket;
-  retries: number;
-  retryTimer?: ReturnType<typeof setTimeout>;
 }
 
 // Internal state
 const clients = new Map<string, InternalClient>();
 
-// Constants
-const MAX_RETRIES = 5;
-const RETRY_DELAY_MS = 1000;
-
 const loggedCreated = new Set<string>();
 const loggedReused = new Set<string>();
 const loggedClosed = new Set<string>();
-const loggedRetryExhausted = new Set<string>();
-const loggedAuthFailure = new Set<string>();
 
 function keyFor(laneId: string, role: LaneRole): string {
   return `${laneId}:${role}`;
@@ -86,19 +85,6 @@ function buildWsUrl({ laneId, role }: { laneId: string; role: LaneRole }): strin
   return qs ? `${base}?${qs}` : base;
 }
 
-function isAuthFailure(event: CloseEvent): boolean {
-  // Best-effort heuristics. Browsers often surface auth handshake failures as code 1006 with empty reason.
-  const code = event.code;
-  const reason = (event.reason || '').toLowerCase();
-  if (code === 1008) return true; // policy violation
-  if (reason.includes('auth')) return true;
-  if (reason.includes('unauthorized')) return true;
-  if (reason.includes('forbidden')) return true;
-  if (reason.includes('401')) return true;
-  if (reason.includes('403')) return true;
-  return false;
-}
-
 function createSocket(options: LaneSessionClientOptions): WebSocket {
   const url = buildWsUrl({ laneId: options.laneId, role: options.role });
   // Browser WebSockets can't set headers; repo convention uses subprotocol for kiosk token.
@@ -110,63 +96,7 @@ function createSocket(options: LaneSessionClientOptions): WebSocket {
     console.info(`[realtime] wsUrl=${url} lane=${options.laneId} role=${options.role}`);
   }
 
-  socket.onopen = () => {
-    options.onOpen?.();
-  };
-  socket.onmessage = (event) => {
-    options.onMessage?.(event);
-  };
-  socket.onerror = (event) => {
-    options.onError?.(event);
-  };
-  socket.onclose = (event) => {
-    options.onClose?.(event);
-  };
-
   return socket;
-}
-
-function attachCloseHandler(key: string, options: LaneSessionClientOptions, socket: WebSocket): void {
-  socket.onclose = (event) => {
-    options.onClose?.(event);
-
-    if (isAuthFailure(event)) {
-      if (!loggedAuthFailure.has(key)) {
-        loggedAuthFailure.add(key);
-        console.error('[realtime] LaneSessionClient auth failure (no retry)', { key, code: event.code });
-      }
-      const existing = clients.get(key);
-      if (existing?.retryTimer) {
-        clearTimeout(existing.retryTimer);
-      }
-      clients.delete(key);
-      return;
-    }
-
-    const current = clients.get(key);
-    if (!current) return;
-
-    if (current.retries >= MAX_RETRIES) {
-      if (!loggedRetryExhausted.has(key)) {
-        loggedRetryExhausted.add(key);
-        console.error('[realtime] LaneSessionClient retries exhausted (permanent close)', { key });
-      }
-      if (current.retryTimer) clearTimeout(current.retryTimer);
-      clients.delete(key);
-      return;
-    }
-
-    current.retries += 1;
-    if (current.retryTimer) clearTimeout(current.retryTimer);
-    current.retryTimer = setTimeout(() => {
-      const still = clients.get(key);
-      if (!still) return;
-      const next = createSocket(options);
-      // Replace the socket reference in InternalClient
-      still.socket = next;
-      attachCloseHandler(key, options, next);
-    }, RETRY_DELAY_MS);
-  };
 }
 
 export function getLaneSessionClient(options: LaneSessionClientOptions): WebSocket {
@@ -175,22 +105,35 @@ export function getLaneSessionClient(options: LaneSessionClientOptions): WebSock
 
   const existing = clients.get(key);
   if (existing) {
+    if (
+      existing.socket.readyState === WebSocket.OPEN ||
+      existing.socket.readyState === WebSocket.CONNECTING
+    ) {
     if (!loggedReused.has(key)) {
       loggedReused.add(key);
       console.info('[realtime] LaneSessionClient reused', { key });
     }
     return existing.socket;
+    }
+
+    // Stale socket: clear cache and create a new one below.
+    clients.delete(key);
   }
 
   assertKioskToken(options.kioskToken);
 
   const socket = createSocket(options);
 
-  const internal: InternalClient = { socket, retries: 0 };
+  const internal: InternalClient = { socket };
   clients.set(key, internal);
 
-  // Reconnect logic (only here)
-  attachCloseHandler(key, options, socket);
+  // When a cached socket closes, evict it (only if it's still the cached one for this key).
+  socket.addEventListener('close', () => {
+    const current = clients.get(key);
+    if (current?.socket === socket) {
+      clients.delete(key);
+    }
+  });
 
   return socket;
 }
@@ -200,18 +143,9 @@ export function closeLaneSessionClient(laneId: string, role: LaneRole): void {
   const client = clients.get(key);
   if (!client) return;
 
-  if (client.retryTimer) {
-    clearTimeout(client.retryTimer);
-    client.retryTimer = undefined;
-  }
-
   try {
-    if (client.socket.readyState === WebSocket.OPEN) {
-      client.socket.close();
-    } else {
-      // Best-effort close in any non-closed state
-      client.socket.close();
-    }
+    // Best-effort close in any non-closed state.
+    client.socket.close();
   } catch {
     // ignore
   }
@@ -233,11 +167,6 @@ export function closeLaneSessionClient(laneId: string, role: LaneRole): void {
  */
 export function closeAllLaneSessionClients(): void {
   for (const [key, client] of clients.entries()) {
-    if (client.retryTimer) {
-      clearTimeout(client.retryTimer);
-      client.retryTimer = undefined;
-    }
-
     try {
       client.socket.close();
     } catch {
