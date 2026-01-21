@@ -39,10 +39,46 @@ function assertKioskToken(kioskToken: string): void {
   }
 }
 
+function getViteEnvString(key: string): string | undefined {
+  // Vite injects env at build-time as `import.meta.env.*` (browser-safe). Keep this typed and optional.
+  const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
+  const value = env?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function normalizeApiBaseUrl(raw: string): string {
+  let s = raw.trim();
+  // Remove trailing slashes.
+  while (s.endsWith('/')) s = s.slice(0, -1);
+  // If it ends with "/api", strip it (repo convention expects host root).
+  if (s.toLowerCase().endsWith('/api')) {
+    s = s.slice(0, -4);
+  }
+  // Remove any trailing slashes again after stripping "/api".
+  while (s.endsWith('/')) s = s.slice(0, -1);
+  return s;
+}
+
+function toWsBaseUrl(httpBase: string): string {
+  const s = httpBase.trim();
+  if (s.startsWith('ws://') || s.startsWith('wss://')) return s;
+  if (s.startsWith('https://')) return `wss://${s.slice('https://'.length)}`;
+  if (s.startsWith('http://')) return `ws://${s.slice('http://'.length)}`;
+  return s;
+}
+
 function buildWsUrl({ laneId, role }: { laneId: string; role: LaneRole }): string {
-  // Existing repo convention: connect to the current Vite origin and rely on /ws proxying to the API.
-  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const base = `${scheme}//${window.location.host}/ws`;
+  // Prefer an explicit API base URL in production (e.g. Vercel -> Render) and only fall back to
+  // same-origin `/ws` for local dev where Vite proxies `/ws` to the API.
+  const rawApiBase = getViteEnvString('VITE_API_BASE_URL');
+  const base =
+    rawApiBase && normalizeApiBaseUrl(rawApiBase)
+      ? `${toWsBaseUrl(normalizeApiBaseUrl(rawApiBase))}/ws`
+      : (() => {
+          // Existing repo convention: connect to the current origin and rely on /ws proxying to the API.
+          const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          return `${scheme}//${window.location.host}/ws`;
+        })();
   const params = new URLSearchParams();
   if (laneId) params.set('lane', laneId);
   params.set('role', role);
@@ -71,7 +107,7 @@ function createSocket(options: LaneSessionClientOptions): WebSocket {
 
   if (!loggedCreated.has(keyFor(options.laneId, options.role))) {
     loggedCreated.add(keyFor(options.laneId, options.role));
-    console.info('[realtime] LaneSessionClient created', { key: keyFor(options.laneId, options.role) });
+    console.info(`[realtime] wsUrl=${url} lane=${options.laneId} role=${options.role}`);
   }
 
   socket.onopen = () => {
