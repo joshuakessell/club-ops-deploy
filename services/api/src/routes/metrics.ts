@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { query } from '../db/index.js';
-import { requireAuth } from '../auth/middleware.js';
+import { query } from '../db';
+import { requireAuth } from '../auth/middleware';
 
 /**
  * Metrics routes for upgrades and waitlist analytics.

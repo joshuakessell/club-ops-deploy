@@ -1,4 +1,4 @@
-import { query } from '../db/index.js';
+import { query } from '../db';
 import crypto from 'crypto';
 import type { AuthenticatorDevice, AuthenticatorTransportFuture } from '@simplewebauthn/types';
 

@@ -1,5 +1,5 @@
 import type { FastifyRequest } from 'fastify';
-import { query } from '../db/index.js';
+import { query } from '../db';
 
 export type TelemetryLevel = 'error' | 'warn' | 'info';
 

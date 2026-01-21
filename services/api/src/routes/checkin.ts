@@ -1,16 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction, serializableTransaction } from '../db/index.js';
-import { requireAuth, optionalAuth } from '../auth/middleware.js';
-import { requireKioskTokenOrStaff } from '../auth/kioskToken.js';
-import { verifyPin } from '../auth/utils.js';
-import { HttpError } from '../errors/HttpError.js';
-import { generateAgreementPdf } from '../utils/pdf-generator.js';
-import { stripSystemLateFeeNotes } from '../utils/lateFeeNotes.js';
-import { roundUpToQuarterHour } from '../time/rounding.js';
-import type { Broadcaster } from '../websocket/broadcaster.js';
-import { broadcastInventoryUpdate } from './sessions.js';
-import { insertAuditLog } from '../audit/auditLog.js';
+import { query, transaction, serializableTransaction } from '../db';
+import { requireAuth, optionalAuth } from '../auth/middleware';
+import { requireKioskTokenOrStaff } from '../auth/kioskToken';
+import { verifyPin } from '../auth/utils';
+import { HttpError } from '../errors/HttpError';
+import { generateAgreementPdf } from '../utils/pdf-generator';
+import { stripSystemLateFeeNotes } from '../utils/lateFeeNotes';
+import { roundUpToQuarterHour } from '../time/rounding';
+import type { Broadcaster } from '../websocket/broadcaster';
+import { broadcastInventoryUpdate } from './sessions';
+import { insertAuditLog } from '../audit/auditLog';
 import type {
   CustomerConfirmationRequiredPayload,
   CustomerConfirmedPayload,
@@ -22,7 +22,7 @@ import type {
   SelectionAcknowledgedPayload,
   CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
-import { calculatePriceQuote, type PricingInput } from '../pricing/engine.js';
+import { calculatePriceQuote, type PricingInput } from '../pricing/engine';
 import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG, IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
 import {
   calculateAge,
@@ -34,9 +34,9 @@ import {
   passesFuzzyThresholds,
   scoreNameMatch,
   splitNamePartsForMatch,
-} from '../checkin/identity.js';
-import { computeWaitlistInfo, getRoomTier } from '../checkin/waitlist.js';
-import { buildFullSessionUpdatedPayload, getAllowedRentals } from '../checkin/payload.js';
+} from '../checkin/identity';
+import { computeWaitlistInfo, getRoomTier } from '../checkin/waitlist';
+import { buildFullSessionUpdatedPayload, getAllowedRentals } from '../checkin/payload';
 
 declare module 'fastify' {
   interface FastifyInstance {

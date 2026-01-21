@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction } from '../db/index.js';
-import { requireAuth, requireAdmin } from '../auth/middleware.js';
-import { insertAuditLog } from '../audit/auditLog.js';
+import { query, transaction } from '../db';
+import { requireAuth, requireAdmin } from '../auth/middleware';
+import { insertAuditLog } from '../audit/auditLog';
 
 const IsoDaySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 

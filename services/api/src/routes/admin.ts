@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction } from '../db/index.js';
-import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware.js';
-import { insertAuditLog, insertAuditLogQuery } from '../audit/auditLog.js';
+import { query, transaction } from '../db';
+import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware';
+import { insertAuditLog, insertAuditLogQuery } from '../audit/auditLog';
 
 /**
  * Admin-only routes for operations management and metrics.

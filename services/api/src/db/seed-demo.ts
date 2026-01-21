@@ -1,4 +1,4 @@
-import { query, transaction } from './index.js';
+import { query, transaction } from './index';
 import { randomUUID } from 'crypto';
 import {
   DOUBLE_ROOM_NUMBERS,
@@ -9,7 +9,6 @@ import {
   SPECIAL_ROOM_NUMBERS,
 } from '@club-ops/shared';
 import { RentalType, RoomStatus, RoomType, getRoomTierFromNumber } from '@club-ops/shared';
-import { pathToFileURL } from 'url';
 
 /**
  * Demo mode seeding for shifts and timeclock sessions.
@@ -1131,13 +1130,7 @@ export async function seedDemoData(): Promise<void> {
 // CLI entrypoint
 // Allows running: DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts
 // ---------------------------------------------------------------------------
-const isDirectRun =
-  typeof process !== 'undefined' &&
-  Array.isArray(process.argv) &&
-  typeof process.argv[1] === 'string' &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
-
-if (isDirectRun) {
+if (require.main === module) {
   seedDemoData().catch((err) => {
     console.error('❌ seed-demo CLI failed:', err);
     process.exitCode = 1;

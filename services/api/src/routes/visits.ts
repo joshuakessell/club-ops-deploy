@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { serializableTransaction, query } from '../db/index.js';
-import { requireAuth, requireReauth } from '../auth/middleware.js';
-import type { Broadcaster } from '../websocket/broadcaster.js';
+import { serializableTransaction, query } from '../db';
+import { requireAuth, requireReauth } from '../auth/middleware';
+import type { Broadcaster } from '../websocket/broadcaster';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
-import { roundUpToQuarterHour } from '../time/rounding.js';
-import { broadcastInventoryUpdate } from './sessions.js';
-import { insertAuditLog } from '../audit/auditLog.js';
+import { roundUpToQuarterHour } from '../time/rounding';
+import { broadcastInventoryUpdate } from './sessions';
+import { insertAuditLog } from '../audit/auditLog';
 
 declare module 'fastify' {
   interface FastifyInstance {
