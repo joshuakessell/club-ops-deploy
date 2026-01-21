@@ -30,15 +30,12 @@
     "CLUB_DALLAS_LOGO_PATH"
   ],
   "tasks": {
-    "build": {
-      "dependsOn": ["^build"],
-      "env": [
-        "VITE_KIOSK_TOKEN",
-        "VITE_API_BASE_URL"
-      ],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": ["dist/**", "build/**"]
-    },
+  "build": {
+    "dependsOn": ["^build"],
+    "inputs": ["$TURBO_DEFAULT$", ".env*"],
+    "outputs": ["dist/**", "build/**"],
+    "env": ["VITE_KIOSK_TOKEN", "VITE_API_BASE_URL"]
+  },
     "db:reset": {
       "cache": false
     },
