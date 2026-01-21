@@ -7,10 +7,10 @@ import {
   verifyAuthenticationResponse,
 } from '@simplewebauthn/server';
 import type { AuthenticatorTransportFuture } from '@simplewebauthn/types';
-import { query } from '../db/index.js';
-import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware.js';
-import { generateSessionToken, getSessionExpiry } from '../auth/utils.js';
-import { insertAuditLogQuery } from '../audit/auditLog.js';
+import { query } from '../db';
+import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware';
+import { generateSessionToken, getSessionExpiry } from '../auth/utils';
+import { insertAuditLogQuery } from '../audit/auditLog';
 import {
   getRpId,
   getRpOrigin,
@@ -21,7 +21,7 @@ import {
   getCredentialByCredentialId,
   storeCredential,
   updateCredentialSignCount,
-} from '../auth/webauthn.js';
+} from '../auth/webauthn';
 
 /**
  * Schema for registration options request.

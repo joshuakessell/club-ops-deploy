@@ -1,8 +1,8 @@
-import { query, initializeDatabase, closeDatabase } from './index.js';
+import { query, initializeDatabase, closeDatabase } from './index';
 import { RoomStatus, RoomType, AGREEMENT_LEGAL_BODY_HTML_BY_LANG } from '@club-ops/shared';
 import { LOCKER_NUMBERS, ROOMS } from '@club-ops/shared';
-import { hashQrToken, hashPin } from '../auth/utils.js';
-import { loadEnvFromDotEnvIfPresent } from '../env/loadEnv.js';
+import { hashQrToken, hashPin } from '../auth/utils';
+import { loadEnvFromDotEnvIfPresent } from '../env/loadEnv';
 
 loadEnvFromDotEnvIfPresent();
 

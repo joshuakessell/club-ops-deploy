@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { insertTelemetryEvents } from './store.js';
-import { sanitizeTelemetryEventInput, type TelemetryEventRow } from './types.js';
+import { insertTelemetryEvents } from './store';
+import { sanitizeTelemetryEventInput, type TelemetryEventRow } from './types';
 
 declare module 'fastify' {
   interface FastifyRequest {

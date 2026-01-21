@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { query } from '../db/index.js';
-import type { Broadcaster } from '../websocket/broadcaster.js';
+import { query } from '../db';
+import type { Broadcaster } from '../websocket/broadcaster';
 
 declare module 'fastify' {
   interface FastifyInstance {

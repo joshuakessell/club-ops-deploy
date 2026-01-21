@@ -1,13 +1,13 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { serializableTransaction, query } from '../db/index.js';
-import type { Broadcaster } from '../websocket/broadcaster.js';
+import { serializableTransaction, query } from '../db';
+import type { Broadcaster } from '../websocket/broadcaster';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
-import { roundUpToQuarterHour } from '../time/rounding.js';
-import { computeInventoryAvailable } from '../inventory/available.js';
-import { insertAuditLog } from '../audit/auditLog.js';
-import { requireAuth } from '../auth/middleware.js';
-import { LaneIdSchema } from '../utils/lane.js';
+import { roundUpToQuarterHour } from '../time/rounding';
+import { computeInventoryAvailable } from '../inventory/available';
+import { insertAuditLog } from '../audit/auditLog';
+import { requireAuth } from '../auth/middleware';
+import { LaneIdSchema } from '../utils/lane';
 
 /**
  * Schema for creating a new session.

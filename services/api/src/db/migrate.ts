@@ -1,12 +1,8 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import pg from 'pg';
-import { loadDatabaseConfig } from './index.js';
-import { loadEnvFromDotEnvIfPresent } from '../env/loadEnv.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { loadDatabaseConfig } from './index';
+import { loadEnvFromDotEnvIfPresent } from '../env/loadEnv';
 
 loadEnvFromDotEnvIfPresent();
 

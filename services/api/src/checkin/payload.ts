@@ -1,5 +1,5 @@
 import type { SessionUpdatedPayload } from '@club-ops/shared';
-import type { transaction } from '../db/index.js';
+import type { transaction } from '../db';
 
 type PoolClient = Parameters<Parameters<typeof transaction>[0]>[0];
 

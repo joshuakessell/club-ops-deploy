@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 
-import { loadEnvFromDotEnvIfPresent } from './env/loadEnv.js';
+import { loadEnvFromDotEnvIfPresent } from './env/loadEnv';
 
 import {
   healthRoutes,
@@ -30,15 +30,15 @@ import {
   sessionDocumentsRoutes,
   scheduleRoutes,
   timeoffRoutes,
-} from './routes/index.js';
-import { createBroadcaster, type Broadcaster } from './websocket/broadcaster.js';
-import { initializeDatabase, closeDatabase } from './db/index.js';
-import { cleanupAbandonedRegisterSessions } from './routes/registers.js';
-import { seedDemoData } from './db/seed-demo.js';
-import { expireWaitlistEntries } from './waitlist/expireWaitlist.js';
-import { processUpgradeHoldsTick } from './waitlist/upgradeHolds.js';
-import { setupTelemetry } from './telemetry/plugin.js';
-import { registerWsRoute } from './websocket/wsRoute.js';
+} from './routes';
+import { createBroadcaster, type Broadcaster } from './websocket/broadcaster';
+import { initializeDatabase, closeDatabase } from './db';
+import { cleanupAbandonedRegisterSessions } from './routes/registers';
+import { seedDemoData } from './db/seed-demo';
+import { expireWaitlistEntries } from './waitlist/expireWaitlist';
+import { processUpgradeHoldsTick } from './waitlist/upgradeHolds';
+import { setupTelemetry } from './telemetry/plugin';
+import { registerWsRoute } from './websocket/wsRoute';
 
 loadEnvFromDotEnvIfPresent();
 

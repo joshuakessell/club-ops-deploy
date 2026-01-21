@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { serializableTransaction, query, transaction } from '../db/index.js';
-import { requireAuth } from '../auth/middleware.js';
-import type { Broadcaster } from '../websocket/broadcaster.js';
+import { serializableTransaction, query, transaction } from '../db';
+import { requireAuth } from '../auth/middleware';
+import type { Broadcaster } from '../websocket/broadcaster';
 import type {
   CheckoutRequestedPayload,
   CheckoutClaimedPayload,
@@ -12,8 +12,8 @@ import type {
   CheckoutRequestSummary,
 } from '@club-ops/shared';
 import { RoomStatus } from '@club-ops/shared';
-import { buildSystemLateFeeNote } from '../utils/lateFeeNotes.js';
-import { insertAuditLog } from '../audit/auditLog.js';
+import { buildSystemLateFeeNote } from '../utils/lateFeeNotes';
+import { insertAuditLog } from '../audit/auditLog';
 
 declare module 'fastify' {
   interface FastifyInstance {
