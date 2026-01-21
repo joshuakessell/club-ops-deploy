@@ -1,5 +1,5 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { query } from '../db/index.js';
+import { query } from '../db';
 
 /**
  * Extended Fastify request with staff information.

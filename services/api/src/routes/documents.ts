@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { query, transaction } from '../db/index.js';
-import { requireAuth, requireAdmin } from '../auth/middleware.js';
+import { query, transaction } from '../db';
+import { requireAuth, requireAdmin } from '../auth/middleware';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { insertAuditLog } from '../audit/auditLog.js';
+import { insertAuditLog } from '../audit/auditLog';
 
 interface DocumentRow {
   id: string;

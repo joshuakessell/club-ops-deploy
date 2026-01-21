@@ -3,10 +3,10 @@ import type { WebSocket } from 'ws';
 
 import type { WebSocketEventType } from '@club-ops/shared';
 
-import { optionalAuth } from '../auth/middleware.js';
-import { requireKioskTokenOrStaff } from '../auth/kioskToken.js';
-import type { Broadcaster } from './broadcaster.js';
-import { LaneIdSchema, parseLaneIdOptional } from '../utils/lane.js';
+import { optionalAuth } from '../auth/middleware';
+import { requireKioskTokenOrStaff } from '../auth/kioskToken';
+import type { Broadcaster } from './broadcaster';
+import { LaneIdSchema, parseLaneIdOptional } from '../utils/lane';
 
 function isWebSocketEventType(value: unknown): value is WebSocketEventType {
   if (typeof value !== 'string') return false;

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query } from '../db/index.js';
-import { storeTelemetryEvents, type TelemetryEventInput } from '../telemetry/storeTelemetryEvents.js';
+import { query } from '../db';
+import { storeTelemetryEvents, type TelemetryEventInput } from '../telemetry/storeTelemetryEvents';
 
 const TelemetryEventSchema = z
   .object({

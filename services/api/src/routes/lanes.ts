@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { transaction } from '../db/index.js';
-import { requireAuth } from '../auth/middleware.js';
-import type { Broadcaster } from '../websocket/broadcaster.js';
+import { transaction } from '../db';
+import { requireAuth } from '../auth/middleware';
+import type { Broadcaster } from '../websocket/broadcaster';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 
 declare module 'fastify' {

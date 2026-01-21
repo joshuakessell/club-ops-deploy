@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth } from '../auth/middleware.js';
-import { query } from '../db/index.js';
+import { requireAuth } from '../auth/middleware';
+import { query } from '../db';
 import crypto from 'crypto';
 
 type SessionDocumentRow = {

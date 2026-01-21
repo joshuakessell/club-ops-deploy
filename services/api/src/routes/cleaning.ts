@@ -1,11 +1,11 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { transaction, query } from '../db/index.js';
+import { transaction, query } from '../db';
 import { RoomStatus, RoomStatusSchema, validateTransition } from '@club-ops/shared';
-import type { Broadcaster } from '../websocket/broadcaster.js';
-import { broadcastInventoryUpdate } from './sessions.js';
-import { insertAuditLog } from '../audit/auditLog.js';
-import { requireAuth } from '../auth/middleware.js';
+import type { Broadcaster } from '../websocket/broadcaster';
+import { broadcastInventoryUpdate } from './sessions';
+import { insertAuditLog } from '../audit/auditLog';
+import { requireAuth } from '../auth/middleware';
 
 /**
  * Schema for batch cleaning operations.

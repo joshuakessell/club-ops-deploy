@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { transaction, serializableTransaction } from '../db/index.js';
-import { requireAuth } from '../auth/middleware.js';
-import type { Broadcaster } from '../websocket/broadcaster.js';
+import { transaction, serializableTransaction } from '../db';
+import { requireAuth } from '../auth/middleware';
+import type { Broadcaster } from '../websocket/broadcaster';
 import { getRoomTierFromNumber } from '@club-ops/shared';
-import { broadcastInventoryUpdate } from './sessions.js';
-import { insertAuditLog } from '../audit/auditLog.js';
+import { broadcastInventoryUpdate } from './sessions';
+import { insertAuditLog } from '../audit/auditLog';
 
 declare module 'fastify' {
   interface FastifyInstance {

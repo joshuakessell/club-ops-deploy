@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction } from '../db/index.js';
-import { verifyPin, generateSessionToken, getSessionExpiry } from '../auth/utils.js';
-import { requireAuth } from '../auth/middleware.js';
-import { insertAuditLog, insertAuditLogQuery } from '../audit/auditLog.js';
+import { query, transaction } from '../db';
+import { verifyPin, generateSessionToken, getSessionExpiry } from '../auth/utils';
+import { requireAuth } from '../auth/middleware';
+import { insertAuditLog, insertAuditLogQuery } from '../audit/auditLog';
 
 /**
  * Schema for PIN login request.

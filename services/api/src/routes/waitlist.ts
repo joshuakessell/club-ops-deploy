@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction, serializableTransaction } from '../db/index.js';
-import { requireAuth, requireReauth } from '../auth/middleware.js';
-import type { Broadcaster } from '../websocket/broadcaster.js';
-import { expireWaitlistEntries } from '../waitlist/expireWaitlist.js';
-import { insertAuditLog } from '../audit/auditLog.js';
+import { query, transaction, serializableTransaction } from '../db';
+import { requireAuth, requireReauth } from '../auth/middleware';
+import type { Broadcaster } from '../websocket/broadcaster';
+import { expireWaitlistEntries } from '../waitlist/expireWaitlist';
+import { insertAuditLog } from '../audit/auditLog';
 
 declare module 'fastify' {
   interface FastifyInstance {
