@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
+import { getApiUrl } from '@/lib/apiBase';
 
-const API_BASE = '/api';
+const API_BASE = getApiUrl('/api');
 
 interface Shift {
   id: string;

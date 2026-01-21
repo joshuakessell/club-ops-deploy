@@ -4,6 +4,7 @@ import { safeJsonParse } from '@club-ops/ui';
 import { useLaneSession } from '@club-ops/shared';
 import { getRoomTier } from './utils/getRoomTier';
 import { ModalFrame } from './components/register/modals/ModalFrame';
+import { getApiUrl, getWebSocketUrl } from '@/lib/apiBase';
 
 const INVENTORY_COLUMN_HEADER_STYLE: CSSProperties = {
   fontWeight: 700,
@@ -293,7 +294,7 @@ export function InventorySelector({
   );
   const waitlistEntries: Array<{ desiredTier: string; status: string }> = useMemo(() => [], []);
 
-  const API_BASE = '/api';
+  const API_BASE = getApiUrl('/api');
 
   // Live countdown tick (UI-only; does not refetch)
   useEffect(() => {
@@ -301,8 +302,7 @@ export function InventorySelector({
     return () => window.clearInterval(id);
   }, []);
 
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
+  const wsUrl = getWebSocketUrl(`/ws?lane=${encodeURIComponent(lane)}`);
   const rawEnv = import.meta.env as unknown as Record<string, unknown>;
   const kioskToken =
     typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()

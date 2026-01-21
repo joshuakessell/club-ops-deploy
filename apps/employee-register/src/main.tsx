@@ -5,6 +5,7 @@ import App from './App';
 import '@club-ops/ui/styles/index.css';
 import './styles.css';
 import { FatalEnvScreen } from './components/FatalEnvScreen';
+import { getApiUrl } from '@/lib/apiBase';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
@@ -23,7 +24,7 @@ if (!kioskToken) {
 } else {
   installTelemetry({
     app: 'employee-register',
-    endpoint: '/api/v1/telemetry',
+    endpoint: getApiUrl('/api/v1/telemetry'),
     isDev: import.meta.env.DEV,
     captureConsoleWarnInDev: true,
     getLane: () => sessionStorage.getItem('lane') ?? undefined,

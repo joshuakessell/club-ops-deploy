@@ -4,8 +4,9 @@ import type { StaffSession } from './LockScreen';
 import type { WebSocketEvent } from '@club-ops/shared';
 import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
+import { getApiUrl } from '@/lib/apiBase';
 
-const API_BASE = '/api';
+const API_BASE = getApiUrl('/api');
 
 interface KPI {
   roomsOccupied: number;

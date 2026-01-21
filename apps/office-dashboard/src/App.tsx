@@ -12,6 +12,7 @@ import { MessagesView } from './MessagesView';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
+import { getApiUrl } from '@/lib/apiBase';
 
 // Material Design Dark Theme - Matching Dashboard Aesthetic
 const theme = createTheme({
@@ -352,7 +353,7 @@ function App() {
     const ac = new AbortController();
     (async () => {
       try {
-        const res = await fetch(`/api/v1/auth/me`, {
+        const res = await fetch(getApiUrl('/api/v1/auth/me'), {
           headers: { Authorization: `Bearer ${session.sessionToken}` },
           signal: ac.signal,
         });
@@ -391,7 +392,7 @@ function App() {
   const handleLogout = async () => {
     if (session?.sessionToken) {
       try {
-        const res = await fetch(`/api/v1/auth/logout`, {
+        const res = await fetch(getApiUrl('/api/v1/auth/logout'), {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${session.sessionToken}`,
