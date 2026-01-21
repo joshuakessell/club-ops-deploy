@@ -1,4 +1,4 @@
-import { RoomStatus, RoomType } from './enums';
+import { RoomStatus, RoomType } from './enums.js';
 
 /**
  * Represents a room in the club.
@@ -52,11 +52,14 @@ export type WebSocketEventType =
   | 'ROOM_ASSIGNED'
   | 'ROOM_RELEASED'
   | 'SESSION_UPDATED'
+  | 'CHECKIN_OPTION_HIGHLIGHTED'
   | 'SELECTION_PROPOSED'
   | 'SELECTION_FORCED'
   | 'SELECTION_LOCKED'
   | 'SELECTION_ACKNOWLEDGED'
   | 'WAITLIST_CREATED'
+  | 'UPGRADE_HOLD_AVAILABLE'
+  | 'UPGRADE_OFFER_EXPIRED'
   | 'ASSIGNMENT_CREATED'
   | 'ASSIGNMENT_FAILED'
   | 'CUSTOMER_CONFIRMATION_REQUIRED'
@@ -91,10 +94,27 @@ export interface RoomStatusChangedPayload {
 }
 
 /**
+ * Snapshot of effective availability (rooms supply minus active/offered waitlist demand),
+ * matching GET /v1/inventory/available.
+ */
+export interface InventoryAvailableSnapshot {
+  rooms: Record<'SPECIAL' | 'DOUBLE' | 'STANDARD', number>;
+  rawRooms: Record<'SPECIAL' | 'DOUBLE' | 'STANDARD', number>;
+  waitlistDemand: Record<'SPECIAL' | 'DOUBLE' | 'STANDARD', number>;
+  lockers: number;
+  total: number;
+}
+
+/**
  * Inventory update event payload.
  */
 export interface InventoryUpdatedPayload {
   inventory: DetailedInventory;
+  /**
+   * Optional: includes effective availability snapshot so UIs can update counts immediately
+   * without refetching. Clients may ignore this and just refetch endpoints on the event.
+   */
+  available?: InventoryAvailableSnapshot;
 }
 
 /**
@@ -111,6 +131,14 @@ export interface SessionUpdatedPayload {
    */
   customerMembershipValidUntil?: string;
   /**
+   * Explicit membership choice made during the kiosk membership step.
+   * - ONE_TIME: customer chose the one-time membership option
+   * - SIX_MONTH: customer chose the 6-month membership option
+   *
+   * This is used for kiosk/employee UI coordination only; pricing logic remains server-authoritative.
+   */
+  membershipChoice?: 'ONE_TIME' | 'SIX_MONTH' | null;
+  /**
    * Customer kiosk requested a membership purchase/renewal to be included in the payment quote.
    * Server-authoritative (stored on lane_sessions).
    */
@@ -124,6 +152,12 @@ export interface SessionUpdatedPayload {
   mode?: 'INITIAL' | 'RENEWAL';
   blockEndsAt?: string;
   visitId?: string;
+  /**
+   * If present, customer requested a higher tier (unavailable) and selected a backup tier.
+   * This represents the customer's pending upgrade intent for this visit.
+   */
+  waitlistDesiredType?: string;
+  backupRentalType?: string;
   status?: string;
   proposedRentalType?: string;
   proposedBy?: 'CUSTOMER' | 'EMPLOYEE';
@@ -133,6 +167,11 @@ export interface SessionUpdatedPayload {
   customerDobMonthDay?: string;
   customerLastVisitAt?: string;
   customerNotes?: string;
+  /**
+   * True when the customer has an encrypted lookup marker (e.g., hashed ID scan) stored on file.
+   * This enables faster and more reliable future lookup from ID scans without storing raw scan data.
+   */
+  customerHasEncryptedLookupMarker?: boolean;
   pastDueBalance?: number;
   pastDueBlocked?: boolean;
   pastDueBypassed?: boolean;
@@ -149,6 +188,24 @@ export interface SessionUpdatedPayload {
   assignedResourceType?: 'room' | 'locker';
   assignedResourceNumber?: string;
   checkoutAt?: string;
+}
+
+/**
+ * Ephemeral UI-only event to coordinate employee "pending/highlight" state with the customer kiosk
+ * without mutating server-authoritative selection state.
+ */
+export interface CheckinOptionHighlightedPayload {
+  sessionId: string;
+  step: 'LANGUAGE' | 'MEMBERSHIP';
+  /**
+   * Option identifier for the step:
+   * - LANGUAGE: 'EN' | 'ES'
+   * - MEMBERSHIP: 'ONE_TIME' | 'SIX_MONTH'
+   *
+   * null clears the highlight for the step.
+   */
+  option: string | null;
+  by: 'EMPLOYEE';
 }
 
 /**
@@ -195,6 +252,23 @@ export interface WaitlistCreatedPayload {
   position: number;
   estimatedReadyAt?: string;
   upgradeFee?: number;
+}
+
+export interface UpgradeHoldAvailablePayload {
+  waitlistId: string;
+  customerName: string;
+  desiredTier: string;
+  roomId: string;
+  roomNumber: string;
+  expiresAt: string;
+}
+
+export interface UpgradeOfferExpiredPayload {
+  waitlistId: string;
+  customerName: string;
+  desiredTier: string;
+  roomId: string;
+  roomNumber: string;
 }
 
 /**
@@ -301,6 +375,7 @@ export interface ResolvedCheckoutKey {
 
 export interface CheckoutRequestSummary {
   requestId: string;
+  customerId?: string;
   customerName: string;
   membershipNumber?: string;
   rentalType: string;
@@ -332,6 +407,34 @@ export interface CheckoutCompletedPayload {
   requestId: string;
   kioskDeviceId: string;
   success: boolean;
+}
+
+export type ManualCheckoutResourceType = 'ROOM' | 'LOCKER';
+
+export interface ManualCheckoutCandidate {
+  occupancyId: string;
+  resourceType: ManualCheckoutResourceType;
+  number: string;
+  customerName: string;
+  checkinAt: Date | string;
+  scheduledCheckoutAt: Date | string;
+  isOverdue: boolean;
+}
+
+export interface ManualCheckoutResolveResponse {
+  occupancyId: string;
+  resourceType: ManualCheckoutResourceType;
+  number: string;
+  customerName: string;
+  checkinAt: Date | string;
+  scheduledCheckoutAt: Date | string;
+  lateMinutes: number;
+  fee: number;
+  banApplied: boolean;
+}
+
+export interface ManualCheckoutCompleteResponse extends ManualCheckoutResolveResponse {
+  alreadyCheckedOut?: boolean;
 }
 
 /**

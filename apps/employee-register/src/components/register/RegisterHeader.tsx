@@ -45,15 +45,15 @@ export function RegisterHeader({
           style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
         >
           <span
-            className={`badge ${health?.status === 'ok' ? 'badge-success' : 'badge-error'}`}
+            className={`cs-badge ${health?.status === 'ok' ? 'cs-badge--success' : 'cs-badge--error'}`}
           >
             API: {health?.status ?? '...'}
           </span>
-          <span className={`badge ${wsConnected ? 'badge-success' : 'badge-error'}`}>
+          <span className={`cs-badge ${wsConnected ? 'cs-badge--success' : 'cs-badge--error'}`}>
             WS: {wsConnected ? 'Live' : 'Offline'}
           </span>
-          <span className="badge badge-info">Lane: {lane}</span>
-          <span className="badge badge-info">
+          <span className="cs-badge cs-badge--info">Lane: {lane}</span>
+          <span className="cs-badge cs-badge--info">
             {staffName} ({staffRole})
           </span>
         </div>
@@ -62,15 +62,13 @@ export function RegisterHeader({
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
         <button
           onClick={() => void onSignOut()}
-          className="cs-liquid-button cs-liquid-button--secondary"
-          style={{ padding: '0.45rem 0.85rem', fontWeight: 700 }}
+          className="cs-liquid-button cs-liquid-button--secondary er-header-action-btn"
         >
           Sign Out
         </button>
         <button
           onClick={() => void onCloseOut()}
-          className="cs-liquid-button cs-liquid-button--danger"
-          style={{ padding: '0.45rem 0.85rem', fontWeight: 800 }}
+          className="cs-liquid-button cs-liquid-button--danger er-header-action-btn"
         >
           Close Out
         </button>

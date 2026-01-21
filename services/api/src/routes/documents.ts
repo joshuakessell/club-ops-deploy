@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin } from '../auth/middleware.js';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 interface DocumentRow {
   id: string;
@@ -28,7 +29,7 @@ const UPLOADS_DIR = join(process.cwd(), 'services', 'api', 'uploads');
 async function ensureUploadsDir(): Promise<void> {
   try {
     await fs.mkdir(UPLOADS_DIR, { recursive: true });
-  } catch (error) {
+  } catch {
     // Directory might already exist, ignore
   }
 }
@@ -167,11 +168,12 @@ export async function documentsRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Write audit log
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'DOCUMENT_UPLOADED', 'employee_document', $2)`,
-            [staffId, documentId]
-          );
+          await insertAuditLog(client, {
+            staffId,
+            action: 'DOCUMENT_UPLOADED',
+            entityType: 'employee_document',
+            entityId: documentId,
+          });
 
           return docResult.rows[0]!;
         });

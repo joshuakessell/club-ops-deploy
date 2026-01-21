@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type {
-  SessionUpdatedPayload,
-  WebSocketEvent,
-  CustomerConfirmationRequiredPayload,
-  AssignmentCreatedPayload,
-  InventoryUpdatedPayload,
-  SelectionProposedPayload,
-  SelectionLockedPayload,
-  SelectionForcedPayload,
+import {
+  safeParseWebSocketEvent,
+  type CustomerConfirmationRequiredPayload,
 } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { t, type Language } from '../i18n';
-import { type SessionState } from '../utils/membership';
+import { getMembershipStatus, type SessionState } from '../utils/membership';
 import { IdleScreen } from '../screens/IdleScreen';
 import { LanguageScreen } from '../screens/LanguageScreen';
 import { SelectionScreen } from '../screens/SelectionScreen';
@@ -90,6 +85,11 @@ export function AppRoot() {
   const [membershipModalIntent, setMembershipModalIntent] = useState<'PURCHASE' | 'RENEW' | null>(
     null
   );
+  const [membershipChoice, setMembershipChoice] = useState<'ONE_TIME' | 'SIX_MONTH' | null>(null);
+  const [highlightedLanguage, setHighlightedLanguage] = useState<'EN' | 'ES' | null>(null);
+  const [highlightedMembershipChoice, setHighlightedMembershipChoice] = useState<
+    'ONE_TIME' | 'SIX_MONTH' | null
+  >(null);
 
   // Inject pulse animation for proposal highlight
   useEffect(() => {
@@ -114,6 +114,37 @@ export function AppRoot() {
   useEffect(() => {
     sessionIdRef.current = session.sessionId;
   }, [session.sessionId]);
+
+  // Explicit membership choice step (non-members only): reset when session changes.
+  useEffect(() => {
+    setMembershipChoice(null);
+  }, [session.sessionId]);
+
+  // If the server has a membershipChoice persisted, reflect it locally so the kiosk flow
+  // can be coordinated with employee-register (e.g. staff-selected ONE_TIME).
+  useEffect(() => {
+    if (session.membershipChoice === 'ONE_TIME' && membershipChoice !== 'ONE_TIME') {
+      setMembershipChoice('ONE_TIME');
+      return;
+    }
+    if (session.membershipChoice === 'SIX_MONTH' && membershipChoice !== 'SIX_MONTH') {
+      setMembershipChoice('SIX_MONTH');
+      return;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.sessionId, session.membershipChoice]);
+
+  // If the server indicates a 6-month membership intent is already selected, reflect it in the explicit choice step.
+  // (We intentionally do NOT auto-select ONE_TIME when intent is null.)
+  useEffect(() => {
+    const status = getMembershipStatus(session, Date.now());
+    const isMember = status === 'ACTIVE' || status === 'PENDING';
+    if (isMember) return;
+    if (session.membershipPurchaseIntent && membershipChoice !== 'SIX_MONTH') {
+      setMembershipChoice('SIX_MONTH');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.sessionId, session.membershipPurchaseIntent, session.membershipValidUntil, session.membershipNumber]);
 
   // Get lane from URL pathname pattern, query param, or sessionStorage fallback
   // Priority: /register-1 => lane-1, /register-2 => lane-2, etc.
@@ -181,16 +212,27 @@ export function AppRoot() {
   ) : null;
 
   const API_BASE = '/api';
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : null;
+  const kioskAuthHeaders = (extra?: Record<string, string>) => {
+    return {
+      ...(extra ?? {}),
+      ...(kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
+    };
+  };
 
   const onWsMessage = useCallback((event: MessageEvent) => {
     try {
       const parsed: unknown = safeJsonParse(String(event.data));
-      if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-      const message = parsed as unknown as WebSocketEvent;
+      const message = safeParseWebSocketEvent(parsed);
+      if (!message) return;
       console.log('WebSocket message:', message);
 
       if (message.type === 'SESSION_UPDATED') {
-        const payload = message.payload as SessionUpdatedPayload;
+        const payload = message.payload;
 
         // Update session state with all fields
         setSession((prev) => ({
@@ -199,6 +241,7 @@ export function AppRoot() {
           customerName: payload.customerName,
           membershipNumber: payload.membershipNumber || null,
           membershipValidUntil: payload.customerMembershipValidUntil || null,
+          membershipChoice: payload.membershipChoice ?? null,
           membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
           kioskAcknowledgedAt: payload.kioskAcknowledgedAt || null,
           allowedRentals: payload.allowedRentals,
@@ -254,6 +297,8 @@ export function AppRoot() {
           setSelectionAcknowledged(false);
           setUpgradeDisclaimerAcknowledged(false);
           setHasScrolledAgreement(false);
+          setHighlightedLanguage(null);
+          setHighlightedMembershipChoice(null);
           return;
         }
 
@@ -264,13 +309,14 @@ export function AppRoot() {
         }
 
         // If kiosk acknowledged, stay idle (lane still locked until employee-register completes/reset).
-        if (payload.kioskAcknowledgedAt && payload.customerName && payload.status !== 'COMPLETED') {
+        if (payload.kioskAcknowledgedAt && payload.status !== 'COMPLETED') {
           setView('idle');
           return;
         }
 
-        // Language selection (first visit, before past-due check)
-        if (payload.customerName && !payload.customerPrimaryLanguage && !payload.pastDueBlocked) {
+        // Language selection (first visit). This should happen before any other customer-facing step,
+        // including past-due messaging, so customers can read everything in their preferred language.
+        if (payload.sessionId && payload.status !== 'COMPLETED' && !payload.customerPrimaryLanguage) {
           setView('language');
           return;
         }
@@ -298,7 +344,7 @@ export function AppRoot() {
         }
 
         // Selection view (default active session state)
-        if (payload.customerName) {
+        if (payload.sessionId && payload.status !== 'COMPLETED') {
           setView('selection');
         }
 
@@ -312,13 +358,13 @@ export function AppRoot() {
           setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
         }
       } else if (message.type === 'SELECTION_PROPOSED') {
-        const payload = message.payload as SelectionProposedPayload;
+        const payload = message.payload;
         if (payload.sessionId === sessionIdRef.current) {
           setProposedRentalType(payload.rentalType);
           setProposedBy(payload.proposedBy);
         }
       } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
-        const payload = message.payload as SelectionLockedPayload | SelectionForcedPayload;
+        const payload = message.payload;
         if (payload.sessionId === sessionIdRef.current) {
           setSelectionConfirmed(true);
           setSelectionConfirmedBy('EMPLOYEE');
@@ -328,16 +374,27 @@ export function AppRoot() {
         }
       } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
         setSelectionAcknowledged(true);
+      } else if (message.type === 'CHECKIN_OPTION_HIGHLIGHTED') {
+        const payload = message.payload;
+        if (payload.sessionId !== sessionIdRef.current) return;
+        if (payload.step === 'LANGUAGE') {
+          const opt = payload.option === 'EN' || payload.option === 'ES' ? payload.option : null;
+          setHighlightedLanguage(opt);
+        } else if (payload.step === 'MEMBERSHIP') {
+          const opt =
+            payload.option === 'ONE_TIME' || payload.option === 'SIX_MONTH' ? payload.option : null;
+          setHighlightedMembershipChoice(opt);
+        }
       } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
-        const payload = message.payload as CustomerConfirmationRequiredPayload;
+        const payload = message.payload;
         setCustomerConfirmationData(payload);
         setShowCustomerConfirmation(true);
       } else if (message.type === 'ASSIGNMENT_CREATED') {
-        const payload = message.payload as AssignmentCreatedPayload;
+        const payload = message.payload;
         // Assignment successful - could show confirmation message
         console.log('Assignment created:', payload);
       } else if (message.type === 'INVENTORY_UPDATED') {
-        const payload = message.payload as InventoryUpdatedPayload;
+        const payload = message.payload;
         // Update inventory counts for availability warnings
         if (payload.inventory) {
           const rooms: Record<string, number> = {};
@@ -357,37 +414,37 @@ export function AppRoot() {
     }
   }, []);
 
-  const wsUrl = `ws://${window.location.hostname}:3001/ws?lane=${encodeURIComponent(lane)}`;
-  const ws = useReconnectingWebSocket({
-    url: wsUrl,
-    onMessage: onWsMessage,
-    onOpenSendJson: [
-      {
-        type: 'subscribe',
-        events: [
-          'SESSION_UPDATED',
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'SELECTION_ACKNOWLEDGED',
-          'CUSTOMER_CONFIRMATION_REQUIRED',
-          'ASSIGNMENT_CREATED',
-          'INVENTORY_UPDATED',
-          'WAITLIST_CREATED',
-        ],
-      },
-    ],
+  // Use the local Vite origin + proxy (/ws -> API) so dev/prod behavior stays consistent.
+  const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
+  const wsProtocols = kioskToken ? [`kiosk-token.${kioskToken}`] : undefined;
+  void wsUrl;
+  void wsProtocols;
+  const { connected: wsConnected, lastMessage } = useLaneSession({
+    laneId: lane,
+    role: 'customer',
+    kioskToken: kioskToken ?? '',
+    enabled: true,
   });
 
   useEffect(() => {
-    setWsConnected(ws.connected);
-  }, [ws.connected]);
+    if (!lastMessage) return;
+    onWsMessage(lastMessage);
+  }, [lastMessage, onWsMessage]);
 
   useEffect(() => {
-    // Check API health
-    fetch(`${API_BASE}/health`)
-      .then((res) => res.json())
-      .then((data: unknown) => {
+    setWsConnected(wsConnected);
+  }, [wsConnected]);
+
+  useEffect(() => {
+    // Check API health (avoid JSON parse crashes on empty/non-JSON responses)
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await readJson<unknown>(res);
         if (
+          !cancelled &&
           isRecord(data) &&
           typeof data.status === 'string' &&
           typeof data.timestamp === 'string' &&
@@ -395,8 +452,10 @@ export function AppRoot() {
         ) {
           setHealth({ status: data.status, timestamp: data.timestamp, uptime: data.uptime });
         }
-      })
-      .catch(console.error);
+      } catch (err) {
+        console.error('Health check failed:', err);
+      }
+    })();
 
     // Fetch initial inventory
     fetch(`${API_BASE}/v1/inventory/available`)
@@ -408,6 +467,9 @@ export function AppRoot() {
       })
       .catch(console.error);
 
+    return () => {
+      cancelled = true;
+    };
   }, [lane]);
 
   // Show a brief welcome overlay when a new session becomes active
@@ -469,15 +531,15 @@ export function AppRoot() {
   // Load active agreement when agreement view is shown
   useEffect(() => {
     const lang = session.customerPrimaryLanguage;
-    if (view === 'agreement' && !agreement) {
+    if (view === 'agreement') {
       fetch(`${API_BASE}/v1/agreements/active`)
         .then((res) => res.json())
         .then((data: Agreement) => {
           setAgreement({
             id: data.id,
             version: data.version,
-            title: data.title,
-            bodyText: data.bodyText,
+            title: lang === 'ES' ? t(lang, 'agreementTitle') : data.title,
+            bodyText: lang === 'ES' ? t(lang, 'agreement.legalBodyHtml') : data.bodyText,
           });
         })
         .catch((error) => {
@@ -485,7 +547,7 @@ export function AppRoot() {
           alert(t(lang, 'error.loadAgreement'));
         });
     }
-  }, [view, agreement, session.customerPrimaryLanguage]);
+  }, [view, session.customerPrimaryLanguage]);
 
   const handleRentalSelection = async (rental: string) => {
     if (!session.sessionId) {
@@ -531,6 +593,7 @@ export function AppRoot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
         },
         body: JSON.stringify({
           rentalType: rental,
@@ -568,6 +631,7 @@ export function AppRoot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
         },
         body: JSON.stringify({
           rentalType: backupType,
@@ -653,9 +717,17 @@ export function AppRoot() {
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
 
+    // Translate pointer coordinates (CSS pixels) into canvas coordinates (canvas pixels).
+    // The canvas is rendered responsively in CSS, so rect.width/height often differs from canvas.width/height.
     const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0]!.clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0]!.clientY - rect.top : e.clientY - rect.top;
+    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY;
+    if (clientX == null || clientY == null) return;
+    if ('touches' in e) e.preventDefault();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
 
     const ctx = canvas.getContext('2d');
     if (ctx) {
@@ -672,8 +744,14 @@ export function AppRoot() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = 'touches' in e ? e.touches[0]!.clientX - rect.left : e.clientX - rect.left;
-    const y = 'touches' in e ? e.touches[0]!.clientY - rect.top : e.clientY - rect.top;
+    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY;
+    if (clientX == null || clientY == null) return;
+    if ('touches' in e) e.preventDefault();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
 
     const ctx = canvas.getContext('2d');
     if (ctx) {
@@ -718,6 +796,7 @@ export function AppRoot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
         },
         body: JSON.stringify({
           signaturePayload: signatureData, // Full data URL or base64
@@ -752,6 +831,7 @@ export function AppRoot() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
         },
         body: JSON.stringify({
           language,
@@ -780,7 +860,7 @@ export function AppRoot() {
     try {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/customer-confirm`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
         body: JSON.stringify({
           sessionId: customerConfirmationData.sessionId,
           confirmed,
@@ -803,6 +883,54 @@ export function AppRoot() {
     setShowMembershipModal(true);
   };
 
+  const handleSelectOneTimeMembership = async () => {
+    setMembershipChoice('ONE_TIME');
+    // Ensure one-time explicitly clears any previously selected 6-month intent.
+    if (session.membershipPurchaseIntent) {
+      await handleClearMembershipPurchaseIntent();
+    }
+    // Persist the explicit choice so employee-register can mirror the kiosk step reliably.
+    if (session.sessionId) {
+      try {
+        await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
+          body: JSON.stringify({ choice: 'ONE_TIME', sessionId: session.sessionId }),
+        });
+        // SESSION_UPDATED will reconcile; we don't need to block UX on this.
+      } catch {
+        // Best-effort (UI still works locally).
+      }
+    }
+  };
+
+  const handleClearMembershipPurchaseIntent = async () => {
+    if (!session.sessionId) return;
+    const lang = session.customerPrimaryLanguage;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
+          body: JSON.stringify({ intent: 'NONE', sessionId: session.sessionId }),
+        }
+      );
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to clear membership intent');
+      }
+      // Immediate UX; server WS broadcast will also reconcile.
+      setSession((prev) => ({ ...prev, membershipPurchaseIntent: null }));
+    } catch (error) {
+      console.error('Failed to clear membership purchase intent:', error);
+      alert(error instanceof Error ? error.message : t(lang, 'error.process'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleMembershipContinue = async () => {
     if (!membershipModalIntent || !session.sessionId) return;
     const lang = session.customerPrimaryLanguage;
@@ -812,7 +940,7 @@ export function AppRoot() {
         `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
           body: JSON.stringify({ intent: membershipModalIntent, sessionId: session.sessionId }),
         }
       );
@@ -822,6 +950,7 @@ export function AppRoot() {
       }
       // Immediate UX; server WS broadcast will also reconcile.
       setSession((prev) => ({ ...prev, membershipPurchaseIntent: membershipModalIntent }));
+      setMembershipChoice('SIX_MONTH');
       setShowMembershipModal(false);
       setMembershipModalIntent(null);
     } catch (error) {
@@ -871,6 +1000,7 @@ export function AppRoot() {
           customerPrimaryLanguage={session.customerPrimaryLanguage}
           onSelectLanguage={(lang) => void handleLanguageSelection(lang)}
           isSubmitting={isSubmitting}
+          highlightedLanguage={highlightedLanguage}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
         />
@@ -925,50 +1055,56 @@ export function AppRoot() {
           isSubmitting={isSubmitting}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
-          onComplete={async () => {
-            setIsSubmitting(true);
-            try {
-              // Kiosk acknowledgement: UI-only. Must NOT end/clear the lane session.
-              await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({}),
-              });
-            } catch (error) {
-              console.error('Failed to kiosk-ack completion:', error);
-              // Continue to local UI reset even if server call fails; WS will reconcile when possible.
-            } finally {
-              // Local reset (immediate UX): hide customer flow and return kiosk to idle,
-              // but keep session data so the kiosk remains "locked" until employee-register completes.
-              setView('idle');
-              setSession((prev) => ({
-                ...prev,
-                kioskAcknowledgedAt: new Date().toISOString(),
-              }));
-              setSelectedRental(null);
-              setAgreed(false);
-              setSignatureData(null);
-              setShowUpgradeDisclaimer(false);
-              setUpgradeAction(null);
-              setShowRenewalDisclaimer(false);
-              setCheckinMode(null);
-              setShowWaitlistModal(false);
-              setWaitlistDesiredType(null);
-              setWaitlistBackupType(null);
-              setProposedRentalType(null);
-              setProposedBy(null);
-              setSelectionConfirmed(false);
-              setSelectionConfirmedBy(null);
-              setSelectionAcknowledged(false);
-              setUpgradeDisclaimerAcknowledged(false);
-              setHasScrolledAgreement(false);
-              setIsSubmitting(false);
-            }
+          onComplete={() => {
+            void (async () => {
+              setIsSubmitting(true);
+              try {
+                // Kiosk acknowledgement: UI-only. Must NOT end/clear the lane session.
+                await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
+                  body: JSON.stringify({}),
+                });
+              } catch (error) {
+                console.error('Failed to kiosk-ack completion:', error);
+                // Continue to local UI reset even if server call fails; WS will reconcile when possible.
+              } finally {
+                // Local reset (immediate UX): hide customer flow and return kiosk to idle,
+                // but keep session data so the kiosk remains "locked" until employee-register completes.
+                setView('idle');
+                setSession((prev) => ({
+                  ...prev,
+                  kioskAcknowledgedAt: new Date().toISOString(),
+                }));
+                setSelectedRental(null);
+                setAgreed(false);
+                setSignatureData(null);
+                setShowUpgradeDisclaimer(false);
+                setUpgradeAction(null);
+                setShowRenewalDisclaimer(false);
+                setCheckinMode(null);
+                setShowWaitlistModal(false);
+                setWaitlistDesiredType(null);
+                setWaitlistBackupType(null);
+                setProposedRentalType(null);
+                setProposedBy(null);
+                setSelectionConfirmed(false);
+                setSelectionConfirmedBy(null);
+                setSelectionAcknowledged(false);
+                setUpgradeDisclaimerAcknowledged(false);
+                setHasScrolledAgreement(false);
+                setIsSubmitting(false);
+              }
+            })();
           }}
         />
       );
 
     case 'selection':
+      {
+        const membershipStatus = getMembershipStatus(session, Date.now());
+        const isMember = membershipStatus === 'ACTIVE' || membershipStatus === 'PENDING';
+        const isExpired = membershipStatus === 'EXPIRED';
       return (
         <>
           <SelectionScreen
@@ -983,7 +1119,12 @@ export function AppRoot() {
             orientationOverlay={orientationOverlay}
             welcomeOverlay={welcomeOverlayNode}
             onSelectRental={(rental) => void handleRentalSelection(rental)}
-            onOpenMembershipModal={openMembershipModal}
+            membershipChoice={isMember ? null : membershipChoice}
+            onSelectOneTimeMembership={() => void handleSelectOneTimeMembership()}
+            onSelectSixMonthMembership={() =>
+              openMembershipModal(isExpired ? 'RENEW' : 'PURCHASE')
+            }
+              highlightedMembershipChoice={highlightedMembershipChoice}
           />
           <UpgradeDisclaimerModal
             isOpen={showUpgradeDisclaimer}
@@ -1042,7 +1183,7 @@ export function AppRoot() {
             />
           )}
         </>
-      );
+      );}
 
     default:
       return null;

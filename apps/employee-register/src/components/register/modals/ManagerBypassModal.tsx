@@ -1,4 +1,5 @@
 import { ModalFrame } from './ModalFrame';
+import { LiquidGlassPinInput } from '@club-ops/ui';
 
 export interface ManagerBypassModalProps {
   isOpen: boolean;
@@ -51,20 +52,19 @@ export function ManagerBypassModal({
         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
           PIN
         </label>
-        <input
-          type="password"
+        <LiquidGlassPinInput
+          length={6}
           value={managerPin}
-          onChange={(e) => onChangeManagerPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-          placeholder="Enter 6-digit PIN"
-          maxLength={6}
-          inputMode="numeric"
-          pattern="[0-9]*"
-          className="cs-liquid-input"
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            fontSize: '1rem',
+          onChange={onChangeManagerPin}
+          onSubmit={() => {
+            if (!managerId) return;
+            if (managerPin.trim().length !== 6) return;
+            onBypass();
           }}
+          submitLabel={isSubmitting ? 'Processing…' : 'Bypass'}
+          submitDisabled={isSubmitting || !managerId}
+          disabled={isSubmitting}
+          displayAriaLabel="Manager PIN"
         />
       </div>
       <div style={{ display: 'flex', gap: '0.5rem' }}>

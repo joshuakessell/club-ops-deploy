@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { WebSocketEvent } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { ApiError, apiJson, wsBaseUrl } from './api';
 import { ReAuthModal } from './ReAuthModal';
@@ -69,17 +70,27 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.sessionToken]);
 
-  useReconnectingWebSocket({
-    url: wsBaseUrl(),
-    onOpenSendJson: [{ type: 'subscribe', events: ['WAITLIST_UPDATED', 'INVENTORY_UPDATED'] }],
-    onMessage: (event) => {
-      const msg = safeJsonParse<WebSocketEvent>(String(event.data));
-      if (!msg) return;
-      if (msg.type === 'WAITLIST_UPDATED' || msg.type === 'INVENTORY_UPDATED') {
-        load().catch(() => {});
-      }
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : '';
+  void wsBaseUrl;
+  const { lastMessage } = useLaneSession({
+    laneId: '',
+    role: 'employee',
+    kioskToken,
+    enabled: !!kioskToken,
   });
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    const msg = safeJsonParse<WebSocketEvent>(String(lastMessage.data));
+    if (!msg) return;
+    if (msg.type === 'WAITLIST_UPDATED' || msg.type === 'INVENTORY_UPDATED') {
+      load().catch(() => {});
+    }
+  }, [lastMessage]);
 
   const availableRoomsForEntry = useMemo(() => {
     if (!selectedEntry) return [];

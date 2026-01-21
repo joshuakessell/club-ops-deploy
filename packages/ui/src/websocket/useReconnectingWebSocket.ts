@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { closeLaneSessionClient, getLaneSessionClient } from '@club-ops/shared';
+import { getInstalledTelemetry } from '../telemetry/global.js';
 
 export type ReconnectingWebSocketStatus = 'connecting' | 'open' | 'closed' | 'reconnecting';
 
@@ -10,16 +12,11 @@ export type UseReconnectingWebSocketOptions = {
   onClose?: (ev: CloseEvent) => void;
   onError?: (ev: Event) => void;
   onOpenSendJson?: unknown[];
-  autoReconnect?: boolean;
-  baseDelayMs?: number;
-  maxDelayMs?: number;
-  jitterMs?: number;
-  maxRetries?: number;
-  reconnectOnFocus?: boolean;
-  reconnectOnOnline?: boolean;
-  reconnectOnVisibility?: boolean;
-  pingIntervalMs?: number;
-  pingJson?: unknown;
+  /**
+   * Lane-scoped realtime connections are guarded and shared in `@club-ops/shared`.
+   * This hook is now a thin subscription wrapper (no socket creation, no reconnect loops).
+   */
+  role?: 'customer' | 'employee';
 };
 
 export type UseReconnectingWebSocketResult = {
@@ -45,40 +42,42 @@ function isSocketOpen(ws: WebSocket | null): ws is WebSocket {
   return !!ws && ws.readyState === WebSocket.OPEN;
 }
 
-function isSocketConnecting(ws: WebSocket | null): ws is WebSocket {
-  return !!ws && ws.readyState === WebSocket.CONNECTING;
+function extractLaneIdFromUrl(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl, window.location.href);
+    return url.searchParams.get('lane')?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function extractKioskTokenFromProtocols(protocols?: string | string[]): string | null {
+  const list = typeof protocols === 'string' ? [protocols] : Array.isArray(protocols) ? protocols : [];
+  for (const p of list) {
+    const s = String(p).trim();
+    if (s.startsWith('kiosk-token.')) {
+      const token = s.slice('kiosk-token.'.length).trim();
+      return token || null;
+    }
+  }
+  return null;
 }
 
 export function useReconnectingWebSocket(
   options: UseReconnectingWebSocketOptions
 ): UseReconnectingWebSocketResult {
-  const {
-    url,
-    protocols,
-    autoReconnect = true,
-    baseDelayMs = 250,
-    maxDelayMs = 30_000,
-    jitterMs = 250,
-    maxRetries = Infinity,
-    reconnectOnFocus = true,
-    reconnectOnOnline = true,
-    reconnectOnVisibility = true,
-    pingIntervalMs = 0,
-    pingJson = { type: 'ping' },
-  } = options;
+  const { url, protocols, role = 'employee' } = options;
 
   const [status, setStatus] = useState<ReconnectingWebSocketStatus>('connecting');
   const [connected, setConnected] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
+  const [retryCount, setRetryCount] = useState(0); // shared module owns retries; we expose 0 for compatibility.
   const [lastCloseEvent, setLastCloseEvent] = useState<CloseEvent | null>(null);
+  const [connectNonce, setConnectNonce] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const closedByUserRef = useRef(false);
-  const stoppedRef = useRef(false);
-  const retryCountRef = useRef(0);
-  const reconnectTimerRef = useRef<number | null>(null);
-  const pingTimerRef = useRef<number | null>(null);
   const sendQueueRef = useRef<string[]>([]);
+  const unsubscribeRef = useRef<null | (() => void)>(null);
 
   const onMessageRef = useRef<UseReconnectingWebSocketOptions['onMessage']>();
   const onOpenRef = useRef<UseReconnectingWebSocketOptions['onOpen']>();
@@ -91,40 +90,6 @@ export function useReconnectingWebSocket(
   onCloseRef.current = options.onClose;
   onErrorRef.current = options.onError;
   onOpenSendJsonRef.current = options.onOpenSendJson;
-
-  const connectRef = useRef<(nextStatus: ReconnectingWebSocketStatus) => void>(() => {});
-
-  const clearReconnectTimer = useCallback(() => {
-    if (reconnectTimerRef.current != null) {
-      window.clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-  }, []);
-
-  const clearPingTimer = useCallback(() => {
-    if (pingTimerRef.current != null) {
-      window.clearInterval(pingTimerRef.current);
-      pingTimerRef.current = null;
-    }
-  }, []);
-
-  const startPingTimerIfEnabled = useCallback(
-    (ws: WebSocket) => {
-      clearPingTimer();
-      if (pingIntervalMs <= 0) return;
-      if (ws.readyState !== WebSocket.OPEN) return;
-      pingTimerRef.current = window.setInterval(() => {
-        if (wsRef.current !== ws) return;
-        if (ws.readyState !== WebSocket.OPEN) return;
-        try {
-          ws.send(JSON.stringify(pingJson));
-        } catch {
-          // ignore
-        }
-      }, pingIntervalMs);
-    },
-    [clearPingTimer, pingIntervalMs, pingJson]
-  );
 
   const flushSendQueue = useCallback((ws: WebSocket) => {
     if (ws.readyState !== WebSocket.OPEN) return;
@@ -142,122 +107,11 @@ export function useReconnectingWebSocket(
     }
   }, []);
 
-  const connect = useCallback(
-    (nextStatus: ReconnectingWebSocketStatus) => {
-      if (stoppedRef.current || closedByUserRef.current) return;
-
-      const existing = wsRef.current;
-      if (existing && (isSocketOpen(existing) || isSocketConnecting(existing)) && existing.url === url) {
-        return;
-      }
-
-      clearReconnectTimer();
-      clearPingTimer();
-
-      setStatus(nextStatus);
-      setConnected(false);
-
-      const ws = protocols ? new WebSocket(url, protocols) : new WebSocket(url);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        if (wsRef.current !== ws) return;
-        retryCountRef.current = 0;
-        setRetryCount(0);
-        setLastCloseEvent(null);
-        setStatus('open');
-        setConnected(true);
-
-        flushSendQueue(ws);
-
-        const toSend = onOpenSendJsonRef.current ?? [];
-        for (const msg of toSend) {
-          try {
-            ws.send(JSON.stringify(msg));
-          } catch {
-            // ignore
-          }
-        }
-
-        startPingTimerIfEnabled(ws);
-        onOpenRef.current?.();
-      };
-
-      ws.onmessage = (event) => {
-        if (wsRef.current !== ws) return;
-        onMessageRef.current?.(event);
-      };
-
-      ws.onerror = (ev) => {
-        if (wsRef.current !== ws) return;
-        onErrorRef.current?.(ev);
-      };
-
-      ws.onclose = (ev) => {
-        if (wsRef.current !== ws) return;
-        clearPingTimer();
-        setConnected(false);
-        setLastCloseEvent(ev);
-        setStatus('closed');
-        onCloseRef.current?.(ev);
-
-        if (stoppedRef.current || closedByUserRef.current) return;
-        if (!autoReconnect) return;
-        if (retryCountRef.current >= maxRetries) return;
-
-        const attempt = retryCountRef.current;
-        const delay =
-          Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt)) + Math.floor(Math.random() * jitterMs);
-        retryCountRef.current = attempt + 1;
-        setRetryCount(retryCountRef.current);
-
-        reconnectTimerRef.current = window.setTimeout(() => {
-          reconnectTimerRef.current = null;
-          connectRef.current('reconnecting');
-        }, delay);
-      };
-    },
-    [
-      autoReconnect,
-      baseDelayMs,
-      clearPingTimer,
-      clearReconnectTimer,
-      flushSendQueue,
-      jitterMs,
-      maxDelayMs,
-      maxRetries,
-      protocols,
-      startPingTimerIfEnabled,
-      url,
-    ]
-  );
-
-  connectRef.current = connect;
-
   const reconnectNow = useCallback(() => {
-    if (stoppedRef.current) return;
-    clearReconnectTimer();
-
-    const existing = wsRef.current;
-    if (existing && (isSocketOpen(existing) || isSocketConnecting(existing))) {
-      // Ensure the close event from this socket doesn't schedule a reconnect.
-      closedByUserRef.current = true;
-      try {
-        existing.close();
-      } catch {
-        // ignore
-      }
-      wsRef.current = null;
-      setConnected(false);
-      setStatus('closed');
-      // Allow new connections and reconnect immediately.
-      closedByUserRef.current = false;
-    }
-
-    retryCountRef.current = 0;
+    // Explicit user action only: force a fresh guarded connection (no loops).
     setRetryCount(0);
-    connectRef.current('reconnecting');
-  }, [clearReconnectTimer]);
+    setConnectNonce((n) => n + 1);
+  }, []);
 
   const sendJson = useCallback(
     (msg: unknown) => {
@@ -272,88 +126,131 @@ export function useReconnectingWebSocket(
         }
       }
       sendQueueRef.current.push(raw);
-      if (stoppedRef.current || closedByUserRef.current) return;
-      if (!isSocketConnecting(ws)) {
-        connectRef.current(status === 'open' ? 'reconnecting' : status);
-      }
+      if (closedByUserRef.current) return;
     },
-    [status]
+    []
   );
 
   const close = useCallback(() => {
-    stoppedRef.current = true;
     closedByUserRef.current = true;
-    clearReconnectTimer();
-    clearPingTimer();
-    const ws = wsRef.current;
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+    const laneId = extractLaneIdFromUrl(url);
+    closeLaneSessionClient(laneId, role);
     wsRef.current = null;
-    if (ws && (isSocketOpen(ws) || isSocketConnecting(ws))) {
+    setConnected(false);
+    setStatus('closed');
+  }, [role, url]);
+
+  // Guarded connect + subscription (no socket creation, no reconnect loops).
+  useEffect(() => {
+    closedByUserRef.current = false;
+    setRetryCount(0);
+    setLastCloseEvent(null);
+
+    unsubscribeRef.current?.();
+    unsubscribeRef.current = null;
+
+    const kioskToken = extractKioskTokenFromProtocols(protocols);
+    if (!kioskToken) {
+      // Fail-fast: without kiosk token we do not create a WebSocket and we do not retry.
+      setStatus('closed');
+      setConnected(false);
+      wsRef.current = null;
+      return;
+    }
+
+    const laneId = extractLaneIdFromUrl(url);
+    setStatus('connecting');
+    setConnected(false);
+
+    let ws: WebSocket | null = null;
+    try {
+      ws = getLaneSessionClient({ laneId, role, kioskToken }) as unknown as WebSocket;
+      wsRef.current = ws;
+    } catch (err) {
       try {
-        ws.close();
+        getInstalledTelemetry()?.capture({
+          level: 'error',
+          kind: 'ws.guard_error',
+          message: err instanceof Error ? err.message : 'Failed to init guarded WebSocket',
+          url,
+        });
       } catch {
         // ignore
       }
-    }
-    setConnected(false);
-    setStatus('closed');
-  }, [clearPingTimer, clearReconnectTimer]);
-
-  const focusHandlers = useMemo(() => {
-    const maybeReconnect = () => {
-      if (stoppedRef.current || closedByUserRef.current) return;
-      if (!isSocketOpen(wsRef.current)) reconnectNow();
-    };
-
-    return {
-      onFocus: () => {
-        if (!reconnectOnFocus) return;
-        maybeReconnect();
-      },
-      onOnline: () => {
-        if (!reconnectOnOnline) return;
-        maybeReconnect();
-      },
-      onVisibilityChange: () => {
-        if (!reconnectOnVisibility) return;
-        if (document.visibilityState !== 'visible') return;
-        maybeReconnect();
-      },
-    };
-  }, [reconnectNow, reconnectOnFocus, reconnectOnOnline, reconnectOnVisibility]);
-
-  // Initial connect + url/protocol changes.
-  useEffect(() => {
-    stoppedRef.current = false;
-    closedByUserRef.current = false;
-    retryCountRef.current = 0;
-    setRetryCount(0);
-    connectRef.current('connecting');
-
-    window.addEventListener('focus', focusHandlers.onFocus);
-    window.addEventListener('online', focusHandlers.onOnline);
-    document.addEventListener('visibilitychange', focusHandlers.onVisibilityChange);
-
-    return () => {
-      closedByUserRef.current = true;
-      stoppedRef.current = true;
-      clearReconnectTimer();
-      clearPingTimer();
-
-      window.removeEventListener('focus', focusHandlers.onFocus);
-      window.removeEventListener('online', focusHandlers.onOnline);
-      document.removeEventListener('visibilitychange', focusHandlers.onVisibilityChange);
-
-      const ws = wsRef.current;
+      setStatus('closed');
+      setConnected(false);
       wsRef.current = null;
-      if (ws && (isSocketOpen(ws) || isSocketConnecting(ws))) {
+      return;
+    }
+
+    const onOpen = () => {
+      const current = wsRef.current;
+      if (!current || current !== ws) return;
+      setStatus('open');
+      setConnected(true);
+      flushSendQueue(current);
+
+      const toSend = onOpenSendJsonRef.current ?? [];
+      for (const msg of toSend) {
         try {
-          ws.close();
+          current.send(JSON.stringify(msg));
         } catch {
           // ignore
         }
       }
+      onOpenRef.current?.();
     };
-  }, [clearPingTimer, clearReconnectTimer, focusHandlers, url, protocols]);
+
+    const onMessage = (event: { data: unknown }) => {
+      const current = wsRef.current;
+      if (!current || current !== ws) return;
+      onMessageRef.current?.({ data: event.data } as MessageEvent);
+    };
+
+    const onClose = (event: { code?: number; reason?: string }) => {
+      const current = wsRef.current;
+      if (!current || current !== ws) return;
+      setConnected(false);
+      setStatus('closed');
+      setLastCloseEvent(event as unknown as CloseEvent);
+      onCloseRef.current?.(event as unknown as CloseEvent);
+    };
+
+    const onError = (event: { type?: string }) => {
+      const current = wsRef.current;
+      if (!current || current !== ws) return;
+      try {
+        getInstalledTelemetry()?.capture({
+          level: 'error',
+          kind: 'ws.error',
+          message: 'WebSocket error',
+          url,
+          meta: { type: event.type },
+        });
+      } catch {
+        // ignore
+      }
+      onErrorRef.current?.(event as unknown as Event);
+    };
+
+    ws.addEventListener('open', onOpen as unknown as (ev: Event) => void);
+    ws.addEventListener('message', onMessage as unknown as (ev: MessageEvent) => void);
+    ws.addEventListener('close', onClose as unknown as (ev: CloseEvent) => void);
+    ws.addEventListener('error', onError as unknown as (ev: Event) => void);
+    unsubscribeRef.current = () => {
+      ws?.removeEventListener('open', onOpen as unknown as (ev: Event) => void);
+      ws?.removeEventListener('message', onMessage as unknown as (ev: MessageEvent) => void);
+      ws?.removeEventListener('close', onClose as unknown as (ev: CloseEvent) => void);
+      ws?.removeEventListener('error', onError as unknown as (ev: Event) => void);
+    };
+
+    return () => {
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+    };
+  }, [connectNonce, flushSendQueue, protocols, role, url]);
 
   return {
     socket: wsRef.current,

@@ -7,10 +7,13 @@
 // - `orientation.*`, `membership.*`, `selection.*`, `waitlist.*`, `upgrade.*`, `renewal.*`, `payment.*`
 //
 // Prefer sentence keys with simple `{param}` placeholders.
+import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG } from '@club-ops/shared';
+
 export const en = {
   // Brand / a11y
   'brand.clubName': 'Club Dallas',
   'a11y.welcomeDialog': 'Welcome',
+  'a11y.signatureDialog': 'Signature',
 
   // Welcome
   welcome: 'Welcome',
@@ -50,6 +53,12 @@ export const en = {
   scrollRequired: 'Please scroll to the bottom of the agreement to continue.',
   iAgree: 'I agree',
   signatureRequired: 'Signature required to continue',
+  'agreement.readAndScrollToContinue': 'Read the agreement, and scroll to the bottom to continue...',
+  'agreement.pleaseCheckToContinue': 'Please check to continue',
+  'agreement.tapToSign': 'Tap to Sign',
+  'agreement.signed': 'Signed',
+  'agreement.sign': 'Sign',
+  'agreement.legalBodyHtml': AGREEMENT_LEGAL_BODY_HTML_BY_LANG.EN,
   clear: 'Clear',
   submit: 'Submit',
   submitting: 'Submitting...',
@@ -70,6 +79,8 @@ export const en = {
   staffHasLocked: 'Staff has locked this selection. Please acknowledge to continue.',
   'selection.staffSuggestionHint': 'Staff suggestion — tap the highlighted option to accept',
   'selection.yourSelectionWaiting': 'Your selection — waiting for staff to confirm',
+  'guidance.pleaseSelectOne': 'Please select one',
+  'selection.pendingApproval': 'Waiting for approval',
 
   // Membership section
   'membership.level': 'Membership Level:',
@@ -83,10 +94,18 @@ export const en = {
   'membership.pending': 'Pending',
   'membership.modal.title': 'Membership',
   'membership.modal.body.purchase':
-    'You can save on daily membership fees by purchasing a 6 month membership for $43.',
+    'Save on daily membership fees with a 6-month membership. Ask the employee about current 6-month membership pricing.',
   'membership.modal.body.renew':
-    'You can save on daily membership fees by renewing a 6 month membership for $43.',
+    'Save on daily membership fees with a 6-month membership. Ask the employee about current 6-month membership renewal pricing.',
   'common.continue': 'Continue',
+
+  // Purchase cards (Selection)
+  'membership.pleaseSelectOne': 'Please select one',
+  'membership.oneTimeOption': 'One-time Membership',
+  'membership.sixMonthOption': '6-Month Membership',
+  'membership.thankYouMember': 'Thank you for being a member.',
+  'membership.expiresOn': 'Your membership expires on {date}.',
+  'rental.title': 'Rental',
 
   // Experience section
   'experience.choose': 'Choose your experience:',
@@ -96,6 +115,7 @@ export const en = {
   unavailable: 'Currently unavailable - Tap to join waitlist',
   'availability.onlyAvailable': 'Only {count} available',
   'availability.unavailable': 'Unavailable',
+  'availability.joinWaitlist': 'Join the waiting list',
 
   // Rental types (display)
   locker: 'Locker',
@@ -104,7 +124,7 @@ export const en = {
   specialRoom: 'Special Room',
   gymLocker: 'Gym Locker',
   'rental.standardDisplay': 'Private Dressing Room',
-  'rental.doubleDisplay': 'Deluxe Dressing Room',
+  'rental.doubleDisplay': 'Double Dressing Room',
   'rental.specialDisplay': 'Special Dressing Room',
 
   // Waitlist
@@ -145,9 +165,9 @@ export const en = {
   'renewal.bullet.approachingMax':
     '⚠️ You are approaching the 14-hour maximum stay for a single visit.',
   'renewal.bullet.finalExtension':
-    'At the end of this 6-hour renewal, you may extend one final time for 2 additional hours for a flat $20 fee (same for lockers or any room type).',
+    'At the end of this 6-hour renewal, you may extend one final time for 2 additional hours (fee applies).',
   'renewal.bullet.feeNotChargedNow':
-    'The $20 fee is not charged now; it applies only if you choose the final 2-hour extension later.',
+    'The fee is not charged now; it applies only if you choose the final 2-hour extension later.',
 
   // Errors (customer-friendly, generic)
   'error.loadAgreement': 'Failed to load agreement. Please try again.',

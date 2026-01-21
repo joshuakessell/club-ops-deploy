@@ -227,7 +227,7 @@ Generate shifts for a 28-day window:
 
 ### Execution
 
-- Run seeding on API startup when `DEMO_MODE=true` environment variable is set
+- Run demo seeding only when explicitly requested (preferred: `pnpm demo:seed`; optional: API boot with `DEMO_MODE=true SEED_ON_STARTUP=true`)
 - Only seed if demo data is not already present (idempotent check)
 - Log seeding activity for debugging
 

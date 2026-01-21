@@ -28,10 +28,21 @@ export function OfferUpgradeModal(props: {
   waitlistId: string;
   desiredTier: 'STANDARD' | 'DOUBLE' | 'SPECIAL';
   customerLabel?: string;
+  heldRoom?: { id: string; number: string } | null;
   disabled?: boolean;
   onOffered: () => void;
 }) {
-  const { isOpen, onClose, sessionToken, waitlistId, desiredTier, customerLabel, disabled, onOffered } =
+  const {
+    isOpen,
+    onClose,
+    sessionToken,
+    waitlistId,
+    desiredTier,
+    customerLabel,
+    heldRoom = null,
+    disabled,
+    onOffered,
+  } =
     props;
 
   const [rooms, setRooms] = useState<OfferableRoom[]>([]);
@@ -45,6 +56,13 @@ export function OfferUpgradeModal(props: {
   }, [customerLabel, desiredTier]);
 
   const fetchOfferable = async () => {
+    if (heldRoom) {
+      // When the server has already held a specific room for this waitlist entry,
+      // the offer UI should default to that room (confirm/extend semantics).
+      setRooms([{ id: heldRoom.id, number: heldRoom.number, type: desiredTier }]);
+      setSelectedRoomId(heldRoom.id);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -76,7 +94,7 @@ export function OfferUpgradeModal(props: {
     if (!isOpen) return;
     void fetchOfferable();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, desiredTier, waitlistId]);
+  }, [isOpen, desiredTier, waitlistId, heldRoom?.id]);
 
   if (!isOpen) return null;
 
@@ -148,7 +166,7 @@ export function OfferUpgradeModal(props: {
                   key={r.id}
                   className={`offer-upgrade-room-item cs-liquid-button cs-liquid-button--secondary ${selectedRoomId === r.id ? 'cs-liquid-button--selected selected' : ''}`}
                   onClick={() => setSelectedRoomId(r.id)}
-                  disabled={Boolean(disabled) || isLoading}
+                  disabled={Boolean(disabled) || isLoading || Boolean(heldRoom)}
                 >
                   Room {r.number}
                 </button>
@@ -170,7 +188,7 @@ export function OfferUpgradeModal(props: {
             onClick={() => void handleConfirm()}
             disabled={Boolean(disabled) || isLoading || !selectedRoomId}
           >
-            Offer Selected Room
+            {heldRoom ? 'Confirm Offer (Extend Hold)' : 'Offer Selected Room'}
           </button>
         </div>
       </div>

@@ -1,33 +1,23 @@
-import { useCallback, useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
-  type ActiveVisit,
   type CheckoutRequestSummary,
   type CheckoutChecklist,
-  type WebSocketEvent,
-  type CheckoutRequestedPayload,
-  type CheckoutClaimedPayload,
-  type CheckoutUpdatedPayload,
-  type SessionUpdatedPayload,
-  type AssignmentCreatedPayload,
   type AssignmentFailedPayload,
-  type CustomerConfirmedPayload,
-  type CustomerDeclinedPayload,
-  type SelectionProposedPayload,
-  type SelectionLockedPayload,
-  type SelectionAcknowledgedPayload,
-  type SelectionForcedPayload,
   getCustomerMembershipStatus,
 } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
+import { isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { RegisterSignIn } from '../RegisterSignIn';
-import { InventorySelector } from '../InventorySelector';
-import type { IdScanPayload } from '@club-ops/shared';
-import { ScanMode, type ScanModeResult } from '../ScanMode';
+type ScanResult =
+  | { outcome: 'matched' }
+  | { outcome: 'no_match'; message: string; canCreate?: boolean }
+  | { outcome: 'error'; message: string };
 import { debounce } from '../utils/debounce';
+import { extractDobDigits, formatDobMmDdYyyy, parseDobDigitsToIso } from '../utils/dob';
 import { OfferUpgradeModal } from '../components/OfferUpgradeModal';
 import { CheckoutRequestsBanner } from '../components/register/CheckoutRequestsBanner';
 import { CheckoutVerificationModal } from '../components/register/CheckoutVerificationModal';
-import { RegisterHeader } from '../components/register/RegisterHeader';
+import { useEmployeeRegisterTabletUiTweaks } from '../hooks/useEmployeeRegisterTabletUiTweaks';
+import { RequiredTenderOutcomeModal } from '../components/register/modals/RequiredTenderOutcomeModal';
 import { WaitlistNoticeModal } from '../components/register/modals/WaitlistNoticeModal';
 import { CustomerConfirmationPendingModal } from '../components/register/modals/CustomerConfirmationPendingModal';
 import { PastDuePaymentModal } from '../components/register/modals/PastDuePaymentModal';
@@ -35,15 +25,46 @@ import { ManagerBypassModal } from '../components/register/modals/ManagerBypassM
 import { UpgradePaymentModal } from '../components/register/modals/UpgradePaymentModal';
 import { AddNoteModal } from '../components/register/modals/AddNoteModal';
 import { MembershipIdPromptModal } from '../components/register/modals/MembershipIdPromptModal';
+import { ModalFrame } from '../components/register/modals/ModalFrame';
+import { TransactionCompleteModal } from '../components/register/modals/TransactionCompleteModal';
+import {
+  MultipleMatchesModal,
+  type MultipleMatchCandidate,
+} from '../components/register/modals/MultipleMatchesModal';
 import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclineToast';
-import { AvailabilityStatusBar } from '../components/AvailabilityStatusBar';
-import { AvailabilityModal, type AvailabilityModalType } from '../components/AvailabilityModal';
+import { SuccessToast } from '../components/register/toasts/SuccessToast';
+import {
+  BottomToastStack,
+  type BottomToast,
+} from '../components/register/toasts/BottomToastStack';
+import { ManualCheckoutPanel } from '../components/register/panels/ManualCheckoutPanel';
+import { RoomCleaningPanel } from '../components/register/panels/RoomCleaningPanel';
+import { CustomerProfileCard, type CheckinStage } from '../components/register/CustomerProfileCard';
+import { EmployeeAssistPanel } from '../components/register/EmployeeAssistPanel';
+import { CustomerAccountPanel } from '../components/register/panels/CustomerAccountPanel';
+import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerContent';
+import { InventoryDrawer, type InventoryDrawerSection } from '../components/inventory/InventoryDrawer';
+import { usePassiveScannerInput } from '../usePassiveScannerInput';
+import { useRegisterLaneSessionState } from './useRegisterLaneSessionState';
+import { useRegisterWebSocketEvents } from './useRegisterWebSocketEvents';
 
 interface HealthStatus {
   status: string;
   timestamp: string;
   uptime: number;
 }
+
+type PaymentQuote = ReturnType<typeof useRegisterLaneSessionState>['state']['paymentQuote'];
+
+type SessionDocument = {
+  id: string;
+  doc_type: string;
+  mime_type: string;
+  created_at: string;
+  has_signature: boolean;
+  signature_hash_prefix?: string;
+  has_pdf?: boolean;
+};
 
 const API_BASE = '/api';
 
@@ -87,6 +108,9 @@ function generateUUID(): string {
 }
 
 export function AppRoot() {
+  // Tablet usability tweaks (Employee Register ONLY): measure baseline typography before applying CSS bumps.
+  useEmployeeRegisterTabletUiTweaks();
+
   const [session, setSession] = useState<StaffSession | null>(() => {
     // Load session from localStorage on mount
     const stored = localStorage.getItem('staff_session');
@@ -102,10 +126,318 @@ export function AppRoot() {
   });
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
-  const [scanModeOpen, setScanModeOpen] = useState(false);
+  const [passiveScanProcessing, setPassiveScanProcessing] = useState(false);
+  const passiveScanProcessingRef = useRef(false);
+  const [scanOverlayMounted, setScanOverlayMounted] = useState(false);
+  const [scanOverlayActive, setScanOverlayActive] = useState(false);
+  const scanOverlayHideTimerRef = useRef<number | null>(null);
+  const scanOverlayShownAtRef = useRef<number | null>(null);
+  const SCAN_OVERLAY_MIN_VISIBLE_MS = 300;
+
+  type HomeTab =
+    | 'account'
+    | 'scan'
+    | 'search'
+    | 'inventory'
+    | 'upgrades'
+    | 'checkout'
+    | 'roomCleaning'
+    | 'firstTime';
+  const [homeTab, setHomeTab] = useState<HomeTab>('scan');
+  const [accountCustomerId, setAccountCustomerId] = useState<string | null>(null);
+  const [accountCustomerLabel, setAccountCustomerLabel] = useState<string | null>(null);
+  const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null);
+  const successToastTimerRef = useRef<number | null>(null);
+
+  const [bottomToasts, setBottomToasts] = useState<BottomToast[]>([]);
+  const bottomToastTimersRef = useRef<Record<string, number>>({});
+
+  const dismissBottomToast = useCallback((id: string) => {
+    const timer = bottomToastTimersRef.current[id];
+    if (timer) window.clearTimeout(timer);
+    delete bottomToastTimersRef.current[id];
+    setBottomToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const pushBottomToast = useCallback(
+    (toast: Omit<BottomToast, 'id'> & { id?: string }, ttlMs = 12_000) => {
+      const id = toast.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      setBottomToasts((prev) => [{ id, message: toast.message, tone: toast.tone }, ...prev].slice(0, 4));
+      if (bottomToastTimersRef.current[id]) window.clearTimeout(bottomToastTimersRef.current[id]);
+      bottomToastTimersRef.current[id] = window.setTimeout(() => dismissBottomToast(id), ttlMs);
+    },
+    [dismissBottomToast]
+  );
+
+  const [inventoryRefreshNonce, setInventoryRefreshNonce] = useState(0);
+  const [checkoutPrefill, setCheckoutPrefill] = useState<null | { occupancyId?: string; number?: string }>(null);
+  const [checkoutEntryMode, setCheckoutEntryMode] = useState<'default' | 'direct-confirm'>('default');
+  const checkoutReturnToTabRef = useRef<HomeTab | null>(null);
   const [manualEntry, setManualEntry] = useState(false);
-  const [customerName, setCustomerName] = useState('');
-  const [membershipNumber, setMembershipNumber] = useState('');
+  const [manualFirstName, setManualFirstName] = useState('');
+  const [manualLastName, setManualLastName] = useState('');
+  const [manualDobDigits, setManualDobDigits] = useState('');
+  const [manualEntrySubmitting, setManualEntrySubmitting] = useState(false);
+  const [manualExistingPrompt, setManualExistingPrompt] = useState<null | {
+    firstName: string;
+    lastName: string;
+    dobIso: string;
+    matchCount: number;
+    bestMatch: { id: string; name: string; membershipNumber?: string | null; dob?: string | null };
+  }>(null);
+  const [manualExistingPromptError, setManualExistingPromptError] = useState<string | null>(null);
+  const [manualExistingPromptSubmitting, setManualExistingPromptSubmitting] = useState(false);
+  const [inventoryForcedSection, setInventoryForcedSection] = useState<InventoryDrawerSection>(null);
+
+  useEffect(() => {
+    if (!successToastMessage) return;
+    if (successToastTimerRef.current) window.clearTimeout(successToastTimerRef.current);
+    successToastTimerRef.current = window.setTimeout(() => setSuccessToastMessage(null), 3000);
+    return () => {
+      if (successToastTimerRef.current) window.clearTimeout(successToastTimerRef.current);
+    };
+  }, [successToastMessage]);
+
+  useEffect(() => {
+    return () => {
+      for (const id of Object.keys(bottomToastTimersRef.current)) {
+        const timer = bottomToastTimersRef.current[id];
+        if (timer) window.clearTimeout(timer);
+      }
+      bottomToastTimersRef.current = {};
+    };
+  }, []);
+
+  const selectHomeTab = useCallback(
+    (next: HomeTab) => {
+      setHomeTab(next);
+      // First Time Customer tab drives manual entry mode.
+      setManualEntry(next === 'firstTime');
+      if (next !== 'checkout') {
+        setCheckoutPrefill(null);
+        setCheckoutEntryMode('default');
+        checkoutReturnToTabRef.current = null;
+      }
+    },
+    [setHomeTab]
+  );
+
+  const startCheckoutFromHome = useCallback(() => {
+    checkoutReturnToTabRef.current = null;
+    setCheckoutPrefill(null);
+    setCheckoutEntryMode('default');
+    selectHomeTab('checkout');
+  }, [selectHomeTab]);
+
+  const startCheckoutFromInventory = useCallback(
+    (prefill: { occupancyId?: string; number: string }) => {
+      checkoutReturnToTabRef.current = 'inventory';
+      setCheckoutEntryMode('direct-confirm');
+      setCheckoutPrefill(prefill);
+      selectHomeTab('checkout');
+    },
+    [selectHomeTab]
+  );
+
+  const startCheckoutFromCustomerAccount = useCallback(
+    (prefill?: { number?: string | null }) => {
+      checkoutReturnToTabRef.current = 'account';
+      const number = prefill?.number ?? null;
+      setCheckoutEntryMode(number ? 'direct-confirm' : 'default');
+      setCheckoutPrefill(number ? { number } : null);
+      selectHomeTab('checkout');
+    },
+    [selectHomeTab]
+  );
+
+  const exitCheckout = useCallback(() => {
+    const returnTo = checkoutReturnToTabRef.current;
+    checkoutReturnToTabRef.current = null;
+    setCheckoutPrefill(null);
+    setCheckoutEntryMode('default');
+    if (returnTo) {
+      selectHomeTab(returnTo);
+      return;
+    }
+    selectHomeTab('scan');
+  }, [selectHomeTab]);
+
+  // ---------------------------------------------------------------------------
+  // Lane-session view model (reducer) + WS-driven updates
+  // ---------------------------------------------------------------------------
+  const { state: laneSession, actions: laneSessionActions } = useRegisterLaneSessionState();
+  const {
+    customerName,
+    membershipNumber,
+    currentSessionId,
+    agreementSigned,
+    customerSelectedType,
+    waitlistDesiredTier,
+    waitlistBackupType,
+    proposedRentalType,
+    proposedBy,
+    selectionConfirmed,
+    paymentIntentId,
+    paymentQuote,
+    paymentStatus,
+    membershipPurchaseIntent,
+    membershipChoice,
+    customerMembershipValidUntil,
+    allowedRentals,
+    pastDueBlocked,
+    pastDueBalance,
+    customerPrimaryLanguage,
+    customerDobMonthDay,
+    customerLastVisitAt,
+    customerNotes,
+    assignedResourceType,
+    assignedResourceNumber,
+    checkoutAt,
+    paymentDeclineError,
+  } = laneSession;
+
+  // Keep naming stable throughout the existing component by providing setter wrappers.
+  const setCustomerName = useCallback(
+    (value: string) => laneSessionActions.patch({ customerName: value }),
+    [laneSessionActions]
+  );
+  const setMembershipNumber = useCallback(
+    (value: string) => laneSessionActions.patch({ membershipNumber: value }),
+    [laneSessionActions]
+  );
+  const setCurrentSessionId = useCallback(
+    (value: string | null) => laneSessionActions.patch({ currentSessionId: value }),
+    [laneSessionActions]
+  );
+  const setCurrentSessionCustomerId = useCallback(
+    (value: string | null) => laneSessionActions.patch({ customerId: value }),
+    [laneSessionActions]
+  );
+  const setAgreementSigned = useCallback(
+    (value: boolean) => laneSessionActions.patch({ agreementSigned: value }),
+    [laneSessionActions]
+  );
+  const setCustomerSelectedType = useCallback(
+    (value: string | null) => laneSessionActions.patch({ customerSelectedType: value }),
+    [laneSessionActions]
+  );
+  const setWaitlistDesiredTier = useCallback(
+    (value: string | null) => laneSessionActions.patch({ waitlistDesiredTier: value }),
+    [laneSessionActions]
+  );
+  const setWaitlistBackupType = useCallback(
+    (value: string | null) => laneSessionActions.patch({ waitlistBackupType: value }),
+    [laneSessionActions]
+  );
+  const setSelectionConfirmed = useCallback(
+    (value: boolean) => laneSessionActions.patch({ selectionConfirmed: value }),
+    [laneSessionActions]
+  );
+  const setPaymentIntentId = useCallback(
+    (value: string | null) => laneSessionActions.patch({ paymentIntentId: value }),
+    [laneSessionActions]
+  );
+  const setPaymentQuote = useCallback(
+    (value: PaymentQuote | ((prev: PaymentQuote) => PaymentQuote)) => {
+      if (typeof value === 'function') {
+        laneSessionActions.patch({ paymentQuote: value(paymentQuote) });
+        return;
+      }
+      laneSessionActions.patch({ paymentQuote: value });
+    },
+    [laneSessionActions, paymentQuote]
+  );
+  const setPaymentStatus = useCallback(
+    (value: 'DUE' | 'PAID' | null) => laneSessionActions.patch({ paymentStatus: value }),
+    [laneSessionActions]
+  );
+  const setCustomerPrimaryLanguage = useCallback(
+    (value: 'EN' | 'ES' | undefined) => laneSessionActions.patch({ customerPrimaryLanguage: value }),
+    [laneSessionActions]
+  );
+  const setCustomerDobMonthDay = useCallback(
+    (value: string | undefined) => laneSessionActions.patch({ customerDobMonthDay: value }),
+    [laneSessionActions]
+  );
+  const setCustomerLastVisitAt = useCallback(
+    (value: string | undefined) => laneSessionActions.patch({ customerLastVisitAt: value }),
+    [laneSessionActions]
+  );
+  const setCustomerNotes = useCallback(
+    (value: string | undefined) => laneSessionActions.patch({ customerNotes: value }),
+    [laneSessionActions]
+  );
+  const setAssignedResourceType = useCallback(
+    (value: 'room' | 'locker' | null) => laneSessionActions.patch({ assignedResourceType: value }),
+    [laneSessionActions]
+  );
+  const setAssignedResourceNumber = useCallback(
+    (value: string | null) => laneSessionActions.patch({ assignedResourceNumber: value }),
+    [laneSessionActions]
+  );
+  const setCheckoutAt = useCallback(
+    (value: string | null) => laneSessionActions.patch({ checkoutAt: value }),
+    [laneSessionActions]
+  );
+  const setPaymentDeclineError = useCallback(
+    (value: string | null) => laneSessionActions.setPaymentDeclineError(value),
+    [laneSessionActions]
+  );
+
+  const checkinStage: CheckinStage | null = useMemo(() => {
+    if (!currentSessionId || !customerName) return null;
+
+    // 6 - Assigned
+    if (assignedResourceType && assignedResourceNumber) {
+      return { number: 6, label: 'Locker/Room Assigned' };
+    }
+
+    // 5 - Signing agreement (after rental confirmation, before assignment)
+    if (agreementSigned) {
+      // In practice assignment follows immediately; treat as stage 6 when agreement is already signed.
+      return { number: 6, label: 'Locker/Room Assigned' };
+    }
+    if (selectionConfirmed) {
+      return { number: 5, label: 'Signing Member Agreement' };
+    }
+
+    // 4 - Employee confirms customer selection
+    if (proposedBy === 'CUSTOMER' && proposedRentalType) {
+      return { number: 4, label: 'Employee Rental Confirmation' };
+    }
+
+    // 1 - Language selection
+    if (!customerPrimaryLanguage) {
+      return { number: 1, label: 'Language Selection' };
+    }
+
+    // 2 - Membership options (only when needed)
+    const membershipStatus = getCustomerMembershipStatus(
+      { membershipNumber: membershipNumber || null, membershipValidUntil: customerMembershipValidUntil || null },
+      new Date()
+    );
+    const isMember = membershipPurchaseIntent ? true : membershipStatus === 'ACTIVE';
+    if (!isMember && !membershipChoice) {
+      return { number: 2, label: 'Membership Options' };
+    }
+
+    // 3 - Rental options
+    return { number: 3, label: 'Rental Options' };
+  }, [
+    agreementSigned,
+    assignedResourceNumber,
+    assignedResourceType,
+    customerMembershipValidUntil,
+    customerName,
+    customerPrimaryLanguage,
+    currentSessionId,
+    membershipChoice,
+    membershipNumber,
+    membershipPurchaseIntent,
+    proposedBy,
+    proposedRentalType,
+    selectionConfirmed,
+  ]);
   const [pendingCreateFromScan, setPendingCreateFromScan] = useState<{
     idScanValue: string;
     idScanHash: string | null;
@@ -123,11 +455,29 @@ export function AppRoot() {
       postalCode?: string;
     };
   } | null>(null);
+  const [showCreateFromScanPrompt, setShowCreateFromScanPrompt] = useState(false);
+  const [createFromScanError, setCreateFromScanError] = useState<string | null>(null);
+  const [createFromScanSubmitting, setCreateFromScanSubmitting] = useState(false);
+
+  const [pendingScanResolution, setPendingScanResolution] = useState<null | {
+    rawScanText: string;
+    extracted?: {
+      firstName?: string;
+      lastName?: string;
+      fullName?: string;
+      dob?: string;
+      idNumber?: string;
+      issuer?: string;
+      jurisdiction?: string;
+    };
+    candidates: MultipleMatchCandidate[];
+  }>(null);
+  const [scanResolutionError, setScanResolutionError] = useState<string | null>(null);
+  const [scanResolutionSubmitting, setScanResolutionSubmitting] = useState(false);
+  const [scanToastMessage, setScanToastMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [agreementSigned, setAgreementSigned] = useState(false);
   // Check-in mode is now auto-detected server-side based on active visits/assignments.
-  const [selectedRentalType, setSelectedRentalType] = useState<string | null>(null);
+  const [, setSelectedRentalType] = useState<string | null>(null);
   const [checkoutRequests, setCheckoutRequests] = useState<Map<string, CheckoutRequestSummary>>(
     new Map()
   );
@@ -135,40 +485,34 @@ export function AppRoot() {
   const [, setCheckoutChecklist] = useState<CheckoutChecklist>({});
   const [checkoutItemsConfirmed, setCheckoutItemsConfirmed] = useState(false);
   const [checkoutFeePaid, setCheckoutFeePaid] = useState(false);
-  const [customerSelectedType, setCustomerSelectedType] = useState<string | null>(null);
-  const [waitlistDesiredTier, setWaitlistDesiredTier] = useState<string | null>(null);
-  const [waitlistBackupType, setWaitlistBackupType] = useState<string | null>(null);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState<{
     type: 'room' | 'locker';
     id: string;
     number: string;
     tier: string;
   } | null>(null);
-  const [proposedRentalType, setProposedRentalType] = useState<string | null>(null);
-  const [proposedBy, setProposedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
-  const [selectionConfirmed, setSelectionConfirmed] = useState(false);
-  const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(
-    null
-  );
-  const [selectionAcknowledged, setSelectionAcknowledged] = useState(true);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const openCustomerAccount = useCallback(
+    (customerId: string, label?: string | null) => {
+      setAccountCustomerId(customerId);
+      setAccountCustomerLabel(label ?? null);
+      selectHomeTab('account');
+    },
+    [selectHomeTab]
+  );
   const [showCustomerConfirmationPending, setShowCustomerConfirmationPending] = useState(false);
   const [customerConfirmationType, setCustomerConfirmationType] = useState<{
     requested: string;
     selected: string;
     number: string;
   } | null>(null);
-  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
-  const [paymentQuote, setPaymentQuote] = useState<{
-    total: number;
-    lineItems: Array<{ description: string; amount: number }>;
-    messages: string[];
-  } | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<'DUE' | 'PAID' | null>(null);
-  const [membershipPurchaseIntent, setMembershipPurchaseIntent] = useState<'PURCHASE' | 'RENEW' | null>(
-    null
-  );
-  const [customerMembershipValidUntil, setCustomerMembershipValidUntil] = useState<string | null>(null);
+  // payment + membership state lives in laneSession reducer
+
+  // Agreement/PDF verification (staff-only)
+  const [documentsModalOpen, setDocumentsModalOpen] = useState(false);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentsForSession, setDocumentsForSession] = useState<SessionDocument[] | null>(null);
 
   // Keep WebSocket handlers stable while still reading the latest values.
   const selectedCheckoutRequestRef = useRef<string | null>(null);
@@ -180,6 +524,20 @@ export function AppRoot() {
   useEffect(() => {
     currentSessionIdRef.current = currentSessionId;
   }, [currentSessionId]);
+
+  // When a session becomes active via any entry path (scan/search/first-time),
+  // bring the operator to the Customer Account panel automatically.
+  const prevSessionIdForTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevSessionIdForTabRef.current;
+    prevSessionIdForTabRef.current = currentSessionId;
+    if (!prev && currentSessionId) {
+      if (laneSession.customerId && !accountCustomerId) {
+        setAccountCustomerId(laneSession.customerId);
+      }
+      selectHomeTab('account');
+    }
+  }, [accountCustomerId, currentSessionId, laneSession.customerId, selectHomeTab]);
 
   const customerSelectedTypeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -194,12 +552,13 @@ export function AppRoot() {
   const [membershipIdPromptedForSessionId, setMembershipIdPromptedForSessionId] = useState<string | null>(
     null
   );
-  const [pastDueBlocked, setPastDueBlocked] = useState(false);
+  // past-due state lives in laneSession reducer
   const [waitlistEntries, setWaitlistEntries] = useState<
     Array<{
       id: string;
       visitId: string;
       checkinBlockId: string;
+      customerId?: string;
       desiredTier: string;
       backupTier: string;
       status: string;
@@ -220,9 +579,7 @@ export function AppRoot() {
     waitlistDemand: Record<string, number>;
     lockers: number;
   }>(null);
-  const [availabilityModalType, setAvailabilityModalType] = useState<AvailabilityModalType>(null);
-  const [showUpgradesPanel, setShowUpgradesPanel] = useState(false);
-  const [selectedWaitlistEntry, setSelectedWaitlistEntry] = useState<string | null>(null);
+  const [, setSelectedWaitlistEntry] = useState<string | null>(null);
   const [upgradePaymentIntentId, setUpgradePaymentIntentId] = useState<string | null>(null);
   const [upgradeFee, setUpgradeFee] = useState<number | null>(null);
   const [upgradePaymentStatus, setUpgradePaymentStatus] = useState<'DUE' | 'PAID' | null>(null);
@@ -237,20 +594,16 @@ export function AppRoot() {
     offeredRoomNumber?: string | null;
     newRoomNumber?: string | null;
   } | null>(null);
-  const [showUpgradePulse, setShowUpgradePulse] = useState(false);
+  const [, setShowUpgradePulse] = useState(false);
   const [offerUpgradeModal, setOfferUpgradeModal] = useState<{
     waitlistId: string;
     desiredTier: 'STANDARD' | 'DOUBLE' | 'SPECIAL';
     customerLabel?: string;
+    heldRoom?: { id: string; number: string } | null;
   } | null>(null);
+  const [inventoryHasLate, setInventoryHasLate] = useState(false);
 
-  // Customer info state
-  const [customerPrimaryLanguage, setCustomerPrimaryLanguage] = useState<'EN' | 'ES' | undefined>(
-    undefined
-  );
-  const [customerDobMonthDay, setCustomerDobMonthDay] = useState<string | undefined>(undefined);
-  const [customerLastVisitAt, setCustomerLastVisitAt] = useState<string | undefined>(undefined);
-  const [customerNotes, setCustomerNotes] = useState<string | undefined>(undefined);
+  // Customer info state lives in laneSession reducer
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [newNoteText, setNewNoteText] = useState('');
 
@@ -260,8 +613,15 @@ export function AppRoot() {
   const [managerId, setManagerId] = useState('');
   const [managerPin, setManagerPin] = useState('');
   const [managerList, setManagerList] = useState<Array<{ id: string; name: string }>>([]);
-  const [paymentDeclineError, setPaymentDeclineError] = useState<string | null>(null);
+  // payment decline state lives in laneSession reducer
   const paymentIntentCreateInFlightRef = useRef(false);
+
+  // Keep past-due modal behavior consistent with prior WS handler: auto-open when server blocks.
+  useEffect(() => {
+    if (pastDueBlocked && pastDueBalance > 0) {
+      setShowPastDueModal(true);
+    }
+  }, [pastDueBlocked, pastDueBalance]);
   const fetchWaitlistRef = useRef<(() => Promise<void>) | null>(null);
   const fetchInventoryAvailableRef = useRef<(() => Promise<void>) | null>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
@@ -278,13 +638,8 @@ export function AppRoot() {
     }>
   >([]);
   const [customerSearchLoading, setCustomerSearchLoading] = useState(false);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [selectedCustomerLabel, setSelectedCustomerLabel] = useState<string | null>(null);
 
-  // Assignment completion state
-  const [assignedResourceType, setAssignedResourceType] = useState<'room' | 'locker' | null>(null);
-  const [assignedResourceNumber, setAssignedResourceNumber] = useState<string | null>(null);
-  const [checkoutAt, setCheckoutAt] = useState<string | null>(null);
+  // Assignment completion state lives in laneSession reducer
 
   const deviceId = useState(() => {
     try {
@@ -292,11 +647,9 @@ export function AppRoot() {
       // In development, you may have multiple tabs open; we add a per-tab instance suffix
       // (stored in sessionStorage) so two tabs on the same machine can sign into
       // different registers without colliding on deviceId.
-      const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
-      const envDeviceId = env?.['VITE_DEVICE_ID'];
-      if (typeof envDeviceId === 'string' && envDeviceId.trim()) {
-        return envDeviceId;
-      }
+      const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+      const envDeviceId = typeof rawEnv.VITE_DEVICE_ID === 'string' ? rawEnv.VITE_DEVICE_ID : null;
+      if (envDeviceId && envDeviceId.trim()) return envDeviceId.trim();
 
       let baseId: string | null = null;
       try {
@@ -388,8 +741,9 @@ export function AppRoot() {
     if (!confirmed) return;
     await handleLogout();
   };
-  const runCustomerSearch = useCallback(
-    debounce(async (query: string) => {
+  const runCustomerSearch = useMemo(
+    () =>
+      debounce(async (query: string) => {
       if (!session?.sessionToken || query.trim().length < 3) {
         setCustomerSuggestions([]);
         setCustomerSearchLoading(false);
@@ -426,64 +780,17 @@ export function AppRoot() {
       } finally {
         setCustomerSearchLoading(false);
       }
-    }, 200),
+      }, 200),
     [session?.sessionToken]
   );
 
   useEffect(() => {
     if (customerSearch.trim().length >= 3) {
-      setSelectedCustomerId(null);
-      setSelectedCustomerLabel(null);
       runCustomerSearch(customerSearch);
     } else {
       setCustomerSuggestions([]);
-      setSelectedCustomerId(null);
-      setSelectedCustomerLabel(null);
     }
   }, [customerSearch, runCustomerSearch]);
-
-  const handleConfirmCustomerSelection = async () => {
-    if (!session?.sessionToken || !selectedCustomerId) return;
-    setIsSubmitting(true);
-    try {
-      // Customer search selection should attach to the *check-in lane session* system
-      // (lane_sessions), not legacy sessions, so downstream kiosk endpoints (set-language, etc.)
-      // can resolve the active session.
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          customerId: selectedCustomerId,
-        }),
-      });
-
-      if (!response.ok) {
-        const payload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(payload) || 'Failed to start session');
-      }
-
-      const data = (await response.json()) as {
-        sessionId?: string;
-        customerName?: string;
-        membershipNumber?: string;
-      };
-      if (data.customerName) setCustomerName(data.customerName);
-      if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
-      if (data.sessionId) setCurrentSessionId(data.sessionId);
-
-      // Clear search UI
-      setCustomerSearch('');
-      setCustomerSuggestions([]);
-    } catch (error) {
-      console.error('Failed to confirm customer:', error);
-      alert(error instanceof Error ? error.message : 'Failed to confirm customer');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   // Load staff session from localStorage (created after register sign-in)
   useEffect(() => {
@@ -523,188 +830,121 @@ export function AppRoot() {
     [setRegisterSession, setSession]
   );
 
-  const handleIdScan = async (
-    payload: IdScanPayload,
-    opts?: { suppressAlerts?: boolean }
-  ): Promise<ScanModeResult> => {
-    if (!session?.sessionToken) {
-      const msg = 'Not authenticated';
-      if (!opts?.suppressAlerts) alert(msg);
-      return { outcome: 'error', message: msg };
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/scan-id`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        const msg = getErrorMessage(errorPayload) || 'Failed to scan ID';
-        if (!opts?.suppressAlerts) alert(msg);
-        // Treat 400 as "no match / invalid ID data", keep scan mode open.
-        if (response.status === 400) return { outcome: 'no_match', message: msg };
-        return { outcome: 'error', message: msg };
-      }
-
-      const data = await readJson<{
-        customerName?: string;
-        membershipNumber?: string;
-        sessionId?: string;
-      }>(response);
-      console.log('ID scanned, session updated:', data);
-
-      // Update local state
-      if (data.customerName) setCustomerName(data.customerName);
-      if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
-      if (data.sessionId) setCurrentSessionId(data.sessionId);
-
-      return { outcome: 'matched' };
-    } catch (error) {
-      console.error('Failed to scan ID:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to scan ID';
-      if (!opts?.suppressAlerts) alert(msg);
-      return { outcome: 'error', message: msg };
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleManualIdEntry = async (name: string, idNumber?: string, dob?: string) => {
-    const payload: IdScanPayload = {
-      fullName: name,
-      idNumber: idNumber || undefined,
-      dob: dob || undefined,
-    };
-    await handleIdScan(payload);
-  };
-
-  const startLaneSession = async (
-    idScanValue: string,
-    membershipScanValue?: string | null,
-    opts?: { suppressAlerts?: boolean }
-  ): Promise<ScanModeResult> => {
-    if (!session?.sessionToken) {
-      const msg = 'Not authenticated';
-      if (!opts?.suppressAlerts) alert(msg);
-      return { outcome: 'error', message: msg };
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          idScanValue,
-          membershipScanValue: membershipScanValue || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        const msg = getErrorMessage(errorPayload) || 'Failed to start session';
-        if (!opts?.suppressAlerts) alert(msg);
-        return { outcome: 'error', message: msg };
-      }
-
-      const data = await readJson<{
-        customerName?: string;
-        membershipNumber?: string;
-        sessionId?: string;
-      }>(response);
-      console.log('Session started:', data);
-
-      // Update local state
-      if (data.customerName) setCustomerName(data.customerName);
-      if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
-      if (data.sessionId) setCurrentSessionId(data.sessionId);
-
-      // Clear manual entry mode if active
-      if (manualEntry) {
-        setManualEntry(false);
-      }
-      return { outcome: 'matched' };
-    } catch (error) {
-      console.error('Failed to start session:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to start session';
-      if (!opts?.suppressAlerts) alert(msg);
-      return { outcome: 'error', message: msg };
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const startLaneSessionByCustomerId = async (
+  const startLaneSessionByCustomerId = useCallback(
+    (
     customerId: string,
-    opts?: { suppressAlerts?: boolean }
-  ): Promise<ScanModeResult> => {
+    opts?: { suppressAlerts?: boolean; customerLabel?: string | null }
+  ): Promise<ScanResult> => {
     if (!session?.sessionToken) {
       const msg = 'Not authenticated';
       if (!opts?.suppressAlerts) alert(msg);
-      return { outcome: 'error', message: msg };
+      return Promise.resolve({ outcome: 'error', message: msg });
     }
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/start`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({ customerId }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        const msg = getErrorMessage(errorPayload) || 'Failed to start session';
-        if (!opts?.suppressAlerts) alert(msg);
-        return { outcome: 'error', message: msg };
-      }
-
-      const data = await readJson<{
-        sessionId?: string;
-        customerName?: string;
-        membershipNumber?: string;
-      }>(response);
-
-      if (data.customerName) setCustomerName(data.customerName);
-      if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
-      if (data.sessionId) setCurrentSessionId(data.sessionId);
-
+      openCustomerAccount(customerId, opts?.customerLabel ?? null);
       if (manualEntry) setManualEntry(false);
-      return { outcome: 'matched' };
+      return Promise.resolve({ outcome: 'matched' });
     } catch (error) {
-      console.error('Failed to start session by customerId:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to start session';
+      console.error('Failed to open customer account:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to open customer account';
       if (!opts?.suppressAlerts) alert(msg);
-      return { outcome: 'error', message: msg };
+      return Promise.resolve({ outcome: 'error', message: msg });
     } finally {
       setIsSubmitting(false);
     }
-  };
+  },
+    [manualEntry, openCustomerAccount, session?.sessionToken]
+  );
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim()) {
-      alert('Please enter customer name');
+    const firstName = manualFirstName.trim();
+    const lastName = manualLastName.trim();
+    const dobIso = parseDobDigitsToIso(manualDobDigits);
+    if (!firstName || !lastName || !dobIso) {
+      alert('Please enter First Name, Last Name, and a valid Date of Birth (MM/DD/YYYY).');
       return;
     }
-    // Use scan-id endpoint for manual entry too (with minimal payload)
-    await handleManualIdEntry(customerName.trim());
+    if (!session?.sessionToken) {
+      alert('Not authenticated');
+      return;
+    }
+
+    setManualEntrySubmitting(true);
+    setManualExistingPromptError(null);
+    try {
+      // First: check for existing customer match (name + dob).
+      const matchRes = await fetch(`${API_BASE}/v1/customers/match-identity`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ firstName, lastName, dob: dobIso }),
+      });
+
+      const matchPayload: unknown = await matchRes.json().catch(() => null);
+      if (!matchRes.ok) {
+        const msg = getErrorMessage(matchPayload) || 'Failed to check for existing customer';
+        setManualExistingPromptError(msg);
+        return;
+      }
+
+      const data = matchPayload as {
+        matchCount?: number;
+        bestMatch?: { id?: string; name?: string; membershipNumber?: string | null; dob?: string | null } | null;
+      };
+      const best = data.bestMatch;
+      const matchCount = typeof data.matchCount === 'number' ? data.matchCount : 0;
+      if (best && typeof best.id === 'string' && typeof best.name === 'string') {
+        // Show confirmation prompt instead of creating a duplicate immediately.
+        setManualExistingPrompt({
+          firstName,
+          lastName,
+          dobIso,
+          matchCount,
+          bestMatch: { id: best.id, name: best.name, membershipNumber: best.membershipNumber, dob: best.dob },
+        });
+        return;
+      }
+
+      // No match: create new customer then load it.
+      const createRes = await fetch(`${API_BASE}/v1/customers/create-manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ firstName, lastName, dob: dobIso }),
+      });
+      const createPayload: unknown = await createRes.json().catch(() => null);
+      if (!createRes.ok) {
+        const msg = getErrorMessage(createPayload) || 'Failed to create customer';
+        setManualExistingPromptError(msg);
+        return;
+      }
+      const created = createPayload as { customer?: { id?: string } };
+      const newId = created.customer?.id;
+      if (!newId) {
+        setManualExistingPromptError('Create returned no customer id');
+        return;
+      }
+
+      const result = await startLaneSessionByCustomerId(newId, { suppressAlerts: true });
+      if (result.outcome === 'matched') {
+        setManualEntry(false);
+        setManualFirstName('');
+        setManualLastName('');
+        setManualDobDigits('');
+      }
+    } finally {
+      setManualEntrySubmitting(false);
+    }
   };
 
-  const onBarcodeCaptured = async (rawScanText: string): Promise<ScanModeResult> => {
+  const onBarcodeCaptured = useCallback(async (rawScanText: string): Promise<ScanResult> => {
     if (!session?.sessionToken) {
       return { outcome: 'error', message: 'Not authenticated' };
     }
@@ -729,7 +969,7 @@ export function AppRoot() {
       }
 
       const data = payload as {
-        result: 'MATCHED' | 'NO_MATCH' | 'ERROR';
+        result: 'MATCHED' | 'NO_MATCH' | 'MULTIPLE_MATCHES' | 'ERROR';
         scanType?: 'STATE_ID' | 'MEMBERSHIP';
         customer?: { id: string; name: string; membershipNumber: string | null };
         extracted?: {
@@ -741,6 +981,13 @@ export function AppRoot() {
           issuer?: string;
           jurisdiction?: string;
         };
+        candidates?: Array<{
+          id: string;
+          name: string;
+          dob: string | null;
+          membershipNumber: string | null;
+          matchScore: number;
+        }>;
         normalizedRawScanText?: string;
         idScanHash?: string;
         membershipCandidate?: string;
@@ -753,8 +1000,35 @@ export function AppRoot() {
 
       if (data.result === 'MATCHED' && data.customer?.id) {
         setPendingCreateFromScan(null);
+        setShowCreateFromScanPrompt(false);
+        setCreateFromScanError(null);
+        setPendingScanResolution(null);
+        setScanResolutionError(null);
         // Open customer record (start lane session) using the resolved customerId.
         return await startLaneSessionByCustomerId(data.customer.id, { suppressAlerts: true });
+      }
+
+      if (data.result === 'MULTIPLE_MATCHES' && data.scanType === 'STATE_ID') {
+        const extracted = data.extracted || {};
+        setPendingCreateFromScan(null);
+        setShowCreateFromScanPrompt(false);
+        setCreateFromScanError(null);
+        setScanResolutionError(null);
+        setPendingScanResolution({
+          rawScanText,
+          extracted: {
+            firstName: extracted.firstName,
+            lastName: extracted.lastName,
+            fullName: extracted.fullName,
+            dob: extracted.dob,
+            idNumber: extracted.idNumber,
+            issuer: extracted.issuer,
+            jurisdiction: extracted.jurisdiction,
+          },
+          candidates: (data.candidates || []).slice(0, 10),
+        });
+        // Let the employee select the correct customer.
+        return { outcome: 'matched' };
       }
 
       // NO_MATCH
@@ -792,9 +1066,175 @@ export function AppRoot() {
       console.error('Scan failed:', error);
       return { outcome: 'error', message: error instanceof Error ? error.message : 'Scan failed' };
     }
-  };
+  }, [lane, session?.sessionToken, startLaneSessionByCustomerId]);
 
-  const handleCreateFromNoMatch = async (): Promise<ScanModeResult> => {
+  const blockingModalOpen =
+    !!pendingScanResolution ||
+    showCreateFromScanPrompt ||
+    showPastDueModal ||
+    showManagerBypassModal ||
+    showMembershipIdPrompt ||
+    showUpgradePaymentModal ||
+    showAddNoteModal ||
+    documentsModalOpen ||
+    !!offerUpgradeModal ||
+    (showWaitlistModal && !!waitlistDesiredTier && !!waitlistBackupType) ||
+    (showCustomerConfirmationPending && !!customerConfirmationType) ||
+    !!selectedCheckoutRequest;
+
+  const passiveScanEnabled =
+    homeTab === 'scan' &&
+    !!session?.sessionToken &&
+    !passiveScanProcessing &&
+    !isSubmitting &&
+    !manualEntry &&
+    !blockingModalOpen;
+
+  const showScanOverlay = useCallback(() => {
+    if (scanOverlayHideTimerRef.current) {
+      window.clearTimeout(scanOverlayHideTimerRef.current);
+      scanOverlayHideTimerRef.current = null;
+    }
+    scanOverlayShownAtRef.current = performance.now();
+    setScanOverlayMounted(true);
+    // Ensure CSS transition runs by toggling active on next frame.
+    window.requestAnimationFrame(() => setScanOverlayActive(true));
+  }, []);
+
+  const hideScanOverlay = useCallback(() => {
+    const shownAt = scanOverlayShownAtRef.current;
+    const elapsed = shownAt ? performance.now() - shownAt : Number.POSITIVE_INFINITY;
+    const remaining = Math.max(0, SCAN_OVERLAY_MIN_VISIBLE_MS - elapsed);
+
+    if (scanOverlayHideTimerRef.current) {
+      window.clearTimeout(scanOverlayHideTimerRef.current);
+      scanOverlayHideTimerRef.current = null;
+    }
+
+    scanOverlayHideTimerRef.current = window.setTimeout(() => {
+      setScanOverlayActive(false);
+      // After fade-out, fully unmount.
+      window.setTimeout(() => {
+        setScanOverlayMounted(false);
+        scanOverlayHideTimerRef.current = null;
+        scanOverlayShownAtRef.current = null;
+      }, 220);
+    }, remaining);
+  }, []);
+
+  const handlePassiveCapture = useCallback(
+    (rawScanText: string) => {
+      void (async () => {
+        setScanToastMessage(null);
+        passiveScanProcessingRef.current = true;
+        setPassiveScanProcessing(true);
+        const result = await onBarcodeCaptured(rawScanText);
+        passiveScanProcessingRef.current = false;
+        setPassiveScanProcessing(false);
+        hideScanOverlay();
+        if (result.outcome === 'no_match') {
+          if (result.canCreate) {
+            setCreateFromScanError(null);
+            setShowCreateFromScanPrompt(true);
+          } else {
+            setScanToastMessage(result.message);
+          }
+          return;
+        }
+        if (result.outcome === 'error') {
+          setScanToastMessage(result.message);
+        }
+      })();
+    },
+    [hideScanOverlay, onBarcodeCaptured]
+  );
+
+  usePassiveScannerInput({
+    enabled: passiveScanEnabled,
+    onCaptureStart: () => showScanOverlay(),
+    onCaptureEnd: () => {
+      // If the capture ended but no processing started (e.g. too-short scan), undim.
+      if (!passiveScanProcessingRef.current) hideScanOverlay();
+    },
+    onCancel: () => {
+      passiveScanProcessingRef.current = false;
+      setPassiveScanProcessing(false);
+      hideScanOverlay();
+    },
+    onCapture: (raw) => handlePassiveCapture(raw),
+  });
+
+  // Cleanup overlay timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (scanOverlayHideTimerRef.current) {
+        window.clearTimeout(scanOverlayHideTimerRef.current);
+        scanOverlayHideTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const resolvePendingScanSelection = useCallback(
+    async (customerId: string) => {
+      if (!pendingScanResolution) return;
+      if (!session?.sessionToken) {
+        setScanResolutionError('Not authenticated');
+        return;
+      }
+      setScanResolutionSubmitting(true);
+      setScanResolutionError(null);
+      try {
+        const response = await fetch(`${API_BASE}/v1/checkin/scan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({
+            laneId: lane,
+            rawScanText: pendingScanResolution.rawScanText,
+            selectedCustomerId: customerId,
+          }),
+        });
+
+        const payload: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const msg =
+            (payload as { error?: { message?: string } } | null)?.error?.message ||
+            getErrorMessage(payload) ||
+            'Failed to resolve scan';
+          setScanResolutionError(msg);
+          return;
+        }
+
+        const data = payload as {
+          result: 'MATCHED' | 'NO_MATCH' | 'MULTIPLE_MATCHES' | 'ERROR';
+          customer?: { id?: string };
+          error?: { code?: string; message?: string };
+        };
+
+        if (data.result === 'ERROR') {
+          setScanResolutionError(data.error?.message || 'Failed to resolve scan');
+          return;
+        }
+        if (data.result === 'MATCHED' && data.customer?.id) {
+          setPendingScanResolution(null);
+          setScanResolutionError(null);
+          await startLaneSessionByCustomerId(data.customer.id, { suppressAlerts: true });
+          return;
+        }
+
+        setScanResolutionError('Could not resolve scan. Please try again.');
+      } catch (err) {
+        setScanResolutionError(err instanceof Error ? err.message : 'Failed to resolve scan');
+      } finally {
+        setScanResolutionSubmitting(false);
+      }
+    },
+    [lane, pendingScanResolution, session?.sessionToken, startLaneSessionByCustomerId]
+  );
+
+  const handleCreateFromNoMatch = async (): Promise<ScanResult> => {
     if (!pendingCreateFromScan) {
       return { outcome: 'error', message: 'Nothing to create (no pending scan)' };
     }
@@ -823,11 +1263,6 @@ export function AppRoot() {
           firstName,
           lastName,
           dob,
-          fullName: extracted.fullName || undefined,
-          addressLine1: extracted.addressLine1 || undefined,
-          city: extracted.city || undefined,
-          state: extracted.state || undefined,
-          postalCode: extracted.postalCode || undefined,
         }),
       });
 
@@ -844,6 +1279,8 @@ export function AppRoot() {
       }
 
       setPendingCreateFromScan(null);
+      setShowCreateFromScanPrompt(false);
+      setCreateFromScanError(null);
       return await startLaneSessionByCustomerId(customerId, { suppressAlerts: true });
     } catch (error) {
       console.error('Failed to create customer from scan:', error);
@@ -877,6 +1314,9 @@ export function AppRoot() {
       setCustomerName('');
       setMembershipNumber('');
       setCurrentSessionId(null);
+      setCurrentSessionCustomerId(null);
+      setAccountCustomerId(null);
+      setAccountCustomerLabel(null);
       setAgreementSigned(false);
       setManualEntry(false);
       setSelectedRentalType(null);
@@ -1126,6 +1566,49 @@ export function AppRoot() {
     }
   };
 
+  const fetchDocumentsBySession = useCallback(
+    async (laneSessionId: string) => {
+      if (!session?.sessionToken) return;
+      setDocumentsLoading(true);
+      setDocumentsError(null);
+      try {
+        const res = await fetch(`${API_BASE}/v1/documents/by-session/${laneSessionId}`, {
+          headers: { Authorization: `Bearer ${session.sessionToken}` },
+        });
+        if (!res.ok) {
+          const errPayload: unknown = await res.json().catch(() => null);
+          throw new Error(getErrorMessage(errPayload) || 'Failed to load documents');
+        }
+        const data = (await res.json()) as { documents?: SessionDocument[] };
+        setDocumentsForSession(Array.isArray(data.documents) ? data.documents : []);
+      } catch (e) {
+        setDocumentsForSession(null);
+        setDocumentsError(e instanceof Error ? e.message : 'Failed to load documents');
+      } finally {
+        setDocumentsLoading(false);
+      }
+    },
+    [session?.sessionToken]
+  );
+
+  const downloadAgreementPdf = useCallback(
+    async (documentId: string) => {
+      if (!session?.sessionToken) return;
+      const res = await fetch(`${API_BASE}/v1/documents/${documentId}/download`, {
+        headers: { Authorization: `Bearer ${session.sessionToken}` },
+      });
+      if (!res.ok) {
+        const errPayload: unknown = await res.json().catch(() => null);
+        throw new Error(getErrorMessage(errPayload) || 'Failed to download PDF');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    [session?.sessionToken]
+  );
+
   fetchWaitlistRef.current = fetchWaitlist;
   fetchInventoryAvailableRef.current = fetchInventoryAvailable;
 
@@ -1137,13 +1620,13 @@ export function AppRoot() {
     }
   }, [session?.sessionToken]);
 
-  // 30s live refresh for waitlist + availability
+  // 60s polling fallback for waitlist + availability (WebSocket is primary)
   useEffect(() => {
     if (!session?.sessionToken) return;
     const interval = window.setInterval(() => {
       void fetchWaitlistRef.current?.();
       void fetchInventoryAvailableRef.current?.();
-    }, 30000);
+    }, 60000);
     return () => window.clearInterval(interval);
   }, [session?.sessionToken]);
 
@@ -1157,7 +1640,6 @@ export function AppRoot() {
   }, {});
 
   const isEntryOfferEligible = (entry: (typeof waitlistEntries)[number]): boolean => {
-    if (sessionActive) return false;
     if (entry.status === 'OFFERED') return true;
     if (entry.status !== 'ACTIVE') return false;
     if (!inventoryAvailable) return false;
@@ -1169,7 +1651,6 @@ export function AppRoot() {
 
   const eligibleEntryCount = waitlistEntries.filter(isEntryOfferEligible).length;
   const hasEligibleEntries = eligibleEntryCount > 0;
-  const waitlistInteractive = hasEligibleEntries && !sessionActive;
   const prevSessionActiveRef = useRef<boolean>(false);
   const pulseCandidateRef = useRef<boolean>(false);
 
@@ -1189,7 +1670,6 @@ export function AppRoot() {
   };
 
   const openOfferUpgradeModal = (entry: (typeof waitlistEntries)[number]) => {
-    if (sessionActive) return;
     if (entry.desiredTier !== 'STANDARD' && entry.desiredTier !== 'DOUBLE' && entry.desiredTier !== 'SPECIAL') {
       alert('Only STANDARD/DOUBLE/SPECIAL upgrades can be offered.');
       return;
@@ -1199,6 +1679,10 @@ export function AppRoot() {
       waitlistId: entry.id,
       desiredTier: entry.desiredTier,
       customerLabel: entry.customerName || entry.displayIdentifier,
+      heldRoom:
+        entry.status === 'OFFERED' && entry.roomId && entry.offeredRoomNumber
+          ? { id: entry.roomId, number: entry.offeredRoomNumber }
+          : null,
     });
   };
 
@@ -1218,18 +1702,6 @@ export function AppRoot() {
       pulseCandidateRef.current = false;
     }
   }, [hasEligibleEntries, sessionActive]);
-
-  const handleWaitlistEntryAction = (entryId: string, customerName?: string) => {
-    if (sessionActive) {
-      return;
-    }
-    dismissUpgradePulse();
-    const label = customerName || 'customer';
-    const confirm = window.confirm(`Begin upgrading ${label}?`);
-    if (!confirm) return;
-    setSelectedWaitlistEntry(entryId);
-    setShowUpgradesPanel(true);
-  };
 
   const handleStartUpgradePayment = async (entry: (typeof waitlistEntries)[number]) => {
     if (!session?.sessionToken) {
@@ -1291,7 +1763,7 @@ export function AppRoot() {
         newRoomNumber: payload.newRoomNumber ?? entry.offeredRoomNumber ?? null,
       });
       dismissUpgradePulse();
-      setShowUpgradesPanel(true);
+      selectHomeTab('upgrades');
       setShowUpgradePaymentModal(true);
     } catch (error) {
       console.error('Failed to start upgrade:', error);
@@ -1299,17 +1771,6 @@ export function AppRoot() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const openUpgradePaymentQuote = (entry: (typeof waitlistEntries)[number]) => {
-    setSelectedWaitlistEntry(entry.id);
-    setUpgradeContext((prev) => ({
-      waitlistId: entry.id,
-      customerLabel: entry.customerName || entry.displayIdentifier,
-      offeredRoomNumber: entry.offeredRoomNumber,
-      newRoomNumber: prev?.newRoomNumber ?? entry.offeredRoomNumber ?? null,
-    }));
-    setShowUpgradePaymentModal(true);
   };
 
   const handleUpgradePaymentDecline = (reason?: string) => {
@@ -1357,11 +1818,6 @@ export function AppRoot() {
 
       if (!completeResponse.ok) {
         const errorPayload: unknown = await completeResponse.json().catch(() => null);
-        if (isRecord(errorPayload) && errorPayload.code === 'REAUTH_REQUIRED') {
-          alert('Re-authentication required. Please log in again.');
-          await handleLogout();
-          return;
-        }
         throw new Error(getErrorMessage(errorPayload) || 'Failed to complete upgrade');
       }
 
@@ -1380,11 +1836,14 @@ export function AppRoot() {
   };
 
   useEffect(() => {
-    // Check API health
-    fetch('/api/health')
-      .then((res) => res.json())
-      .then((data: unknown) => {
+    // Check API health (avoid JSON parse crashes on empty/non-JSON responses)
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await readJson<unknown>(res);
         if (
+          !cancelled &&
           isRecord(data) &&
           typeof data.status === 'string' &&
           typeof data.timestamp === 'string' &&
@@ -1392,249 +1851,68 @@ export function AppRoot() {
         ) {
           setHealth({ status: data.status, timestamp: data.timestamp, uptime: data.uptime });
         }
-      })
-      .catch(console.error);
+      } catch (err) {
+        console.error('Health check failed:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [lane]);
 
-  const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
-  const ws = useReconnectingWebSocket({
-    url: wsUrl,
-    onOpenSendJson: [
-      {
-        type: 'subscribe',
-        events: [
-          'CHECKOUT_REQUESTED',
-          'CHECKOUT_CLAIMED',
-          'CHECKOUT_UPDATED',
-          'CHECKOUT_COMPLETED',
-          'SESSION_UPDATED',
-          'ROOM_STATUS_CHANGED',
-          'INVENTORY_UPDATED',
-          'ASSIGNMENT_CREATED',
-          'ASSIGNMENT_FAILED',
-          'CUSTOMER_CONFIRMED',
-          'CUSTOMER_DECLINED',
-          'WAITLIST_UPDATED',
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'SELECTION_ACKNOWLEDGED',
-        ],
-      },
-    ],
-    onMessage: (event) => {
-      try {
-        const parsed: unknown = safeJsonParse(String(event.data));
-        if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-        const message = parsed as unknown as WebSocketEvent;
-        console.log('WebSocket message:', message);
-
-        if (message.type === 'CHECKOUT_REQUESTED') {
-          const payload = message.payload as CheckoutRequestedPayload;
-          setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.set(payload.request.requestId, payload.request);
-            return next;
-          });
-        } else if (message.type === 'CHECKOUT_CLAIMED') {
-          const payload = message.payload as CheckoutClaimedPayload;
-          setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.delete(payload.requestId);
-            return next;
-          });
-        } else if (message.type === 'CHECKOUT_UPDATED') {
-          const payload = message.payload as CheckoutUpdatedPayload;
-          if (selectedCheckoutRequestRef.current === payload.requestId) {
-            setCheckoutItemsConfirmed(payload.itemsConfirmed);
-            setCheckoutFeePaid(payload.feePaid);
-          }
-        } else if (message.type === 'CHECKOUT_COMPLETED') {
-          const payload = message.payload as { requestId: string };
-          setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.delete(payload.requestId);
-            return next;
-          });
-          if (selectedCheckoutRequestRef.current === payload.requestId) {
-            setSelectedCheckoutRequest(null);
-            setCheckoutChecklist({});
-            setCheckoutItemsConfirmed(false);
-            setCheckoutFeePaid(false);
-          }
-        } else if (message.type === 'SESSION_UPDATED') {
-          const payload = message.payload as SessionUpdatedPayload;
-          // Core identity/session fields (keep register in sync without manual refresh)
-          if (payload.sessionId !== undefined) {
-            setCurrentSessionId(payload.sessionId || null);
-          }
-          if (payload.customerName !== undefined) {
-            setCustomerName(payload.customerName || '');
-          }
-          if (payload.membershipNumber !== undefined) {
-            setMembershipNumber(payload.membershipNumber || '');
-          }
-          if (payload.customerMembershipValidUntil !== undefined) {
-            setCustomerMembershipValidUntil(payload.customerMembershipValidUntil || null);
-          }
-          if (payload.membershipPurchaseIntent !== undefined) {
-            setMembershipPurchaseIntent(payload.membershipPurchaseIntent || null);
-          }
-
-          // Agreement completion sync
-          if (payload.agreementSigned !== undefined) {
-            setAgreementSigned(Boolean(payload.agreementSigned));
-          }
-
-          // Update selection state
-          if (payload.proposedRentalType) {
-            setProposedRentalType(payload.proposedRentalType);
-            setProposedBy(payload.proposedBy || null);
-          }
-          if (payload.selectionConfirmed !== undefined) {
-            setSelectionConfirmed(payload.selectionConfirmed);
-            setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
-            if (payload.selectionConfirmed) {
-              setCustomerSelectedType(payload.proposedRentalType || null);
-            }
-          }
-          // Update customer info
-          if (payload.customerPrimaryLanguage !== undefined) {
-            setCustomerPrimaryLanguage(payload.customerPrimaryLanguage);
-          }
-          if (payload.customerDobMonthDay !== undefined) {
-            setCustomerDobMonthDay(payload.customerDobMonthDay);
-          }
-          if (payload.customerLastVisitAt !== undefined) {
-            setCustomerLastVisitAt(payload.customerLastVisitAt);
-          }
-          if (payload.customerNotes !== undefined) {
-            setCustomerNotes(payload.customerNotes);
-          }
-          // Update assignment info
-          if (payload.assignedResourceType !== undefined) {
-            setAssignedResourceType(payload.assignedResourceType);
-          }
-          if (payload.assignedResourceNumber !== undefined) {
-            setAssignedResourceNumber(payload.assignedResourceNumber);
-          }
-          if (payload.checkoutAt !== undefined) {
-            setCheckoutAt(payload.checkoutAt);
-          }
-          // Update payment status
-          if (payload.paymentIntentId !== undefined) {
-            setPaymentIntentId(payload.paymentIntentId || null);
-          }
-          if (payload.paymentStatus !== undefined) {
-            setPaymentStatus(payload.paymentStatus);
-          }
-          // Keep payment quote view in sync with server-authoritative quote updates (e.g., kiosk membership purchase intent).
-          if (payload.paymentTotal !== undefined || payload.paymentLineItems !== undefined) {
-            setPaymentQuote((prev) => {
-              const total = payload.paymentTotal ?? prev?.total ?? 0;
-              const lineItems = payload.paymentLineItems ?? prev?.lineItems ?? [];
-              const messages = prev?.messages ?? [];
-              return { total, lineItems, messages };
-            });
-          }
-          if (payload.paymentFailureReason) {
-            setPaymentDeclineError(payload.paymentFailureReason);
-          }
-          // Update past-due blocking
-          if (payload.pastDueBlocked !== undefined) {
-            setPastDueBlocked(payload.pastDueBlocked);
-            if (payload.pastDueBlocked && payload.pastDueBalance && payload.pastDueBalance > 0) {
-              setShowPastDueModal(true);
-            }
-          }
-
-          // If server cleared the lane session (COMPLETED with empty customer name), reset local UI.
-          if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
-            setCurrentSessionId(null);
-            setCustomerName('');
-            setMembershipNumber('');
-            setAgreementSigned(false);
-            setAssignedResourceType(null);
-            setAssignedResourceNumber(null);
-            setSelectedInventoryItem(null);
-            setPaymentIntentId(null);
-            setPaymentQuote(null);
-            setPaymentStatus(null);
-            setMembershipPurchaseIntent(null);
-            setCustomerMembershipValidUntil(null);
-            setShowMembershipIdPrompt(false);
-            setMembershipIdInput('');
-            setMembershipIdError(null);
-            setMembershipIdPromptedForSessionId(null);
-            setProposedRentalType(null);
-            setProposedBy(null);
-            setSelectionConfirmed(false);
-            setSelectionConfirmedBy(null);
-            setSelectionAcknowledged(true);
-          }
-        } else if (message.type === 'WAITLIST_UPDATED') {
-          // Refresh waitlist when updated
-          void fetchWaitlistRef.current?.();
-          void fetchInventoryAvailableRef.current?.();
-        } else if (message.type === 'SELECTION_PROPOSED') {
-          const payload = message.payload as SelectionProposedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setProposedRentalType(payload.rentalType);
-            setProposedBy(payload.proposedBy);
-          }
-        } else if (message.type === 'SELECTION_LOCKED') {
-          const payload = message.payload as SelectionLockedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setSelectionConfirmed(true);
-            setSelectionConfirmedBy(payload.confirmedBy);
-            setCustomerSelectedType(payload.rentalType);
-            setSelectionAcknowledged(true);
-          }
-        } else if (message.type === 'SELECTION_FORCED') {
-          const payload = message.payload as SelectionForcedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setSelectionConfirmed(true);
-            setSelectionConfirmedBy('EMPLOYEE');
-            setCustomerSelectedType(payload.rentalType);
-            setSelectionAcknowledged(true);
-          }
-        } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
-          setSelectionAcknowledged(true);
-        } else if (message.type === 'INVENTORY_UPDATED' || message.type === 'ROOM_STATUS_CHANGED') {
-          void fetchInventoryAvailableRef.current?.();
-        } else if (message.type === 'ASSIGNMENT_CREATED') {
-          const payload = message.payload as AssignmentCreatedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            // Assignment successful - payment should already be handled before agreement + assignment.
-            // SessionUpdated will carry assigned resource details.
-          }
-        } else if (message.type === 'ASSIGNMENT_FAILED') {
-          const payload = message.payload as AssignmentFailedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            // Handle race condition - refresh and re-select
-            alert('Assignment failed: ' + payload.reason);
-            setSelectedInventoryItem(null);
-          }
-        } else if (message.type === 'CUSTOMER_CONFIRMED') {
-          const payload = message.payload as CustomerConfirmedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setShowCustomerConfirmationPending(false);
-            setCustomerConfirmationType(null);
-          }
-        } else if (message.type === 'CUSTOMER_DECLINED') {
-          const payload = message.payload as CustomerDeclinedPayload;
-          if (payload.sessionId === currentSessionIdRef.current) {
-            setShowCustomerConfirmationPending(false);
-            setCustomerConfirmationType(null);
-            // Revert to customer's requested type
-            if (customerSelectedTypeRef.current) {
-              setSelectedInventoryItem(null);
-              // This will trigger auto-selection in InventorySelector
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
+  const ws = useRegisterWebSocketEvents({
+    lane,
+    currentSessionIdRef,
+    selectedCheckoutRequestRef,
+    customerSelectedTypeRef,
+    laneSessionActions: {
+      applySessionUpdated: laneSessionActions.applySessionUpdated,
+      applySelectionProposed: ({ rentalType, proposedBy }) =>
+        laneSessionActions.applySelectionProposed({ rentalType, proposedBy }),
+      applySelectionLocked: ({ rentalType, confirmedBy }) =>
+        laneSessionActions.applySelectionLocked({ rentalType, confirmedBy }),
+      applySelectionForced: ({ rentalType }) => laneSessionActions.applySelectionForced({ rentalType }),
+      selectionAcknowledged: laneSessionActions.selectionAcknowledged,
+    },
+    setCheckoutRequests,
+    setCheckoutItemsConfirmed,
+    setCheckoutFeePaid,
+    setSelectedCheckoutRequest,
+    setCheckoutChecklist,
+    onWaitlistUpdated: () => {
+      void fetchWaitlistRef.current?.();
+      void fetchInventoryAvailableRef.current?.();
+    },
+    onInventoryUpdated: () => {
+      void fetchInventoryAvailableRef.current?.();
+    },
+    onLaneSessionCleared: () => {
+      setSelectedInventoryItem(null);
+      setShowMembershipIdPrompt(false);
+      setMembershipIdInput('');
+      setMembershipIdError(null);
+      setMembershipIdPromptedForSessionId(null);
+      setShowWaitlistModal(false);
+      setCurrentSessionCustomerId(null);
+      setAccountCustomerId(null);
+      setAccountCustomerLabel(null);
+      selectHomeTab('scan');
+      // Any additional per-session UI state resets remain here (outside reducer).
+    },
+    pushBottomToast,
+    onAssignmentFailed: (payload: AssignmentFailedPayload) => {
+      alert('Assignment failed: ' + payload.reason);
+      setSelectedInventoryItem(null);
+    },
+    onCustomerConfirmed: () => {
+      setShowCustomerConfirmationPending(false);
+      setCustomerConfirmationType(null);
+    },
+    onCustomerDeclined: () => {
+      setShowCustomerConfirmationPending(false);
+      setCustomerConfirmationType(null);
+      if (customerSelectedTypeRef.current) {
+        setSelectedInventoryItem(null);
       }
     },
   });
@@ -1667,17 +1945,112 @@ export function AppRoot() {
     setSelectedInventoryItem({ type, id, number, tier });
   };
 
-  const handleProposeSelection = async (rentalType: string) => {
-    if (!currentSessionId || !session?.sessionToken) {
-      return;
+  const highlightKioskOption = async (params: {
+    step: 'LANGUAGE' | 'MEMBERSHIP';
+    option: string | null;
+  }) => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    try {
+      await fetch(`${API_BASE}/v1/checkin/lane/${lane}/highlight-option`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ ...params, sessionId: currentSessionId }),
+      });
+    } catch {
+      // Best-effort (UI-only).
     }
+  };
 
-    // Second tap on same rental forces selection
-    if (proposedRentalType === rentalType && !selectionConfirmed) {
-      await handleConfirmSelection();
-      return;
+  const handleConfirmLanguage = async (lang: 'EN' | 'ES') => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/set-language`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ language: lang, sessionId: currentSessionId, customerName }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to set language');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to set language');
+    } finally {
+      setIsSubmitting(false);
     }
+  };
 
+  const handleConfirmMembershipOneTime = async () => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    setIsSubmitting(true);
+    try {
+      // Clear any 6-month intent (if present)
+      await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ intent: 'NONE', sessionId: currentSessionId }),
+      });
+
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ choice: 'ONE_TIME', sessionId: currentSessionId }),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to set membership choice');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to set membership choice');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmMembershipSixMonth = async () => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    const base = getCustomerMembershipStatus({
+      membershipNumber: membershipNumber || null,
+      membershipValidUntil: customerMembershipValidUntil,
+    });
+    const intent: 'PURCHASE' | 'RENEW' = base === 'EXPIRED' ? 'RENEW' : 'PURCHASE';
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ intent, sessionId: currentSessionId }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to set membership purchase intent');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to set membership purchase intent');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleProposeSelection = async (rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+    if (!currentSessionId || !session?.sessionToken) return;
     setIsSubmitting(true);
     try {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
@@ -1686,24 +2059,36 @@ export function AppRoot() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.sessionToken}`,
         },
-        body: JSON.stringify({
-          rentalType,
-          proposedBy: 'EMPLOYEE',
-        }),
+        body: JSON.stringify({ rentalType, proposedBy: 'EMPLOYEE' }),
       });
-
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to propose selection');
       }
-
-      setProposedRentalType(rentalType);
-      setProposedBy('EMPLOYEE');
     } catch (error) {
-      console.error('Failed to propose selection:', error);
-      alert(
-        error instanceof Error ? error.message : 'Failed to propose selection. Please try again.'
-      );
+      alert(error instanceof Error ? error.message : 'Failed to propose selection');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCustomerSelectRental = async (rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+    if (!currentSessionId) return;
+    setIsSubmitting(true);
+    try {
+      // Public endpoint; we intentionally set proposedBy=CUSTOMER so the kiosk enters its
+      // "pending approval" step and employee-register shows the OK button.
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rentalType, proposedBy: 'CUSTOMER' }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to select rental');
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to select rental');
     } finally {
       setIsSubmitting(false);
     }
@@ -1733,8 +2118,7 @@ export function AppRoot() {
       }
 
       setSelectionConfirmed(true);
-      setSelectionConfirmedBy('EMPLOYEE');
-      setSelectionAcknowledged(true);
+      laneSessionActions.patch({ selectionConfirmedBy: 'EMPLOYEE', selectionAcknowledged: true });
       setCustomerSelectedType(proposedRentalType);
     } catch (error) {
       console.error('Failed to confirm selection:', error);
@@ -1746,97 +2130,7 @@ export function AppRoot() {
     }
   };
 
-  // Corrected demo flow: once selection is confirmed/locked, create payment intent (no assignment required).
-  useEffect(() => {
-    if (!currentSessionId || !session?.sessionToken) return;
-    if (!selectionConfirmed) return;
-    if (paymentIntentId || paymentStatus === 'DUE' || paymentStatus === 'PAID') return;
-    if (paymentIntentCreateInFlightRef.current) return;
-
-    paymentIntentCreateInFlightRef.current = true;
-    void handleCreatePaymentIntent().finally(() => {
-      paymentIntentCreateInFlightRef.current = false;
-    });
-  }, [currentSessionId, session?.sessionToken, selectionConfirmed, paymentIntentId, paymentStatus]);
-
-  const handleAssign = async () => {
-    if (!selectedInventoryItem || !currentSessionId || !session?.sessionToken) {
-      alert('Please select an item to assign');
-      return;
-    }
-
-    // Guardrails: Prevent assignment if conditions not met
-    if (showCustomerConfirmationPending) {
-      alert('Please wait for customer confirmation before assigning');
-      return;
-    }
-
-    if (!agreementSigned) {
-      alert(
-        'Agreement must be signed before assignment. Please wait for customer to sign the agreement.'
-      );
-      return;
-    }
-
-    if (paymentStatus !== 'PAID') {
-      alert(
-        'Payment must be marked as paid before assignment. Please mark payment as paid in Square first.'
-      );
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      // Use new check-in assign endpoint
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/assign`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          resourceType: selectedInventoryItem.type,
-          resourceId: selectedInventoryItem.id,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        const msg = getErrorMessage(errorPayload);
-        if (
-          isRecord(errorPayload) &&
-          (errorPayload.raceLost === true ||
-            (typeof msg === 'string' && msg.includes('already assigned')))
-        ) {
-          // Race condition - refresh inventory and re-select
-          alert('Item no longer available. Refreshing inventory...');
-          setSelectedInventoryItem(null);
-          // InventorySelector will auto-refresh and re-select
-        } else {
-          throw new Error(msg || 'Failed to assign');
-        }
-      } else {
-        const data = await readJson<{ needsConfirmation?: boolean }>(response);
-        console.log('Assignment successful:', data);
-
-        // If cross-type assignment, wait for customer confirmation
-        if (data.needsConfirmation === true) {
-          setShowCustomerConfirmationPending(true);
-          setIsSubmitting(false);
-          return;
-        }
-
-        // Assignment occurs after payment + agreement in the corrected flow; nothing payment-related here.
-      }
-    } catch (error) {
-      console.error('Failed to assign:', error);
-      alert(error instanceof Error ? error.message : 'Failed to assign');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleCreatePaymentIntent = async () => {
+  const handleCreatePaymentIntent = useCallback(async () => {
     if (!currentSessionId || !session?.sessionToken) {
       return;
     }
@@ -1871,40 +2165,27 @@ export function AppRoot() {
       console.error('Failed to create payment intent:', error);
       alert(error instanceof Error ? error.message : 'Failed to create payment intent');
     }
-  };
+  }, [currentSessionId, lane, session?.sessionToken, setPaymentIntentId, setPaymentQuote, setPaymentStatus]);
 
-  const handleMarkPaid = async () => {
-    if (!paymentIntentId || !session?.sessionToken) {
-      return;
-    }
+  // Corrected demo flow: once selection is confirmed/locked, create payment intent (no assignment required).
+  useEffect(() => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    if (!selectionConfirmed) return;
+    if (paymentIntentId || paymentStatus === 'DUE' || paymentStatus === 'PAID') return;
+    if (paymentIntentCreateInFlightRef.current) return;
 
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/payments/${paymentIntentId}/mark-paid`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          squareTransactionId: undefined, // Would come from Square POS integration
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to mark payment as paid');
-      }
-
-      setPaymentStatus('PAID');
-      // Payment marked paid - customer can now sign agreement
-    } catch (error) {
-      console.error('Failed to mark payment as paid:', error);
-      alert(error instanceof Error ? error.message : 'Failed to mark payment as paid');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+    paymentIntentCreateInFlightRef.current = true;
+    void handleCreatePaymentIntent().finally(() => {
+      paymentIntentCreateInFlightRef.current = false;
+    });
+  }, [
+    currentSessionId,
+    session?.sessionToken,
+    selectionConfirmed,
+    paymentIntentId,
+    paymentStatus,
+    handleCreatePaymentIntent,
+  ]);
 
   const handleCompleteMembershipPurchase = async (membershipNumberOverride?: string) => {
     if (!session?.sessionToken || !currentSessionId) {
@@ -2004,49 +2285,6 @@ export function AppRoot() {
     setMembershipIdPromptedForSessionId(null);
   }, [membershipPurchaseIntent, showMembershipIdPrompt]);
 
-  const handleClearSelection = () => {
-    setSelectedInventoryItem(null);
-  };
-
-  const handleManualSignatureOverride = async () => {
-    if (!session?.sessionToken || !currentSessionId) {
-      alert('Not authenticated');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(
-        `${API_BASE}/v1/checkin/lane/${lane}/manual-signature-override`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.sessionToken}`,
-          },
-          body: JSON.stringify({
-            sessionId: currentSessionId,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(
-          getErrorMessage(errorPayload) || 'Failed to process manual signature override'
-        );
-      }
-
-      // Success - WebSocket will update the UI
-      await response.json();
-    } catch (error) {
-      console.error('Failed to process manual signature override:', error);
-      alert(error instanceof Error ? error.message : 'Failed to process manual signature override');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Past-due payment handlers
   const handlePastDuePayment = async (
     outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE',
@@ -2086,6 +2324,31 @@ export function AppRoot() {
       setIsSubmitting(false);
     }
   };
+
+  const pastDueLineItems = useMemo(() => {
+    const items: Array<{ description: string; amount: number }> = [];
+    const notes = customerNotes || '';
+    for (const line of notes.split('\n')) {
+      const m = line.match(
+        /^\[SYSTEM_LATE_FEE_PENDING\]\s+Late fee\s+\(\$(\d+(?:\.\d{2})?)\):\s+customer was\s+(.+)\s+late on last visit on\s+(\d{4}-\d{2}-\d{2})\./
+      );
+      if (!m) continue;
+      const amount = Number.parseFloat(m[1]!);
+      const dur = m[2]!.trim();
+      const date = m[3]!;
+      if (!Number.isFinite(amount)) continue;
+      items.push({
+        description: `Late fee (last visit ${date}, ${dur} late)`,
+        amount,
+      });
+    }
+
+    if (items.length === 0 && pastDueBalance > 0) {
+      items.push({ description: 'Past due balance', amount: pastDueBalance });
+    }
+
+    return items;
+  }, [customerNotes, pastDueBalance]);
 
   const handleManagerBypass = async () => {
     if (!session?.sessionToken || !currentSessionId || !managerId || !managerPin) {
@@ -2221,6 +2484,9 @@ export function AppRoot() {
       setCustomerName('');
       setMembershipNumber('');
       setCurrentSessionId(null);
+      setCurrentSessionCustomerId(null);
+      setAccountCustomerId(null);
+      setAccountCustomerLabel(null);
       setAgreementSigned(false);
       setSelectedRentalType(null);
       setCustomerSelectedType(null);
@@ -2272,18 +2538,45 @@ export function AppRoot() {
   }, [showManagerBypassModal, session?.sessionToken]);
 
   return (
-    <RegisterSignIn deviceId={deviceId} onSignedIn={handleRegisterSignIn}>
+    <RegisterSignIn
+      deviceId={deviceId}
+      onSignedIn={handleRegisterSignIn}
+      topTitle="Employee Register"
+      lane={lane}
+      apiStatus={health?.status ?? null}
+      wsConnected={wsConnected}
+      onSignOut={() => void handleLogout()}
+      onCloseOut={() => void handleCloseOut()}
+    >
       {!registerSession ? (
         <div />
       ) : !session ? (
         <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading...</div>
       ) : (
-        <div className="container" style={{ marginTop: '60px', padding: '1.5rem' }}>
+        <div className="container">
+          {scanOverlayMounted && (
+            <div
+              className={[
+                'er-scan-processing-overlay',
+                scanOverlayActive ? 'er-scan-processing-overlay--active' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+              aria-hidden="true"
+            >
+              <div className="er-scan-processing-card cs-liquid-card">
+                <span className="er-spinner" aria-hidden="true" />
+                <span className="er-scan-processing-text">Processing scan…</span>
+              </div>
+            </div>
+          )}
+
           {/* Checkout Request Notifications */}
           {checkoutRequests.size > 0 && !selectedCheckoutRequest && (
             <CheckoutRequestsBanner
               requests={Array.from(checkoutRequests.values())}
               onClaim={(id) => void handleClaimCheckout(id)}
+              onOpenCustomerAccount={(customerId, label) => openCustomerAccount(customerId, label)}
             />
           )}
 
@@ -2298,6 +2591,7 @@ export function AppRoot() {
                   isSubmitting={isSubmitting}
                   checkoutItemsConfirmed={checkoutItemsConfirmed}
                   checkoutFeePaid={checkoutFeePaid}
+                  onOpenCustomerAccount={(customerId, label) => openCustomerAccount(customerId, label)}
                   onConfirmItems={() => void handleConfirmItems(selectedCheckoutRequest)}
                   onMarkFeePaid={() => void handleMarkFeePaid(selectedCheckoutRequest)}
                   onComplete={() => void handleCompleteCheckout(selectedCheckoutRequest)}
@@ -2311,878 +2605,518 @@ export function AppRoot() {
               );
             })()}
 
-          <RegisterHeader
-            health={health}
-            wsConnected={wsConnected}
-            lane={lane}
-            staffName={session.name}
-            staffRole={session.role}
-            onSignOut={() => void handleLogout()}
-            onCloseOut={() => void handleCloseOut()}
-          />
-
-          <AvailabilityStatusBar
-            counts={{
-              lockers: inventoryAvailable?.lockers,
-              STANDARD: inventoryAvailable?.rawRooms?.STANDARD,
-              DOUBLE: inventoryAvailable?.rawRooms?.DOUBLE,
-              SPECIAL: inventoryAvailable?.rawRooms?.SPECIAL,
-            }}
-            onOpen={(type) => setAvailabilityModalType(type)}
-          />
-
           <main className="main">
-            {/* Customer Info Panel */}
-            {currentSessionId && customerName && (
-              <section
-                style={{
-                  marginBottom: '1rem',
-                  padding: '1rem',
-                  background: '#1e293b',
-                  border: '1px solid #475569',
-                  borderRadius: '8px',
-                }}
-              >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
-                  Customer Information
-                </h2>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                    gap: '1rem',
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
-                    >
-                      Name
-                    </div>
-                    <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerName}</div>
-                  </div>
-                  {customerPrimaryLanguage && (
-                    <div>
-                      <div
-                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
-                      >
-                        Primary Language
-                      </div>
-                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>
-                        {customerPrimaryLanguage}
-                      </div>
-                    </div>
-                  )}
-                  {customerDobMonthDay && (
-                    <div>
-                      <div
-                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
-                      >
-                        Date of Birth
-                      </div>
-                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>{customerDobMonthDay}</div>
-                    </div>
-                  )}
-                  {customerLastVisitAt && (
-                    <div>
-                      <div
-                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
-                      >
-                        Last Visit
-                      </div>
-                      <div style={{ fontWeight: 600, fontSize: '1rem' }}>
-                        {new Date(customerLastVisitAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                  )}
-                  {paymentQuote && paymentQuote.total > 0 && (
-                    <div>
-                      <div
-                        style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.25rem' }}
-                      >
-                        Past Due Balance
-                      </div>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          fontSize: '1rem',
-                          color: paymentQuote.total > 0 ? '#f59e0b' : 'inherit',
-                        }}
-                      >
-                        ${paymentQuote.total.toFixed(2)}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {customerNotes && (
-                  <div
-                    style={{
-                      marginTop: '1rem',
-                      paddingTop: '1rem',
-                      borderTop: '1px solid #475569',
-                    }}
-                  >
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginBottom: '0.5rem' }}>
-                      Notes
-                    </div>
-                    <div
-                      style={{
-                        padding: '0.75rem',
-                        background: '#0f172a',
-                        borderRadius: '6px',
-                        fontSize: '0.875rem',
-                        whiteSpace: 'pre-wrap',
-                        maxHeight: '150px',
-                        overflowY: 'auto',
-                      }}
-                    >
-                      {customerNotes}
-                    </div>
-                  </div>
-                )}
-                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => setShowAddNoteModal(true)}
-                    className="cs-liquid-button cs-liquid-button--secondary"
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontSize: '0.875rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Add Note
-                  </button>
-                </div>
-              </section>
-            )}
-
-            {/* Waitlist/Upgrades Panel Toggle */}
-            <section style={{ marginBottom: '1rem' }}>
-              <button
-                className={[
-                  'cs-liquid-button',
-                  showUpgradesPanel ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
-                  showUpgradePulse && hasEligibleEntries ? 'gold-pulse' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                onClick={() => {
-                  const nextOpen = !showUpgradesPanel;
-                  if (nextOpen) dismissUpgradePulse();
-                  setShowUpgradesPanel(nextOpen);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  fontSize: '1rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                {showUpgradesPanel ? '▼' : '▶'} Upgrades / Waitlist (
-                {
-                  waitlistEntries.filter((e) => e.status === 'ACTIVE' || e.status === 'OFFERED')
-                    .length
-                }
-                )
-              </button>
-            </section>
-
-            {/* Waitlist/Upgrades Panel */}
-            {showUpgradesPanel && (
-              <section
-                className="cs-liquid-card er-surface"
-                style={{
-                  marginBottom: '1rem',
-                  padding: '1rem',
-                }}
-              >
-                <h2 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600 }}>
-                  Waitlist & Upgrades
-                </h2>
-                {sessionActive && (
-                  <div style={{ marginBottom: '0.75rem', color: '#f59e0b', fontSize: '0.875rem' }}>
-                    Active session present — waitlist actions are disabled
-                  </div>
-                )}
-
-                {waitlistEntries.length === 0 ? (
-                  <p style={{ color: '#94a3b8' }}>No active waitlist entries</p>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {['ACTIVE', 'OFFERED'].map((status) => {
-                      const entries = waitlistEntries.filter((e) => e.status === status);
-                      if (entries.length === 0) return null;
-
-                      return (
-                        <div key={status} style={{ marginBottom: '1rem' }}>
-                          <h3
-                            style={{
-                              marginBottom: '0.5rem',
-                              fontSize: '1rem',
-                              fontWeight: 600,
-                              color: status === 'OFFERED' ? '#f59e0b' : '#94a3b8',
-                            }}
-                          >
-                            {status === 'OFFERED' ? '⚠️ Offered' : '⏳ Active'} ({entries.length})
-                          </h3>
-                          {entries.map((entry) => (
-                            <div
-                              key={entry.id}
-                              className="er-surface"
-                              style={{
-                                padding: '1rem',
-                                borderRadius: '6px',
-                                marginBottom: '0.5rem',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'start',
-                                  marginBottom: '0.5rem',
-                                }}
-                              >
-                                <div>
-                                  <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
-                                    {entry.displayIdentifier} → {entry.desiredTier}
-                                  </div>
-                                  <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                                    Current: {entry.currentRentalType} • Check-in:{' '}
-                                    {entry.checkinAt ? new Date(entry.checkinAt).toLocaleTimeString() : '—'} •
-                                    Checkout:{' '}
-                                    {entry.checkoutAt ? new Date(entry.checkoutAt).toLocaleTimeString() : '—'}
-                                  </div>
-                                </div>
-                                {status === 'OFFERED' && (
-                                  <div style={{ marginTop: '0.5rem' }}>
-                                    {upgradePaymentIntentId && entry.id === selectedWaitlistEntry ? (
-                                      <div
-                                        className="er-surface-strong"
-                                        style={{
-                                          padding: '0.75rem',
-                                          borderRadius: 6,
-                                          display: 'flex',
-                                          flexDirection: 'column',
-                                          gap: '0.5rem',
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                          }}
-                                        >
-                                          <div style={{ fontSize: '0.875rem', color: '#f8fafc' }}>
-                                            Payment quote ready{upgradeFee !== null ? ` • $${upgradeFee.toFixed(2)}` : ''}
-                                          </div>
-                                          <div
-                                            style={{
-                                              fontSize: '0.75rem',
-                                              color: upgradePaymentStatus === 'PAID' ? '#10b981' : '#f59e0b',
-                                              fontWeight: 600,
-                                            }}
-                                          >
-                                            {upgradePaymentStatus === 'PAID' ? 'Paid' : 'Payment Due'}
-                                          </div>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                          <button
-                                            onClick={() => openUpgradePaymentQuote(entry)}
-                                            className="cs-liquid-button cs-liquid-button--secondary"
-                                            style={{
-                                              padding: '0.5rem 0.75rem',
-                                              fontSize: '0.85rem',
-                                              fontWeight: 600,
-                                              cursor: 'pointer',
-                                            }}
-                                          >
-                                            View Payment Quote
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              dismissUpgradePulse();
-                                              if (upgradePaymentIntentId) {
-                                                void handleUpgradePaymentFlow('CREDIT');
-                                              }
-                                            }}
-                                            className="cs-liquid-button"
-                                            disabled={
-                                              !isEntryOfferEligible(entry) ||
-                                              upgradePaymentStatus !== 'PAID' ||
-                                              isSubmitting ||
-                                              !upgradePaymentIntentId
-                                            }
-                                            style={{
-                                              padding: '0.5rem 0.75rem',
-                                              fontSize: '0.85rem',
-                                              fontWeight: 600,
-                                            }}
-                                          >
-                                            Complete Upgrade
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <button
-                                        onClick={() => {
-                                          dismissUpgradePulse();
-                                          resetUpgradeState();
-                                          setSelectedWaitlistEntry(entry.id);
-                                          void handleStartUpgradePayment(entry);
-                                        }}
-                                        className="cs-liquid-button"
-                                        disabled={!isEntryOfferEligible(entry) || isSubmitting}
-                                        style={{
-                                          padding: '0.5rem 1rem',
-                                          fontSize: '0.875rem',
-                                          fontWeight: 600,
-                                        }}
-                                      >
-                                        Upgrade Room
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                              {status === 'ACTIVE' && (
-                                <button
-                                  onClick={() => {
-                                    dismissUpgradePulse();
-                                    openOfferUpgradeModal(entry);
-                                  }}
-                                  className="cs-liquid-button cs-liquid-button--secondary"
-                                  disabled={!isEntryOfferEligible(entry)}
-                                  style={{
-                                    padding: '0.5rem 1rem',
-                                    fontSize: '0.875rem',
-                                    fontWeight: 600,
-                                  }}
-                                >
-                                  Offer Upgrade
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* Waitlist Banner */}
-            {waitlistDesiredTier && waitlistBackupType && (
-              <div
-                style={{
-                  padding: '1rem',
-                  background: '#fef3c7',
-                  border: '2px solid #f59e0b',
-                  borderRadius: '8px',
-                  marginBottom: '1rem',
-                  color: '#92400e',
-                }}
-              >
-                <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.5rem' }}>
-                  ⚠️ Customer Waitlisted
-                </div>
-                <div style={{ fontSize: '0.875rem' }}>
-                  Customer requested <strong>{waitlistDesiredTier}</strong> but it's unavailable.
-                  Assigning <strong>{waitlistBackupType}</strong> as backup. If{' '}
-                  {waitlistDesiredTier} becomes available, customer can upgrade.
-                </div>
-              </div>
-            )}
-
-            {/* Selection State Display */}
-            {currentSessionId && customerName && (proposedRentalType || selectionConfirmed) && (
-              <div
-                style={{
-                  padding: '1rem',
-                  marginBottom: '1rem',
-                  background: selectionConfirmed ? '#10b981' : '#3b82f6',
-                  borderRadius: '8px',
-                  color: 'white',
-                }}
-              >
-                <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-                  {selectionConfirmed
-                    ? `✓ Selection Locked: ${proposedRentalType} (by ${selectionConfirmedBy === 'CUSTOMER' ? 'Customer' : 'You'})`
-                    : `Proposed: ${proposedRentalType} (by ${proposedBy === 'CUSTOMER' ? 'Customer' : 'You'})`}
-                </div>
-                {!selectionConfirmed && proposedBy === 'EMPLOYEE' && (
-                  <button
-                    onClick={() => void handleConfirmSelection()}
-                    className="cs-liquid-button"
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {isSubmitting ? 'Confirming...' : 'Confirm Selection'}
-                  </button>
-                )}
-                {!selectionConfirmed && proposedBy === 'CUSTOMER' && (
-                  <button
-                    onClick={() => void handleConfirmSelection()}
-                    className="cs-liquid-button"
-                    disabled={isSubmitting}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {isSubmitting ? 'Confirming...' : 'Confirm Customer Selection'}
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Quick Selection Buttons */}
-            {currentSessionId && customerName && !selectionConfirmed && !pastDueBlocked && (
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '0.5rem',
-                  marginBottom: '1rem',
-                  flexWrap: 'wrap',
-                }}
-              >
-                {['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'].map((rental) => (
-                  <button
-                    key={rental}
-                    onClick={() => void handleProposeSelection(rental)}
-                    disabled={isSubmitting}
-                    className={[
-                      'cs-liquid-button',
-                      'cs-liquid-button--secondary',
-                      proposedRentalType === rental ? 'cs-liquid-button--selected' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Propose {rental}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Inventory Selector */}
-            {currentSessionId && customerName && !pastDueBlocked && (
-              <InventorySelector
-                customerSelectedType={customerSelectedType}
-                waitlistDesiredTier={waitlistDesiredTier}
-                waitlistBackupType={waitlistBackupType}
-                onSelect={handleInventorySelect}
-                selectedItem={selectedInventoryItem}
-                sessionId={currentSessionId}
-                lane={lane}
-                sessionToken={session.sessionToken}
-              />
-            )}
-
-            {/* Assignment Bar */}
-            {selectedInventoryItem && (
-              <div
-                className="cs-liquid-card"
-                style={{
-                  position: 'sticky',
-                  bottom: 0,
-                  borderTop: '2px solid #3b82f6',
-                  padding: '1rem',
-                  zIndex: 100,
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '1rem',
-                    marginBottom: paymentQuote ? '1rem' : 0,
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}>
-                      Selected: {selectedInventoryItem.type === 'room' ? 'Room' : 'Locker'}{' '}
-                      {selectedInventoryItem.number}
-                    </div>
-                    {customerSelectedType &&
-                      selectedInventoryItem.tier !== customerSelectedType && (
-                        <div style={{ fontSize: '0.875rem', color: '#f59e0b' }}>
-                          Waiting for customer confirmation...
-                        </div>
-                      )}
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button
-                      onClick={() => void handleAssign()}
-                      className="cs-liquid-button"
-                      disabled={
-                        isSubmitting ||
-                        showCustomerConfirmationPending ||
-                        !agreementSigned ||
-                        paymentStatus !== 'PAID'
-                      }
-                      style={{
-                        padding: '0.75rem 1.5rem',
-                        fontSize: '1rem',
-                        fontWeight: 600,
-                        cursor:
-                          isSubmitting ||
-                          showCustomerConfirmationPending ||
-                          !agreementSigned ||
-                          paymentStatus !== 'PAID'
-                            ? 'not-allowed'
-                            : 'pointer',
-                      }}
-                      title={
-                        showCustomerConfirmationPending
-                          ? 'Waiting for customer confirmation'
-                          : paymentStatus !== 'PAID'
-                            ? 'Payment must be successful before assignment'
-                            : !agreementSigned
-                              ? 'Waiting for customer to sign agreement'
-                              : 'Assign resource'
-                      }
-                    >
-                      {isSubmitting
-                        ? 'Assigning...'
-                        : showCustomerConfirmationPending
-                          ? 'Waiting for Confirmation'
-                          : paymentStatus !== 'PAID'
-                            ? 'Awaiting Payment'
-                            : !agreementSigned
-                              ? 'Awaiting Signature'
-                              : 'Assign'}
-                    </button>
-                    {!agreementSigned && paymentStatus === 'PAID' ? (
-                      <button
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              'Override customer signature? This will complete the agreement signing process without a customer signature.'
-                            )
-                          ) {
-                            void handleManualSignatureOverride();
-                          }
-                        }}
-                        className="cs-liquid-button cs-liquid-button--danger"
-                        disabled={isSubmitting}
-                        style={{
-                          padding: '0.75rem 1.5rem',
-                          fontSize: '1rem',
-                          fontWeight: 600,
-                          cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        Manual Signature
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleClearSelection}
-                        className="cs-liquid-button cs-liquid-button--secondary"
-                        disabled={isSubmitting}
-                        style={{
-                          padding: '0.75rem 1.5rem',
-                          fontSize: '1rem',
-                          fontWeight: 600,
-                          cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Payment Quote and Mark Paid */}
-                {paymentQuote && (
-                  <div
-                    className="cs-liquid-card"
-                    style={{
-                      padding: '1rem',
-                    }}
-                  >
-                    <div style={{ marginBottom: '0.75rem', fontWeight: 600, fontSize: '1rem' }}>
-                      Payment Quote
-                    </div>
-                    <div style={{ marginBottom: '0.5rem' }}>
-                      {paymentQuote.lineItems.map((item, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            marginBottom: '0.25rem',
-                            fontSize: '0.875rem',
-                          }}
-                        >
-                          <span>{item.description}</span>
-                          <span>${item.amount.toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        fontWeight: 600,
-                        fontSize: '1.125rem',
-                        paddingTop: '0.5rem',
-                        borderTop: '1px solid #475569',
-                        marginBottom: '0.75rem',
-                      }}
-                    >
-                      <span>Total Due:</span>
-                      <span>${paymentQuote.total.toFixed(2)}</span>
-                    </div>
-                    {paymentQuote.messages && paymentQuote.messages.length > 0 && (
-                      <div
-                        style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.75rem' }}
-                      >
-                        {paymentQuote.messages.map((msg, idx) => (
-                          <div key={idx}>{msg}</div>
-                        ))}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => void handleMarkPaid()}
-                      disabled={isSubmitting || paymentStatus === 'PAID'}
-                      className={[
-                        'cs-liquid-button',
-                        paymentStatus === 'PAID' ? 'cs-liquid-button--selected' : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                      style={{
-                        width: '100%',
-                        padding: '0.75rem',
-                        fontSize: '1rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {paymentStatus === 'PAID' ? '✓ Paid in Square' : 'Mark Paid in Square'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* Customer Account embeds the check-in UI (lane session driven). */}
 
             <section className="actions-panel">
-              <h2>Lane Session</h2>
-              <div className="action-buttons">
-                <button
-                  className={`action-btn cs-liquid-button ${scanModeOpen ? 'cs-liquid-button--selected active' : ''}`}
-                  onClick={() => {
-                    setManualEntry(false);
-                    setScanModeOpen(true);
-                  }}
-                >
-                  <span className="btn-icon">📡</span>
-                  Scan
-                </button>
-                <button
-                  className={`action-btn cs-liquid-button cs-liquid-button--secondary ${manualEntry ? 'cs-liquid-button--selected active' : ''}`}
-                  onClick={() => {
-                    setManualEntry(!manualEntry);
-                  }}
-                >
-                  <span className="btn-icon">✏️</span>
-                  Manual Entry
-                </button>
-                <button
-                  className="action-btn cs-liquid-button cs-liquid-button--danger"
-                  onClick={() => void handleClearSession()}
-                  disabled={isSubmitting}
-                >
-                  <span className="btn-icon">🗑️</span>
-                  Clear Session
-                </button>
-              </div>
-
-              {manualEntry && (
-                <form
-                  className="manual-entry-form cs-liquid-card"
-                  onSubmit={(e) => void handleManualSubmit(e)}
-                >
-                  <div className="form-group">
-                    <label htmlFor="customerName">Customer Name *</label>
-                    <input
-                      id="customerName"
-                      type="text"
-                      className="cs-liquid-input"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Enter customer name"
-                      disabled={isSubmitting}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="membershipNumber">Membership Number (optional)</label>
-                    <input
-                      id="membershipNumber"
-                      type="text"
-                      className="cs-liquid-input"
-                      value={membershipNumber}
-                      onChange={(e) => setMembershipNumber(e.target.value)}
-                      placeholder="Enter membership number"
-                      disabled={isSubmitting}
-                    />
-                  </div>
-                  <div className="form-actions">
-                    <button
-                      type="submit"
-                      className="submit-btn cs-liquid-button"
-                      disabled={isSubmitting || !customerName.trim()}
-                    >
-                      {isSubmitting ? 'Submitting...' : 'Update Session'}
-                    </button>
-                    <button
-                      type="button"
-                      className="cancel-btn cs-liquid-button cs-liquid-button--danger"
-                      onClick={() => {
-                        setManualEntry(false);
-                        setCustomerName('');
-                        setMembershipNumber('');
-                      }}
-                      disabled={isSubmitting}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {(customerName || membershipNumber) && !manualEntry && (
-                <div className="current-session">
-                  <p>
-                    <strong>Current Session:</strong>
-                  </p>
-                  <p>Name: {customerName || 'Not set'}</p>
-                  {membershipNumber && <p>Membership: {membershipNumber}</p>}
-                  {currentSessionId && (
-                    <p
-                      className={
-                        agreementSigned ? 'agreement-status signed' : 'agreement-status unsigned'
-                      }
-                    >
-                      {agreementSigned ? 'Agreement signed ✓' : 'Agreement pending'}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Customer lookup (typeahead) */}
-              <div
-                className="typeahead-section cs-liquid-card"
-                style={{
-                  marginTop: '1rem',
-                  padding: '1rem',
-                }}
-              >
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '0.5rem',
-                    alignItems: 'center',
-                    marginBottom: '0.5rem',
-                  }}
-                >
-                  <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
+              <div className="er-home-layout">
+                <nav className="er-home-tabs" aria-label="Home actions">
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'scan' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('scan')}
+                  >
+                    Scan
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'search' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('search')}
+                  >
                     Search Customer
-                  </label>
-                  <span style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                    (type at least 3 letters)
-                  </span>
-                </div>
-                <input
-                  id="customer-search"
-                  type="text"
-                  className="cs-liquid-input"
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  placeholder="Start typing name..."
-                  style={{ width: '100%' }}
-                  disabled={isSubmitting}
-                />
-                {customerSearchLoading && (
-                  <div style={{ marginTop: '0.25rem', color: '#94a3b8', fontSize: '0.875rem' }}>
-                    Searching...
-                  </div>
-                )}
-                {customerSuggestions.length > 0 && (
-                  <div
-                    className="cs-liquid-card"
-                    style={{
-                      marginTop: '0.5rem',
-                      maxHeight: '180px',
-                      overflowY: 'auto',
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!accountCustomerId && !(currentSessionId && customerName)}
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'account' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('account')}
+                    style={{ opacity: !accountCustomerId && !(currentSessionId && customerName) ? 0.6 : 1 }}
+                    title={!accountCustomerId && !(currentSessionId && customerName) ? 'Select a customer first' : undefined}
+                  >
+                    Customer Account
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'inventory'
+                        ? 'cs-liquid-button--selected'
+                        : inventoryHasLate
+                          ? 'cs-liquid-button--danger'
+                          : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('inventory')}
+                  >
+                    Inventory
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'upgrades'
+                        ? 'cs-liquid-button--selected'
+                        : hasEligibleEntries
+                          ? 'cs-liquid-button--success'
+                          : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => {
+                      dismissUpgradePulse();
+                      selectHomeTab('upgrades');
                     }}
                   >
-                    {customerSuggestions.map((s) => {
-                      const label = `${s.lastName}, ${s.firstName}`;
-                      const active = selectedCustomerId === s.id;
-                      return (
+                    Upgrades
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      'er-home-tab-btn--checkout',
+                      homeTab === 'checkout' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => startCheckoutFromHome()}
+                  >
+                    Checkout
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'roomCleaning' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('roomCleaning')}
+                  >
+                    Room Cleaning
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
+                      homeTab === 'firstTime' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('firstTime')}
+                  >
+                    First Time Customer
+                  </button>
+                </nav>
+
+                <div className="er-home-content">
+                  {homeTab === 'scan' && (
+                    <div className="er-home-panel er-home-panel--center cs-liquid-card er-main-panel-card">
+                      <div style={{ fontSize: '4rem', lineHeight: 1 }} aria-hidden="true">
+                        📷
+                      </div>
+                      <div style={{ marginTop: '0.75rem', fontWeight: 950, fontSize: '1.6rem' }}>Scan Now</div>
+                      <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
+                        Scan a membership ID or driver license.
+                      </div>
+                      {currentSessionId && customerName ? (
+                        <div style={{ marginTop: '1rem', display: 'grid', gap: '0.5rem' }}>
+                          <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+                            Active lane session: <span style={{ color: '#e2e8f0' }}>{customerName}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="cs-liquid-button"
+                            onClick={() => selectHomeTab('account')}
+                            style={{ width: '100%', padding: '0.75rem', fontWeight: 900 }}
+                          >
+                            Open Customer Account
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+
+                  {homeTab === 'account' && (
+                    accountCustomerId ? (
+                      <CustomerAccountPanel
+                        lane={lane}
+                        sessionToken={session?.sessionToken}
+                        customerId={accountCustomerId}
+                        customerLabel={accountCustomerLabel}
+                        onStartCheckout={startCheckoutFromCustomerAccount}
+                        onClearSession={() => void handleClearSession().then(() => selectHomeTab('scan'))}
+                        currentSessionId={currentSessionId}
+                        currentSessionCustomerId={laneSession.customerId}
+                        customerName={customerName}
+                        membershipNumber={membershipNumber}
+                        customerMembershipValidUntil={customerMembershipValidUntil}
+                        membershipPurchaseIntent={membershipPurchaseIntent}
+                        membershipChoice={membershipChoice}
+                        allowedRentals={allowedRentals}
+                        proposedRentalType={proposedRentalType}
+                        proposedBy={proposedBy}
+                        selectionConfirmed={selectionConfirmed}
+                        customerPrimaryLanguage={customerPrimaryLanguage}
+                        customerDobMonthDay={customerDobMonthDay}
+                        customerLastVisitAt={customerLastVisitAt}
+                        hasEncryptedLookupMarker={Boolean(laneSession.customerHasEncryptedLookupMarker)}
+                        waitlistDesiredTier={waitlistDesiredTier}
+                        waitlistBackupType={waitlistBackupType}
+                        inventoryAvailable={
+                          inventoryAvailable ? { rooms: inventoryAvailable.rooms, lockers: inventoryAvailable.lockers } : null
+                        }
+                        isSubmitting={isSubmitting}
+                        checkinStage={checkinStage}
+                        onStartedSession={(data) => {
+                          setCurrentSessionCustomerId(accountCustomerId);
+                          if (data.customerName) setCustomerName(data.customerName);
+                          if (data.membershipNumber) setMembershipNumber(data.membershipNumber);
+                          if (data.sessionId) setCurrentSessionId(data.sessionId);
+                          if (data.mode === 'RENEWAL' && typeof data.blockEndsAt === 'string') {
+                            if (data.activeAssignedResourceType) setAssignedResourceType(data.activeAssignedResourceType);
+                            if (data.activeAssignedResourceNumber) setAssignedResourceNumber(data.activeAssignedResourceNumber);
+                            setCheckoutAt(data.blockEndsAt);
+                          }
+                        }}
+                        onHighlightLanguage={(lang) => void highlightKioskOption({ step: 'LANGUAGE', option: lang })}
+                        onConfirmLanguage={(lang) => void handleConfirmLanguage(lang)}
+                        onHighlightMembership={(choice) => void highlightKioskOption({ step: 'MEMBERSHIP', option: choice })}
+                        onConfirmMembershipOneTime={() => void handleConfirmMembershipOneTime()}
+                        onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
+                        onHighlightRental={(rental) => void handleProposeSelection(rental)}
+                        onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+                        onApproveRental={() => void handleConfirmSelection()}
+                      />
+                    ) : currentSessionId && customerName ? (
+                      <div
+                        className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card"
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', minHeight: 0 }}>
+                          <div style={{ fontWeight: 950, fontSize: '1.05rem' }}>Customer Account</div>
+                          <CustomerProfileCard
+                            name={customerName}
+                            preferredLanguage={customerPrimaryLanguage || null}
+                            dobMonthDay={customerDobMonthDay || null}
+                            membershipNumber={membershipNumber || null}
+                            membershipValidUntil={customerMembershipValidUntil || null}
+                            lastVisitAt={customerLastVisitAt || null}
+                            hasEncryptedLookupMarker={Boolean(laneSession.customerHasEncryptedLookupMarker)}
+                            checkinStage={checkinStage}
+                            waitlistDesiredTier={waitlistDesiredTier}
+                            waitlistBackupType={waitlistBackupType}
+                            footer={
+                              checkinStage ? (
+                                <button
+                                  type="button"
+                                  className="cs-liquid-button cs-liquid-button--danger"
+                                  onClick={() => void handleClearSession().then(() => selectHomeTab('scan'))}
+                                  style={{ width: '100%', maxWidth: 320, padding: '0.7rem', fontWeight: 900 }}
+                                >
+                                  Clear Session
+                                </button>
+                              ) : null
+                            }
+                          />
+                          <EmployeeAssistPanel
+                            sessionId={currentSessionId}
+                            customerName={customerName}
+                            customerPrimaryLanguage={customerPrimaryLanguage}
+                            membershipNumber={membershipNumber || null}
+                            customerMembershipValidUntil={customerMembershipValidUntil}
+                            membershipPurchaseIntent={membershipPurchaseIntent}
+                            membershipChoice={membershipChoice}
+                            allowedRentals={allowedRentals}
+                            proposedRentalType={proposedRentalType}
+                            proposedBy={proposedBy}
+                            selectionConfirmed={selectionConfirmed}
+                            waitlistDesiredTier={waitlistDesiredTier}
+                            waitlistBackupType={waitlistBackupType}
+                            inventoryAvailable={
+                              inventoryAvailable ? { rooms: inventoryAvailable.rooms, lockers: inventoryAvailable.lockers } : null
+                            }
+                            isSubmitting={isSubmitting}
+                            onHighlightLanguage={(lang) => void highlightKioskOption({ step: 'LANGUAGE', option: lang })}
+                            onConfirmLanguage={(lang) => void handleConfirmLanguage(lang)}
+                            onHighlightMembership={(choice) => void highlightKioskOption({ step: 'MEMBERSHIP', option: choice })}
+                            onConfirmMembershipOneTime={() => void handleConfirmMembershipOneTime()}
+                            onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
+                            onHighlightRental={(rental) => void handleProposeSelection(rental)}
+                            onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+                            onApproveRental={() => void handleConfirmSelection()}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="er-home-panel er-home-panel--center cs-liquid-card er-main-panel-card">
+                        <div style={{ fontWeight: 950, fontSize: '1.35rem' }}>Customer Account</div>
+                        <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
+                          Select a customer (scan, search, or first-time) to view their account.
+                        </div>
+                      </div>
+                    )
+                  )}
+
+                  {homeTab === 'search' && (
+                    <div
+                      className="er-home-panel er-home-panel--top typeahead-section cs-liquid-card er-main-panel-card"
+                      style={{ marginTop: 0 }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '0.5rem',
+                          alignItems: 'center',
+                          marginBottom: '0.5rem',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
+                          Search Customer
+                        </label>
+                        <span className="er-search-help">(type at least 3 letters)</span>
+                      </div>
+                      <input
+                        id="customer-search"
+                        type="text"
+                        className="cs-liquid-input"
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        placeholder="Start typing name..."
+                        disabled={isSubmitting}
+                      />
+                      {customerSearchLoading && (
+                        <div className="er-text-sm" style={{ marginTop: '0.25rem', color: '#94a3b8' }}>
+                          Searching...
+                        </div>
+                      )}
+                      {customerSuggestions.length > 0 && (
                         <div
-                          key={s.id}
-                          onClick={() => {
-                            setSelectedCustomerId(s.id);
-                            setSelectedCustomerLabel(label);
-                          }}
+                          className="cs-liquid-card"
                           style={{
-                            padding: '0.5rem 0.75rem',
-                            cursor: 'pointer',
-                            background: active ? '#1e293b' : 'transparent',
-                            borderBottom: '1px solid #1f2937',
+                            marginTop: '0.5rem',
+                            maxHeight: '180px',
+                            overflowY: 'auto',
                           }}
                         >
-                          <div style={{ fontWeight: 600 }}>{label}</div>
-                          <div
-                            style={{
-                              fontSize: '0.8rem',
-                              color: '#94a3b8',
-                              display: 'flex',
-                              gap: '0.75rem',
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
-                            {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
-                          </div>
+                          {customerSuggestions.map((s) => {
+                            const label = `${s.lastName}, ${s.firstName}`;
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                className="cs-liquid-button cs-liquid-button--secondary"
+                                onClick={() => {
+                                  // Direct navigation: selecting a customer name anywhere should open Customer Account.
+                                  openCustomerAccount(s.id, label);
+                                  setCustomerSearch('');
+                                  setCustomerSuggestions([]);
+                                }}
+                                style={{
+                                  padding: '0.5rem 0.75rem',
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  borderRadius: 0,
+                                  border: 'none',
+                                  borderBottom: '1px solid #1f2937',
+                                  justifyContent: 'space-between',
+                                }}
+                              >
+                                <div style={{ fontWeight: 600 }}>{label}</div>
+                                <div
+                                  className="er-text-sm"
+                                  style={{
+                                    color: '#94a3b8',
+                                    display: 'flex',
+                                    gap: '0.75rem',
+                                    flexWrap: 'wrap',
+                                  }}
+                                >
+                                  {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
+                                  {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <button
-                  onClick={() => void handleConfirmCustomerSelection()}
-                  disabled={!selectedCustomerId || isSubmitting}
-                  className="cs-liquid-button"
-                  style={{
-                    marginTop: '0.75rem',
-                    width: '100%',
-                    padding: '0.65rem',
-                    fontWeight: 600,
-                    opacity: !selectedCustomerId || isSubmitting ? 0.7 : 1,
-                  }}
-                >
-                  {selectedCustomerLabel ? `Confirm ${selectedCustomerLabel}` : 'Confirm'}
-                </button>
+                      )}
+                    </div>
+                  )}
+
+                  {homeTab === 'inventory' && session?.sessionToken && (
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
+                      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                        <InventoryDrawer
+                          lane={lane}
+                          sessionToken={session.sessionToken}
+                          forcedExpandedSection={inventoryForcedSection}
+                          onExpandedSectionChange={setInventoryForcedSection}
+                          customerSelectedType={customerSelectedType}
+                          waitlistDesiredTier={waitlistDesiredTier}
+                          waitlistBackupType={waitlistBackupType}
+                          onSelect={handleInventorySelect}
+                          onClearSelection={() => setSelectedInventoryItem(null)}
+                          selectedItem={selectedInventoryItem}
+                          sessionId={currentSessionId}
+                          disableSelection={false}
+                          onAlertSummaryChange={({ hasLate }) => setInventoryHasLate(hasLate)}
+                          onRequestCheckout={startCheckoutFromInventory}
+                          onOpenCustomerAccount={openCustomerAccount}
+                          externalRefreshNonce={inventoryRefreshNonce}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {homeTab === 'upgrades' && (
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
+                      <UpgradesDrawerContent
+                        waitlistEntries={waitlistEntries}
+                        hasEligibleEntries={hasEligibleEntries}
+                        isEntryOfferEligible={(entryId, status, desiredTier) => {
+                          const entry = waitlistEntries.find((e) => e.id === entryId);
+                          if (!entry) return false;
+                          if (entry.status !== status) return false;
+                          if (entry.desiredTier !== desiredTier) return false;
+                          return isEntryOfferEligible(entry);
+                        }}
+                        onOffer={(entryId) => {
+                          const entry = waitlistEntries.find((e) => e.id === entryId);
+                          if (!entry) return;
+                          openOfferUpgradeModal(entry);
+                          selectHomeTab('upgrades');
+                        }}
+                        onStartPayment={(entry) => {
+                          resetUpgradeState();
+                          setSelectedWaitlistEntry(entry.id);
+                          void handleStartUpgradePayment(entry);
+                        }}
+                        onCancelOffer={(entryId) => {
+                          alert(`Cancel offer not implemented yet (waitlistId=${entryId}).`);
+                        }}
+                        onOpenCustomerAccount={openCustomerAccount}
+                        isSubmitting={isSubmitting}
+                      />
+                    </div>
+                  )}
+
+                  {homeTab === 'checkout' && session?.sessionToken && (
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll">
+                      <ManualCheckoutPanel
+                        sessionToken={session.sessionToken}
+                        entryMode={checkoutEntryMode}
+                        prefill={checkoutPrefill ?? undefined}
+                        onExit={exitCheckout}
+                        onSuccess={(message) => {
+                          setSuccessToastMessage(message);
+                          if (checkoutReturnToTabRef.current) {
+                            setInventoryRefreshNonce((prev) => prev + 1);
+                            exitCheckout();
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {homeTab === 'roomCleaning' && session?.sessionToken && session?.staffId && (
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll">
+                      <RoomCleaningPanel
+                        sessionToken={session.sessionToken}
+                        staffId={session.staffId}
+                        onSuccess={(message) => setSuccessToastMessage(message)}
+                      />
+                    </div>
+                  )}
+
+                  {homeTab === 'firstTime' && (
+                    <form
+                      className="er-home-panel er-home-panel--top manual-entry-form cs-liquid-card er-main-panel-card"
+                      onSubmit={(e) => void handleManualSubmit(e)}
+                    >
+                      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>First Time Customer</div>
+                      <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.75rem', fontWeight: 700 }}>
+                        Enter customer details from alternate ID.
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="manualFirstName">First Name *</label>
+                        <input
+                          id="manualFirstName"
+                          type="text"
+                          className="cs-liquid-input"
+                          value={manualFirstName}
+                          onChange={(e) => setManualFirstName(e.target.value)}
+                          placeholder="Enter first name"
+                          disabled={isSubmitting}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="manualLastName">Last Name *</label>
+                        <input
+                          id="manualLastName"
+                          type="text"
+                          className="cs-liquid-input"
+                          value={manualLastName}
+                          onChange={(e) => setManualLastName(e.target.value)}
+                          placeholder="Enter last name"
+                          disabled={isSubmitting}
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="manualDob">Date of Birth *</label>
+                        <input
+                          id="manualDob"
+                          type="text"
+                          inputMode="numeric"
+                          className="cs-liquid-input"
+                          value={formatDobMmDdYyyy(manualDobDigits)}
+                          onChange={(e) => setManualDobDigits(extractDobDigits(e.target.value))}
+                          placeholder="MM/DD/YYYY"
+                          disabled={isSubmitting}
+                          required
+                        />
+                      </div>
+                      <div className="form-actions">
+                        <button
+                          type="submit"
+                          className="submit-btn cs-liquid-button"
+                          disabled={
+                            isSubmitting ||
+                            manualEntrySubmitting ||
+                            !manualFirstName.trim() ||
+                            !manualLastName.trim() ||
+                            !parseDobDigitsToIso(manualDobDigits)
+                          }
+                        >
+                          {isSubmitting || manualEntrySubmitting ? 'Submitting...' : 'Add Customer'}
+                        </button>
+                        <button
+                          type="button"
+                          className="cancel-btn cs-liquid-button cs-liquid-button--danger"
+                          onClick={() => {
+                            setManualEntry(false);
+                            setManualFirstName('');
+                            setManualLastName('');
+                            setManualDobDigits('');
+                            selectHomeTab('scan');
+                          }}
+                          disabled={isSubmitting || manualEntrySubmitting}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                </div>
               </div>
             </section>
           </main>
@@ -3198,13 +3132,6 @@ export function AppRoot() {
             onClose={() => setShowWaitlistModal(false)}
           />
 
-          <AvailabilityModal
-            isOpen={availabilityModalType !== null}
-            type={availabilityModalType}
-            onClose={() => setAvailabilityModalType(null)}
-            sessionToken={session.sessionToken}
-          />
-
           {offerUpgradeModal && session?.sessionToken && (
             <OfferUpgradeModal
               isOpen={true}
@@ -3213,7 +3140,7 @@ export function AppRoot() {
               waitlistId={offerUpgradeModal.waitlistId}
               desiredTier={offerUpgradeModal.desiredTier}
               customerLabel={offerUpgradeModal.customerLabel}
-              disabled={sessionActive}
+              heldRoom={offerUpgradeModal.heldRoom ?? null}
               onOffered={() => {
                 void fetchWaitlistRef.current?.();
                 void fetchInventoryAvailableRef.current?.();
@@ -3235,21 +3162,260 @@ export function AppRoot() {
             }
           />
 
-          {/* Full-screen Scan Mode (keyboard-wedge scanner; no iPad camera) */}
-          <ScanMode
-            isOpen={scanModeOpen}
+          <MultipleMatchesModal
+            isOpen={!!pendingScanResolution}
+            candidates={pendingScanResolution?.candidates || []}
+            errorMessage={scanResolutionError}
+            isSubmitting={scanResolutionSubmitting}
             onCancel={() => {
-              setScanModeOpen(false);
-              setPendingCreateFromScan(null);
+              setPendingScanResolution(null);
+              setScanResolutionError(null);
             }}
-            onBarcodeCaptured={onBarcodeCaptured}
-            onCreateFromNoMatch={handleCreateFromNoMatch}
+            onSelect={(customerId) => void resolvePendingScanSelection(customerId)}
           />
 
-          {paymentQuote && paymentQuote.total > 0 && (
+          <ModalFrame
+            isOpen={!!manualExistingPrompt}
+            title="Existing customer found"
+            onClose={() => {
+              setManualExistingPrompt(null);
+              setManualExistingPromptError(null);
+              setManualExistingPromptSubmitting(false);
+            }}
+            maxWidth="640px"
+            closeOnOverlayClick={false}
+          >
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              <div style={{ color: '#94a3b8' }}>
+                An existing customer already matches this First Name, Last Name, and Date of Birth. Do you want to continue?
+              </div>
+
+              {manualExistingPrompt?.matchCount && manualExistingPrompt.matchCount > 1 ? (
+                <div style={{ color: '#f59e0b', fontWeight: 800 }}>
+                  {manualExistingPrompt.matchCount} matching customers found. Showing best match:
+                </div>
+              ) : null}
+
+              {manualExistingPrompt ? (
+                <div className="cs-liquid-card" style={{ padding: '1rem' }}>
+                  <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>{manualExistingPrompt.bestMatch.name}</div>
+                  <div style={{ marginTop: '0.25rem', color: '#94a3b8', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <span>
+                      DOB:{' '}
+                      <strong style={{ color: 'white' }}>
+                        {manualExistingPrompt.bestMatch.dob || manualExistingPrompt.dobIso}
+                      </strong>
+                    </span>
+                    {manualExistingPrompt.bestMatch.membershipNumber ? (
+                      <span>
+                        Membership:{' '}
+                        <strong style={{ color: 'white' }}>{manualExistingPrompt.bestMatch.membershipNumber}</strong>
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {manualExistingPromptError ? (
+                <div
+                  style={{
+                    padding: '0.75rem',
+                    background: 'rgba(239, 68, 68, 0.18)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: 12,
+                    color: '#fecaca',
+                    fontWeight: 800,
+                  }}
+                >
+                  {manualExistingPromptError}
+                </div>
+              ) : null}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  disabled={manualExistingPromptSubmitting || isSubmitting}
+                  onClick={() => {
+                    setManualExistingPrompt(null);
+                    setManualExistingPromptError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  disabled={manualExistingPromptSubmitting || isSubmitting || !manualExistingPrompt}
+                  onClick={() => {
+                    if (!manualExistingPrompt) return;
+                    void (async () => {
+                      setManualExistingPromptSubmitting(true);
+                      setManualExistingPromptError(null);
+                      try {
+                        const result = await startLaneSessionByCustomerId(manualExistingPrompt.bestMatch.id, {
+                          suppressAlerts: true,
+                        });
+                        if (result.outcome === 'matched') {
+                          setManualExistingPrompt(null);
+                          setManualEntry(false);
+                          setManualFirstName('');
+                          setManualLastName('');
+                          setManualDobDigits('');
+                        }
+                      } catch (err) {
+                        setManualExistingPromptError(err instanceof Error ? err.message : 'Failed to load existing customer');
+                      } finally {
+                        setManualExistingPromptSubmitting(false);
+                      }
+                    })();
+                  }}
+                >
+                  Existing Customer
+                </button>
+
+                <button
+                  type="button"
+                  className="cs-liquid-button"
+                  disabled={manualExistingPromptSubmitting || isSubmitting || !manualExistingPrompt || !session?.sessionToken}
+                  onClick={() => {
+                    if (!manualExistingPrompt || !session?.sessionToken) return;
+                    void (async () => {
+                      setManualExistingPromptSubmitting(true);
+                      setManualExistingPromptError(null);
+                      try {
+                        const { firstName, lastName, dobIso } = manualExistingPrompt;
+                        const createRes = await fetch(`${API_BASE}/v1/customers/create-manual`, {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${session.sessionToken}`,
+                          },
+                          body: JSON.stringify({ firstName, lastName, dob: dobIso }),
+                        });
+                        const createPayload: unknown = await createRes.json().catch(() => null);
+                        if (!createRes.ok) {
+                          const msg = getErrorMessage(createPayload) || 'Failed to create customer';
+                          setManualExistingPromptError(msg);
+                          return;
+                        }
+                        const created = createPayload as { customer?: { id?: string } };
+                        const newId = created.customer?.id;
+                        if (!newId) {
+                          setManualExistingPromptError('Create returned no customer id');
+                          return;
+                        }
+                        const result = await startLaneSessionByCustomerId(newId, { suppressAlerts: true });
+                        if (result.outcome === 'matched') {
+                          setManualExistingPrompt(null);
+                          setManualEntry(false);
+                          setManualFirstName('');
+                          setManualLastName('');
+                          setManualDobDigits('');
+                        }
+                      } finally {
+                        setManualExistingPromptSubmitting(false);
+                      }
+                    })();
+                  }}
+                >
+                  Add Customer
+                </button>
+              </div>
+            </div>
+          </ModalFrame>
+
+          <ModalFrame
+            isOpen={showCreateFromScanPrompt && !!pendingCreateFromScan}
+            title="No match found"
+            onClose={() => {
+              setShowCreateFromScanPrompt(false);
+              setPendingCreateFromScan(null);
+              setCreateFromScanError(null);
+              setCreateFromScanSubmitting(false);
+            }}
+            maxWidth="720px"
+            closeOnOverlayClick={false}
+          >
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              <div style={{ color: '#94a3b8' }}>
+                Create a new customer profile using the scanned First Name, Last Name, and DOB.
+              </div>
+
+              {createFromScanError ? (
+                <div
+                  style={{
+                    padding: '0.75rem',
+                    background: 'rgba(239, 68, 68, 0.18)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: 12,
+                    color: '#fecaca',
+                    fontWeight: 800,
+                  }}
+                >
+                  {createFromScanError}
+                </div>
+              ) : null}
+
+              <div className="cs-liquid-card" style={{ padding: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', color: '#94a3b8' }}>
+                  <span>
+                    First: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.firstName || '—'}</strong>
+                  </span>
+                  <span>
+                    Last: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.lastName || '—'}</strong>
+                  </span>
+                  <span>
+                    DOB: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.dob || '—'}</strong>
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                <button
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  disabled={createFromScanSubmitting || isSubmitting}
+                  onClick={() => {
+                    setShowCreateFromScanPrompt(false);
+                    setPendingCreateFromScan(null);
+                    setCreateFromScanError(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="cs-liquid-button"
+                  disabled={createFromScanSubmitting || isSubmitting || !pendingCreateFromScan}
+                  onClick={() => {
+                    void (async () => {
+                      setCreateFromScanSubmitting(true);
+                      setCreateFromScanError(null);
+                      try {
+                        const r = await handleCreateFromNoMatch();
+                        if (r.outcome !== 'matched') {
+                          setCreateFromScanError(r.message);
+                        }
+                      } finally {
+                        setCreateFromScanSubmitting(false);
+                      }
+                    })();
+                  }}
+                >
+                  {createFromScanSubmitting ? 'Creating…' : 'Create Customer'}
+                </button>
+              </div>
+            </div>
+          </ModalFrame>
+
+          {pastDueBalance > 0 && (
             <PastDuePaymentModal
               isOpen={showPastDueModal}
-              quote={paymentQuote}
+              quote={{
+                total: pastDueBalance,
+                lineItems: pastDueLineItems,
+                messages: [],
+              }}
               onPayInSquare={(outcome, reason) => void handlePastDuePayment(outcome, reason)}
               onManagerBypass={() => {
                 setShowPastDueModal(false);
@@ -3337,77 +3503,74 @@ export function AppRoot() {
             isSubmitting={isSubmitting}
           />
 
+          <SuccessToast message={successToastMessage} onDismiss={() => setSuccessToastMessage(null)} />
           <PaymentDeclineToast message={paymentDeclineError} onDismiss={() => setPaymentDeclineError(null)} />
-
-          {/* Agreement + Assignment Display */}
-          {currentSessionId && customerName && (agreementSigned || assignedResourceType) && (
+          <BottomToastStack toasts={bottomToasts} onDismiss={dismissBottomToast} />
+          {scanToastMessage && (
             <div
               style={{
                 position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                background: '#1e293b',
-                borderTop: '2px solid #3b82f6',
-                padding: '1.5rem',
-                zIndex: 100,
+                inset: 0,
+                background: 'rgba(0, 0, 0, 0.55)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '1rem',
+                zIndex: 2000,
               }}
+              role="status"
+              aria-label="Scan message"
+              onClick={() => setScanToastMessage(null)}
             >
-              {!agreementSigned && (
-                <div
-                  style={{
-                    marginBottom: '1rem',
-                    padding: '1rem',
-                    background: '#0f172a',
-                    borderRadius: '6px',
-                  }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
-                    Agreement Pending
-                  </div>
-                  <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                    Waiting for customer to sign the agreement on their device.
-                  </div>
+              <div
+                className="cs-liquid-card"
+                style={{
+                  width: 'min(520px, 92vw)',
+                  background: '#0f172a',
+                  color: 'white',
+                  padding: '1rem',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(148, 163, 184, 0.18)',
+                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.45)',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <div style={{ fontWeight: 900 }}>Scan</div>
+                  <button
+                    onClick={() => setScanToastMessage(null)}
+                    className="cs-liquid-button cs-liquid-button--secondary"
+                    style={{ padding: '0.2rem 0.55rem' }}
+                    aria-label="Dismiss"
+                  >
+                    ×
+                  </button>
                 </div>
-              )}
-              {assignedResourceType && assignedResourceNumber && (
-                <div
-                  style={{
-                    marginBottom: '1rem',
-                    padding: '1rem',
-                    background: '#0f172a',
-                    borderRadius: '6px',
-                  }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>
-                    Assigned: {assignedResourceType === 'room' ? 'Room' : 'Locker'}{' '}
-                    {assignedResourceNumber}
-                  </div>
-                  {checkoutAt && (
-                    <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                      Checkout: {new Date(checkoutAt).toLocaleString()}
-                    </div>
-                  )}
+                <div style={{ marginTop: '0.5rem', color: '#cbd5e1', fontWeight: 700 }}>
+                  {scanToastMessage}
                 </div>
-              )}
-              {agreementSigned && assignedResourceType && (
-                <button
-                  onClick={() => void handleCompleteTransaction()}
-                  disabled={isSubmitting}
-                  className="cs-liquid-button"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  {isSubmitting ? 'Processing...' : 'Complete Transaction'}
-                </button>
-              )}
+              </div>
             </div>
           )}
+          {/* Agreement + Assignment Display */}
+          <TransactionCompleteModal
+            isOpen={Boolean(currentSessionId && customerName && assignedResourceType && assignedResourceNumber)}
+            agreementPending={!agreementSigned && selectionConfirmed && paymentStatus === 'PAID'}
+            assignedLabel={assignedResourceType === 'room' ? 'Room' : 'Locker'}
+            assignedNumber={assignedResourceNumber || '—'}
+            checkoutAt={checkoutAt}
+            verifyDisabled={!session?.sessionToken || !currentSessionIdRef.current}
+            showComplete={Boolean(agreementSigned && assignedResourceType)}
+            completeLabel={isSubmitting ? 'Processing...' : 'Complete Transaction'}
+            completeDisabled={isSubmitting}
+            onVerifyAgreementArtifacts={() => {
+              const sid = currentSessionIdRef.current;
+              if (!sid) return;
+              setDocumentsModalOpen(true);
+              void fetchDocumentsBySession(sid);
+            }}
+            onCompleteTransaction={() => void handleCompleteTransaction()}
+          />
 
           {/* Pay-First Demo Buttons (after selection confirmed) */}
           {currentSessionId &&
@@ -3416,69 +3579,104 @@ export function AppRoot() {
             paymentQuote &&
             paymentStatus === 'DUE' &&
             !pastDueBlocked && (
-              <div
-                className="cs-liquid-card"
-                style={{
-                  position: 'fixed',
-                  bottom: assignedResourceType ? '200px' : '0',
-                  left: 0,
-                  right: 0,
-                  borderTop: '2px solid #3b82f6',
-                  padding: '1.5rem',
-                  zIndex: 100,
+              <RequiredTenderOutcomeModal
+                isOpen={true}
+                totalLabel={`Total: $${paymentQuote.total.toFixed(2)}`}
+                isSubmitting={isSubmitting}
+                onConfirm={(choice) => {
+                  if (choice === 'CREDIT_SUCCESS') void handleDemoPayment('CREDIT_SUCCESS');
+                  if (choice === 'CASH_SUCCESS') void handleDemoPayment('CASH_SUCCESS');
+                  if (choice === 'CREDIT_DECLINE') void handleDemoPayment('CREDIT_DECLINE', 'Card declined');
                 }}
-              >
-                <div style={{ marginBottom: '1rem', fontWeight: 600, fontSize: '1.125rem' }}>
-                  Total: ${paymentQuote.total.toFixed(2)}
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => void handleDemoPayment('CREDIT_SUCCESS')}
-                    disabled={isSubmitting}
-                    className="cs-liquid-button"
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Credit Success
-                  </button>
-                  <button
-                    onClick={() => void handleDemoPayment('CASH_SUCCESS')}
-                    disabled={isSubmitting}
-                    className="cs-liquid-button"
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Cash Success
-                  </button>
-                  <button
-                    onClick={() => void handleDemoPayment('CREDIT_DECLINE', 'Card declined')}
-                    disabled={isSubmitting}
-                    className="cs-liquid-button cs-liquid-button--danger"
-                    style={{
-                      flex: 1,
-                      padding: '0.75rem',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: isSubmitting ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    Credit Decline
-                  </button>
-                </div>
-              </div>
+              />
             )}
         </div>
       )}
+      <ModalFrame
+        isOpen={documentsModalOpen}
+        title="Agreement artifacts"
+        onClose={() => setDocumentsModalOpen(false)}
+        maxWidth="720px"
+        maxHeight="70vh"
+      >
+        <div style={{ display: 'grid', gap: '0.75rem' }}>
+          <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+            Session: <span style={{ fontFamily: 'monospace' }}>{currentSessionIdRef.current || '—'}</span>
+          </div>
+
+          {documentsError && (
+            <div
+              style={{
+                padding: '0.75rem',
+                background: 'rgba(239, 68, 68, 0.18)',
+                border: '1px solid rgba(239, 68, 68, 0.35)',
+                borderRadius: 12,
+                color: '#fecaca',
+                fontWeight: 700,
+              }}
+            >
+              {documentsError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              className="cs-liquid-button cs-liquid-button--secondary"
+              disabled={documentsLoading || !currentSessionIdRef.current}
+              onClick={() => {
+                const sid = currentSessionIdRef.current;
+                if (!sid) return;
+                void fetchDocumentsBySession(sid);
+              }}
+            >
+              {documentsLoading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+
+          {documentsForSession === null ? (
+            <div style={{ color: '#94a3b8' }}>No data loaded yet.</div>
+          ) : documentsForSession.length === 0 ? (
+            <div style={{ color: '#94a3b8' }}>No documents found for this session.</div>
+          ) : (
+            <div style={{ display: 'grid', gap: '0.5rem' }}>
+              {documentsForSession.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="er-surface"
+                  style={{ padding: '0.75rem', borderRadius: 12, display: 'grid', gap: '0.35rem' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 900 }}>
+                      {doc.doc_type}{' '}
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#94a3b8' }}>
+                        {doc.id}
+                      </span>
+                    </div>
+                    <div style={{ color: '#94a3b8' }}>{new Date(doc.created_at).toLocaleString()}</div>
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                    PDF stored: {doc.has_pdf ? 'yes' : 'no'} • Signature stored: {doc.has_signature ? 'yes' : 'no'}
+                    {doc.signature_hash_prefix ? ` • sig hash: ${doc.signature_hash_prefix}…` : ''}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      className="cs-liquid-button"
+                      disabled={!doc.has_pdf}
+                      onClick={() => {
+                        void downloadAgreementPdf(doc.id).catch((e) => {
+                          setDocumentsError(e instanceof Error ? e.message : 'Failed to download PDF');
+                        });
+                      }}
+                    >
+                      Download PDF
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </ModalFrame>
     </RegisterSignIn>
   );
 }

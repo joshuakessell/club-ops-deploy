@@ -10,6 +10,7 @@ import type { AuthenticatorTransportFuture } from '@simplewebauthn/types';
 import { query } from '../db/index.js';
 import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware.js';
 import { generateSessionToken, getSessionExpiry } from '../auth/utils.js';
+import { insertAuditLogQuery } from '../audit/auditLog.js';
 import {
   getRpId,
   getRpOrigin,
@@ -220,19 +221,27 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
           | undefined
       );
 
-      // Log audit action
-      await query(
-        `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, new_value)
-         VALUES ($1, 'STAFF_WEBAUTHN_ENROLLED', 'staff_webauthn_credential', $2, $3)`,
-        [
-          body.staffId,
-          credentialId,
-          JSON.stringify({
-            deviceId: body.deviceId,
-            transports: body.credentialResponse?.response?.transports,
-          }),
-        ]
+      // audit_log.entity_id is UUID; use the staff_webauthn_credentials row id (not the credential_id text).
+      const credRow = await query<{ id: string }>(
+        `SELECT id FROM staff_webauthn_credentials WHERE staff_id = $1 AND credential_id = $2 LIMIT 1`,
+        [body.staffId, credentialId]
       );
+      const credentialRowId = credRow.rows[0]?.id;
+      if (!credentialRowId) {
+        return reply.status(500).send({ error: 'Failed to load created credential for audit logging' });
+      }
+
+      // Log audit action
+      await insertAuditLogQuery(query, {
+        staffId: body.staffId,
+        action: 'STAFF_WEBAUTHN_ENROLLED',
+        entityType: 'staff_webauthn_credential',
+        entityId: credentialRowId,
+        newValue: {
+          deviceId: body.deviceId,
+          transports: body.credentialResponse?.response?.transports,
+        },
+      });
 
       return reply.send({
         verified: true,
@@ -425,11 +434,12 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       const sessionId = sessionResult.rows[0]!.id;
 
       // Log audit action (use session UUID id, not the token string)
-      await query(
-        `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-         VALUES ($1, 'STAFF_LOGIN_WEBAUTHN', 'staff_session', $2)`,
-        [staff.id, sessionId]
-      );
+      await insertAuditLogQuery(query, {
+        staffId: staff.id,
+        action: 'STAFF_LOGIN_WEBAUTHN',
+        entityType: 'staff_session',
+        entityId: sessionId,
+      });
 
       // Create or update timeclock session for cleaning station sign-in (WebAuthn)
       // Only if employee is not already signed into a register
@@ -603,11 +613,12 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
         );
 
         // Log audit action
-        await query(
-          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-         VALUES ($1, 'STAFF_WEBAUTHN_REVOKED', 'staff_webauthn_credential', $2)`,
-          [staff.staffId, credentialResult.rows[0]!.id]
-        );
+        await insertAuditLogQuery(query, {
+          staffId: staff.staffId,
+          action: 'STAFF_WEBAUTHN_REVOKED',
+          entityType: 'staff_webauthn_credential',
+          entityId: credentialResult.rows[0]!.id,
+        });
 
         return reply.send({ success: true });
       } catch (error) {

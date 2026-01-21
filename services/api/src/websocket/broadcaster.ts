@@ -5,6 +5,7 @@ import type {
   RoomStatusChangedPayload,
   InventoryUpdatedPayload,
   SessionUpdatedPayload,
+  CheckinOptionHighlightedPayload,
   SelectionForcedPayload,
   CheckoutRequestedPayload,
   CheckoutClaimedPayload,
@@ -48,6 +49,7 @@ export type WebSocketPayload =
   | RoomAssignedPayload
   | RoomReleasedPayload
   | SessionUpdatedPayload
+  | CheckinOptionHighlightedPayload
   | CheckoutRequestedPayload
   | CheckoutClaimedPayload
   | CheckoutUpdatedPayload
@@ -75,7 +77,7 @@ interface ClientMetadata {
 
 /**
  * WebSocket broadcaster for sending real-time updates to connected clients.
- * Follows AGENTS.md requirement: "Realtime is push-based"
+ * Follows CONTRIBUTING.md requirement: "Realtime is push-based"
  * Supports lane-scoped broadcasts for SESSION_UPDATED events.
  */
 export interface Broadcaster {

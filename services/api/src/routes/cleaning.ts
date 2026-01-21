@@ -4,6 +4,8 @@ import { transaction, query } from '../db/index.js';
 import { RoomStatus, RoomStatusSchema, validateTransition } from '@club-ops/shared';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import { broadcastInventoryUpdate } from './sessions.js';
+import { insertAuditLog } from '../audit/auditLog.js';
+import { requireAuth } from '../auth/middleware.js';
 
 /**
  * Schema for batch cleaning operations.
@@ -11,12 +13,22 @@ import { broadcastInventoryUpdate } from './sessions.js';
 const CleaningBatchSchema = z.object({
   roomIds: z.array(z.string().uuid()).min(1).max(50),
   targetStatus: RoomStatusSchema,
-  staffId: z.string().min(1),
+  // Deprecated: staff identity is derived from request.staff when staff-authenticated.
+  staffId: z.string().min(1).optional(),
   override: z.boolean().default(false),
   overrideReason: z.string().optional(),
 });
 
-type CleaningBatchInput = z.infer<typeof CleaningBatchSchema>;
+// NOTE: We intentionally spell this type out to avoid occasional `unknown` inference
+// issues in certain TS/Zod toolchain combinations. Runtime validation remains the
+// source of truth via `CleaningBatchSchema.parse(...)`.
+type CleaningBatchInput = {
+  roomIds: string[];
+  targetStatus: RoomStatus;
+  staffId?: string;
+  override: boolean;
+  overrideReason?: string;
+};
 
 interface RoomRow {
   id: string;
@@ -44,7 +56,6 @@ declare module 'fastify' {
 /**
  * Cleaning workflow routes for batch room status updates.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/cleaning/batch - Batch update room statuses
@@ -60,13 +71,15 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
    * - CLEAN → CLEANING (re-clean)
    * - DIRTY → CLEAN (requires override)
    */
-  fastify.post(
+  fastify.post<{ Body: CleaningBatchInput }>(
     '/v1/cleaning/batch',
-    async (request: FastifyRequest<{ Body: CleaningBatchInput }>, reply: FastifyReply) => {
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
       let body: CleaningBatchInput;
 
       try {
-        body = CleaningBatchSchema.parse(request.body);
+        // Work around occasional `unknown` inference in downstream tooling; runtime validation still applies.
+        body = CleaningBatchSchema.parse(request.body) as CleaningBatchInput;
       } catch (error) {
         return reply.status(400).send({
           error: 'Validation failed',
@@ -81,6 +94,17 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
+      if (!request.staff) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+      const staffId = request.staff.staffId;
+      if (body.staffId && body.staffId !== staffId) {
+        request.log.warn(
+          { claimedStaffId: body.staffId, authStaffId: staffId },
+          'Ignoring claimed staffId; using authenticated staff'
+        );
+      }
+
       try {
         const result = await transaction(async (client) => {
           // 1. Create the cleaning batch record
@@ -88,7 +112,7 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
             `INSERT INTO cleaning_batches (staff_id, room_count)
            VALUES ($1, $2)
            RETURNING id`,
-            [body.staffId, body.roomIds.length]
+            [staffId, body.roomIds.length]
           );
           const batchId = batchResult.rows[0]!.id;
 
@@ -192,36 +216,28 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
 
             // 6. Log to audit log if override was used
             if (isOverrideTransition) {
-              await client.query(
-                `INSERT INTO audit_log 
-               (user_id, user_role, action, entity_type, entity_id, old_value, new_value, override_reason)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-                [
-                  body.staffId,
-                  'staff',
-                  'OVERRIDE',
-                  'room',
-                  roomId,
-                  JSON.stringify({ status: fromStatus }),
-                  JSON.stringify({ status: toStatus }),
-                  body.overrideReason,
-                ]
-              );
+              await insertAuditLog(client, {
+                staffId,
+                userId: staffId,
+                userRole: 'staff',
+                action: 'OVERRIDE',
+                entityType: 'room',
+                entityId: roomId,
+                oldValue: { status: fromStatus },
+                newValue: { status: toStatus },
+                overrideReason: body.overrideReason,
+              });
             } else {
-              await client.query(
-                `INSERT INTO audit_log 
-               (user_id, user_role, action, entity_type, entity_id, old_value, new_value)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [
-                  body.staffId,
-                  'staff',
-                  'STATUS_CHANGE',
-                  'room',
-                  roomId,
-                  JSON.stringify({ status: fromStatus }),
-                  JSON.stringify({ status: toStatus }),
-                ]
-              );
+              await insertAuditLog(client, {
+                staffId,
+                userId: staffId,
+                userRole: 'staff',
+                action: 'STATUS_CHANGE',
+                entityType: 'room',
+                entityId: roomId,
+                oldValue: { status: fromStatus },
+                newValue: { status: toStatus },
+              });
             }
 
             results.push({
@@ -268,7 +284,7 @@ export async function cleaningRoutes(fastify: FastifyInstance): Promise<void> {
                 roomId: transition.roomId,
                 previousStatus: transition.previousStatus,
                 newStatus: transition.newStatus,
-                changedBy: body.staffId,
+                changedBy: staffId,
                 override: body.override,
                 reason: body.overrideReason,
               },

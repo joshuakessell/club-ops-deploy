@@ -1,7 +1,8 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
-import type { WebSocket } from 'ws';
+
+import { loadEnvFromDotEnvIfPresent } from './env/loadEnv.js';
 
 import {
   healthRoutes,
@@ -26,6 +27,7 @@ import {
   shiftsRoutes,
   timeclockRoutes,
   documentsRoutes,
+  sessionDocumentsRoutes,
   scheduleRoutes,
   timeoffRoutes,
 } from './routes/index.js';
@@ -33,41 +35,24 @@ import { createBroadcaster, type Broadcaster } from './websocket/broadcaster.js'
 import { initializeDatabase, closeDatabase } from './db/index.js';
 import { cleanupAbandonedRegisterSessions } from './routes/registers.js';
 import { seedDemoData } from './db/seed-demo.js';
-import type { WebSocketEventType } from '@club-ops/shared';
 import { expireWaitlistEntries } from './waitlist/expireWaitlist.js';
+import { processUpgradeHoldsTick } from './waitlist/upgradeHolds.js';
+import { setupTelemetry } from './telemetry/plugin.js';
+import { registerWsRoute } from './websocket/wsRoute.js';
+
+loadEnvFromDotEnvIfPresent();
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const SKIP_DB = process.env.SKIP_DB === 'true';
+const SEED_ON_STARTUP = process.env.SEED_ON_STARTUP === 'true';
 
-function isWebSocketEventType(value: unknown): value is WebSocketEventType {
-  if (typeof value !== 'string') return false;
-  switch (value) {
-    case 'ROOM_STATUS_CHANGED':
-    case 'INVENTORY_UPDATED':
-    case 'ROOM_ASSIGNED':
-    case 'ROOM_RELEASED':
-    case 'SESSION_UPDATED':
-    case 'SELECTION_PROPOSED':
-    case 'SELECTION_FORCED':
-    case 'SELECTION_LOCKED':
-    case 'SELECTION_ACKNOWLEDGED':
-    case 'WAITLIST_CREATED':
-    case 'ASSIGNMENT_CREATED':
-    case 'ASSIGNMENT_FAILED':
-    case 'CUSTOMER_CONFIRMATION_REQUIRED':
-    case 'CUSTOMER_CONFIRMED':
-    case 'CUSTOMER_DECLINED':
-    case 'CHECKOUT_REQUESTED':
-    case 'CHECKOUT_CLAIMED':
-    case 'CHECKOUT_UPDATED':
-    case 'CHECKOUT_COMPLETED':
-    case 'WAITLIST_UPDATED':
-    case 'REGISTER_SESSION_UPDATED':
-      return true;
-    default:
-      return false;
-  }
+// Fail-fast: the API must never start without a kiosk token configured.
+// This is required for kiosk-facing authenticated WebSockets and state-mutating endpoints.
+const KIOSK_TOKEN = process.env.KIOSK_TOKEN?.trim();
+if (!KIOSK_TOKEN) {
+  console.error('FATAL: Missing required env var KIOSK_TOKEN. Refusing to start API server.');
+  process.exit(1);
 }
 
 // Augment FastifyInstance with broadcaster
@@ -91,6 +76,9 @@ async function main() {
     },
   });
 
+  // Telemetry: requestId correlation, ingestion endpoint, backend error capture.
+  await setupTelemetry(fastify);
+
   // Register CORS
   await fastify.register(cors, {
     origin: true,
@@ -98,7 +86,19 @@ async function main() {
   });
 
   // Register WebSocket support
-  await fastify.register(websocket);
+  await fastify.register(websocket, {
+    // If the browser supplies `protocols` when constructing the WebSocket, the server must
+    // select one in the handshake response or the connection will fail.
+    //
+    // We only use this to allow clients to pass the kiosk token via a subprotocol value
+    // (see `auth/kioskToken.ts`), but selecting the first offered protocol is sufficient.
+    options: {
+      handleProtocols: (protocols) => {
+        for (const p of protocols) return p;
+        return false;
+      },
+    },
+  });
 
   // Create broadcaster for WebSocket events
   const broadcaster = createBroadcaster();
@@ -134,6 +134,20 @@ async function main() {
     })();
   }, 60000);
 
+  // Periodic upgrade hold/offer processing (every 5 seconds)
+  const upgradeHoldInterval = setInterval(() => {
+    void (async () => {
+      try {
+        const { expired, held } = await processUpgradeHoldsTick(fastify);
+        if (expired > 0 || held > 0) {
+          fastify.log.info({ expired, held }, 'Processed upgrade holds');
+        }
+      } catch (error) {
+        fastify.log.error(error, 'Error during upgrade hold processing');
+      }
+    })();
+  }, 5000);
+
   // Initialize database connection (unless skipped for testing)
   if (!SKIP_DB) {
     try {
@@ -142,8 +156,14 @@ async function main() {
 
       // Seed demo data if DEMO_MODE is enabled
       if (process.env.DEMO_MODE === 'true') {
-        fastify.log.info('DEMO_MODE enabled, seeding demo data...');
-        await seedDemoData();
+        if (SEED_ON_STARTUP) {
+          fastify.log.info('DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...');
+          await seedDemoData();
+        } else {
+          fastify.log.info(
+            'DEMO_MODE enabled; skipping demo seed on startup. Run `pnpm demo:seed` or set SEED_ON_STARTUP=true to seed during boot.'
+          );
+        }
       }
     } catch (err) {
       fastify.log.error(err, 'Failed to initialize database');
@@ -174,83 +194,19 @@ async function main() {
   await fastify.register(shiftsRoutes);
   await fastify.register(timeclockRoutes);
   await fastify.register(documentsRoutes);
+  await fastify.register(sessionDocumentsRoutes);
   await fastify.register(scheduleRoutes);
   await fastify.register(timeoffRoutes);
 
-  // WebSocket endpoint
-  fastify.get('/ws', { websocket: true }, (connection, req) => {
-    const clientId = crypto.randomUUID();
-    const socket = connection.socket as unknown as WebSocket;
-    type AliveWebSocket = WebSocket & { isAlive?: boolean };
-    const alive = socket as AliveWebSocket;
-
-    // Extract lane from query string if present
-    const url = req.url || '';
-    const urlObj = new URL(url, `http://${req.headers.host || 'localhost'}`);
-    const lane = urlObj.searchParams.get('lane') || undefined;
-
-    fastify.log.info({ clientId, lane }, 'WebSocket client connected');
-
-    broadcaster.addClient(clientId, alive, lane);
-
-    // Keepalive: send ping frames to prevent idle timeouts and detect half-open connections.
-    alive.isAlive = true;
-    alive.on('pong', () => {
-      alive.isAlive = true;
-    });
-
-    const keepaliveInterval = setInterval(() => {
-      if (alive.readyState !== alive.OPEN) return;
-      if (alive.isAlive === false) {
-        alive.terminate();
-        broadcaster.removeClient(clientId);
-        clearInterval(keepaliveInterval);
-        return;
-      }
-      alive.isAlive = false;
-      alive.ping();
-    }, 30000); // 30s
-
-    connection.on('message', (message: Buffer) => {
-      try {
-        const data = JSON.parse(message.toString()) as Record<string, unknown>;
-        fastify.log.info({ clientId, data }, 'Received message from client');
-
-        // Handle subscription messages
-        if (data.type === 'subscribe' && Array.isArray(data.events)) {
-          const events = data.events.filter(isWebSocketEventType);
-          fastify.log.info({ clientId, events }, 'Client subscribed to events');
-          broadcaster.subscribeClient(clientId, events);
-        }
-
-        // Handle lane update
-        if (data.type === 'setLane' && typeof data.lane === 'string') {
-          fastify.log.info({ clientId, lane: data.lane }, 'Client lane updated');
-          broadcaster.updateClientLane(clientId, data.lane);
-        }
-      } catch {
-        fastify.log.warn({ clientId }, 'Received invalid JSON from client');
-      }
-    });
-
-    connection.on('close', () => {
-      clearInterval(keepaliveInterval);
-      broadcaster.removeClient(clientId);
-      fastify.log.info({ clientId }, 'WebSocket client disconnected');
-    });
-
-    connection.on('error', (err) => {
-      clearInterval(keepaliveInterval);
-      fastify.log.error({ clientId, err }, 'WebSocket error');
-      broadcaster.removeClient(clientId);
-    });
-  });
+  // WebSocket endpoint (authenticated; see websocket/wsRoute.ts)
+  await registerWsRoute(fastify, broadcaster);
 
   // Graceful shutdown
   const shutdown = async () => {
     fastify.log.info('Shutting down...');
     clearInterval(cleanupInterval);
     clearInterval(waitlistExpiryInterval);
+    clearInterval(upgradeHoldInterval);
     await fastify.close();
     if (!SKIP_DB) {
       await closeDatabase();

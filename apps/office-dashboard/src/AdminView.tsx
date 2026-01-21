@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { WebSocketEvent } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -265,29 +266,13 @@ export function AdminView({ session }: AdminViewProps) {
           </div>
           <button
             onClick={() => navigate('/admin/staff')}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#374151',
-              border: 'none',
-              borderRadius: '6px',
-              color: '#f9fafb',
-              cursor: 'pointer',
-              fontSize: '1rem',
-            }}
+            className="cs-liquid-button cs-liquid-button--secondary"
           >
             Staff Management
           </button>
           <button
             onClick={() => navigate('/')}
-            style={{
-              padding: '0.75rem 1.5rem',
-              background: '#374151',
-              border: 'none',
-              borderRadius: '6px',
-              color: '#f9fafb',
-              cursor: 'pointer',
-              fontSize: '1rem',
-            }}
+            className="cs-liquid-button cs-liquid-button--secondary"
           >
             ← Back to Dashboard
           </button>
@@ -300,7 +285,7 @@ export function AdminView({ session }: AdminViewProps) {
           display: 'flex',
           gap: '0.5rem',
           marginBottom: '2rem',
-          borderBottom: '1px solid #374151',
+          borderBottom: '1px solid var(--border)',
         }}
       >
         <button
@@ -308,17 +293,11 @@ export function AdminView({ session }: AdminViewProps) {
             setActiveTab('operations');
             loadOperationsData();
           }}
-          style={{
-            padding: '0.75rem 1.5rem',
-            background: activeTab === 'operations' ? '#8b5cf6' : 'transparent',
-            border: 'none',
-            borderBottom:
-              activeTab === 'operations' ? '2px solid #8b5cf6' : '2px solid transparent',
-            color: '#f9fafb',
-            cursor: 'pointer',
-            fontSize: '1rem',
-            fontWeight: activeTab === 'operations' ? 600 : 400,
-          }}
+          className={[
+            'cs-liquid-button',
+            'cs-liquid-button--pill',
+            activeTab === 'operations' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+          ].join(' ')}
         >
           Operations
         </button>
@@ -327,16 +306,11 @@ export function AdminView({ session }: AdminViewProps) {
             setActiveTab('metrics');
             loadMetricsData();
           }}
-          style={{
-            padding: '0.75rem 1.5rem',
-            background: activeTab === 'metrics' ? '#8b5cf6' : 'transparent',
-            border: 'none',
-            borderBottom: activeTab === 'metrics' ? '2px solid #8b5cf6' : '2px solid transparent',
-            color: '#f9fafb',
-            cursor: 'pointer',
-            fontSize: '1rem',
-            fontWeight: activeTab === 'metrics' ? 600 : 400,
-          }}
+          className={[
+            'cs-liquid-button',
+            'cs-liquid-button--pill',
+            activeTab === 'metrics' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+          ].join(' ')}
         >
           Metrics
         </button>
@@ -360,7 +334,7 @@ export function AdminView({ session }: AdminViewProps) {
                 gap: '1rem',
               }}
             >
-              <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
+              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.roomsOccupied ?? 0}
                 </div>
@@ -368,7 +342,7 @@ export function AdminView({ session }: AdminViewProps) {
                   Rooms Occupied
                 </div>
               </div>
-              <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
+              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.roomsUnoccupied ?? 0}
                 </div>
@@ -376,7 +350,7 @@ export function AdminView({ session }: AdminViewProps) {
                   Rooms Unoccupied
                 </div>
               </div>
-              <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
+              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.lockersOccupied ?? 0}
                 </div>
@@ -384,7 +358,7 @@ export function AdminView({ session }: AdminViewProps) {
                   Lockers Occupied
                 </div>
               </div>
-              <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px' }}>
+              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.lockersAvailable ?? 0}
                 </div>
@@ -761,30 +735,36 @@ function AdminWs({
   loadOperationsDataRef: { current: () => Promise<void> };
   onConnectedChange: (connected: boolean) => void;
 }) {
-  const ws = useReconnectingWebSocket({
-    url: `ws://${window.location.hostname}:3001/ws`,
-    onOpenSendJson: [
-      { type: 'subscribe', events: ['INVENTORY_UPDATED', 'ROOM_STATUS_CHANGED', 'SESSION_UPDATED'] },
-    ],
-    onMessage: (event) => {
-      const message = safeJsonParse<WebSocketEvent>(String(event.data));
-      if (!message) return;
-      if (
-        message.type === 'INVENTORY_UPDATED' ||
-        message.type === 'ROOM_STATUS_CHANGED' ||
-        message.type === 'SESSION_UPDATED'
-      ) {
-        // Avoid socket recreation on tab changes.
-        if (activeTabRef.current === 'operations') {
-          loadOperationsDataRef.current().catch(console.error);
-        }
-      }
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : '';
+  const { connected, lastMessage } = useLaneSession({
+    laneId: '',
+    role: 'employee',
+    kioskToken,
+    enabled: !!kioskToken,
   });
 
   useEffect(() => {
-    onConnectedChange(ws.connected);
-  }, [onConnectedChange, ws.connected]);
+    if (!lastMessage) return;
+    const message = safeJsonParse<WebSocketEvent>(String(lastMessage.data));
+    if (!message) return;
+    if (
+      message.type === 'INVENTORY_UPDATED' ||
+      message.type === 'ROOM_STATUS_CHANGED' ||
+      message.type === 'SESSION_UPDATED'
+    ) {
+      if (activeTabRef.current === 'operations') {
+        loadOperationsDataRef.current().catch(console.error);
+      }
+    }
+  }, [lastMessage, loadOperationsDataRef, activeTabRef]);
+
+  useEffect(() => {
+    onConnectedChange(connected);
+  }, [onConnectedChange, connected]);
 
   return null;
 }

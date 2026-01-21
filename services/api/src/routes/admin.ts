@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { requireAuth, requireAdmin, requireReauthForAdmin } from '../auth/middleware.js';
+import { insertAuditLog, insertAuditLogQuery } from '../audit/auditLog.js';
 
 /**
  * Admin-only routes for operations management and metrics.
@@ -612,15 +613,13 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         const staffId = result.rows[0]!.id;
 
         // Log audit action
-        await query(
-          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, new_value)
-         VALUES ($1, 'STAFF_CREATED', 'staff', $2, $3)`,
-          [
-            request.staff.staffId,
-            staffId,
-            JSON.stringify({ name: body.name, role: body.role, active: body.active }),
-          ]
-        );
+        await insertAuditLogQuery(query, {
+          staffId: request.staff.staffId,
+          action: 'STAFF_CREATED',
+          entityType: 'staff',
+          entityId: staffId,
+          newValue: { name: body.name, role: body.role, active: body.active },
+        });
 
         return reply.status(201).send({
           id: staffId,
@@ -727,11 +726,13 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
               : 'STAFF_DEACTIVATED'
             : 'STAFF_UPDATED';
 
-        await query(
-          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, new_value)
-         VALUES ($1, $2, 'staff', $3, $4)`,
-          [request.staff.staffId, action, staff.id, JSON.stringify(body)]
-        );
+        await insertAuditLogQuery(query, {
+          staffId: request.staff.staffId,
+          action,
+          entityType: 'staff',
+          entityId: staff.id,
+          newValue: body,
+        });
 
         return reply.send(staff);
       } catch (error) {
@@ -790,11 +791,12 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
         }
 
         // Log audit action
-        await query(
-          `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-         VALUES ($1, 'STAFF_PIN_RESET', 'staff', $2)`,
-          [request.staff.staffId, request.params.id]
-        );
+        await insertAuditLogQuery(query, {
+          staffId: request.staff.staffId,
+          action: 'STAFF_PIN_RESET',
+          entityType: 'staff',
+          entityId: request.params.id,
+        });
 
         return reply.send({ success: true });
       } catch (error) {
@@ -981,11 +983,12 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Log audit action
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'REGISTER_FORCE_SIGN_OUT', 'register_session', $2)`,
-            [request.staff!.staffId, session.id]
-          );
+          await insertAuditLog(client, {
+            staffId: request.staff!.staffId,
+            action: 'REGISTER_FORCE_SIGN_OUT',
+            entityType: 'register_session',
+            entityId: session.id,
+          });
 
           // Broadcast REGISTER_SESSION_UPDATED event
           const payload = {
@@ -1187,11 +1190,12 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
               );
 
               // Log audit action
-              await client.query(
-                `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-               VALUES ($1, 'REGISTER_FORCE_SIGN_OUT', 'register_session', $2)`,
-                [request.staff!.staffId, session.id]
-              );
+              await insertAuditLog(client, {
+                staffId: request.staff!.staffId,
+                action: 'REGISTER_FORCE_SIGN_OUT',
+                entityType: 'register_session',
+                entityId: session.id,
+              });
 
               // Broadcast REGISTER_SESSION_UPDATED event
               const payload = {
@@ -1393,23 +1397,22 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
 
           const after = updated.rows[0]!;
 
-          await client.query(
-            `INSERT INTO audit_log (user_id, user_role, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, $2, 'UPDATE', 'customer', $3, $4, $5)`,
-            [
-              auditStaffId,
-              auditStaffRole,
-              request.params.id,
-              JSON.stringify({
-                notes: before.notes,
-                pastDueBalance: parseFloat(String(before.past_due_balance || 0)),
-              }),
-              JSON.stringify({
-                notes: after.notes,
-                pastDueBalance: parseFloat(String(after.past_due_balance || 0)),
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: auditStaffId,
+            userId: auditStaffId,
+            userRole: auditStaffRole,
+            action: 'UPDATE',
+            entityType: 'customer',
+            entityId: request.params.id,
+            oldValue: {
+              notes: before.notes,
+              pastDueBalance: parseFloat(String(before.past_due_balance || 0)),
+            },
+            newValue: {
+              notes: after.notes,
+              pastDueBalance: parseFloat(String(after.past_due_balance || 0)),
+            },
+          });
 
           return after;
         });

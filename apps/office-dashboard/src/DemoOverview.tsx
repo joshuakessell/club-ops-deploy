@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { InventoryUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +19,23 @@ export function DemoOverview({ session }: { session: StaffSession }) {
     activeCount: number;
     offeredCount: number;
   } | null>(null);
+  const [docSessionId, setDocSessionId] = useState('');
+  const [docLookupBusy, setDocLookupBusy] = useState(false);
+  const [docLookupError, setDocLookupError] = useState<string | null>(null);
+  const [docLookup, setDocLookup] = useState<
+    | null
+    | {
+        documents: Array<{
+          id: string;
+          doc_type: string;
+          mime_type: string;
+          created_at: string;
+          has_signature: boolean;
+          signature_hash_prefix?: string;
+          has_pdf?: boolean;
+        }>;
+      }
+  >(null);
 
   const lowAvailability = useMemo(() => {
     const byType = inventory?.byType || {};
@@ -40,26 +58,36 @@ export function DemoOverview({ session }: { session: StaffSession }) {
       .catch(() => setWaitlistMetrics(null));
   }, [session.sessionToken]);
 
-  useReconnectingWebSocket({
-    url: wsBaseUrl(),
-    onOpenSendJson: [{ type: 'subscribe', events: ['INVENTORY_UPDATED', 'WAITLIST_UPDATED'] }],
-    onMessage: (event) => {
-      const msg = safeJsonParse<WebSocketEvent>(String(event.data));
-      if (!msg) return;
-      if (msg.type === 'INVENTORY_UPDATED') {
-        const payload = msg.payload as InventoryUpdatedPayload;
-        setInventory(payload.inventory as unknown as InventorySummaryResponse);
-      }
-      if (msg.type === 'WAITLIST_UPDATED') {
-        apiJson<{ activeCount: number; offeredCount: number; averageWaitTimeMinutes: number }>(
-          '/v1/metrics/waitlist',
-          { sessionToken: session.sessionToken }
-        )
-          .then((m) => setWaitlistMetrics({ activeCount: m.activeCount, offeredCount: m.offeredCount }))
-          .catch(() => setWaitlistMetrics(null));
-      }
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : '';
+  void wsBaseUrl;
+  const { lastMessage } = useLaneSession({
+    laneId: '',
+    role: 'employee',
+    kioskToken,
+    enabled: !!kioskToken,
   });
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    const msg = safeJsonParse<WebSocketEvent>(String(lastMessage.data));
+    if (!msg) return;
+    if (msg.type === 'INVENTORY_UPDATED') {
+      const payload = msg.payload as InventoryUpdatedPayload;
+      setInventory(payload.inventory as unknown as InventorySummaryResponse);
+    }
+    if (msg.type === 'WAITLIST_UPDATED') {
+      apiJson<{ activeCount: number; offeredCount: number; averageWaitTimeMinutes: number }>(
+        '/v1/metrics/waitlist',
+        { sessionToken: session.sessionToken }
+      )
+        .then((m) => setWaitlistMetrics({ activeCount: m.activeCount, offeredCount: m.offeredCount }))
+        .catch(() => setWaitlistMetrics(null));
+    }
+  }, [lastMessage, session.sessionToken]);
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -114,6 +142,102 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               <button className="cs-liquid-button" onClick={() => navigate('/waitlist')}>
                 Manage Waitlist
               </button>
+            </div>
+
+            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Agreement PDF verification</div>
+              <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                Paste a lane session ID to verify PDF + signature artifacts, and download the PDF.
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <input
+                  value={docSessionId}
+                  onChange={(e) => setDocSessionId(e.target.value)}
+                  placeholder="lane session id (uuid)…"
+                  style={{
+                    flex: '1 1 320px',
+                    padding: '0.5rem 0.75rem',
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    color: 'var(--text)',
+                    fontFamily: 'monospace',
+                  }}
+                />
+                <button
+                  className="cs-liquid-button cs-liquid-button--secondary"
+                  disabled={docLookupBusy || !docSessionId.trim()}
+                  onClick={() => {
+                    const sid = docSessionId.trim();
+                    if (!sid) return;
+                    setDocLookupBusy(true);
+                    setDocLookupError(null);
+                    apiJson<{ documents: any[] }>(`/v1/documents/by-session/${sid}`, {
+                      sessionToken: session.sessionToken,
+                    })
+                      .then((data) => setDocLookup({ documents: Array.isArray(data.documents) ? (data.documents as any) : [] }))
+                      .catch((e) => setDocLookupError(e instanceof Error ? e.message : 'Failed to fetch'))
+                      .finally(() => setDocLookupBusy(false));
+                  }}
+                >
+                  {docLookupBusy ? 'Checking…' : 'Check'}
+                </button>
+              </div>
+              {docLookupError && (
+                <div style={{ marginTop: '0.75rem', color: '#fecaca', fontWeight: 700 }}>{docLookupError}</div>
+              )}
+              {docLookup && (
+                <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
+                  {docLookup.documents.length === 0 ? (
+                    <div style={{ color: 'var(--text-muted)' }}>No documents found.</div>
+                  ) : (
+                    docLookup.documents.map((d) => (
+                      <div
+                        key={d.id}
+                        className="er-surface"
+                        style={{ padding: '0.75rem', borderRadius: 12, display: 'grid', gap: '0.35rem' }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <div style={{ fontWeight: 900 }}>
+                            {d.doc_type}{' '}
+                            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-muted)' }}>
+                              {d.id}
+                            </span>
+                          </div>
+                          <div style={{ color: 'var(--text-muted)' }}>
+                            {d.created_at ? new Date(d.created_at).toLocaleString() : '—'}
+                          </div>
+                        </div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                          PDF stored: {d.has_pdf ? 'yes' : 'no'} • Signature stored: {d.has_signature ? 'yes' : 'no'}
+                          {d.signature_hash_prefix ? ` • sig hash: ${d.signature_hash_prefix}…` : ''}
+                        </div>
+                        <div>
+                          <button
+                            className="cs-liquid-button"
+                            disabled={!d.has_pdf}
+                            onClick={() => {
+                              fetch(`/api/v1/documents/${d.id}/download`, {
+                                headers: { Authorization: `Bearer ${session.sessionToken}` },
+                              })
+                                .then(async (res) => {
+                                  if (!res.ok) throw new Error('Download failed');
+                                  const blob = await res.blob();
+                                  const obj = URL.createObjectURL(blob);
+                                  window.open(obj, '_blank', 'noopener,noreferrer');
+                                  window.setTimeout(() => URL.revokeObjectURL(obj), 60_000);
+                                })
+                                .catch((e) => setDocLookupError(e instanceof Error ? e.message : 'Download failed'));
+                            }}
+                          >
+                            Download PDF
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>

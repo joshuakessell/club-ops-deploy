@@ -1,9 +1,13 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { serializableTransaction, query } from '../db/index.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding.js';
+import { computeInventoryAvailable } from '../inventory/available.js';
+import { insertAuditLog } from '../audit/auditLog.js';
+import { requireAuth } from '../auth/middleware.js';
+import { LaneIdSchema } from '../utils/lane.js';
 
 /**
  * Schema for creating a new session.
@@ -14,6 +18,23 @@ const CreateSessionSchema = z.object({
   lockerId: z.string().uuid().optional(),
   expectedDuration: z.number().int().positive().default(360), // in minutes (6 hours default)
   checkinType: z.enum(['INITIAL', 'RENEWAL', 'UPGRADE']).optional().default('INITIAL'),
+}).superRefine((v, ctx) => {
+  const hasRoom = Boolean(v.roomId);
+  const hasLocker = Boolean(v.lockerId);
+  if (hasRoom && hasLocker) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide either roomId or lockerId, not both',
+      path: ['roomId'],
+    });
+  }
+  if (!hasRoom && !hasLocker) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide exactly one of roomId or lockerId',
+      path: ['roomId'],
+    });
+  }
 });
 
 type CreateSessionInput = z.infer<typeof CreateSessionSchema>;
@@ -116,7 +137,6 @@ function getAllowedRentals(membershipNumber: string | null | undefined): string[
  * Session management routes.
  * Handles check-in/check-out operations.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/sessions - Create a new check-in session
@@ -124,9 +144,11 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    * Creates a session for a member, optionally assigning a room and/or locker.
    * Uses serializable transactions to prevent double-booking.
    */
-  fastify.post(
+  fastify.post<{ Body: CreateSessionInput }>(
     '/v1/sessions',
-    async (request: FastifyRequest<{ Body: CreateSessionInput }>, reply: FastifyReply) => {
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const staffId = request.staff?.staffId ?? null;
       let body: CreateSessionInput;
 
       try {
@@ -167,7 +189,7 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 409, message: 'Customer already has an active session' };
           }
 
-          // 3. Handle room assignment if requested
+          // 3. Handle room OR locker assignment (mutually exclusive)
           let assignedRoomId: string | null = null;
           if (body.roomId) {
             const roomResult = await client.query<RoomRow>(
@@ -251,38 +273,36 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
 
           // 6. Log the check-in to audit log
           const newSession = sessionResult.rows[0]!;
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, new_value)
-           VALUES ($1, $2, $3, $4, $5)`,
-            [
-              null, // TODO: Use actual staff ID from auth when available
-              'CHECK_IN',
-              'session',
-              newSession.id,
-              JSON.stringify({
-                customerId: body.customerId,
-                roomId: assignedRoomId,
-                lockerId: assignedLockerId,
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId,
+            userId: staffId,
+            userRole: staffId ? 'staff' : null,
+            action: 'CHECK_IN',
+            entityType: 'session',
+            entityId: newSession.id,
+            newValue: {
+              customerId: body.customerId,
+              roomId: assignedRoomId,
+              lockerId: assignedLockerId,
+            },
+          });
 
           return newSession;
         });
 
-        // Broadcast room assignment if applicable
-        if (body.roomId && fastify.broadcaster) {
-          fastify.broadcaster.broadcast({
-            type: 'ROOM_ASSIGNED',
-            payload: {
-              roomId: body.roomId,
-              sessionId: session.id,
-              customerId: body.customerId,
-            },
-            timestamp: new Date().toISOString(),
-          });
-
-          // Also broadcast inventory update
+        // Broadcast assignment and inventory update (room or locker)
+        if (fastify.broadcaster) {
+          if (body.roomId) {
+            fastify.broadcaster.broadcast({
+              type: 'ROOM_ASSIGNED',
+              payload: {
+                roomId: body.roomId,
+                sessionId: session.id,
+                customerId: body.customerId,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          }
           await broadcastInventoryUpdate(fastify.broadcaster);
         }
 
@@ -355,15 +375,13 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    */
   const ScanIdSchema = z.object({
     idNumber: z.string().min(1),
-    lane: z.string().min(1),
+    lane: LaneIdSchema,
   });
 
-  fastify.post(
+  fastify.post<{ Body: z.infer<typeof ScanIdSchema> }>(
     '/v1/sessions/scan-id',
-    async (
-      request: FastifyRequest<{ Body: z.infer<typeof ScanIdSchema> }>,
-      reply: FastifyReply
-    ) => {
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
       try {
         const body = ScanIdSchema.parse(request.body);
 
@@ -468,16 +486,14 @@ export async function sessionRoutes(fastify: FastifyInstance): Promise<void> {
    */
   const ScanMembershipSchema = z.object({
     membershipNumber: z.string().min(1),
-    lane: z.string().min(1),
+    lane: LaneIdSchema,
     sessionId: z.string().uuid().optional(),
   });
 
-  fastify.post(
+  fastify.post<{ Body: z.infer<typeof ScanMembershipSchema> }>(
     '/v1/sessions/scan-membership',
-    async (
-      request: FastifyRequest<{ Body: z.infer<typeof ScanMembershipSchema> }>,
-      reply: FastifyReply
-    ) => {
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
       try {
         const body = ScanMembershipSchema.parse(request.body);
 
@@ -614,13 +630,14 @@ async function broadcastInventoryUpdate(broadcaster: Broadcaster): Promise<void>
       byType[row.room_type] = { clean: 0, cleaning: 0, dirty: 0, total: 0 };
     }
     const count = parseInt(row.count, 10);
-    const status = row.status.toLowerCase() as 'clean' | 'cleaning' | 'dirty';
-    byType[row.room_type]![status] = count;
-    byType[row.room_type]!.total += count;
-
-    if (status === 'clean') overallClean += count;
-    else if (status === 'cleaning') overallCleaning += count;
-    else if (status === 'dirty') overallDirty += count;
+    const status = row.status.toLowerCase();
+    if (status === 'clean' || status === 'cleaning' || status === 'dirty') {
+      byType[row.room_type]![status] = count;
+      byType[row.room_type]!.total += count;
+      if (status === 'clean') overallClean += count;
+      else if (status === 'cleaning') overallCleaning += count;
+      else overallDirty += count;
+    }
   }
 
   let lockerClean = 0,
@@ -628,10 +645,17 @@ async function broadcastInventoryUpdate(broadcaster: Broadcaster): Promise<void>
     lockerDirty = 0;
   for (const row of lockerResult.rows) {
     const count = parseInt(row.count, 10);
-    const status = row.status.toLowerCase() as 'clean' | 'cleaning' | 'dirty';
+    const status = row.status.toLowerCase();
     if (status === 'clean') lockerClean = count;
     else if (status === 'cleaning') lockerCleaning = count;
     else if (status === 'dirty') lockerDirty = count;
+  }
+
+  let available: Awaited<ReturnType<typeof computeInventoryAvailable>> | undefined;
+  try {
+    available = await computeInventoryAvailable(query);
+  } catch {
+    available = undefined;
   }
 
   broadcaster.broadcast({
@@ -652,6 +676,7 @@ async function broadcastInventoryUpdate(broadcaster: Broadcaster): Promise<void>
           total: lockerClean + lockerCleaning + lockerDirty,
         },
       },
+      available,
     },
     timestamp: new Date().toISOString(),
   });

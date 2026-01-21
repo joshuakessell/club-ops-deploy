@@ -1,8 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { transaction, serializableTransaction } from '../db/index.js';
-import { requireAuth, requireReauth } from '../auth/middleware.js';
+import { requireAuth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
+import { getRoomTierFromNumber } from '@club-ops/shared';
+import { broadcastInventoryUpdate } from './sessions.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -104,28 +107,7 @@ The full upgrade fee applies even if limited time remains.`;
  * Map room number to tier (Special, Double, or Standard).
  */
 function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
-  const num = parseInt(roomNumber, 10);
-
-  // Special: rooms 201, 232, 256
-  if (num === 201 || num === 232 || num === 256) {
-    return 'SPECIAL';
-  }
-
-  // Double: even rooms 216, 218, 232, 252, 256, 262 and odd room 225
-  if (
-    num === 216 ||
-    num === 218 ||
-    num === 232 ||
-    num === 252 ||
-    num === 256 ||
-    num === 262 ||
-    num === 225
-  ) {
-    return 'DOUBLE';
-  }
-
-  // All else standard
-  return 'STANDARD';
+  return getRoomTierFromNumber(parseInt(roomNumber, 10));
 }
 
 /**
@@ -154,7 +136,6 @@ function calculateUpgradeFee(fromTier: string, toTier: 'STANDARD' | 'DOUBLE' | '
 /**
  * Upgrade routes for waitlist and upgrade management.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/upgrades/waitlist - Join waitlist for upgrade
@@ -204,25 +185,20 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           const session = sessionResult.rows[0]!;
 
           // 2. Log disclaimer acknowledgment to audit_log
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, new_value)
-           VALUES ($1, $2, $3, $4, $5)`,
-            [
-              staff.staffId,
-              'UPGRADE_DISCLAIMER',
-              'session',
-              session.id,
-              JSON.stringify({
-                action: 'JOIN_WAITLIST',
-                desiredRoomType: body.desiredRoomType,
-                disclaimerText: UPGRADE_DISCLAIMER_TEXT,
-                acknowledgedAt: new Date().toISOString(),
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'UPGRADE_DISCLAIMER',
+            entityType: 'session',
+            entityId: session.id,
+            newValue: {
+              action: 'JOIN_WAITLIST',
+              desiredRoomType: body.desiredRoomType,
+              disclaimerText: UPGRADE_DISCLAIMER_TEXT,
+              acknowledgedAt: new Date().toISOString(),
+            },
+          });
 
-          // TODO: Actually implement waitlist table if needed
-          // For now, we just log the disclaimer acknowledgment
+          // NOTE: Waitlist persistence is not implemented; we only record the disclaimer acknowledgment.
         });
 
         return reply.status(200).send({
@@ -352,28 +328,22 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // 6. Log disclaimer acknowledgment to audit_log
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-            [
-              staff.staffId,
-              'UPGRADE_DISCLAIMER',
-              'session',
-              session.id,
-              JSON.stringify({
-                previousRoomId: session.room_id,
-              }),
-              JSON.stringify({
-                action: 'ACCEPT_UPGRADE',
-                newRoomId: body.newRoomId,
-                newRoomNumber: newRoom.number,
-                newRoomType: newRoom.type,
-                checkoutAt: originalCheckoutAt?.toISOString(),
-                disclaimerText: UPGRADE_DISCLAIMER_TEXT,
-                acknowledgedAt: new Date().toISOString(),
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'UPGRADE_DISCLAIMER',
+            entityType: 'session',
+            entityId: session.id,
+            oldValue: { previousRoomId: session.room_id },
+            newValue: {
+              action: 'ACCEPT_UPGRADE',
+              newRoomId: body.newRoomId,
+              newRoomNumber: newRoom.number,
+              newRoomType: newRoom.type,
+              checkoutAt: originalCheckoutAt?.toISOString(),
+              disclaimerText: UPGRADE_DISCLAIMER_TEXT,
+              acknowledgedAt: new Date().toISOString(),
+            },
+          });
 
           return {
             sessionId: session.id,
@@ -598,28 +568,25 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           const paymentIntent = intentResult.rows[0]!;
 
           // 6. Log upgrade started
-          await client.query(
-            `INSERT INTO audit_log 
-           (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, 'UPGRADE_STARTED', 'waitlist', $2, $3, $4)`,
-            [
-              staff.staffId,
-              waitlistId,
-              JSON.stringify({
-                status: waitlist.status,
-                currentRentalType: block.rental_type,
-                currentResourceId: block.room_id || block.locker_id,
-              }),
-              JSON.stringify({
-                desiredTier: waitlist.desired_tier,
-                newRoomId: roomId,
-                newRoomNumber: newRoom.number,
-                upgradeFee,
-                paymentIntentId: paymentIntent.id,
-                disclaimerAcknowledged: true,
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'UPGRADE_STARTED',
+            entityType: 'waitlist',
+            entityId: waitlistId,
+            oldValue: {
+              status: waitlist.status,
+              currentRentalType: block.rental_type,
+              currentResourceId: block.room_id || block.locker_id,
+            },
+            newValue: {
+              desiredTier: waitlist.desired_tier,
+              newRoomId: roomId,
+              newRoomNumber: newRoom.number,
+              upgradeFee,
+              paymentIntentId: paymentIntent.id,
+              disclaimerAcknowledged: true,
+            },
+          });
 
           return {
             waitlistId,
@@ -656,7 +623,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
    *
    * Called after payment is marked as paid.
    * Performs the actual upgrade: resource swap and inventory transitions.
-   * Requires step-up re-auth.
+   * Auth required.
    */
   fastify.post<{
     Body: {
@@ -666,7 +633,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/upgrades/complete',
     {
-      preHandler: [requireReauth],
+      preHandler: [requireAuth],
     },
     async (request, reply) => {
       const staff = request.staff;
@@ -681,6 +648,7 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           // 1. Verify payment is paid
           const intentResult = await client.query<{
             id: string;
+            amount: number | string;
             status: string;
             quote_json: unknown;
           }>(`SELECT * FROM payment_intents WHERE id = $1`, [paymentIntentId]);
@@ -830,37 +798,23 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           // 9. Log upgrade completed
-          await client.query(
-            `INSERT INTO audit_log 
-           (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, 'UPGRADE_COMPLETED', 'waitlist', $2, $3, $4)`,
-            [
-              staff.staffId,
-              waitlistId,
-              JSON.stringify({
-                oldResourceId,
-                oldResourceType,
-                oldRentalType: block.rental_type,
-              }),
-              JSON.stringify({
-                newRoomId,
-                newRoomNumber: newRoom.number,
-                newRentalType: waitlist.desired_tier,
-                paymentIntentId,
-                blockEndsAt: block.ends_at.toISOString(), // Upgrade does NOT extend stay
-              }),
-            ]
-          );
-
-          // 10. Broadcast inventory and waitlist updates
-          fastify.broadcaster.broadcastInventoryUpdated({ inventory: {} as any }); // Will be refreshed by inventory route
-          fastify.broadcaster.broadcast({
-            type: 'WAITLIST_UPDATED',
-            payload: {
-              waitlistId,
-              status: 'COMPLETED',
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'UPGRADE_COMPLETED',
+            entityType: 'waitlist',
+            entityId: waitlistId,
+            oldValue: {
+              oldResourceId,
+              oldResourceType,
+              oldRentalType: block.rental_type,
             },
-            timestamp: new Date().toISOString(),
+            newValue: {
+              newRoomId,
+              newRoomNumber: newRoom.number,
+              newRentalType: waitlist.desired_tier,
+              paymentIntentId,
+              blockEndsAt: block.ends_at.toISOString(), // Upgrade does NOT extend stay
+            },
           });
 
           return {
@@ -874,6 +828,19 @@ export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
             blockEndsAt: block.ends_at, // Checkout time unchanged
           };
         });
+
+        // Broadcast AFTER commit so refetch-on-event sees updated DB rows immediately.
+        if (fastify.broadcaster) {
+          await broadcastInventoryUpdate(fastify.broadcaster);
+          fastify.broadcaster.broadcast({
+            type: 'WAITLIST_UPDATED',
+            payload: {
+              waitlistId: result.waitlistId,
+              status: 'COMPLETED',
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         return reply.send(result);
       } catch (error: unknown) {

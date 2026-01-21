@@ -57,29 +57,12 @@ body {
 }
 
 .start-checkout-btn {
+  /* Visual treatment is provided by `cs-liquid-button` + Liquid Glass theme engine */
   padding: 1.5rem 3rem;
-  background: var(--cs-primary);
-  color: var(--cs-white);
-  border: none;
-  border-radius: var(--cs-radius-xl);
   font-size: clamp(1.25rem, 3vw, 2rem);
   font-weight: 600;
-  cursor: pointer;
-  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   min-height: 64px;
   animation: fadeIn 0.5s ease-in 0.3s both;
-  box-shadow: var(--cs-elevation-3);
-}
-
-.start-checkout-btn:hover {
-  background: var(--cs-primary-dark);
-  box-shadow: var(--cs-elevation-4);
-  transform: translateY(-2px);
-}
-
-.start-checkout-btn:active {
-  transform: translateY(0);
-  box-shadow: var(--cs-elevation-2);
 }
 
 /* Active session state */
@@ -178,17 +161,15 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 1.5rem;
-  border: 1px solid var(--border);
   border-radius: var(--cs-radius-lg);
-  background: var(--cs-bg-card);
   cursor: pointer;
   transition: all var(--cs-transition-base) var(--cs-ease-standard);
   box-shadow: var(--cs-elevation-1);
 }
 
 .checklist-item:hover {
-  border-color: var(--cs-primary);
-  background: var(--cs-bg-hover);
+  border-color: rgba(255, 255, 255, 0.28);
+  background-color: rgba(255, 255, 255, 0.12);
   box-shadow: var(--cs-elevation-2);
   transform: translateY(-1px);
 }
@@ -207,9 +188,7 @@ body {
 
 .checklist-notice {
   padding: 1.5rem;
-  border: 1px solid var(--border);
   border-radius: var(--cs-radius-lg);
-  background: var(--cs-bg-card);
   font-size: clamp(0.875rem, 1.5vw, 1rem);
   line-height: 1.6;
   box-shadow: var(--cs-elevation-1);
@@ -226,29 +205,12 @@ body {
 }
 
 .continue-btn {
+  /* Visual treatment is provided by `cs-liquid-button` */
   padding: 1.5rem 3rem;
-  background: var(--cs-primary);
-  color: var(--cs-white);
-  border: none;
-  border-radius: var(--cs-radius-lg);
   font-size: clamp(1.125rem, 2vw, 1.5rem);
   font-weight: 600;
-  cursor: pointer;
-  transition: all var(--cs-transition-base) var(--cs-ease-standard);
   min-height: 64px;
   width: 100%;
-  box-shadow: var(--cs-elevation-2);
-}
-
-.continue-btn:hover:not(:disabled) {
-  background: var(--cs-primary-dark);
-  box-shadow: var(--cs-elevation-4);
-  transform: translateY(-2px);
-}
-
-.continue-btn:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: var(--cs-elevation-1);
 }
 
 .continue-btn:disabled {
@@ -278,12 +240,11 @@ body {
 
 .late-fee-notice {
   padding: 1.5rem;
-  border: 2px solid var(--border);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
   font-size: clamp(1rem, 2vw, 1.25rem);
   font-weight: 600;
   color: var(--text);
+  border-color: rgba(245, 158, 11, 0.65);
 }
 
 /* Completion view */

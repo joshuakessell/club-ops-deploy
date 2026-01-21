@@ -1,16 +1,15 @@
-const SPECIAL_ROOMS = new Set([201, 232, 256]);
-const DOUBLE_ROOMS = new Set([216, 218, 232, 252, 256, 262, 225]);
+import { getRoomTierFromNumber } from '@club-ops/shared';
 
 export type RoomTier = 'STANDARD' | 'DOUBLE' | 'SPECIAL';
 
 export function getRoomTier(roomNumber: string): RoomTier {
   const numeric = parseInt(roomNumber, 10);
-  if (SPECIAL_ROOMS.has(numeric)) {
-    return 'SPECIAL';
+  try {
+    return getRoomTierFromNumber(numeric);
+  } catch {
+    // In some UI contexts/tests we may be given non-contract room numbers (e.g. "101").
+    // Treat unknown rooms as STANDARD for display tiering.
+    return 'STANDARD';
   }
-  if (DOUBLE_ROOMS.has(numeric)) {
-    return 'DOUBLE';
-  }
-  return 'STANDARD';
 }
 

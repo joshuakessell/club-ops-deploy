@@ -1,16 +1,39 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { installTelemetry, TelemetryErrorBoundary } from '@club-ops/ui';
 import App from './App';
-import '@club-ops/ui/src/styles/tokens.css';
-import '@club-ops/ui/src/styles/components.css';
-import '@club-ops/ui/src/styles/liquid-glass.css';
+import '@club-ops/ui/styles/index.css';
 import './styles.css';
+import { FatalEnvScreen } from './components/FatalEnvScreen';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+const kioskToken =
+  typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+    ? rawEnv.VITE_KIOSK_TOKEN.trim()
+    : null;
+if (!kioskToken) {
+  const err = new Error('Missing required env var VITE_KIOSK_TOKEN (employee-register).');
+  createRoot(root).render(<FatalEnvScreen message={err.message} />);
+  queueMicrotask(() => {
+    throw err;
+  });
+} else {
+  installTelemetry({
+    app: 'employee-register',
+    endpoint: '/api/v1/telemetry',
+    isDev: import.meta.env.DEV,
+    captureConsoleWarnInDev: true,
+    getLane: () => sessionStorage.getItem('lane') ?? undefined,
+  });
+
+  createRoot(root).render(
+    <StrictMode>
+      <TelemetryErrorBoundary>
+        <App />
+      </TelemetryErrorBoundary>
+    </StrictMode>
+  );
+}

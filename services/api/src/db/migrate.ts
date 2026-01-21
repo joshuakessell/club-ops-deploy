@@ -3,9 +3,12 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { loadDatabaseConfig } from './index.js';
+import { loadEnvFromDotEnvIfPresent } from '../env/loadEnv.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+loadEnvFromDotEnvIfPresent();
 
 const MIGRATIONS_TABLE = 'schema_migrations';
 

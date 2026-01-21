@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SignInModal } from './SignInModal';
 import type { WebSocketEvent, RegisterSessionUpdatedPayload } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { closeLaneSessionClient, useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -25,20 +26,40 @@ interface RegisterSession {
 interface RegisterSignInProps {
   deviceId: string;
   onSignedIn: (session: RegisterSession) => void;
+  topTitle?: string;
+  lane?: string;
+  apiStatus?: string | null;
+  wsConnected?: boolean;
+  onSignOut?: () => void;
+  onCloseOut?: () => void;
   children: React.ReactNode;
 }
 
-export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignInProps) {
+export function RegisterSignIn({
+  deviceId,
+  onSignedIn,
+  topTitle = 'Employee Register',
+  lane,
+  apiStatus,
+  wsConnected,
+  onSignOut,
+  onCloseOut,
+  children,
+}: RegisterSignInProps) {
   const [showSignInModal, setShowSignInModal] = useState(false);
   const [registerSession, setRegisterSession] = useState<RegisterSession | null>(null);
-  const [heartbeatInterval, setHeartbeatInterval] = useState<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
 
   const handleSessionInvalidated = useCallback(() => {
     // Clear heartbeat interval
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-      setHeartbeatInterval(null);
-    }
+    stopHeartbeat();
 
     // Clear register session state
     setRegisterSession(null);
@@ -47,7 +68,7 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     localStorage.removeItem('staff_session');
 
     // Return to splash (component will re-render showing sign-in modal)
-  }, [heartbeatInterval]);
+  }, [stopHeartbeat]);
 
   const checkRegisterStatus = useCallback(async (): Promise<boolean> => {
     try {
@@ -74,7 +95,6 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
           registerNumber: data.registerNumber,
           deviceId,
         });
-        startHeartbeat();
         onSignedIn({
           employeeId: data.employee.id,
           employeeName: data.employee.name,
@@ -99,11 +119,8 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     <RegisterSessionWs deviceId={deviceId} onInvalidated={handleSessionInvalidated} />
   ) : null;
 
-  const startHeartbeat = () => {
-    // Clear existing interval
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval);
-    }
+  const startHeartbeat = useCallback(() => {
+    stopHeartbeat();
 
     // Send heartbeat every 60 seconds (90 second TTL on server)
     const interval = setInterval(() => {
@@ -139,8 +156,18 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
       })();
     }, 60000);
 
-    setHeartbeatInterval(interval);
-  };
+    heartbeatIntervalRef.current = interval;
+  }, [checkRegisterStatus, deviceId, handleSessionInvalidated, stopHeartbeat]);
+
+  // Start/stop heartbeat based on register session
+  useEffect(() => {
+    if (registerSession) {
+      startHeartbeat();
+      return () => stopHeartbeat();
+    }
+    stopHeartbeat();
+    return;
+  }, [registerSession, startHeartbeat, stopHeartbeat]);
 
   const handleSignIn = async (session: RegisterSession) => {
     // After register sign-in, also create a staff session for API calls
@@ -171,7 +198,6 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
     const { pin, ...sessionWithoutPin } = session;
     void pin;
     setRegisterSession(sessionWithoutPin);
-    startHeartbeat();
     onSignedIn(sessionWithoutPin);
   };
 
@@ -199,11 +225,48 @@ export function RegisterSignIn({ deviceId, onSignedIn, children }: RegisterSignI
   return (
     <div className="register-sign-in-container">
       <div className="register-top-bar">
-        <div style={{ width: '40px' }} />
-        <div className="register-top-bar-center">
-          {registerSession.employeeName} • Register {registerSession.registerNumber}
+        <div className="register-top-bar-left">
+          <div className="register-top-bar-title">{topTitle}</div>
         </div>
-        <div style={{ width: '40px' }} /> {/* Spacer for alignment */}
+
+        <div className="register-top-bar-center">
+          <span>
+            {registerSession.employeeName} • Register {registerSession.registerNumber}
+          </span>
+
+          {import.meta.env.DEV && (
+            <span className="register-top-bar-dev">
+              {lane ? <span className="cs-badge cs-badge--info">Lane: {lane}</span> : null}
+              <span className={`cs-badge ${apiStatus === 'ok' ? 'cs-badge--success' : 'cs-badge--error'}`}>
+                API: {apiStatus ?? '...'}
+              </span>
+              <span className={`cs-badge ${wsConnected ? 'cs-badge--success' : 'cs-badge--error'}`}>
+                WS: {wsConnected ? 'Live' : 'Offline'}
+              </span>
+            </span>
+          )}
+        </div>
+
+        <div className="register-top-bar-right">
+          {onSignOut && (
+            <button
+              type="button"
+              onClick={() => void onSignOut()}
+              className="cs-liquid-button cs-liquid-button--secondary er-header-action-btn"
+            >
+              Sign Out
+            </button>
+          )}
+          {onCloseOut && (
+            <button
+              type="button"
+              onClick={() => void onCloseOut()}
+              className="cs-liquid-button cs-liquid-button--danger er-header-action-btn"
+            >
+              Close Out
+            </button>
+          )}
+        </div>
       </div>
 
       {signedInWs}
@@ -221,26 +284,36 @@ function RegisterSessionWs({
 }) {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws`;
-
-  const ws = useReconnectingWebSocket({
-    url: wsUrl,
-    onOpenSendJson: [{ type: 'subscribe', events: ['REGISTER_SESSION_UPDATED'] }],
-    onMessage: (event) => {
-      const parsed = safeJsonParse<unknown>(String(event.data));
-      if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
-      const message = parsed as unknown as WebSocketEvent;
-      if (message.type !== 'REGISTER_SESSION_UPDATED') return;
-      const payload = message.payload as RegisterSessionUpdatedPayload;
-      if (payload.deviceId === deviceId && !payload.active) {
-        ws.close();
-        onInvalidated();
-      }
-    },
-    onError: (error) => {
-      console.error('WebSocket connection error:', error);
-      // Don't disconnect on error - connection might recover
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : null;
+  void wsUrl;
+  const { lastMessage, lastError } = useLaneSession({
+    laneId: '',
+    role: 'employee',
+    kioskToken: kioskToken ?? '',
+    enabled: true,
   });
+
+  useEffect(() => {
+    if (!lastMessage) return;
+    const parsed = safeJsonParse<unknown>(String(lastMessage.data));
+    if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
+    const message = parsed as unknown as WebSocketEvent;
+    if (message.type !== 'REGISTER_SESSION_UPDATED') return;
+    const payload = message.payload as RegisterSessionUpdatedPayload;
+    if (payload.deviceId === deviceId && !payload.active) {
+      closeLaneSessionClient('', 'employee');
+      onInvalidated();
+    }
+  }, [deviceId, lastMessage, onInvalidated]);
+
+  useEffect(() => {
+    if (!lastError) return;
+    console.error('WebSocket connection error:', lastError);
+  }, [lastError]);
 
   return null;
 }

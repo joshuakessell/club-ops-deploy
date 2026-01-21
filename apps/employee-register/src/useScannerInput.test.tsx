@@ -76,7 +76,7 @@ describe('useScannerInput', () => {
     expect(onCapture).toHaveBeenCalledWith('A\nB');
   });
 
-  it('finalizes immediately on Tab terminator without including a tab character', async () => {
+  it('finalizes immediately on Tab terminator without including a tab character', () => {
     const onCapture = vi.fn();
     render(<Harness enabled={true} onCapture={onCapture} />);
 

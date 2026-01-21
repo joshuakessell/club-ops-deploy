@@ -20,7 +20,9 @@
     "db:migrate:status": "node --import tsx src/db/migrate.ts status",
     "db:migrate:rollback": "node --import tsx src/db/migrate.ts rollback",
     "db:reset": "node scripts/compose.mjs reset",
+    "preseed": "pnpm --filter @club-ops/shared build",
     "seed": "pnpm db:wait && node --import tsx src/db/seed.ts",
+    "seed:demo": "pnpm db:wait && node --import tsx src/db/seed-demo.ts",
     "update-staff": "node --import tsx scripts/update-staff-names.ts"
   },
   "dependencies": {

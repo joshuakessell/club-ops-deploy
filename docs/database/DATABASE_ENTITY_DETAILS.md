@@ -34,6 +34,8 @@ This section is the **single authoritative place** (within this repo) that defin
 
 - `customers`
 - `lane_sessions`
+- `waitlist`
+- `inventory_reservations`
 - `payment_intents`
 - `visits`
 - `checkin_blocks`
@@ -104,6 +106,56 @@ Other markdown files may describe workflows, but **must not redefine** these ent
 - **Invariants**:
   - This system does **not** assume external payment succeeded without an explicit “mark paid” action.
   - Status transitions are validated server-side and should be audited.
+
+### `waitlist`
+
+- **Purpose**: Tracks customers currently in an **upgrade waitlist** for a higher room tier during an active visit/check-in block.
+- **Primary key**: `waitlist.id` (UUID).
+- **Key columns**:
+  - **Identity / scope**:
+    - `visit_id`: Owning active visit (required).
+    - `checkin_block_id`: The active check-in block whose checkout time governs eligibility (required).
+  - **Upgrade intent**:
+    - `desired_tier`: Desired room tier (STANDARD/DOUBLE/SPECIAL); validated server-side.
+    - `backup_tier`: Fallback tier used for initial assignment; stored for coordination.
+    - `locker_or_room_assigned_initially`: The initial resource assigned (debug/audit convenience).
+  - **Offer/hold tracking**:
+    - `status`: Lifecycle state (`waitlist_status` enum).
+      - `ACTIVE`: Eligible to be offered when inventory becomes available.
+      - `OFFERED`: Currently has an active room hold/offer associated (see `inventory_reservations`).
+    - `room_id`: The room being held/offered for this entry when `status='OFFERED'` (nullable).
+    - `offered_at`: When the current offer/hold began.
+    - `offer_expires_at`: When the current offer/hold expires (timed).
+    - `last_offered_at`: The most recent time this entry was offered/held (used for fair rotation without changing queue position).
+    - `offer_attempts`: Number of times an offer/hold has been created for this entry (monotonic counter).
+- **Relationships**:
+  - `waitlist.visit_id` → `visits.id`
+  - `waitlist.checkin_block_id` → `checkin_blocks.id`
+  - `waitlist.room_id` → `rooms.id` (optional; points to the currently held room when offered)
+- **Invariants**:
+  - Waitlist entries are only eligible while the visit is active and `checkin_block.ends_at > now()`.
+  - An entry cannot be simultaneously `ACTIVE` and `OFFERED`; clients may de-dupe defensively but server should enforce consistent transitions.
+
+### `inventory_reservations`
+
+- **Purpose**: Explicit, time-bound holds on inventory resources (rooms/lockers) to prevent selection/assignment races across lanes and upgrade flows.
+- **Primary key**: `inventory_reservations.id` (UUID).
+- **Key columns**:
+  - `resource_type`: `room` or `locker`.
+  - `resource_id`: UUID of the resource (FK enforced by application; the DB stores only the UUID).
+  - `kind`:
+    - `LANE_SELECTION`: Resource reserved by a lane session selection.
+    - `UPGRADE_HOLD`: Resource reserved for a waitlist upgrade hold/offer.
+  - `lane_session_id`: Required when `kind='LANE_SELECTION'`.
+  - `waitlist_id`: Required when `kind='UPGRADE_HOLD'`.
+  - `expires_at`: Expiration time for timed holds (nullable for holds that are purely lifecycle-bound).
+  - `released_at` / `release_reason`: Release metadata. An active reservation is one with `released_at IS NULL`.
+- **Relationships**:
+  - `inventory_reservations.lane_session_id` → `lane_sessions.id` (optional)
+  - `inventory_reservations.waitlist_id` → `waitlist.id` (optional)
+- **Invariants**:
+  - At most **one active reservation per resource** at a time (enforced by a partial unique index on `(resource_type, resource_id)` where `released_at IS NULL`).
+  - Reservations are used by selection/assignment queries to exclude held inventory from general availability.
 
 ### `visits`
 

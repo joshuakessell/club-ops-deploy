@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { LiquidGlassPinInput } from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -110,8 +111,8 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     setError(null);
   };
 
-  const handlePinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePinSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!selectedEmployee || !pin.trim()) return;
 
     setIsLoading(true);
@@ -299,40 +300,30 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
             <p className="sign-in-subtitle">Employee: {selectedEmployee.name}</p>
             {pinError && <div className="sign-in-error shake">Wrong PIN</div>}
             {error && <div className="sign-in-error">{error}</div>}
-            <form onSubmit={(e) => void handlePinSubmit(e)}>
-              <input
-                type="password"
-                className={`pin-input cs-liquid-input ${pinError ? 'shake' : ''}`}
-                value={pin}
-                onChange={(e) => {
-                  setPin(e.target.value.replace(/\D/g, '').slice(0, 6));
-                  setPinError(false);
-                }}
-                placeholder="Enter 6-digit PIN"
-                maxLength={6}
-                inputMode="numeric"
-                pattern="[0-9]*"
-                autoFocus
+            <LiquidGlassPinInput
+              length={6}
+              value={pin}
+              onChange={(next) => {
+                setPin(next);
+                setPinError(false);
+              }}
+              onSubmit={() => void handlePinSubmit()}
+              submitLabel={isLoading ? 'Verifying…' : 'Verify PIN'}
+              submitDisabled={isLoading}
+              disabled={isLoading}
+              className={pinError ? 'shake' : undefined}
+              displayAriaLabel="Employee PIN"
+            />
+            <div className="sign-in-actions">
+              <button
+                type="button"
+                className="cs-liquid-button cs-liquid-button--secondary"
+                onClick={handleBack}
                 disabled={isLoading}
-              />
-              <div className="sign-in-actions">
-                <button
-                  type="button"
-                  className="cs-liquid-button cs-liquid-button--secondary"
-                  onClick={handleBack}
-                  disabled={isLoading}
-                >
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  className="cs-liquid-button"
-                  disabled={isLoading || pin.length !== 6}
-                >
-                  {isLoading ? 'Verifying...' : 'Verify PIN'}
-                </button>
-              </div>
-            </form>
+              >
+                Back
+              </button>
+            </div>
           </div>
         )}
 

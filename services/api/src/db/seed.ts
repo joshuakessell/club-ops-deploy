@@ -1,106 +1,47 @@
 import { query, initializeDatabase, closeDatabase } from './index.js';
-import { RoomStatus, RoomType } from '@club-ops/shared';
+import { RoomStatus, RoomType, AGREEMENT_LEGAL_BODY_HTML_BY_LANG } from '@club-ops/shared';
+import { LOCKER_NUMBERS, ROOMS } from '@club-ops/shared';
 import { hashQrToken, hashPin } from '../auth/utils.js';
+import { loadEnvFromDotEnvIfPresent } from '../env/loadEnv.js';
+
+loadEnvFromDotEnvIfPresent();
 
 interface RoomSeed {
   number: string;
   type: RoomType;
-  status: RoomStatus;
   floor: number;
   tagCode: string;
 }
 
 interface LockerSeed {
   number: string; // 3-digit "001".."108"
-  status: RoomStatus;
   tagCode: string;
 }
 
 /**
  * Seed data for development and testing.
- * Inserts rooms/lockers with various statuses and key tags with QR scan tokens.
+ *
+ * IMPORTANT (facility inventory contract):
+ * - Lockers: 001..108
+ * - Rooms: existing rooms only (nominal 200..262 minus non-existent odd 247..261)
+ *
+ * This seed enforces inventory presence and removes any invalid legacy rooms/lockers.
  */
-const seedRooms: RoomSeed[] = [
-  // DIRTY rooms
-  {
-    number: '101',
-    type: RoomType.STANDARD,
-    status: RoomStatus.DIRTY,
-    floor: 1,
-    tagCode: 'ROOM-101',
-  },
-  {
-    number: '102',
-    type: RoomType.STANDARD,
-    status: RoomStatus.DIRTY,
-    floor: 1,
-    tagCode: 'ROOM-102',
-  },
-
-  // CLEANING rooms
-  {
-    number: '103',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEANING,
-    floor: 1,
-    tagCode: 'ROOM-103',
-  },
-  {
-    number: '216',
-    type: RoomType.DOUBLE,
-    status: RoomStatus.CLEANING,
-    floor: 2,
-    tagCode: 'ROOM-216',
-  },
-
-  // CLEAN rooms - intentionally low counts for demo
-  // STANDARD rooms
-  {
-    number: '104',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEAN,
-    floor: 1,
-    tagCode: 'ROOM-104',
-  },
-  {
-    number: '105',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEAN,
-    floor: 1,
-    tagCode: 'ROOM-105',
-  },
-  {
-    number: '106',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEAN,
-    floor: 1,
-    tagCode: 'ROOM-106',
-  },
-  {
-    number: '107',
-    type: RoomType.STANDARD,
-    status: RoomStatus.CLEAN,
-    floor: 1,
-    tagCode: 'ROOM-107',
-  },
-
-  // DOUBLE rooms - <5 available (only 2 clean)
-  { number: '218', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-218' },
-  { number: '225', type: RoomType.DOUBLE, status: RoomStatus.CLEAN, floor: 2, tagCode: 'ROOM-225' },
-
-  // SPECIAL rooms - 0 available (none seeded as CLEAN)
-  // Note: Room 201, 232, 256 are SPECIAL but not seeded as CLEAN
-];
-
-// Seed lockers 001–108 (Club Dallas contract / employee register grid)
-const seedLockers: LockerSeed[] = Array.from({ length: 108 }, (_, idx) => {
-  const n = String(idx + 1).padStart(3, '0');
+const seedRooms: RoomSeed[] = ROOMS.map((r: { number: number; tier: string }) => {
+  const type: RoomType =
+    r.tier === 'DOUBLE' ? RoomType.DOUBLE : r.tier === 'SPECIAL' ? RoomType.SPECIAL : RoomType.STANDARD;
   return {
-    number: n,
-    status: RoomStatus.CLEAN,
-    tagCode: `LOCKER-${n}`,
+    number: String(r.number),
+    type,
+    floor: Math.floor(r.number / 100),
+    tagCode: `ROOM-${r.number}`,
   };
 });
+
+const seedLockers: LockerSeed[] = LOCKER_NUMBERS.map((n: string) => ({
+  number: n,
+  tagCode: `LOCKER-${n}`,
+}));
 
 async function seed() {
   try {
@@ -109,69 +50,96 @@ async function seed() {
 
     console.log('Starting seed process...');
 
-    // Check if rooms already exist
-    const existingRooms = await query<{ count: string }>('SELECT COUNT(*) as count FROM rooms');
-
-    if (parseInt(existingRooms.rows[0]?.count || '0', 10) > 0) {
-      console.log('⚠️  Rooms already exist in database. Skipping room seed.');
-      console.log('   To reseed rooms, clear the database first: pnpm db:reset && pnpm db:migrate');
-    } else {
-      for (const roomSeed of seedRooms) {
-        const roomResult = await query<{ id: string }>(
-          `INSERT INTO rooms (number, type, status, floor, last_status_change)
-           VALUES ($1, $2, $3, $4, NOW())
-           RETURNING id`,
-          [roomSeed.number, roomSeed.type, roomSeed.status, roomSeed.floor]
-        );
-
-        const roomId = roomResult.rows[0]!.id;
-
-        await query(
-          `INSERT INTO key_tags (room_id, tag_type, tag_code, is_active)
-           VALUES ($1, 'QR', $2, true)`,
-          [roomId, roomSeed.tagCode]
-        );
-
-        console.log(
-          `✓ Seeded room ${roomSeed.number} (${roomSeed.status}) with tag ${roomSeed.tagCode}`
-        );
-      }
-
-      console.log(`\n✅ Successfully seeded ${seedRooms.length} rooms with key tags`);
+    // Enforce facility inventory contract (delete any invalid legacy rooms)
+    const desiredRoomNumbers = seedRooms.map((r) => r.number);
+    const deletedRooms = await query<{ count: string }>(
+      `WITH del AS (
+         DELETE FROM rooms
+         WHERE NOT (number = ANY($1::text[]))
+         RETURNING 1
+       )
+       SELECT COUNT(*)::text as count FROM del`,
+      [desiredRoomNumbers]
+    );
+    if (parseInt(deletedRooms.rows[0]?.count || '0', 10) > 0) {
+      console.log(`🧹 Removed ${deletedRooms.rows[0]!.count} invalid legacy room(s) from inventory`);
     }
 
-    // Seed lockers (001–108) and their key tags
-    const existingLockers = await query<{ count: string }>('SELECT COUNT(*) as count FROM lockers');
+    for (const roomSeed of seedRooms) {
+      const roomResult = await query<{ id: string }>(
+        `INSERT INTO rooms (number, type, status, floor, last_status_change)
+         VALUES ($1, $2, $3, $4, NOW())
+         ON CONFLICT (number) DO UPDATE
+           SET type = EXCLUDED.type,
+               floor = EXCLUDED.floor,
+               updated_at = NOW()
+         RETURNING id`,
+        [roomSeed.number, roomSeed.type, RoomStatus.CLEAN, roomSeed.floor]
+      );
 
-    if (parseInt(existingLockers.rows[0]?.count || '0', 10) > 0) {
-      console.log('⚠️  Lockers already exist in database. Skipping locker seed.');
-    } else {
-      for (const lockerSeed of seedLockers) {
-        const lockerResult = await query<{ id: string }>(
-          `INSERT INTO lockers (number, status)
-           VALUES ($1, $2)
-           RETURNING id`,
-          [lockerSeed.number, lockerSeed.status]
-        );
+      const roomId = roomResult.rows[0]!.id;
 
-        const lockerId = lockerResult.rows[0]!.id;
-
-        await query(
-          `INSERT INTO key_tags (locker_id, tag_type, tag_code, is_active)
-           VALUES ($1, 'QR', $2, true)`,
-          [lockerId, lockerSeed.tagCode]
-        );
-      }
-
-      console.log(`\n✅ Successfully seeded ${seedLockers.length} lockers with key tags (001–108)`);
+      await query(
+        `INSERT INTO key_tags (room_id, tag_type, tag_code, is_active)
+         VALUES ($1, 'QR', $2, true)
+         ON CONFLICT (tag_code) DO UPDATE
+           SET room_id = EXCLUDED.room_id,
+               locker_id = NULL,
+               is_active = true,
+               updated_at = NOW()`,
+        [roomId, roomSeed.tagCode]
+      );
     }
+
+    console.log(`\n✅ Rooms inventory ensured (${seedRooms.length} rooms)`);
+
+    // Enforce facility inventory contract (delete any invalid legacy lockers)
+    const desiredLockerNumbers = seedLockers.map((l) => l.number);
+    const deletedLockers = await query<{ count: string }>(
+      `WITH del AS (
+         DELETE FROM lockers
+         WHERE NOT (number = ANY($1::text[]))
+         RETURNING 1
+       )
+       SELECT COUNT(*)::text as count FROM del`,
+      [desiredLockerNumbers]
+    );
+    if (parseInt(deletedLockers.rows[0]?.count || '0', 10) > 0) {
+      console.log(`🧹 Removed ${deletedLockers.rows[0]!.count} invalid legacy locker(s) from inventory`);
+    }
+
+    for (const lockerSeed of seedLockers) {
+      const lockerResult = await query<{ id: string }>(
+        `INSERT INTO lockers (number, status)
+         VALUES ($1, $2)
+         ON CONFLICT (number) DO UPDATE
+           SET updated_at = NOW()
+         RETURNING id`,
+        [lockerSeed.number, RoomStatus.CLEAN]
+      );
+
+      const lockerId = lockerResult.rows[0]!.id;
+
+      await query(
+        `INSERT INTO key_tags (locker_id, tag_type, tag_code, is_active)
+         VALUES ($1, 'QR', $2, true)
+         ON CONFLICT (tag_code) DO UPDATE
+           SET locker_id = EXCLUDED.locker_id,
+               room_id = NULL,
+               is_active = true,
+               updated_at = NOW()`,
+        [lockerId, lockerSeed.tagCode]
+      );
+    }
+
+    console.log(`\n✅ Lockers inventory ensured (${seedLockers.length} lockers, 001–108)`);
 
     console.log('\nScan tokens for testing (sample):');
     seedRooms.slice(0, 5).forEach((room) => {
-      console.log(`  - ${room.tagCode} → Room ${room.number} (${room.status})`);
+      console.log(`  - ${room.tagCode} → Room ${room.number}`);
     });
     seedLockers.slice(0, 5).forEach((locker) => {
-      console.log(`  - ${locker.tagCode} → Locker ${locker.number} (${locker.status})`);
+      console.log(`  - ${locker.tagCode} → Locker ${locker.number}`);
     });
 
     // Seed staff users
@@ -317,42 +285,7 @@ async function seed() {
       'SELECT COUNT(*) as count FROM agreements WHERE active = true'
     );
 
-    const agreementBodyText = `<h2 style="text-align:center; margin: 0 0 12px 0;">CLUB DALLAS ENTRY &amp; LIABILITY WAIVER</h2>
-<p style="text-align:center; margin: 0 0 18px 0; font-size: 12px;">Effective Date: Today</p>
-
-<p><strong>PLEASE READ CAREFULLY.</strong> This Agreement contains a release of liability and waiver of certain legal rights. By entering Club Dallas ("Club"), you agree to the terms below.</p>
-
-<h3>1. Definitions</h3>
-<p>"Club Dallas," "Club," "we," "us," and "our" mean the operator(s), owners, managers, employees, contractors, agents, affiliates, successors, and assigns of Club Dallas and the premises. "Guest," "you," and "your" mean the individual entering the premises.</p>
-
-<h3>2. Voluntary Entry and Assumption of Risk</h3>
-<p>You acknowledge that visiting and using the premises involves inherent risks, including but not limited to slips and falls, allergic reactions, exposure to cleaning products, interactions with other guests, and other foreseeable and unforeseeable hazards. You voluntarily assume all risks of injury, illness, property damage, and loss arising from your entry and presence on the premises, whether caused by ordinary negligence or otherwise, to the fullest extent permitted by law.</p>
-
-<h3>3. Release and Waiver of Liability</h3>
-<p>To the maximum extent permitted by law, you hereby release, waive, and discharge the Club from any and all claims, demands, damages, losses, liabilities, costs, and causes of action of any kind arising out of or related to your entry, presence, or participation in any activities on the premises, including claims based on the Club's ordinary negligence.</p>
-
-<h3>4. Indemnification</h3>
-<p>You agree to indemnify, defend, and hold harmless the Club from and against any claims, damages, liabilities, and expenses (including reasonable attorneys' fees) arising out of or related to your actions, conduct, violations of Club rules, or breach of this Agreement.</p>
-
-<h3>5. Conduct and Compliance</h3>
-<p>You agree to comply with all posted rules, staff instructions, and applicable laws. The Club reserves the right to refuse entry or remove any guest at its discretion. You acknowledge that violations of Club rules may result in removal without refund and may be reported to authorities where appropriate.</p>
-
-<h3>6. Health and Fitness Acknowledgment</h3>
-<p>You represent that you are physically able to enter and use the premises and that you will not engage in conduct that poses a risk of harm to yourself or others. You are responsible for your own personal property.</p>
-
-<h3>7. Personal Property; Limitation of Responsibility</h3>
-<p>The Club is not responsible for lost, stolen, or damaged personal property, including valuables left in lockers, rooms, or common areas, except where liability cannot be excluded by law.</p>
-
-<h3>8. Photo/Video Notice</h3>
-<p>To the extent permitted by law, you acknowledge that security monitoring may be in use in certain areas for safety and compliance. The Club does not guarantee privacy in any non-private area. (No statement here authorizes recording in private areas.)</p>
-
-<h3>9. Dispute Resolution</h3>
-<p>Any dispute arising out of this Agreement or your entry to the Club shall be resolved in a lawful forum with jurisdiction, under applicable law. If any provision is held unenforceable, the remainder remains in effect.</p>
-
-<h3>10. Entire Agreement</h3>
-<p>This Agreement represents the entire understanding regarding entry to the premises and supersedes prior communications on this subject. By signing below, you acknowledge that you have read and understood this Agreement and agree to be bound by it.</p>
-
-<p style="margin-top: 18px;"><strong>ACKNOWLEDGMENT:</strong> I have read this Agreement, understand it, and agree to its terms.</p>`;
+    const agreementBodyText = AGREEMENT_LEGAL_BODY_HTML_BY_LANG.EN;
 
     if (parseInt(existingAgreement.rows[0]?.count || '0', 10) > 0) {
       // Update existing active agreement if body_text is empty

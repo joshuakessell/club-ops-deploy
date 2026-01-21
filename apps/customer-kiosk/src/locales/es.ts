@@ -2,97 +2,116 @@
 //
 // Keep keys aligned with `en.ts`. If a key is missing here at runtime, the app will fall back to EN.
 import { en } from './en';
+import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG } from '@club-ops/shared';
 
 export const es: Record<keyof typeof en, string> = {
   // Brand / a11y
   'brand.clubName': 'Club Dallas',
   'a11y.welcomeDialog': 'Bienvenido',
+  'a11y.signatureDialog': 'Firma',
 
   // Welcome
   welcome: 'Bienvenido',
   'selection.welcomeWithName': 'Bienvenido, {name}',
 
   // Language selection
-  selectLanguage: 'Seleccione Idioma / Select Language',
+  selectLanguage: 'Elige idioma / Select Language',
   english: 'English',
   spanish: 'Español',
 
   // Orientation
-  'orientation.title': 'Se requiere modo vertical',
-  'orientation.body': 'Por favor, gire el dispositivo a vertical para continuar.',
+  'orientation.title': 'Pon la pantalla vertical',
+  'orientation.body': 'Gira la pantalla para seguir.',
 
   // Common
   'common.ok': 'OK',
   'common.cancel': 'Cancelar',
   'common.accept': 'Aceptar',
-  'common.decline': 'Rechazar',
-  'common.you': 'Usted',
-  'common.staff': 'Personal',
-  'kiosk.locked.title': 'Por favor, vea al empleado',
+  'common.decline': 'No acepto',
+  'common.you': 'Tú',
+  'common.staff': 'Staff',
+  'kiosk.locked.title': 'Ve con el empleado',
   'kiosk.locked.body':
-    'Este carril aún se está completando. Por favor, vea al empleado para finalizar la salida.',
+    'Este carril sigue en proceso. Ve con el empleado para terminar.',
 
   // Past due
-  pastDueBlocked: 'Por favor, vea al mostrador para resolver su saldo.',
+  pastDueBlocked: 'Pasa a caja para arreglar tu saldo.',
 
   // Payment
-  paymentPending: 'Por favor, presente el pago al empleado',
+  paymentPending: 'Paga con el empleado',
   'payment.charges': 'Cargos',
-  totalDue: 'Total a Pagar',
-  paymentIssueSeeAttendant: 'Problema con el pago — por favor vea al empleado',
+  totalDue: 'Total',
+  paymentIssueSeeAttendant: 'Problema con el pago — ve con el empleado',
 
   // Agreement
   agreementTitle: 'Acuerdo del Club',
-  agreementPlaceholder: 'El contenido del acuerdo se mostrará aquí.',
-  scrollRequired: 'Por favor, desplácese hasta el final del acuerdo para continuar.',
-  iAgree: 'Estoy de acuerdo',
-  signatureRequired: 'Se requiere firma para continuar',
+  agreementPlaceholder: 'Aquí va el acuerdo.',
+  scrollRequired: 'Desliza hasta el final para seguir.',
+  iAgree: 'Acepto',
+  signatureRequired: 'Firma para continuar',
+  'agreement.readAndScrollToContinue': 'Lee el acuerdo y baja hasta el final para continuar…',
+  'agreement.pleaseCheckToContinue': 'Marca la casilla para continuar',
+  'agreement.tapToSign': 'Toca para firmar',
+  'agreement.signed': 'Firmado',
+  'agreement.sign': 'Firmar',
+  'agreement.legalBodyHtml': AGREEMENT_LEGAL_BODY_HTML_BY_LANG.ES,
   clear: 'Limpiar',
   submit: 'Enviar',
-  submitting: 'Enviando...',
+  submitting: 'Enviando…',
 
   // Assignment / completion
   thankYou: '¡Gracias!',
-  assignmentComplete: 'Su registro está siendo procesado...',
-  room: 'Habitación',
-  checkoutAt: 'Hora de Salida',
+  assignmentComplete: 'Estamos procesando tu entrada…',
+  room: 'Cuarto',
+  checkoutAt: 'Hora de salida',
 
   // Selection state
   proposed: 'Propuesto',
   selected: 'Seleccionado',
-  confirmSelection: 'Confirmar Selección',
+  confirmSelection: 'Confirmar',
   confirming: 'Confirmando...',
-  acknowledge: 'Reconocer',
-  acknowledging: 'Reconociendo...',
-  staffHasLocked: 'El personal ha bloqueado esta selección. Por favor, reconozca para continuar.',
-  'selection.staffSuggestionHint': 'Sugerencia del personal — toque la opción resaltada para aceptar',
-  'selection.yourSelectionWaiting': 'Su selección — esperando confirmación del personal',
+  acknowledge: 'Entendido',
+  acknowledging: 'Entendido…',
+  staffHasLocked: 'El staff ya bloqueó esta opción. Toca Entendido para seguir.',
+  'selection.staffSuggestionHint': 'Sugerencia del staff — toca la opción marcada para aceptar',
+  'selection.yourSelectionWaiting': 'Tu elección — esperando confirmación del staff',
+  'guidance.pleaseSelectOne': 'Elige una opción',
+  'selection.pendingApproval': 'Esperando approbación',
 
   // Membership section
   'membership.level': 'Nivel de membresía:',
   'membership.member': 'Miembro',
-  'membership.nonMember': 'No miembro',
+  'membership.nonMember': 'Sin membresía',
   'membership.expired': 'Vencida',
-  'membership.purchase6Month': 'Comprar membresía de 6 meses',
+  'membership.purchase6Month': 'Membresía 6 meses',
   'membership.renewMembership': 'Renovar membresía',
-  'membership.ctaSeeStaffPurchase': 'Por favor, vea al empleado para comprar la membresía.',
-  'membership.ctaSeeStaffRenew': 'Por favor, vea al empleado para renovar la membresía.',
-  'membership.pending': 'Pendiente',
+  'membership.ctaSeeStaffPurchase': 'Pasa con el empleado para comprarla.',
+  'membership.ctaSeeStaffRenew': 'Pasa con el empleado para renovarla.',
+  'membership.pending': 'En proceso',
   'membership.modal.title': 'Membresía',
   'membership.modal.body.purchase':
-    'Puede ahorrar en las tarifas diarias de membresía comprando una membresía de 6 meses por $43.',
+    'Ahorra en la membresía por día con la membresía de 6 meses. Pregunta al empleado el precio actual de la membresía de 6 meses.',
   'membership.modal.body.renew':
-    'Puede ahorrar en las tarifas diarias de membresía renovando una membresía de 6 meses por $43.',
+    'Ahorra en la membresía por día con la renovación de 6 meses. Pregunta al empleado el precio actual de la renovación de 6 meses.',
   'common.continue': 'Continuar',
 
+  // Purchase cards (Selection)
+  'membership.pleaseSelectOne': 'Elige una',
+  'membership.oneTimeOption': 'Membresía por día',
+  'membership.sixMonthOption': 'Membresía 6 meses',
+  'membership.thankYouMember': 'Gracias por ser miembro.',
+  'membership.expiresOn': 'Vence el {date}.',
+  'rental.title': 'Renta',
+
   // Experience section
-  'experience.choose': 'Elige tu experiencia:',
+  'experience.choose': 'Elige tu opción:',
 
   // Availability
-  limitedAvailability: 'Limitado: solo quedan {count}',
-  unavailable: 'No disponible actualmente - Toque para unirse a la lista de espera',
+  limitedAvailability: 'Quedan {count}',
+  unavailable: 'No hay por ahora — toca para lista de espera',
   'availability.onlyAvailable': 'Solo {count} disponibles',
   'availability.unavailable': 'No disponible',
+  'availability.joinWaitlist': 'Únete a la lista de espera',
 
   // Rental types (display)
   locker: 'Casillero',
@@ -100,24 +119,24 @@ export const es: Record<keyof typeof en, string> = {
   doubleRoom: 'Habitación Doble',
   specialRoom: 'Habitación Especial',
   gymLocker: 'Casillero del Gimnasio',
-  'rental.standardDisplay': 'Vestidor Privado',
-  'rental.doubleDisplay': 'Vestidor Deluxe',
-  'rental.specialDisplay': 'Vestidor Especial',
+  'rental.standardDisplay': 'Vestidor privado',
+  'rental.doubleDisplay': 'Vestidor deluxe',
+  'rental.specialDisplay': 'Vestidor especial',
 
   // Waitlist
-  'waitlist.modalTitle': 'No hay disponibilidad — ¿unirse a la lista de espera?',
-  'waitlist.currentlyUnavailable': '{rental} no está disponible actualmente.',
-  'waitlist.infoTitle': 'Información de la lista de espera:',
-  'waitlist.position': 'Posición',
-  'waitlist.estimatedReady': 'Listo estimado',
-  'waitlist.unknown': 'Desconocido',
-  'waitlist.upgradeFee': 'Tarifa de mejora',
+  'waitlist.modalTitle': 'No hay — ¿lista de espera?',
+  'waitlist.currentlyUnavailable': 'No hay {rental} ahorita.',
+  'waitlist.infoTitle': 'Datos de la lista:',
+  'waitlist.position': 'Lugar',
+  'waitlist.estimatedReady': 'Aprox. listo',
+  'waitlist.unknown': 'Sin dato',
+  'waitlist.upgradeFee': 'Costo de mejora',
   'waitlist.instructions':
-    'Para unirse a la lista de espera, seleccione un alquiler de respaldo que esté disponible ahora.',
+    'Para anotarte, elige una opción de respaldo disponible.',
   'waitlist.noteChargedBackup':
-    'Se le cobrará por el alquiler de respaldo. Si una mejora queda disponible, puede aceptarla (se aplican tarifas de mejora).',
-  'waitlist.selectBackup': 'Seleccione alquiler de respaldo:',
-  'waitlist.unavailableSuffix': '(No disponible)',
+    'Se cobra el respaldo. Si sale una mejora, puedes aceptarla (aplica costo).',
+  'waitlist.selectBackup': 'Elige respaldo:',
+  'waitlist.unavailableSuffix': '(No hay)',
 
   // Upgrade disclaimer
   'upgrade.title': 'Aviso de mejora',
@@ -143,21 +162,21 @@ export const es: Record<keyof typeof en, string> = {
   'renewal.bullet.approachingMax':
     '⚠️ Se está acercando al máximo de 14 horas de estadía para una sola visita.',
   'renewal.bullet.finalExtension':
-    'Al final de esta renovación de 6 horas, puede extender una última vez por 2 horas adicionales por una tarifa fija de $20 (igual para casilleros o cualquier tipo de habitación).',
+    'Al final de esta renovación de 6 horas, puede extender una última vez por 2 horas adicionales (aplica tarifa).',
   'renewal.bullet.feeNotChargedNow':
-    'La tarifa de $20 no se cobra ahora; solo aplica si elige la extensión final de 2 horas más adelante.',
+    'La tarifa no se cobra ahora; solo aplica si elige la extensión final de 2 horas más adelante.',
 
   // Errors
-  'error.loadAgreement': 'No se pudo cargar el acuerdo. Por favor, intente de nuevo.',
+  'error.loadAgreement': 'No se pudo cargar el acuerdo. Intenta de nuevo.',
   'error.noActiveSession':
-    'No hay una sesión activa. Por favor, espere a que el personal inicie una sesión.',
-  'error.processSelection': 'No se pudo procesar la selección. Por favor, intente de nuevo.',
-  'error.process': 'No se pudo procesar. Por favor, intente de nuevo.',
+    'No hay sesión activa. Espera a que el staff inicie una sesión.',
+  'error.processSelection': 'No se pudo procesar. Intenta de nuevo.',
+  'error.process': 'No se pudo procesar. Intenta de nuevo.',
   'error.rentalNotAvailable':
-    'Este tipo de alquiler no está disponible. Por favor, seleccione una opción disponible.',
-  'error.signAgreement': 'No se pudo firmar el acuerdo. Por favor, intente de nuevo.',
-  'error.setLanguage': 'No se pudo establecer el idioma. Por favor, intente de nuevo.',
-  'error.confirmSelection': 'No se pudo confirmar la selección. Por favor, intente de nuevo.',
+    'No está disponible. Elige una opción disponible.',
+  'error.signAgreement': 'No se pudo firmar. Intenta de nuevo.',
+  'error.setLanguage': 'No se pudo cambiar el idioma. Intenta de nuevo.',
+  'error.confirmSelection': 'No se pudo confirmar. Intenta de nuevo.',
 
   // Payment line item descriptions (client-side mapping)
   'lineItem.locker': 'Casillero',

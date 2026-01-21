@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { serializableTransaction, query } from '../db/index.js';
-import { requireReauth } from '../auth/middleware.js';
+import { requireAuth, requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding.js';
+import { broadcastInventoryUpdate } from './sessions.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -21,6 +23,50 @@ const CreateVisitSchema = z.object({
   roomId: z.string().uuid().optional(),
   lockerId: z.string().uuid().optional(),
   lane: z.string().min(1).optional(),
+}).superRefine((v, ctx) => {
+  const hasRoom = Boolean(v.roomId);
+  const hasLocker = Boolean(v.lockerId);
+  if (hasRoom && hasLocker) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide either roomId or lockerId, not both',
+      path: ['roomId'],
+    });
+    return;
+  }
+
+  const isLockerRental = v.rentalType === 'LOCKER' || v.rentalType === 'GYM_LOCKER';
+  if (isLockerRental) {
+    if (!hasLocker) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `lockerId is required for rentalType ${v.rentalType}`,
+        path: ['lockerId'],
+      });
+    }
+    if (hasRoom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `roomId must not be provided for rentalType ${v.rentalType}`,
+        path: ['roomId'],
+      });
+    }
+  } else {
+    if (!hasRoom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `roomId is required for rentalType ${v.rentalType}`,
+        path: ['roomId'],
+      });
+    }
+    if (hasLocker) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `lockerId must not be provided for rentalType ${v.rentalType}`,
+        path: ['lockerId'],
+      });
+    }
+  }
 });
 
 type CreateVisitInput = z.infer<typeof CreateVisitSchema>;
@@ -33,6 +79,50 @@ const RenewVisitSchema = z.object({
   roomId: z.string().uuid().optional(),
   lockerId: z.string().uuid().optional(),
   lane: z.string().min(1).optional(),
+}).superRefine((v, ctx) => {
+  const hasRoom = Boolean(v.roomId);
+  const hasLocker = Boolean(v.lockerId);
+  if (hasRoom && hasLocker) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Provide either roomId or lockerId, not both',
+      path: ['roomId'],
+    });
+    return;
+  }
+
+  const isLockerRental = v.rentalType === 'LOCKER' || v.rentalType === 'GYM_LOCKER';
+  if (isLockerRental) {
+    if (!hasLocker) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `lockerId is required for rentalType ${v.rentalType}`,
+        path: ['lockerId'],
+      });
+    }
+    if (hasRoom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `roomId must not be provided for rentalType ${v.rentalType}`,
+        path: ['roomId'],
+      });
+    }
+  } else {
+    if (!hasRoom) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `roomId is required for rentalType ${v.rentalType}`,
+        path: ['roomId'],
+      });
+    }
+    if (hasLocker) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `lockerId must not be provided for rentalType ${v.rentalType}`,
+        path: ['lockerId'],
+      });
+    }
+  }
 });
 
 type RenewVisitInput = z.infer<typeof RenewVisitSchema>;
@@ -108,7 +198,6 @@ function getLatestBlockEnd(blocks: CheckinBlockRow[]): Date | null {
  * Visit management routes.
  * Handles visit creation, renewal, and active visit search.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * POST /v1/visits - Create an initial visit with initial block
@@ -347,6 +436,11 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
         };
 
         fastify.broadcaster.broadcastSessionUpdated(payload, body.lane);
+      }
+
+      // Broadcast inventory update AFTER commit for immediate UI refresh.
+      if (fastify.broadcaster) {
+        await broadcastInventoryUpdate(fastify.broadcaster);
       }
 
       return reply.status(201).send(result);
@@ -640,6 +734,11 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           fastify.broadcaster.broadcastSessionUpdated(payload, body.lane);
         }
 
+        // Broadcast inventory update AFTER commit for immediate UI refresh.
+        if (fastify.broadcaster) {
+          await broadcastInventoryUpdate(fastify.broadcaster);
+        }
+
         return reply.status(201).send(result);
       } catch (error) {
         if (error && typeof error === 'object' && 'statusCode' in error) {
@@ -785,7 +884,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/visits/:visitId/final-extension',
     {
-      preHandler: [requireReauth],
+      preHandler: [requireAuth, requireReauth],
     },
     async (request, reply) => {
       const staff = request.staff;
@@ -976,27 +1075,24 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           const paymentIntent = intentResult.rows[0]!;
 
           // 12. Log final extension started
-          await client.query(
-            `INSERT INTO audit_log 
-           (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, 'FINAL_EXTENSION_STARTED', 'visit', $2, $3, $4)`,
-            [
-              staff.staffId,
-              visitId,
-              JSON.stringify({
-                totalHours: totalHours,
-                blockCount: blocks.length,
-              }),
-              JSON.stringify({
-                blockId: block.id,
-                blockType: 'FINAL2H',
-                extensionHours: 2,
-                newEndsAt: extensionEndsAt.toISOString(),
-                paymentIntentId: paymentIntent.id,
-                rentalType,
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'FINAL_EXTENSION_STARTED',
+            entityType: 'visit',
+            entityId: visitId,
+            oldValue: {
+              totalHours: totalHours,
+              blockCount: blocks.length,
+            },
+            newValue: {
+              blockId: block.id,
+              blockType: 'FINAL2H',
+              extensionHours: 2,
+              newEndsAt: extensionEndsAt.toISOString(),
+              paymentIntentId: paymentIntent.id,
+              rentalType,
+            },
+          });
 
           return {
             visit: {

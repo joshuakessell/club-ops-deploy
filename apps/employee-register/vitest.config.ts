@@ -13,5 +13,15 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['./src/vitest.setup.ts'],
+    // Avoid flaky OOMs:
+    // - Node worker threads often have a lower heap limit than the parent process.
+    // - Use a single forked process instead of threads to get a normal Node heap.
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
   },
 });
