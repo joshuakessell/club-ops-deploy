@@ -18,7 +18,7 @@ import { CustomerConfirmationModal } from '../components/modals/CustomerConfirma
 import { WaitlistModal } from '../components/modals/WaitlistModal';
 import { RenewalDisclaimerModal } from '../components/modals/RenewalDisclaimerModal';
 import { MembershipModal } from '../components/modals/MembershipModal';
-import { getApiUrl, getWebSocketUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@/lib/apiBase';
 
 interface HealthStatus {
   status: string;
@@ -225,6 +225,137 @@ export function AppRoot() {
     };
   };
 
+  const resetToIdle = useCallback(() => {
+    setView('idle');
+    setSession({
+      sessionId: null,
+      customerName: null,
+      membershipNumber: null,
+      membershipValidUntil: null,
+      membershipPurchaseIntent: null,
+      allowedRentals: [],
+      blockEndsAt: undefined,
+    });
+    setSelectedRental(null);
+    setAgreed(false);
+    setSignatureData(null);
+    setShowUpgradeDisclaimer(false);
+    setUpgradeAction(null);
+    setShowRenewalDisclaimer(false);
+    setCheckinMode(null);
+    setShowWaitlistModal(false);
+    setWaitlistDesiredType(null);
+    setWaitlistBackupType(null);
+    setProposedRentalType(null);
+    setProposedBy(null);
+    setSelectionConfirmed(false);
+    setSelectionConfirmedBy(null);
+    setSelectionAcknowledged(false);
+    setUpgradeDisclaimerAcknowledged(false);
+    setHasScrolledAgreement(false);
+    setHighlightedLanguage(null);
+    setHighlightedMembershipChoice(null);
+  }, []);
+
+  const applySessionUpdatedPayload = useCallback(
+    (payload: Record<string, any>) => {
+      // Update session state with all fields
+      setSession((prev) => ({
+        ...prev,
+        sessionId: payload.sessionId || null,
+        customerName: payload.customerName,
+        membershipNumber: payload.membershipNumber || null,
+        membershipValidUntil: payload.customerMembershipValidUntil || null,
+        membershipChoice: payload.membershipChoice ?? null,
+        membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
+        kioskAcknowledgedAt: payload.kioskAcknowledgedAt || null,
+        allowedRentals: payload.allowedRentals,
+        visitId: payload.visitId,
+        mode: payload.mode,
+        blockEndsAt: payload.blockEndsAt,
+        customerPrimaryLanguage: payload.customerPrimaryLanguage,
+        pastDueBlocked: payload.pastDueBlocked,
+        pastDueBalance: payload.pastDueBalance,
+        paymentStatus: payload.paymentStatus,
+        paymentTotal: payload.paymentTotal,
+        paymentLineItems: payload.paymentLineItems,
+        paymentFailureReason: payload.paymentFailureReason,
+        agreementSigned: payload.agreementSigned,
+        assignedResourceType: payload.assignedResourceType,
+        assignedResourceNumber: payload.assignedResourceNumber,
+        checkoutAt: payload.checkoutAt,
+      }));
+
+      // Set check-in mode from payload
+      if (payload.mode) {
+        setCheckinMode(payload.mode);
+      }
+
+      // Handle view transitions based on session state
+      // First check: Reset to idle if session is completed and cleared
+      if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
+        resetToIdle();
+        return;
+      }
+
+      // If we have assignment, show complete view (highest priority after reset)
+      if (payload.assignedResourceType && payload.assignedResourceNumber) {
+        setView('complete');
+        return;
+      }
+
+      // If kiosk acknowledged, stay idle (lane still locked until employee-register completes/reset).
+      if (payload.kioskAcknowledgedAt && payload.status !== 'COMPLETED') {
+        setView('idle');
+        return;
+      }
+
+      // Language selection (first visit). This should happen before any other customer-facing step.
+      if (payload.sessionId && payload.status !== 'COMPLETED' && !payload.customerPrimaryLanguage) {
+        setView('language');
+        return;
+      }
+
+      // Past-due block screen (shows selection but disabled)
+      if (payload.pastDueBlocked) {
+        setView('selection');
+        return;
+      }
+
+      // Agreement screen (after payment is PAID, before assignment)
+      if (
+        payload.paymentStatus === 'PAID' &&
+        !payload.agreementSigned &&
+        (payload.mode === 'INITIAL' || payload.mode === 'RENEWAL')
+      ) {
+        setView('agreement');
+        return;
+      }
+
+      // Payment pending screen (after selection confirmed, before payment)
+      if (payload.selectionConfirmed && payload.paymentStatus === 'DUE') {
+        setView('payment');
+        return;
+      }
+
+      // Selection view (default active session state)
+      if (payload.sessionId && payload.status !== 'COMPLETED') {
+        setView('selection');
+      }
+
+      // Update selection state
+      if (payload.proposedRentalType) {
+        setProposedRentalType(payload.proposedRentalType);
+        setProposedBy(payload.proposedBy || null);
+      }
+      if (payload.selectionConfirmed !== undefined) {
+        setSelectionConfirmed(Boolean(payload.selectionConfirmed));
+        setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
+      }
+    },
+    [resetToIdle]
+  );
+
   const onWsMessage = useCallback((event: MessageEvent) => {
     try {
       const parsed: unknown = safeJsonParse(String(event.data));
@@ -234,129 +365,8 @@ export function AppRoot() {
 
       if (message.type === 'SESSION_UPDATED') {
         const payload = message.payload;
-
-        // Update session state with all fields
-        setSession((prev) => ({
-          ...prev,
-          sessionId: payload.sessionId || null,
-          customerName: payload.customerName,
-          membershipNumber: payload.membershipNumber || null,
-          membershipValidUntil: payload.customerMembershipValidUntil || null,
-          membershipChoice: payload.membershipChoice ?? null,
-          membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
-          kioskAcknowledgedAt: payload.kioskAcknowledgedAt || null,
-          allowedRentals: payload.allowedRentals,
-          visitId: payload.visitId,
-          mode: payload.mode,
-          blockEndsAt: payload.blockEndsAt,
-          customerPrimaryLanguage: payload.customerPrimaryLanguage,
-          pastDueBlocked: payload.pastDueBlocked,
-          pastDueBalance: payload.pastDueBalance,
-          paymentStatus: payload.paymentStatus,
-          paymentTotal: payload.paymentTotal,
-          paymentLineItems: payload.paymentLineItems,
-          paymentFailureReason: payload.paymentFailureReason,
-          agreementSigned: payload.agreementSigned,
-          assignedResourceType: payload.assignedResourceType,
-          assignedResourceNumber: payload.assignedResourceNumber,
-          checkoutAt: payload.checkoutAt,
-        }));
-
-        // Set check-in mode from payload
-        if (payload.mode) {
-          setCheckinMode(payload.mode);
-        }
-
-        // Handle view transitions based on session state
-        // First check: Reset to idle if session is completed and cleared
-        if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
-          // Reset to idle
-          setView('idle');
-          setSession({
-            sessionId: null,
-            customerName: null,
-            membershipNumber: null,
-            membershipValidUntil: null,
-            membershipPurchaseIntent: null,
-            allowedRentals: [],
-            blockEndsAt: undefined,
-          });
-          setSelectedRental(null);
-          setAgreed(false);
-          setSignatureData(null);
-          setShowUpgradeDisclaimer(false);
-          setUpgradeAction(null);
-          setShowRenewalDisclaimer(false);
-          setCheckinMode(null);
-          setShowWaitlistModal(false);
-          setWaitlistDesiredType(null);
-          setWaitlistBackupType(null);
-          setProposedRentalType(null);
-          setProposedBy(null);
-          setSelectionConfirmed(false);
-          setSelectionConfirmedBy(null);
-          setSelectionAcknowledged(false);
-          setUpgradeDisclaimerAcknowledged(false);
-          setHasScrolledAgreement(false);
-          setHighlightedLanguage(null);
-          setHighlightedMembershipChoice(null);
-          return;
-        }
-
-        // If we have assignment, show complete view (highest priority after reset)
-        if (payload.assignedResourceType && payload.assignedResourceNumber) {
-          setView('complete');
-          return;
-        }
-
-        // If kiosk acknowledged, stay idle (lane still locked until employee-register completes/reset).
-        if (payload.kioskAcknowledgedAt && payload.status !== 'COMPLETED') {
-          setView('idle');
-          return;
-        }
-
-        // Language selection (first visit). This should happen before any other customer-facing step,
-        // including past-due messaging, so customers can read everything in their preferred language.
-        if (payload.sessionId && payload.status !== 'COMPLETED' && !payload.customerPrimaryLanguage) {
-          setView('language');
-          return;
-        }
-
-        // Past-due block screen (shows selection but disabled)
-        if (payload.pastDueBlocked) {
-          setView('selection');
-          return;
-        }
-
-        // Agreement screen (after payment is PAID, before assignment)
-        if (
-          payload.paymentStatus === 'PAID' &&
-          !payload.agreementSigned &&
-          (payload.mode === 'INITIAL' || payload.mode === 'RENEWAL')
-        ) {
-          setView('agreement');
-          return;
-        }
-
-        // Payment pending screen (after selection confirmed, before payment)
-        if (payload.selectionConfirmed && payload.paymentStatus === 'DUE') {
-          setView('payment');
-          return;
-        }
-
-        // Selection view (default active session state)
-        if (payload.sessionId && payload.status !== 'COMPLETED') {
-          setView('selection');
-        }
-
-        // Update selection state
-        if (payload.proposedRentalType) {
-          setProposedRentalType(payload.proposedRentalType);
-          setProposedBy(payload.proposedBy || null);
-        }
-        if (payload.selectionConfirmed !== undefined) {
-          setSelectionConfirmed(payload.selectionConfirmed);
-          setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
+        if (payload && typeof payload === 'object') {
+          applySessionUpdatedPayload(payload as Record<string, any>);
         }
       } else if (message.type === 'SELECTION_PROPOSED') {
         const payload = message.payload;
@@ -413,12 +423,8 @@ export function AppRoot() {
     } catch (error) {
       console.error('Failed to parse WebSocket message:', error);
     }
-  }, []);
+  }, [applySessionUpdatedPayload]);
 
-  const wsUrl = getWebSocketUrl(`/ws?lane=${encodeURIComponent(lane)}`);
-  const wsProtocols = kioskToken ? [`kiosk-token.${kioskToken}`] : undefined;
-  void wsUrl;
-  void wsProtocols;
   const { connected: wsConnected, lastMessage } = useLaneSession({
     laneId: lane,
     role: 'customer',
@@ -434,6 +440,72 @@ export function AppRoot() {
   useEffect(() => {
     setWsConnected(wsConnected);
   }, [wsConnected]);
+
+  // Polling fallback: if WS is down, fetch session snapshots until it recovers.
+  const pollingStartedRef = useRef(false);
+  const pollingDelayTimerRef = useRef<number | null>(null);
+  const pollingIntervalRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (pollingDelayTimerRef.current !== null) {
+      window.clearTimeout(pollingDelayTimerRef.current);
+      pollingDelayTimerRef.current = null;
+    }
+    if (pollingIntervalRef.current !== null) {
+      window.clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    pollingStartedRef.current = false;
+
+    if (wsConnected) return;
+
+    // Give the WS a moment to connect before we start polling.
+    pollingDelayTimerRef.current = window.setTimeout(() => {
+      if (wsConnected) return;
+      if (!pollingStartedRef.current) {
+        pollingStartedRef.current = true;
+        console.info('[customer-kiosk] WS disconnected; entering polling fallback');
+      }
+
+      const pollOnce = async () => {
+        try {
+          const res = await fetch(
+            `${API_BASE}/v1/checkin/lane/${encodeURIComponent(lane)}/session-snapshot`,
+            { headers: kioskAuthHeaders() }
+          );
+          if (!res.ok) return;
+          const data = await readJson<unknown>(res);
+          if (!isRecord(data)) return;
+          const sessionPayload = data['session'];
+          if (sessionPayload == null) {
+            resetToIdle();
+            return;
+          }
+          if (isRecord(sessionPayload)) {
+            applySessionUpdatedPayload(sessionPayload as Record<string, any>);
+          }
+        } catch {
+          // Best-effort; keep polling.
+        }
+      };
+
+      void pollOnce();
+      pollingIntervalRef.current = window.setInterval(() => {
+        void pollOnce();
+      }, 1500);
+    }, 1200);
+
+    return () => {
+      if (pollingDelayTimerRef.current !== null) {
+        window.clearTimeout(pollingDelayTimerRef.current);
+        pollingDelayTimerRef.current = null;
+      }
+      if (pollingIntervalRef.current !== null) {
+        window.clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+      pollingStartedRef.current = false;
+    };
+  }, [API_BASE, applySessionUpdatedPayload, lane, resetToIdle, wsConnected]);
 
   useEffect(() => {
     // Check API health (avoid JSON parse crashes on empty/non-JSON responses)

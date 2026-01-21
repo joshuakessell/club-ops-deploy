@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { closeLaneSessionClient, getLaneSessionClient, type LaneRole } from './laneSessionClient.js';
 
 export function useLaneSession({
@@ -20,33 +20,69 @@ export function useLaneSession({
   const [lastMessage, setLastMessage] = useState<MessageEvent | null>(null);
   const [lastError, setLastError] = useState<Event | null>(null);
 
-  const stableKey = useMemo(() => `${laneId ?? ''}:${role}`, [laneId, role]);
-  const prevRef = useRef<{ laneId?: string; role: LaneRole; enabled: boolean } | null>(null);
+  // Force a re-connect effect when we need to build a fresh socket and re-attach listeners.
+  const [connectNonce, setConnectNonce] = useState(0);
+  const retryCountRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closedIntentionallyRef = useRef(false);
+
+  // Ensure we don't keep background sockets alive when this hook is not mounted anymore,
+  // or when the lane/role changes.
+  useEffect(() => {
+    return () => {
+      if (laneId === undefined) return;
+      closeLaneSessionClient(laneId, role);
+    };
+  }, [laneId, role]);
 
   useEffect(() => {
-    const prev = prevRef.current;
-    // Close ONLY when lane/role changes, or enabled flips to false.
-    if (prev) {
-      const laneChanged = prev.laneId !== laneId;
-      const roleChanged = prev.role !== role;
-      const disabledNow = prev.enabled === true && enabled === false;
-      if ((laneChanged || roleChanged || disabledNow) && prev.laneId !== undefined) {
-        closeLaneSessionClient(prev.laneId, prev.role);
+    if (!enabled || laneId === undefined) {
+      closedIntentionallyRef.current = true;
+      setConnected(false);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
+      if (laneId !== undefined) {
+        closeLaneSessionClient(laneId, role);
+      }
+      return;
     }
 
-    prevRef.current = { laneId, role, enabled };
+    closedIntentionallyRef.current = false;
 
-    if (!enabled) return;
-    if (laneId === undefined) return;
+    const scheduleReconnect = () => {
+      if (!enabled) return;
+      if (closedIntentionallyRef.current) return;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+
+      const attempt = retryCountRef.current + 1;
+      retryCountRef.current = attempt;
+
+      const baseDelay = Math.min(30000, 500 * Math.pow(2, attempt - 1));
+      const jitter = baseDelay * 0.2 * Math.random();
+      const delayMs = Math.round(baseDelay + jitter);
+
+      reconnectTimerRef.current = setTimeout(() => {
+        setConnectNonce((n) => n + 1);
+      }, delayMs);
+    };
 
     // No socket creation during render; only inside effect.
     const socket = getLaneSessionClient({ laneId, role, kioskToken });
 
-    const onOpen = () => setConnected(true);
+    const onOpen = () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      retryCountRef.current = 0;
+      setConnected(true);
+    };
     const onClose = (event: CloseEvent) => {
       void event;
       setConnected(false);
+      scheduleReconnect();
     };
     const onMessage = (event: MessageEvent) => setLastMessage(event);
     const onError = (event: Event) => setLastError(event);
@@ -56,13 +92,26 @@ export function useLaneSession({
     socket.addEventListener('message', onMessage);
     socket.addEventListener('error', onError);
 
+    // If the socket is already open by the time we subscribe, reflect it immediately.
+    if (socket.readyState === WebSocket.OPEN) {
+      onOpen();
+    } else if (socket.readyState !== WebSocket.CONNECTING) {
+      setConnected(false);
+      scheduleReconnect();
+    }
+
     return () => {
       socket.removeEventListener('open', onOpen);
       socket.removeEventListener('close', onClose);
       socket.removeEventListener('message', onMessage);
       socket.removeEventListener('error', onError);
+
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
     };
-  }, [enabled, laneId, kioskToken, role, stableKey]);
+  }, [connectNonce, enabled, laneId, kioskToken, role]);
 
   return { connected, lastMessage, lastError };
 }
