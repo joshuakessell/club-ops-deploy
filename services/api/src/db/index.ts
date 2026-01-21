@@ -17,7 +17,19 @@ export interface DatabaseConfig {
 /**
  * Load database configuration from environment variables.
  */
-export function loadDatabaseConfig(): DatabaseConfig {
+export function loadDatabaseConfig(): pg.PoolConfig {
+  if (process.env.DATABASE_URL) {
+    return {
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+      max: parseInt(process.env.DB_POOL_MAX || '20', 10),
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    };
+  }
+
   return {
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5433', 10),
