@@ -1,4 +1,4 @@
-export const API_BASE = '/api';
+import { getApiUrl, getWebSocketUrl } from '@/lib/apiBase';
 
 export class ApiError extends Error {
   status: number;
@@ -19,7 +19,7 @@ export async function apiJson<T>(
     signal?: AbortSignal;
   } = {}
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(getApiUrl(`/api${path}`), {
     method: opts.method ?? (opts.body ? 'POST' : 'GET'),
     headers: {
       ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
@@ -57,6 +57,5 @@ export async function apiJson<T>(
 }
 
 export function wsBaseUrl(): string {
-  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${scheme}//${window.location.host}/ws`;
+  return getWebSocketUrl('/ws');
 }

@@ -18,6 +18,7 @@ import { CustomerConfirmationModal } from '../components/modals/CustomerConfirma
 import { WaitlistModal } from '../components/modals/WaitlistModal';
 import { RenewalDisclaimerModal } from '../components/modals/RenewalDisclaimerModal';
 import { MembershipModal } from '../components/modals/MembershipModal';
+import { getApiUrl, getWebSocketUrl } from '@/lib/apiBase';
 
 interface HealthStatus {
   status: string;
@@ -211,7 +212,7 @@ export function AppRoot() {
     </div>
   ) : null;
 
-  const API_BASE = '/api';
+  const API_BASE = getApiUrl('/api');
   const rawEnv = import.meta.env as unknown as Record<string, unknown>;
   const kioskToken =
     typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
@@ -414,9 +415,7 @@ export function AppRoot() {
     }
   }, []);
 
-  // Use the local Vite origin + proxy (/ws -> API) so dev/prod behavior stays consistent.
-  const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
+  const wsUrl = getWebSocketUrl(`/ws?lane=${encodeURIComponent(lane)}`);
   const wsProtocols = kioskToken ? [`kiosk-token.${kioskToken}`] : undefined;
   void wsUrl;
   void wsProtocols;

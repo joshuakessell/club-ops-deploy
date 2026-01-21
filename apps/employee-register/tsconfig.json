@@ -5,6 +5,10 @@
     "jsx": "react-jsx",
     "noUnusedLocals": false,
     "noUnusedParameters": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "noEmit": true
   },
   "include": ["src"],

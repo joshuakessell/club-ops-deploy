@@ -7,8 +7,9 @@ import {
   authenticationCredentialToJSON,
   verifyAuthentication,
 } from '@club-ops/ui';
+import { getApiUrl } from '@/lib/apiBase';
 
-const API_BASE = '/api';
+const API_BASE = getApiUrl('/api');
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;

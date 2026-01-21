@@ -22,7 +22,9 @@ import {
   Schedule,
   Assessment,
 } from '@mui/icons-material';
-const API_BASE = '/api';
+import { getApiUrl } from '@/lib/apiBase';
+
+const API_BASE = getApiUrl('/api');
 
 export interface StaffSession {
   staffId: string;

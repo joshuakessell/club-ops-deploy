@@ -6,8 +6,9 @@ import {
   requestReauthAuthenticationOptions,
   verifyReauthAuthentication,
 } from '@club-ops/ui';
+import { getApiUrl } from '@/lib/apiBase';
 
-const API_BASE = '/api';
+const API_BASE = getApiUrl('/api');
 
 interface ReAuthModalProps {
   sessionToken: string;
