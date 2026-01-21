@@ -115,6 +115,8 @@ describe('Checkout Flow', () => {
       database: process.env.DB_NAME || 'club_operations',
       user: process.env.DB_USER || 'clubops',
       password: process.env.DB_PASSWORD || 'clubops_dev',
+      // Prevent "hung" test runs when DB isn't reachable.
+      connectionTimeoutMillis: 3000,
     };
 
     pool = new pg.Pool(config);
@@ -131,7 +133,7 @@ describe('Checkout Flow', () => {
 
     const roomResult = await pool.query(
       `INSERT INTO rooms (number, type, status, floor)
-       VALUES ('101', 'STANDARD', 'CLEAN', 1)
+       VALUES ('200', 'STANDARD', 'CLEAN', 1)
        RETURNING id`
     );
     testRoomId = roomResult.rows[0]!.id;
@@ -578,6 +580,67 @@ describe('Checkout Flow', () => {
       await pool.query('DELETE FROM waitlist WHERE id = $1', [waitlistId]);
       await pool.query(`UPDATE checkin_blocks SET ends_at = NOW() + INTERVAL '1 hour' WHERE id = $1`, [
         testBlockId,
+      ]);
+    });
+
+    it('should post late fee as itemized charge + system note (without changing amounts)', async () => {
+      // Make the block overdue by 74 minutes (for display rounding validation in note)
+      await pool.query(`UPDATE checkin_blocks SET ends_at = NOW() - INTERVAL '74 minutes' WHERE id = $1`, [
+        testBlockId,
+      ]);
+
+      // Reset customer bookkeeping
+      await pool.query(`UPDATE customers SET past_due_balance = 0, notes = '' WHERE id = $1`, [
+        testCustomerId,
+      ]);
+      await pool.query(`DELETE FROM charges WHERE visit_id = $1`, [testVisitId]);
+
+      // Create a checkout request that already has a late fee assessed + paid
+      const requestResult = await pool.query(
+        `INSERT INTO checkout_requests (occupancy_id, customer_id, kiosk_device_id, customer_checklist_json, late_minutes, late_fee_amount, claimed_by_staff_id, status, items_confirmed, fee_paid)
+         VALUES ($1, $2, 'test-kiosk', '{}', 74, 35, $3, 'CLAIMED', true, true)
+         RETURNING id`,
+        [testBlockId, testCustomerId, testStaffId]
+      );
+      const requestId = requestResult.rows[0]!.id;
+
+      const response = await fastify.inject({
+        method: 'POST',
+        url: `/v1/checkout/${requestId}/complete`,
+        headers: {
+          authorization: `Bearer ${testStaffToken}`,
+        },
+      });
+      expect(response.statusCode).toBe(200);
+
+      const customerAfter = await pool.query<{ past_due_balance: string; notes: string | null }>(
+        `SELECT past_due_balance, notes FROM customers WHERE id = $1`,
+        [testCustomerId]
+      );
+      expect(parseFloat(String(customerAfter.rows[0]!.past_due_balance))).toBe(35);
+      const notes = String(customerAfter.rows[0]!.notes || '');
+      expect(notes).toContain('[SYSTEM_LATE_FEE_PENDING]');
+      // 74 mins -> floor to 60 -> "1h 0m late"
+      expect(notes).toContain('1h 0m late');
+
+      const visitRow = await pool.query<{ started_at: Date }>(
+        `SELECT started_at FROM visits WHERE id = $1`,
+        [testVisitId]
+      );
+      const visitDate = visitRow.rows[0]!.started_at.toISOString().slice(0, 10);
+      expect(notes).toContain(`on last visit on ${visitDate}.`);
+
+      const chargesRes = await pool.query<{ type: string; amount: string; checkin_block_id: string }>(
+        `SELECT type, amount, checkin_block_id FROM charges WHERE visit_id = $1`,
+        [testVisitId]
+      );
+      expect(chargesRes.rows.some((r) => r.type === 'LATE_FEE' && r.checkin_block_id === testBlockId)).toBe(true);
+
+      // Clean up
+      await pool.query('DELETE FROM checkout_requests WHERE id = $1', [requestId]);
+      await pool.query('DELETE FROM charges WHERE visit_id = $1', [testVisitId]);
+      await pool.query(`UPDATE customers SET past_due_balance = 0, notes = '' WHERE id = $1`, [
+        testCustomerId,
       ]);
     });
   });

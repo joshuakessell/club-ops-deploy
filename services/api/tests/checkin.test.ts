@@ -6,8 +6,10 @@ import { query, initializeDatabase, closeDatabase } from '../src/db/index.js';
 import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaster.js';
 import { checkinRoutes } from '../src/routes/checkin.js';
 import { customerRoutes } from '../src/routes/customers.js';
+import { inventoryRoutes } from '../src/routes/inventory.js';
+import { sessionDocumentsRoutes } from '../src/routes/session-documents.js';
 import { hashPin, generateSessionToken } from '../src/auth/utils.js';
-import type { SessionUpdatedPayload } from '@club-ops/shared';
+import type { SessionUpdatedPayload, CustomerConfirmedPayload } from '@club-ops/shared';
 import { truncateAllTables } from './testDb.js';
 
 // Augment FastifyInstance with broadcaster
@@ -18,6 +20,7 @@ declare module 'fastify' {
 }
 
 describe('Check-in Flow', () => {
+  const TEST_KIOSK_TOKEN = 'test-kiosk-token';
   let app: FastifyInstance;
   let staffToken: string;
   let staffId: string;
@@ -25,8 +28,10 @@ describe('Check-in Flow', () => {
   let customerId: string;
   let dbAvailable = false;
   let sessionUpdatedEvents: Array<{ lane: string; payload: SessionUpdatedPayload }> = [];
+  let customerConfirmedEvents: Array<{ lane: string; payload: CustomerConfirmedPayload }> = [];
 
   beforeAll(async () => {
+    process.env.KIOSK_TOKEN = TEST_KIOSK_TOKEN;
     // Check if database is available
     try {
       await initializeDatabase();
@@ -37,6 +42,12 @@ describe('Check-in Flow', () => {
       console.warn('   1. Start Docker Desktop');
       console.warn('   2. cd services/api && docker compose up -d');
       console.warn('   3. pnpm db:migrate\n');
+      // initializeDatabase() creates the pool before attempting to connect; ensure we don't leak it.
+      try {
+        await closeDatabase();
+      } catch {
+        // ignore
+      }
       return;
     }
 
@@ -54,12 +65,20 @@ describe('Check-in Flow', () => {
       sessionUpdatedEvents.push({ lane, payload });
       return originalBroadcastSessionUpdated(payload, lane);
     };
+    // Capture CUSTOMER_CONFIRMED payloads for assertions.
+    const originalBroadcastCustomerConfirmed = broadcaster.broadcastCustomerConfirmed.bind(broadcaster);
+    broadcaster.broadcastCustomerConfirmed = (payload, lane) => {
+      customerConfirmedEvents.push({ lane, payload });
+      return originalBroadcastCustomerConfirmed(payload, lane);
+    };
     app.decorate('broadcaster', broadcaster);
 
     // Register check-in routes
     // Note: Tests will need to properly authenticate or we'll mock requireAuth
     await app.register(checkinRoutes);
     await app.register(customerRoutes);
+    await app.register(inventoryRoutes);
+    await app.register(sessionDocumentsRoutes);
 
     await app.ready();
   });
@@ -67,6 +86,7 @@ describe('Check-in Flow', () => {
   beforeEach(async () => {
     if (!dbAvailable) return;
     sessionUpdatedEvents = [];
+    customerConfirmedEvents = [];
 
     // Ensure each test starts from a clean DB state (integration tests share one DB).
     await truncateAllTables((text, params) => query(text, params));
@@ -174,12 +194,15 @@ describe('Check-in Flow', () => {
     await query(`DELETE FROM staff_sessions WHERE staff_id = $1`, [staffId]);
     await query(`DELETE FROM customers WHERE id = $1 OR membership_number = '12345'`, [customerId]);
     await query(`DELETE FROM staff WHERE id = $1`, [staffId]);
-    await query(`DELETE FROM rooms WHERE number IN ('101', '102', '103', '104')`);
+    await query(`DELETE FROM rooms WHERE number IN ('200', '202', '203', '204')`);
   });
 
   afterAll(async () => {
-    await app.close();
-    await closeDatabase();
+    try {
+      if (app) await app.close();
+    } finally {
+      await closeDatabase();
+    }
   });
 
   // Helper to skip tests when DB is unavailable
@@ -275,6 +298,136 @@ describe('Check-in Flow', () => {
     );
   });
 
+  describe('POST /v1/checkin/lane/:laneId/customer-confirm', () => {
+    it(
+      'should unassign the selected resource when customer declines (regression for assigned_to column mismatch)',
+      runIfDbAvailable(async () => {
+        // Create a clean room and assign it to the customer to simulate a pending cross-type assignment.
+        const roomResult = await query<{ id: string }>(
+          `INSERT INTO rooms (number, type, status, floor, assigned_to_customer_id)
+           VALUES ('204', 'STANDARD', 'CLEAN', 1, $1)
+           RETURNING id`,
+          [customerId]
+        );
+        const roomId = roomResult.rows[0]!.id;
+
+        // Start a lane session (authenticated) and then mark it as having a selected resource.
+        const startRes = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
+          payload: {
+            customerId,
+          },
+        });
+        expect(startRes.statusCode).toBe(200);
+        const startJson = JSON.parse(startRes.body) as { sessionId: string };
+
+        await query(
+          `UPDATE lane_sessions
+           SET desired_rental_type = 'LOCKER',
+               assigned_resource_type = 'room',
+               assigned_resource_id = $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [roomId, startJson.sessionId]
+        );
+
+        // Customer declines.
+        const declineRes = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/customer-confirm`,
+          headers: {
+            'x-kiosk-token': TEST_KIOSK_TOKEN,
+          },
+          payload: {
+            sessionId: startJson.sessionId,
+            confirmed: false,
+          },
+        });
+
+        expect(declineRes.statusCode).toBe(200);
+
+        // Resource should be unassigned using the canonical DB column name assigned_to_customer_id.
+        const roomAfter = await query<{ assigned_to_customer_id: string | null }>(
+          `SELECT assigned_to_customer_id FROM rooms WHERE id = $1`,
+          [roomId]
+        );
+        expect(roomAfter.rows[0]!.assigned_to_customer_id).toBeNull();
+
+        const sessionAfter = await query<{ assigned_resource_id: string | null; assigned_resource_type: string | null }>(
+          `SELECT assigned_resource_id, assigned_resource_type FROM lane_sessions WHERE id = $1`,
+          [startJson.sessionId]
+        );
+        expect(sessionAfter.rows[0]!.assigned_resource_id).toBeNull();
+        expect(sessionAfter.rows[0]!.assigned_resource_type).toBeNull();
+      })
+    );
+
+    it(
+      'should broadcast confirmedType/confirmedNumber using the assigned resource number (not UUID)',
+      runIfDbAvailable(async () => {
+        // Create a SPECIAL room and assign it to the customer to simulate a pending cross-type assignment.
+        const roomResult = await query<{ id: string }>(
+          `INSERT INTO rooms (number, type, status, floor, assigned_to_customer_id)
+           VALUES ('201', 'SPECIAL', 'CLEAN', 1, $1)
+           RETURNING id`,
+          [customerId]
+        );
+        const roomId = roomResult.rows[0]!.id;
+
+        // Start a lane session (authenticated) for the customer.
+        const startRes = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
+          payload: {
+            customerId,
+          },
+        });
+        expect(startRes.statusCode).toBe(200);
+        const startJson = JSON.parse(startRes.body) as { sessionId: string };
+
+        // Mark the session as having a selected room (cross-type selection simulation).
+        await query(
+          `UPDATE lane_sessions
+           SET desired_rental_type = 'LOCKER',
+               assigned_resource_type = 'room',
+               assigned_resource_id = $1,
+               updated_at = NOW()
+           WHERE id = $2`,
+          [roomId, startJson.sessionId]
+        );
+
+        // Customer confirms.
+        const confirmRes = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/customer-confirm`,
+          headers: {
+            'x-kiosk-token': TEST_KIOSK_TOKEN,
+          },
+          payload: {
+            sessionId: startJson.sessionId,
+            confirmed: true,
+          },
+        });
+        expect(confirmRes.statusCode).toBe(200);
+
+        // Should broadcast CUSTOMER_CONFIRMED with tier+number (not UUID).
+        expect(customerConfirmedEvents.length).toBeGreaterThanOrEqual(1);
+        const last = customerConfirmedEvents[customerConfirmedEvents.length - 1]!;
+        expect(last.lane).toBe(laneId);
+        expect(last.payload.sessionId).toBe(startJson.sessionId);
+        expect(last.payload.confirmedType).toBe('SPECIAL');
+        expect(last.payload.confirmedNumber).toBe('201');
+      })
+    );
+  });
+
   describe('POST /v1/checkin/lane/:laneId/select-rental', () => {
     it(
       'should update session with rental selection',
@@ -354,7 +507,7 @@ describe('Check-in Flow', () => {
         // Create a clean room
         const roomResult = await query<{ id: string; number: string }>(
           `INSERT INTO rooms (number, type, status, floor)
-         VALUES ('101', 'STANDARD', 'CLEAN', 1)
+         VALUES ('200', 'STANDARD', 'CLEAN', 1)
          RETURNING id, number`
         );
         const roomId = roomResult.rows[0]!.id;
@@ -403,7 +556,7 @@ describe('Check-in Flow', () => {
         const data = JSON.parse(response.body);
         expect(data.success).toBe(true);
         expect(data.resourceType).toBe('room');
-        expect(data.roomNumber).toBe('101');
+        expect(data.roomNumber).toBe('200');
 
         // Verify room is NOT yet assigned/occupied (that happens after agreement signing)
         const roomCheck = await query<{ assigned_to_customer_id: string | null; status: string }>(
@@ -516,6 +669,7 @@ describe('Check-in Flow', () => {
         await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/set-language`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: { language: 'ES' },
         });
 
@@ -602,6 +756,122 @@ describe('Check-in Flow', () => {
     );
   });
 
+  describe('POST /v1/checkin/lane/:laneId/membership-purchase-intent', () => {
+    it(
+      "should allow intent=NONE to clear a prior 6-month intent (stored as NULL) and recompute the DUE quote",
+      runIfDbAvailable(async () => {
+        // Start a lane session
+        const startResponse = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: {
+            Authorization: `Bearer ${staffToken}`,
+          },
+          payload: {
+            customerId,
+          },
+        });
+        expect(startResponse.statusCode).toBe(200);
+        const startData = JSON.parse(startResponse.body) as { sessionId: string };
+        expect(startData.sessionId).toBeTruthy();
+
+        // Confirm a selection + create a DUE payment intent (required for immediate quote updates).
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { confirmedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+
+        const piIdResult = await query<{ payment_intent_id: string | null }>(
+          `SELECT payment_intent_id FROM lane_sessions WHERE id = $1`,
+          [startData.sessionId]
+        );
+        const paymentIntentId = piIdResult.rows[0]!.payment_intent_id;
+        expect(paymentIntentId).toBeTruthy();
+
+        const getQuote = async () => {
+          const r = await query<{ quote_json: unknown }>(
+            `SELECT quote_json FROM payment_intents WHERE id = $1`,
+            [paymentIntentId]
+          );
+          const raw = r.rows[0]!.quote_json;
+          return typeof raw === 'string' ? (JSON.parse(raw) as any) : (raw as any);
+        };
+
+        // Baseline quote should include daily membership fee (customer has no valid membership on file).
+        const baseQuote = await getQuote();
+        const baseItems: Array<{ description: string; amount: number }> = baseQuote.lineItems ?? [];
+        expect(baseItems.some((li) => li.description === 'Membership Fee')).toBe(true);
+        expect(baseItems.some((li) => li.description === '6 Month Membership')).toBe(false);
+
+        // Set PURCHASE intent; quote should include 6 Month Membership and omit Membership Fee.
+        const purchaseResp = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/membership-purchase-intent`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
+          payload: { intent: 'PURCHASE', sessionId: startData.sessionId },
+        });
+        expect(purchaseResp.statusCode).toBe(200);
+
+        const intentRow = await query<{
+          membership_purchase_intent: string | null;
+          membership_purchase_requested_at: string | null;
+        }>(
+          `SELECT membership_purchase_intent, membership_purchase_requested_at
+           FROM lane_sessions
+           WHERE id = $1`,
+          [startData.sessionId]
+        );
+        expect(intentRow.rows[0]!.membership_purchase_intent).toBe('PURCHASE');
+        expect(intentRow.rows[0]!.membership_purchase_requested_at).toBeTruthy();
+
+        const purchasedQuote = await getQuote();
+        const purchasedItems: Array<{ description: string; amount: number }> =
+          purchasedQuote.lineItems ?? [];
+        expect(purchasedItems.some((li) => li.description === '6 Month Membership')).toBe(true);
+        expect(purchasedItems.some((li) => li.description === 'Membership Fee')).toBe(false);
+
+        // Clear it with NONE; should persist NULLs and restore Membership Fee in the quote.
+        const clearResp = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/membership-purchase-intent`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
+          payload: { intent: 'NONE', sessionId: startData.sessionId },
+        });
+        expect(clearResp.statusCode).toBe(200);
+
+        const clearedRow = await query<{
+          membership_purchase_intent: string | null;
+          membership_purchase_requested_at: string | null;
+        }>(
+          `SELECT membership_purchase_intent, membership_purchase_requested_at
+           FROM lane_sessions
+           WHERE id = $1`,
+          [startData.sessionId]
+        );
+        expect(clearedRow.rows[0]!.membership_purchase_intent).toBeNull();
+        expect(clearedRow.rows[0]!.membership_purchase_requested_at).toBeNull();
+
+        const clearedQuote = await getQuote();
+        const clearedItems: Array<{ description: string; amount: number }> = clearedQuote.lineItems ?? [];
+        expect(clearedItems.some((li) => li.description === 'Membership Fee')).toBe(true);
+        expect(clearedItems.some((li) => li.description === '6 Month Membership')).toBe(false);
+      })
+    );
+  });
+
   describe('POST /v1/checkin/lane/:laneId/propose-selection', () => {
     it(
       'should allow customer to propose a rental type',
@@ -624,6 +894,7 @@ describe('Check-in Flow', () => {
         const proposeResponse = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             rentalType: 'STANDARD',
             proposedBy: 'CUSTOMER',
@@ -695,6 +966,7 @@ describe('Check-in Flow', () => {
         await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             rentalType: 'STANDARD',
             proposedBy: 'CUSTOMER',
@@ -819,6 +1091,59 @@ describe('Check-in Flow', () => {
         });
         expect(startResponse.statusCode).toBe(200);
 
+        // Seed two occupied room blocks with different tiers and different end times:
+        // - STANDARD ends sooner
+        // - SPECIAL ends later
+        //
+        // The waitlist ETA for desiredTier=SPECIAL must be based on the SPECIAL block,
+        // not the earliest-ending block overall.
+        const standardRoomId = (
+          await query<{ id: string }>(
+            `INSERT INTO rooms (number, type, status, floor)
+             VALUES ('200', 'STANDARD', 'OCCUPIED', 1)
+             RETURNING id`
+          )
+        ).rows[0]!.id;
+        const specialRoomId = (
+          await query<{ id: string }>(
+            `INSERT INTO rooms (number, type, status, floor)
+             VALUES ('201', 'SPECIAL', 'OCCUPIED', 1)
+             RETURNING id`
+          )
+        ).rows[0]!.id;
+
+        const visitStandardId = (
+          await query<{ id: string }>(
+            `INSERT INTO visits (customer_id, started_at)
+             VALUES ($1, NOW())
+             RETURNING id`,
+            [customerId]
+          )
+        ).rows[0]!.id;
+        const visitSpecialId = (
+          await query<{ id: string }>(
+            `INSERT INTO visits (customer_id, started_at)
+             VALUES ($1, NOW())
+             RETURNING id`,
+            [customerId]
+          )
+        ).rows[0]!.id;
+
+        const now = new Date();
+        const standardEndsAt = new Date(now.getTime() + 30 * 60 * 1000);
+        const specialEndsAt = new Date(now.getTime() + 90 * 60 * 1000);
+
+        await query(
+          `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, room_id, rental_type)
+           VALUES ($1, 'INITIAL', $2, $3, $4, 'STANDARD')`,
+          [visitStandardId, now, standardEndsAt, standardRoomId]
+        );
+        await query(
+          `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, room_id, rental_type)
+           VALUES ($1, 'INITIAL', $2, $3, $4, 'SPECIAL')`,
+          [visitSpecialId, now, specialEndsAt, specialRoomId]
+        );
+
         // Get waitlist info
         const waitlistResponse = await app.inject({
           method: 'GET',
@@ -826,9 +1151,11 @@ describe('Check-in Flow', () => {
         });
         expect(waitlistResponse.statusCode).toBe(200);
         const waitlistData = JSON.parse(waitlistResponse.body);
-        expect(waitlistData).toHaveProperty('position');
+        expect(waitlistData.position).toBe(1);
         expect(waitlistData).toHaveProperty('upgradeFee');
-        // ETA may be null if no occupied rooms
+
+        const expectedEta = new Date(specialEndsAt.getTime() + 15 * 60 * 1000).toISOString();
+        expect(waitlistData.estimatedReadyAt).toBe(expectedEta);
       })
     );
   });
@@ -1001,6 +1328,7 @@ describe('Check-in Flow', () => {
         const response = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/kiosk-ack`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
         });
         expect(response.statusCode).toBe(200);
 
@@ -1101,6 +1429,157 @@ describe('Check-in Flow', () => {
     );
 
     it(
+      'fuzzy-matches by exact DOB + similar name when exact token match fails, and enriches id_scan_hash/value',
+      runIfDbAvailable(async () => {
+        const customerResult = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JOHN DOE', '1980-01-15']
+        );
+        const customerId = customerResult.rows[0]!.id;
+
+        // Scanned first name slightly off so exact token match fails, but fuzzy should pass.
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ555555555\nDCITX\n';
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const data = JSON.parse(response.body);
+        expect(data.result).toBe('MATCHED');
+        expect(data.scanType).toBe('STATE_ID');
+        expect(data.customer.id).toBe(customerId);
+        expect(data.enriched).toBe(true);
+
+        const row = await query<{ id_scan_hash: string | null; id_scan_value: string | null }>(
+          `SELECT id_scan_hash, id_scan_value FROM customers WHERE id = $1`,
+          [customerId]
+        );
+        expect(row.rows[0]!.id_scan_hash).toBeTruthy();
+        expect(row.rows[0]!.id_scan_value).toBeTruthy();
+      })
+    );
+
+    it(
+      'returns MULTIPLE_MATCHES when more than one fuzzy candidate passes thresholds',
+      runIfDbAvailable(async () => {
+        const c1 = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JOHN DOE', '1980-01-15']
+        );
+        const c2 = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JONN DOE', '1980-01-15']
+        );
+        const id1 = c1.rows[0]!.id;
+        const id2 = c2.rows[0]!.id;
+
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ777777777\nDCITX\n';
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const data = JSON.parse(response.body);
+        expect(data.result).toBe('MULTIPLE_MATCHES');
+        expect(data.scanType).toBe('STATE_ID');
+        expect(Array.isArray(data.candidates)).toBe(true);
+        expect(data.candidates.length).toBeGreaterThanOrEqual(2);
+        const ids = data.candidates.map((c: { id: string }) => c.id);
+        expect(ids).toContain(id1);
+        expect(ids).toContain(id2);
+        // Sorted by descending matchScore
+        for (let i = 1; i < data.candidates.length; i++) {
+          expect(data.candidates[i - 1].matchScore).toBeGreaterThanOrEqual(data.candidates[i].matchScore);
+        }
+      })
+    );
+
+    it(
+      'resolves MULTIPLE_MATCHES by selectedCustomerId and enriches id_scan_hash/value',
+      runIfDbAvailable(async () => {
+        const c1 = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JOHN DOE', '1980-01-15']
+        );
+        await query(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())`,
+          ['JONN DOE', '1980-01-15']
+        );
+        const selectedId = c1.rows[0]!.id;
+
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ888888888\nDCITX\n';
+        const initial = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw },
+        });
+        expect(initial.statusCode).toBe(200);
+        const initialData = JSON.parse(initial.body);
+        expect(initialData.result).toBe('MULTIPLE_MATCHES');
+
+        const resolved = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw, selectedCustomerId: selectedId },
+        });
+        expect(resolved.statusCode).toBe(200);
+        const resolvedData = JSON.parse(resolved.body);
+        expect(resolvedData.result).toBe('MATCHED');
+        expect(resolvedData.customer.id).toBe(selectedId);
+
+        const row = await query<{ id_scan_hash: string | null; id_scan_value: string | null }>(
+          `SELECT id_scan_hash, id_scan_value FROM customers WHERE id = $1`,
+          [selectedId]
+        );
+        expect(row.rows[0]!.id_scan_hash).toBeTruthy();
+        expect(row.rows[0]!.id_scan_value).toBeTruthy();
+      })
+    );
+
+    it(
+      'rejects selectedCustomerId resolution when DOB does not match extracted scan (INVALID_SELECTION)',
+      runIfDbAvailable(async () => {
+        const customerResult = await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2, NOW(), NOW())
+           RETURNING id`,
+          ['JOHN DOE', '1980-01-16']
+        );
+        const customerId = customerResult.rows[0]!.id;
+
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ999999999\nDCITX\n';
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw, selectedCustomerId: customerId },
+        });
+
+        expect(response.statusCode).toBe(400);
+        const data = JSON.parse(response.body);
+        expect(data.result).toBe('ERROR');
+        expect(data.error.code).toBe('INVALID_SELECTION');
+      })
+    );
+
+    it(
       'matches non-ID scans as membership/general barcode',
       runIfDbAvailable(async () => {
         const customerResult = await query<{ id: string }>(
@@ -1145,6 +1624,31 @@ describe('Check-in Flow', () => {
         expect(data.extracted.firstName).toBe('JANE');
         expect(data.extracted.lastName).toBe('DOE');
         expect(data.extracted.dob).toBe('1992-01-02');
+      })
+    );
+
+    it(
+      'extracts identity fields from concatenated AAMVA payloads (field boundary parsing regression)',
+      runIfDbAvailable(async () => {
+        const raw =
+          '@\nANSI 636015090002DL00410289DLDCACDCBNONEDCDNONEDBA01012030DCSDOEDDENDACJOHNDDFNDBB07151988DAQ123456789DAJTX\n';
+        const response = await app.inject({
+          method: 'POST',
+          url: '/v1/checkin/scan',
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { laneId, rawScanText: raw },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const data = JSON.parse(response.body);
+        expect(data.result).toBe('NO_MATCH');
+        expect(data.scanType).toBe('STATE_ID');
+        expect(data.extracted).toBeDefined();
+        expect(data.extracted.firstName).toBe('JOHN');
+        expect(data.extracted.lastName).toBe('DOE');
+        expect(data.extracted.dob).toBe('1988-07-15');
+        expect(data.extracted.idNumber).toBe('123456789');
+        expect(data.extracted.jurisdiction).toBe('TX');
       })
     );
 
@@ -1269,6 +1773,7 @@ describe('Check-in Flow', () => {
         const signResponse = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload: 'data:image/png;base64,test',
             sessionId: session.sessionId,
@@ -1285,10 +1790,16 @@ describe('Check-in Flow', () => {
         // Setup: create session, lock selection, create payment intent, demo-take-payment, then sign agreement
         const roomResult = await query<{ id: string }>(
           `INSERT INTO rooms (number, type, status, floor)
-         VALUES ('104', 'STANDARD', 'CLEAN', 1)
+         VALUES ('200', 'STANDARD', 'CLEAN', 2)
          RETURNING id`
         );
         const roomId = roomResult.rows[0]!.id;
+
+        // Sanity: room 200 is available before check-in completion
+        const beforeAvail = await app.inject({ method: 'GET', url: '/v1/inventory/available' });
+        expect(beforeAvail.statusCode).toBe(200);
+        const beforeAvailBody = JSON.parse(beforeAvail.body);
+        expect(beforeAvailBody.rawRooms?.STANDARD).toBe(1);
 
         const startResponse = await app.inject({
           method: 'POST',
@@ -1361,6 +1872,7 @@ describe('Check-in Flow', () => {
         const response = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload:
               'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -1415,6 +1927,34 @@ describe('Check-in Flow', () => {
           [roomId]
         );
         expect(roomAssignedResult.rows[0]!.assigned_to_customer_id).toBe(customerId);
+
+        // Expected outcome: /v1/inventory/available must no longer count room 200 immediately after completion
+        const afterAvail = await app.inject({ method: 'GET', url: '/v1/inventory/available' });
+        expect(afterAvail.statusCode).toBe(200);
+        const afterAvailBody = JSON.parse(afterAvail.body);
+        expect(afterAvailBody.rawRooms?.STANDARD).toBe(0);
+
+        // Document verification: employee/office can prove agreement PDF + signature artifacts exist
+        const docsRes = await app.inject({
+          method: 'GET',
+          url: `/v1/documents/by-session/${startData.sessionId}`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+        expect(docsRes.statusCode).toBe(200);
+        const docsBody = JSON.parse(docsRes.body) as { documents?: any[] };
+        expect(Array.isArray(docsBody.documents)).toBe(true);
+        expect(docsBody.documents!.length).toBeGreaterThan(0);
+        expect(docsBody.documents![0]!.has_signature).toBe(true);
+        expect(docsBody.documents![0]!.has_pdf).toBe(true);
+
+        const downloadRes = await app.inject({
+          method: 'GET',
+          url: `/v1/documents/${docsBody.documents![0]!.id}/download`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+        expect(downloadRes.statusCode).toBe(200);
+        expect(downloadRes.headers['content-type']).toContain('application/pdf');
+        expect(downloadRes.body.length).toBeGreaterThan(100);
       })
     );
 
@@ -1424,7 +1964,7 @@ describe('Check-in Flow', () => {
         // Supply: 2 CLEAN STANDARD rooms
         await query(
           `INSERT INTO rooms (number, type, status, floor)
-           VALUES ('101', 'STANDARD', 'CLEAN', 1), ('102', 'STANDARD', 'CLEAN', 1)`
+           VALUES ('200', 'STANDARD', 'CLEAN', 1), ('202', 'STANDARD', 'CLEAN', 1)`
         );
 
         // Demand: 2 ACTIVE STANDARD waitlist entries on an active visit + active block
@@ -1486,6 +2026,7 @@ describe('Check-in Flow', () => {
         const response = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload:
               'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -1504,13 +2045,13 @@ describe('Check-in Flow', () => {
         // Supply: 2 CLEAN STANDARD rooms
         const r1 = await query<{ id: string; number: string }>(
           `INSERT INTO rooms (number, type, status, floor)
-           VALUES ('101', 'STANDARD', 'CLEAN', 1)
+           VALUES ('200', 'STANDARD', 'CLEAN', 1)
            RETURNING id, number`
         );
         const offeredRoomId = r1.rows[0]!.id;
         await query(
           `INSERT INTO rooms (number, type, status, floor)
-           VALUES ('102', 'STANDARD', 'CLEAN', 1)`
+           VALUES ('202', 'STANDARD', 'CLEAN', 1)`
         );
 
         // OFFERED waitlist entry reserves room 101 (valid active visit + active block)
@@ -1570,6 +2111,7 @@ describe('Check-in Flow', () => {
         const response = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
           payload: {
             signaturePayload:
               'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -1586,7 +2128,7 @@ describe('Check-in Flow', () => {
            LIMIT 1`,
           [customerId]
         );
-        expect(assignedRoom.rows[0]!.number).toBe('102');
+        expect(assignedRoom.rows[0]!.number).toBe('202');
 
         const offeredRoom = await query<{ status: string; assigned_to_customer_id: string | null }>(
           `SELECT status, assigned_to_customer_id FROM rooms WHERE id = $1`,
@@ -1594,6 +2136,95 @@ describe('Check-in Flow', () => {
         );
         expect(offeredRoom.rows[0]!.status).toBe('CLEAN');
         expect(offeredRoom.rows[0]!.assigned_to_customer_id).toBeNull();
+      })
+    );
+
+    it(
+      'archives system late-fee notes after they are shown on the next visit (manual notes persist)',
+      runIfDbAvailable(async () => {
+        // Seed customer notes: one manual note + one system late-fee note
+        const manual = `[2026-01-01T00:00:00.000Z] Staff: Manual note should persist`;
+        const system = `[SYSTEM_LATE_FEE_PENDING] Late fee ($35.00): customer was 1h 0m late on last visit on 2026-01-12.`;
+        await query(`UPDATE customers SET notes = $1, past_due_balance = 35 WHERE id = $2`, [
+          `${manual}\n${system}`,
+          customerId,
+        ]);
+
+        // Setup room for assignment
+        const roomResult = await query<{ id: string }>(
+          `INSERT INTO rooms (number, type, status, floor)
+           VALUES ('201', 'STANDARD', 'CLEAN', 2)
+           RETURNING id`
+        );
+        const roomId = roomResult.rows[0]!.id;
+
+        // Start lane session
+        const startResponse = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/start`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { idScanValue: 'ID123456', membershipScanValue: '12345' },
+        });
+        expect(startResponse.statusCode).toBe(200);
+        const startData = JSON.parse(startResponse.body);
+
+        // Ensure the note is visible on this next visit (via broadcasted SESSION_UPDATED payload)
+        const startEvents = sessionUpdatedEvents.filter((e) => e.lane === laneId);
+        expect(startEvents.length).toBeGreaterThan(0);
+        const last = startEvents[startEvents.length - 1]!;
+        expect(String(last.payload.customerNotes || '')).toContain('[SYSTEM_LATE_FEE_PENDING]');
+        expect(String(last.payload.customerNotes || '')).toContain('Manual note should persist');
+
+        // Complete flow through sign-agreement (successful check-in) which should auto-archive system note
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/propose-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { rentalType: 'STANDARD', proposedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/confirm-selection`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { confirmedBy: 'EMPLOYEE' },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/assign`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { resourceType: 'room', resourceId: roomId },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/create-payment-intent`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+        });
+        await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/demo-take-payment`,
+          headers: { Authorization: `Bearer ${staffToken}` },
+          payload: { outcome: 'CASH_SUCCESS' },
+        });
+
+        const sign = await app.inject({
+          method: 'POST',
+          url: `/v1/checkin/lane/${laneId}/sign-agreement`,
+          headers: { 'x-kiosk-token': TEST_KIOSK_TOKEN },
+          payload: {
+            signaturePayload:
+              'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            sessionId: startData.sessionId,
+          },
+        });
+        expect(sign.statusCode).toBe(200);
+
+        const notesAfter = await query<{ notes: string | null }>(
+          `SELECT notes FROM customers WHERE id = $1`,
+          [customerId]
+        );
+        const finalNotes = String(notesAfter.rows[0]!.notes || '');
+        expect(finalNotes).toContain('Manual note should persist');
+        expect(finalNotes).not.toContain('[SYSTEM_LATE_FEE_PENDING]');
       })
     );
   });

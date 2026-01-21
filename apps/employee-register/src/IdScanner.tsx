@@ -248,7 +248,9 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
     >
       {showConfirm && scannedData ? (
         <div className="cs-liquid-card" style={{ padding: '2rem', maxWidth: '500px', width: '90%' }}>
-          <h2 style={{ marginBottom: '1rem', fontSize: '1.5rem' }}>Confirm ID Details</h2>
+          <h2 className="er-text-lg" style={{ marginBottom: '1rem' }}>
+            Confirm ID Details
+          </h2>
           <div style={{ marginBottom: '1rem' }}>
             <div style={{ marginBottom: '0.5rem' }}>
               <strong>Name:</strong>{' '}
@@ -279,7 +281,6 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
               style={{
                 flex: 1,
                 padding: '0.75rem',
-                fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -292,7 +293,6 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
               style={{
                 flex: 1,
                 padding: '0.75rem',
-                fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -345,13 +345,13 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
                   left: '50%',
                   transform: 'translateX(-50%)',
                   color: 'white',
-                  fontSize: '0.875rem',
                   fontWeight: 600,
                   textAlign: 'center',
                   background: 'rgba(0, 0, 0, 0.7)',
                   padding: '0.25rem 0.5rem',
                   borderRadius: '4px',
                 }}
+                className="er-text-sm"
               >
                 Align ID barcode here
               </div>
@@ -382,8 +382,10 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
                 marginBottom: '1rem',
               }}
             >
-              <p style={{ fontSize: '1.125rem', marginBottom: '0.5rem' }}>Scanning ID...</p>
-              <p style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+              <p className="er-text-md" style={{ marginBottom: '0.5rem' }}>
+                Scanning ID...
+              </p>
+              <p className="er-text-sm" style={{ color: '#94a3b8' }}>
                 Point camera at the barcode on the back of the ID
               </p>
             </div>
@@ -395,7 +397,6 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
               className="cs-liquid-button cs-liquid-button--danger"
               style={{
                 padding: '0.75rem 1.5rem',
-                fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}
@@ -407,7 +408,6 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
               className="cs-liquid-button cs-liquid-button--secondary"
               style={{
                 padding: '0.75rem 1.5rem',
-                fontSize: '1rem',
                 fontWeight: 600,
                 cursor: 'pointer',
               }}

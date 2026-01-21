@@ -24,5 +24,6 @@ export { registerRoutes } from './registers.js';
 export { shiftsRoutes } from './shifts.js';
 export { timeclockRoutes } from './timeclock.js';
 export { documentsRoutes } from './documents.js';
+export { sessionDocumentsRoutes } from './session-documents.js';
 export { scheduleRoutes } from './schedule.js';
 export { timeoffRoutes } from './timeoff.js';

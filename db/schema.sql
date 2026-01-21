@@ -235,6 +235,26 @@ CREATE TYPE public.waitlist_status AS ENUM (
 );
 
 
+--
+-- Name: inventory_resource_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.inventory_resource_type AS ENUM (
+    'room',
+    'locker'
+);
+
+
+--
+-- Name: inventory_reservation_kind; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.inventory_reservation_kind AS ENUM (
+    'LANE_SELECTION',
+    'UPGRADE_HOLD'
+);
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -474,6 +494,7 @@ CREATE TABLE public.lane_sessions (
     payment_intent_id uuid,
     membership_purchase_intent character varying(20),
     membership_purchase_requested_at timestamp with time zone,
+    membership_choice character varying(20),
     kiosk_acknowledged_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -485,7 +506,8 @@ CREATE TABLE public.lane_sessions (
     selection_confirmed_by character varying(20),
     selection_locked_at timestamp with time zone,
     CONSTRAINT lane_sessions_proposed_by_check CHECK (((proposed_by)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'EMPLOYEE'::character varying])::text[]))),
-    CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'EMPLOYEE'::character varying])::text[])))
+    CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'EMPLOYEE'::character varying])::text[]))),
+    CONSTRAINT lane_sessions_membership_choice_check CHECK (((membership_choice)::text = ANY ((ARRAY['ONE_TIME'::character varying, 'SIX_MONTH'::character varying])::text[])) OR membership_choice IS NULL)
 );
 
 
@@ -828,9 +850,30 @@ CREATE TABLE public.waitlist (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     offered_at timestamp with time zone,
+    offer_expires_at timestamp with time zone,
+    last_offered_at timestamp with time zone,
+    offer_attempts integer DEFAULT 0 NOT NULL,
     completed_at timestamp with time zone,
     cancelled_at timestamp with time zone,
     cancelled_by_staff_id uuid
+);
+
+
+--
+-- Name: inventory_reservations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_reservations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    resource_type public.inventory_resource_type NOT NULL,
+    resource_id uuid NOT NULL,
+    kind public.inventory_reservation_kind NOT NULL,
+    lane_session_id uuid,
+    waitlist_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone,
+    released_at timestamp with time zone,
+    release_reason text
 );
 
 
@@ -1121,6 +1164,14 @@ ALTER TABLE ONLY public.waitlist
 
 
 --
+-- Name: inventory_reservations inventory_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: webauthn_challenges webauthn_challenges_challenge_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1400,6 +1451,13 @@ CREATE INDEX idx_customers_banned ON public.customers USING btree (banned_until)
 --
 
 CREATE INDEX idx_customers_id_hash ON public.customers USING btree (id_scan_hash) WHERE (id_scan_hash IS NOT NULL);
+
+
+--
+-- Name: idx_customers_dob; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customers_dob ON public.customers USING btree (dob) WHERE (dob IS NOT NULL);
 
 
 --
@@ -1795,6 +1853,27 @@ CREATE INDEX idx_waitlist_status ON public.waitlist USING btree (status);
 
 
 --
+-- Name: idx_inventory_reservations_active_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_inventory_reservations_active_expires_at ON public.inventory_reservations USING btree (expires_at) WHERE (released_at IS NULL);
+
+
+--
+-- Name: idx_inventory_reservations_waitlist_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_inventory_reservations_waitlist_active ON public.inventory_reservations USING btree (waitlist_id) WHERE (released_at IS NULL);
+
+
+--
+-- Name: uniq_inventory_reservations_active_resource; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uniq_inventory_reservations_active_resource ON public.inventory_reservations USING btree (resource_type, resource_id) WHERE (released_at IS NULL);
+
+
+--
 -- Name: idx_waitlist_visit; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2177,11 +2256,151 @@ ALTER TABLE ONLY public.waitlist
 
 
 --
+-- Name: inventory_reservations inventory_reservations_lane_session_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_lane_session_fk FOREIGN KEY (lane_session_id) REFERENCES public.lane_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_reservations inventory_reservations_waitlist_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_waitlist_fk FOREIGN KEY (waitlist_id) REFERENCES public.waitlist(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_reservations inventory_reservations_lane_session_required; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_lane_session_required CHECK (((kind <> 'LANE_SELECTION'::public.inventory_reservation_kind) OR (lane_session_id IS NOT NULL)));
+
+
+--
+-- Name: inventory_reservations inventory_reservations_waitlist_required; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_waitlist_required CHECK (((kind <> 'UPGRADE_HOLD'::public.inventory_reservation_kind) OR (waitlist_id IS NOT NULL)));
+
+
+--
 -- Name: webauthn_challenges webauthn_challenges_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.webauthn_challenges
     ADD CONSTRAINT webauthn_challenges_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: telemetry_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.telemetry_events (
+    id bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    app text NOT NULL,
+    level text NOT NULL,
+    kind text NOT NULL,
+    route text,
+    message text,
+    stack text,
+    request_id text,
+    session_id text,
+    device_id text,
+    lane text,
+    method text,
+    status integer,
+    url text,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL
+);
+
+
+--
+-- Name: telemetry_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.telemetry_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: telemetry_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.telemetry_events_id_seq OWNED BY public.telemetry_events.id;
+
+
+--
+-- Name: telemetry_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_events ALTER COLUMN id SET DEFAULT nextval('public.telemetry_events_id_seq'::regclass);
+
+
+--
+-- Name: telemetry_events telemetry_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_events
+    ADD CONSTRAINT telemetry_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: telemetry_events_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_created_at_idx ON public.telemetry_events USING btree (created_at);
+
+
+--
+-- Name: telemetry_events_app_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_app_idx ON public.telemetry_events USING btree (app);
+
+
+--
+-- Name: telemetry_events_kind_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_kind_idx ON public.telemetry_events USING btree (kind);
+
+
+--
+-- Name: telemetry_events_level_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_level_idx ON public.telemetry_events USING btree (level);
+
+
+--
+-- Name: telemetry_events_request_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_request_id_idx ON public.telemetry_events USING btree (request_id);
+
+
+--
+-- Name: telemetry_events_device_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_device_id_idx ON public.telemetry_events USING btree (device_id);
+
+
+--
+-- Name: telemetry_events telemetry_events_level_check; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.telemetry_events
+    ADD CONSTRAINT telemetry_events_level_check CHECK ((level = ANY (ARRAY['error'::text, 'warn'::text, 'info'::text])));
 
 
 --

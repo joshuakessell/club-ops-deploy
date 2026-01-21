@@ -18,7 +18,6 @@ type RoomRow = {
 /**
  * Room routes (offerable rooms for waitlist upgrades).
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function roomsRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/rooms/offerable?tier=STANDARD|DOUBLE|SPECIAL
@@ -51,6 +50,22 @@ export async function roomsRoutes(fastify: FastifyInstance): Promise<void> {
            WHERE r.status = 'CLEAN'
              AND r.assigned_to_customer_id IS NULL
              AND r.type = $1
+             -- Exclude rooms "selected" by an active lane session (reservation semantics).
+             AND NOT EXISTS (
+               SELECT 1
+               FROM lane_sessions ls
+               WHERE ls.assigned_resource_type = 'room'
+                 AND ls.assigned_resource_id = r.id
+                 AND ls.status = ANY (
+                   ARRAY[
+                     'ACTIVE'::public.lane_session_status,
+                     'AWAITING_CUSTOMER'::public.lane_session_status,
+                     'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                     'AWAITING_PAYMENT'::public.lane_session_status,
+                     'AWAITING_SIGNATURE'::public.lane_session_status
+                   ]
+                 )
+             )
              AND NOT EXISTS (
                SELECT 1
                FROM waitlist w

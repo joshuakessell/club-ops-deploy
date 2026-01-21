@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 import { computeCompliance } from '../services/compliance.js';
 
 interface ShiftRow {
@@ -218,11 +219,12 @@ export async function shiftsRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Write audit log
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'SHIFT_UPDATED', 'employee_shift', $2)`,
-            [request.staff!.staffId, shiftId]
-          );
+          await insertAuditLog(client, {
+            staffId: request.staff!.staffId,
+            action: 'SHIFT_UPDATED',
+            entityType: 'employee_shift',
+            entityId: shiftId,
+          });
 
           // Return updated shift
           const updated = await client.query<ShiftRow>(

@@ -19,7 +19,6 @@ export class AppErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: unknown) {
     // Keep console logging; if you have telemetry, wire it here later.
-    // eslint-disable-next-line no-console
     console.error('App crashed:', error);
   }
 

@@ -3,6 +3,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { cleaningRoutes } from '../src/routes/cleaning.js';
 import { createBroadcaster, type Broadcaster } from '../src/websocket/broadcaster.js';
+import { generateSessionToken } from '../src/auth/utils.js';
 import { RoomStatus, validateTransition } from '@club-ops/shared';
 import { truncateAllTables } from './testDb.js';
 
@@ -80,6 +81,7 @@ describe('Cleaning Batch Endpoint', () => {
   let pool: pg.Pool;
   let broadcastedEvents: Array<{ type: string; payload: unknown }>;
   let dbAvailable = false;
+  let staffToken: string;
 
   // Test data IDs
   const testRoomIds = {
@@ -153,6 +155,16 @@ describe('Cleaning Batch Endpoint', () => {
       [testStaffId]
     );
 
+    // Create staff session to satisfy requireAuth (Bearer token)
+    staffToken = generateSessionToken();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 8);
+    await pool.query(
+      `INSERT INTO staff_sessions (staff_id, device_id, device_type, session_token, expires_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [testStaffId, 'test-device', 'tablet', staffToken, expiresAt]
+    );
+
     // Insert test rooms with known statuses
     await pool.query(
       `
@@ -175,11 +187,17 @@ describe('Cleaning Batch Endpoint', () => {
     await testFn();
   };
 
+  const injectAsStaff = (opts: Parameters<FastifyInstance['inject']>[0]) =>
+    fastify.inject({
+      ...opts,
+      headers: { ...(opts.headers ?? {}), Authorization: `Bearer ${staffToken}` },
+    });
+
   describe('Valid transitions', () => {
     it(
       'should transition DIRTY → CLEANING',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -208,7 +226,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should transition CLEANING → CLEAN',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -235,7 +253,7 @@ describe('Cleaning Batch Endpoint', () => {
           testRoomIds.dirty,
         ]);
 
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -257,7 +275,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should reject DIRTY → CLEAN without override',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -287,7 +305,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should allow DIRTY → CLEAN with override and reason',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -327,7 +345,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should reject override without reason',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -349,7 +367,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should handle partial failures in batch',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -386,7 +404,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should reject empty roomIds array',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -403,7 +421,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should reject invalid room UUIDs',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -420,7 +438,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should reject invalid target status',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -438,7 +456,7 @@ describe('Cleaning Batch Endpoint', () => {
       'should handle non-existent rooms',
       runIfDbAvailable(async () => {
         const nonExistentId = '99999999-9999-9999-9999-999999999999';
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -460,7 +478,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should create cleaning batch record',
       runIfDbAvailable(async () => {
-        await fastify.inject({
+        await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {
@@ -481,7 +499,7 @@ describe('Cleaning Batch Endpoint', () => {
     it(
       'should create cleaning_batch_rooms records',
       runIfDbAvailable(async () => {
-        const response = await fastify.inject({
+        const response = await injectAsStaff({
           method: 'POST',
           url: '/v1/cleaning/batch',
           payload: {

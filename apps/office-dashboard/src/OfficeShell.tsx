@@ -40,7 +40,7 @@ export function OfficeShell({
 
   return (
     <div className="dashboard">
-      <aside className="sidebar">
+      <aside className="sidebar glass-effect">
         <div
           className="logo"
           onClick={() => navigate(isAdmin ? '/overview' : '/schedule')}
@@ -77,7 +77,7 @@ export function OfficeShell({
       </aside>
 
       <main className="main-content">
-        <header className="topbar">
+        <header className="topbar glass-effect">
           <h1>{isAdmin ? 'Office Dashboard (Admin)' : 'Office Dashboard (Staff)'}</h1>
           <div className="topbar-status" style={{ display: 'flex', alignItems: 'center' }}>
             <span style={{ color: 'var(--text-muted)' }}>{location.pathname}</span>

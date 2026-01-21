@@ -28,6 +28,8 @@ describe('GET /v1/inventory/available (effective availability subtracts waitlist
       database: process.env.DB_NAME || 'club_operations',
       user: process.env.DB_USER || 'clubops',
       password: process.env.DB_PASSWORD || 'clubops_dev',
+      // Prevent "hung" test runs when DB isn't reachable.
+      connectionTimeoutMillis: 3000,
     });
   });
 
@@ -39,9 +41,9 @@ describe('GET /v1/inventory/available (effective availability subtracts waitlist
     await pool.query(
       `INSERT INTO rooms (number, type, status, floor)
        VALUES
-         ('101', 'STANDARD', 'CLEAN', 1),
-         ('102', 'STANDARD', 'CLEAN', 1),
-         ('103', 'STANDARD', 'CLEAN', 1),
+         ('200', 'STANDARD', 'CLEAN', 1),
+         ('202', 'STANDARD', 'CLEAN', 1),
+         ('203', 'STANDARD', 'CLEAN', 1),
          ('216', 'DOUBLE',   'CLEAN', 2),
          ('218', 'DOUBLE',   'CLEAN', 2),
          ('225', 'DOUBLE',   'CLEAN', 2),
@@ -49,7 +51,7 @@ describe('GET /v1/inventory/available (effective availability subtracts waitlist
     );
 
     // Lockers remain unchanged by waitlist demand; keep one available locker.
-    await pool.query(`INSERT INTO lockers (number, status) VALUES ('L01', 'CLEAN')`);
+    await pool.query(`INSERT INTO lockers (number, status) VALUES ('001', 'CLEAN')`);
 
     // Create customer + active visit + active block (ends in future) for the waitlist join criteria.
     const cust = await pool.query<{ id: string }>(

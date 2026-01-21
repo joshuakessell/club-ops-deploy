@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { verifyPin } from '../auth/utils.js';
 import { requireAuth } from '../auth/middleware.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 /**
  * Schema for PIN verification request.
@@ -533,11 +534,12 @@ export async function registerRoutes(
           const employee = employeeResult.rows[0]!;
 
           // Log audit action
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'REGISTER_SIGN_IN', 'register_session', $2)`,
-            [body.employeeId, session.id]
-          );
+          await insertAuditLog(client, {
+            staffId: body.employeeId,
+            action: 'REGISTER_SIGN_IN',
+            entityType: 'register_session',
+            entityId: session.id,
+          });
 
           // Broadcast REGISTER_SESSION_UPDATED event
           const payload = {
@@ -733,11 +735,12 @@ export async function registerRoutes(
           }
 
           // Log audit action
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'REGISTER_SIGN_OUT', 'register_session', $2)`,
-            [request.staff!.staffId, session.id]
-          );
+          await insertAuditLog(client, {
+            staffId: request.staff!.staffId,
+            action: 'REGISTER_SIGN_OUT',
+            entityType: 'register_session',
+            entityId: session.id,
+          });
 
           // Broadcast REGISTER_SESSION_UPDATED event
           const payload = {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { RegisterSessionUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
-import { safeJsonParse, useReconnectingWebSocket } from '@club-ops/ui';
+import { useLaneSession } from '@club-ops/shared';
+import { safeJsonParse } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
 
@@ -59,48 +60,48 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
     };
   }, [lane, laneNumber, session.sessionToken]);
 
-  const ws = useReconnectingWebSocket({
-    url: `${wsBaseUrl()}?lane=${lane}`,
-    onOpenSendJson: [
-      {
-        type: 'subscribe',
-        events: [
-          'SESSION_UPDATED',
-          'SELECTION_PROPOSED',
-          'SELECTION_LOCKED',
-          'CUSTOMER_CONFIRMATION_REQUIRED',
-          'CUSTOMER_CONFIRMED',
-          'CUSTOMER_DECLINED',
-          'REGISTER_SESSION_UPDATED',
-        ],
-      },
-    ],
-    onMessage: async (event) => {
-      const msg = safeJsonParse<WebSocketEvent>(String(event.data));
-      if (!msg) return;
-      if (msg.type === 'SESSION_UPDATED') {
-        setLastLaneEvent(msg.timestamp);
-        // Lane-scoped already; fetch full summary list (cheap enough for demo).
-        const sessions = await apiJson<{ sessions: LaneSessionSummary[] }>('/v1/checkin/lane-sessions', {
-          sessionToken: session.sessionToken,
-        });
-        setLaneSession((sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null);
-      }
-      if (msg.type === 'REGISTER_SESSION_UPDATED') {
-        const payload = msg.payload as RegisterSessionUpdatedPayload;
-        if (payload.registerNumber === laneNumber) {
-          const regs = await apiJson<RegisterSession[]>('/v1/admin/register-sessions', {
-            sessionToken: session.sessionToken,
-          });
-          setRegister(regs.find((r) => r.registerNumber === laneNumber) || null);
-        }
-      }
-    },
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : '';
+  void wsBaseUrl;
+  const { connected: wsLive, lastMessage } = useLaneSession({
+    laneId: String(lane),
+    role: 'employee',
+    kioskToken,
+    enabled: !!kioskToken,
   });
 
   useEffect(() => {
-    setWsConnected(ws.connected);
-  }, [ws.connected]);
+    if (!lastMessage) return;
+    const msg = safeJsonParse<WebSocketEvent>(String(lastMessage.data));
+    if (!msg) return;
+    if (msg.type === 'SESSION_UPDATED') {
+      setLastLaneEvent(msg.timestamp);
+      void apiJson<{ sessions: LaneSessionSummary[] }>('/v1/checkin/lane-sessions', {
+        sessionToken: session.sessionToken,
+      })
+        .then((sessions) => {
+          setLaneSession((sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null);
+        })
+        .catch(console.error);
+    }
+    if (msg.type === 'REGISTER_SESSION_UPDATED') {
+      const payload = msg.payload as RegisterSessionUpdatedPayload;
+      if (payload.registerNumber === laneNumber) {
+        void apiJson<RegisterSession[]>('/v1/admin/register-sessions', {
+          sessionToken: session.sessionToken,
+        })
+          .then((regs) => setRegister(regs.find((r) => r.registerNumber === laneNumber) || null))
+          .catch(console.error);
+      }
+    }
+  }, [lane, laneNumber, lastMessage, session.sessionToken]);
+
+  useEffect(() => {
+    setWsConnected(wsLive);
+  }, [wsLive]);
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>

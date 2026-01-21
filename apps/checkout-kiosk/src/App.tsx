@@ -110,7 +110,7 @@ function App() {
   );
 
   useReconnectingWebSocket({
-    url: `ws://${window.location.hostname}:3001/ws`,
+    url: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`,
     onMessage: onWsMessage,
     onOpenSendJson: [{ type: 'subscribe', events: ['CHECKOUT_COMPLETED'] }],
   });
@@ -279,7 +279,10 @@ function App() {
     return (
       <div className="idle-container">
         <img src={logoImageSrc} alt="Club Dallas" className="logo-idle" />
-        <button className="start-checkout-btn" onClick={() => void handleStartCheckout()}>
+        <button
+          className="start-checkout-btn cs-liquid-button cs-liquid-button--pill"
+          onClick={() => void handleStartCheckout()}
+        >
           Start Checkout
         </button>
       </div>
@@ -315,7 +318,10 @@ function App() {
             <div className="checklist-items">
               {isLocker ? (
                 <>
-                  <div className="checklist-item" onClick={() => handleChecklistToggle('key')}>
+                  <div
+                    className="checklist-item glass-effect"
+                    onClick={() => handleChecklistToggle('key')}
+                  >
                     <input
                       type="checkbox"
                       id="key"
@@ -324,7 +330,10 @@ function App() {
                     />
                     <label htmlFor="key">Locker key</label>
                   </div>
-                  <div className="checklist-item" onClick={() => handleChecklistToggle('towel')}>
+                  <div
+                    className="checklist-item glass-effect"
+                    onClick={() => handleChecklistToggle('towel')}
+                  >
                     <input
                       type="checkbox"
                       id="towel"
@@ -336,7 +345,10 @@ function App() {
                 </>
               ) : (
                 <>
-                  <div className="checklist-item" onClick={() => handleChecklistToggle('key')}>
+                  <div
+                    className="checklist-item glass-effect"
+                    onClick={() => handleChecklistToggle('key')}
+                  >
                     <input
                       type="checkbox"
                       id="key"
@@ -345,7 +357,10 @@ function App() {
                     />
                     <label htmlFor="key">Room key</label>
                   </div>
-                  <div className="checklist-item" onClick={() => handleChecklistToggle('sheets')}>
+                  <div
+                    className="checklist-item glass-effect"
+                    onClick={() => handleChecklistToggle('sheets')}
+                  >
                     <input
                       type="checkbox"
                       id="sheets"
@@ -355,7 +370,10 @@ function App() {
                     <label htmlFor="sheets">Sheets</label>
                   </div>
                   {resolvedKey.hasTvRemote && (
-                    <div className="checklist-item" onClick={() => handleChecklistToggle('remote')}>
+                    <div
+                      className="checklist-item glass-effect"
+                      onClick={() => handleChecklistToggle('remote')}
+                    >
                       <input
                         type="checkbox"
                         id="remote"
@@ -369,7 +387,7 @@ function App() {
               )}
             </div>
 
-            <div className="checklist-notice">
+            <div className="checklist-notice glass-effect">
               <strong>Important:</strong>
               <ul>
                 <li>A staff member must verify all items have been returned.</li>
@@ -379,7 +397,7 @@ function App() {
             </div>
 
             <button
-              className="continue-btn"
+              className="continue-btn cs-liquid-button"
               onClick={() => void handleSubmitCheckout()}
               disabled={!isChecklistComplete()}
             >
@@ -400,7 +418,7 @@ function App() {
           <div className="waiting-container">
             <h1 className="waiting-title">Please hand your items to staff for verification.</h1>
             {lateFeeAmount > 0 && (
-              <div className="late-fee-notice">
+              <div className="late-fee-notice glass-effect">
                 Late fee due: ${lateFeeAmount.toFixed(2)}. Staff will collect payment.
               </div>
             )}

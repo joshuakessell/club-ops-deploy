@@ -59,6 +59,8 @@ describe('Upgrade payment flow attaches charges', () => {
       database: process.env.DB_NAME || 'club_operations',
       user: process.env.DB_USER || 'clubops',
       password: process.env.DB_PASSWORD || 'clubops_dev',
+      // Prevent "hung" test runs when DB isn't reachable.
+      connectionTimeoutMillis: 3000,
     });
   });
 
@@ -125,7 +127,7 @@ describe('Upgrade payment flow attaches charges', () => {
 
     const room = await pool.query<{ id: string }>(
       `INSERT INTO rooms (number, type, status, floor)
-       VALUES ('101', 'STANDARD', 'CLEAN', 1)
+       VALUES ('200', 'STANDARD', 'CLEAN', 1)
        RETURNING id`
     );
 

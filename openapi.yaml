@@ -43,6 +43,10 @@ tags:
     description: Operational metrics and analytics
   - name: Keys
     description: Key tag resolution
+  - name: Documents
+    description: Agreement PDF + signature verification endpoints
+  - name: Telemetry
+    description: Best-effort UI + backend telemetry ingestion
 
 paths:
   /v1/health:
@@ -63,6 +67,81 @@ paths:
                   uptime:
                     type: number
                     example: 12345
+
+  /v1/telemetry:
+    post:
+      tags: [Telemetry]
+      summary: Ingest telemetry events (single or batch)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  description: Single event
+                  properties:
+                    timestamp: { oneOf: [{ type: string }, { type: number }] }
+                    app: { type: string }
+                    level: { type: string, enum: [error, warn, info] }
+                    kind: { type: string }
+                    route: { type: string }
+                    message: { type: string }
+                    stack: { type: string }
+                    requestId: { type: string }
+                    sessionId: { type: string }
+                    deviceId: { type: string }
+                    lane: { type: string }
+                    method: { type: string }
+                    status: { type: integer }
+                    url: { type: string }
+                    meta: { type: object, additionalProperties: true }
+                - type: array
+                  description: Batch of events
+                  items:
+                    type: object
+                    properties:
+                      timestamp: { oneOf: [{ type: string }, { type: number }] }
+                      app: { type: string }
+                      level: { type: string, enum: [error, warn, info] }
+                      kind: { type: string }
+                      route: { type: string }
+                      message: { type: string }
+                      stack: { type: string }
+                      requestId: { type: string }
+                      sessionId: { type: string }
+                      deviceId: { type: string }
+                      lane: { type: string }
+                      method: { type: string }
+                      status: { type: integer }
+                      url: { type: string }
+                      meta: { type: object, additionalProperties: true }
+                - type: object
+                  description: Batch envelope
+                  properties:
+                    events:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          timestamp: { oneOf: [{ type: string }, { type: number }] }
+                          app: { type: string }
+                          level: { type: string, enum: [error, warn, info] }
+                          kind: { type: string }
+                          route: { type: string }
+                          message: { type: string }
+                          stack: { type: string }
+                          requestId: { type: string }
+                          sessionId: { type: string }
+                          deviceId: { type: string }
+                          lane: { type: string }
+                          method: { type: string }
+                          status: { type: integer }
+                          url: { type: string }
+                          meta: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Always OK (best-effort ingestion)
 
   /v1/auth/login-pin:
     post:
@@ -91,15 +170,176 @@ paths:
               schema:
                 type: object
                 properties:
-                  sessionToken:
-                    type: string
-                  expiresAt:
-                    type: string
-                    format: date-time
-                  staff:
-                    $ref: '#/components/schemas/Staff'
+                  staffId: { type: string, format: uuid }
+                  name: { type: string }
+                  role: { type: string, enum: [STAFF, ADMIN] }
+                  sessionToken: { type: string }
         '401':
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  message: { type: string }
+
+  /v1/auth/staff:
+    get:
+      tags: [Authentication]
+      summary: List active staff for login selection
+      responses:
+        '200':
+          description: Staff list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  staff:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string }
+                        role: { type: string, enum: [STAFF, ADMIN] }
+
+  /v1/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Staff logout (revoke current session token)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  message: { type: string }
+
+  /v1/auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get current staff identity
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current staff identity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  staffId: { type: string, format: uuid }
+                  name: { type: string }
+                  role: { type: string, enum: [STAFF, ADMIN] }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+                  message: { type: string }
+
+  /v1/auth/reauth-pin:
+    post:
+      tags: [Authentication]
+      summary: Re-authenticate with PIN for sensitive actions (sets reauth_ok_until)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pin]
+              properties:
+                pin:
+                  type: string
+      responses:
+        '200':
+          description: Re-auth successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  reauthOkUntil: { type: string, format: date-time }
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+
+  /v1/auth/reauth/webauthn/options:
+    post:
+      tags: [Authentication]
+      summary: Get WebAuthn re-authentication options
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: WebAuthn authentication options (server-generated)
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: No passkeys registered / invalid request
+        '401':
+          description: Unauthorized
+
+  /v1/auth/reauth/webauthn/verify:
+    post:
+      tags: [Authentication]
+      summary: Verify WebAuthn re-authentication (sets reauth_ok_until)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [credentialResponse]
+              properties:
+                credentialResponse:
+                  type: object
+                  additionalProperties: true
+                deviceId:
+                  type: string
+      responses:
+        '200':
+          description: Re-auth successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  reauthOkUntil: { type: string, format: date-time }
+        '400':
+          description: Invalid/expired challenge or verification failed
+        '401':
+          description: Unauthorized
 
   /v1/auth/webauthn/registration/options:
     post:
@@ -222,6 +462,57 @@ paths:
           description: Lane session created/updated
         '401':
           description: Unauthorized
+        '409':
+          description: Customer already checked in (active visit exists)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum: [ALREADY_CHECKED_IN]
+                  activeCheckin:
+                    type: object
+                    nullable: true
+                    properties:
+                      visitId:
+                        type: string
+                        format: uuid
+                      rentalType:
+                        type: string
+                        nullable: true
+                      assignedResourceType:
+                        type: string
+                        nullable: true
+                        enum: [room, locker]
+                      assignedResourceNumber:
+                        type: string
+                        nullable: true
+                      checkinAt:
+                        type: string
+                        nullable: true
+                      checkoutAt:
+                        type: string
+                        nullable: true
+                      overdue:
+                        type: boolean
+                        nullable: true
+                      waitlist:
+                        type: object
+                        nullable: true
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          desiredTier:
+                            type: string
+                          backupTier:
+                            type: string
+                          status:
+                            type: string
 
   /v1/checkin/scan:
     post:
@@ -243,6 +534,11 @@ paths:
                 rawScanText:
                   type: string
                   description: Raw decoded scan text from a keyboard-wedge scanner (may include newlines)
+                selectedCustomerId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Optional employee-selected customer id to resolve MULTIPLE_MATCHES (STATE_ID scans only)
       responses:
         '200':
           description: Scan resolved (matched or no-match)
@@ -253,7 +549,7 @@ paths:
                 properties:
                   result:
                     type: string
-                    enum: [MATCHED, NO_MATCH, ERROR]
+                    enum: [MATCHED, NO_MATCH, MULTIPLE_MATCHES, ERROR]
                   scanType:
                     type: string
                     enum: [STATE_ID, MEMBERSHIP]
@@ -265,6 +561,30 @@ paths:
                   membershipCandidate:
                     type: string
                     nullable: true
+                  candidates:
+                    type: array
+                    nullable: true
+                    description: Present only when result=MULTIPLE_MATCHES (STATE_ID scans)
+                    items:
+                      type: object
+                      required: [id, name, dob, membershipNumber, matchScore]
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        name:
+                          type: string
+                        dob:
+                          type: string
+                          nullable: true
+                          description: YYYY-MM-DD or null
+                        membershipNumber:
+                          type: string
+                          nullable: true
+                        matchScore:
+                          type: number
+                          minimum: 0
+                          maximum: 1
                   customer:
                     type: object
                     nullable: true
@@ -387,6 +707,107 @@ paths:
         '403':
           description: Customer banned
 
+  /v1/customers/match-identity:
+    post:
+      tags: [Customers]
+      summary: Match existing customer by (firstName, lastName, dob) for manual entry duplicate prevention
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firstName, lastName, dob]
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                dob:
+                  type: string
+                  description: Date of birth YYYY-MM-DD
+      responses:
+        '200':
+          description: Match result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  matchCount:
+                    type: integer
+                  bestMatch:
+                    type: object
+                    nullable: true
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      dob:
+                        type: string
+                        nullable: true
+                      membershipNumber:
+                        type: string
+                        nullable: true
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+
+  /v1/customers/create-manual:
+    post:
+      tags: [Customers]
+      summary: Create customer from manual entry (firstName, lastName, dob) without de-duping
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [firstName, lastName, dob]
+              properties:
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                dob:
+                  type: string
+                  description: Date of birth YYYY-MM-DD
+      responses:
+        '200':
+          description: Customer created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: boolean
+                  customer:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      dob:
+                        type: string
+                        nullable: true
+                      membershipNumber:
+                        type: string
+                        nullable: true
+        '400':
+          description: Validation failed
+        '401':
+          description: Unauthorized
+
   /v1/checkin/lane/{laneId}/scan-id:
     post:
       tags: [Check-in]
@@ -460,6 +881,57 @@ paths:
           description: Unauthorized
         '403':
           description: Customer is banned
+        '409':
+          description: Customer already checked in (active visit exists)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  code:
+                    type: string
+                    enum: [ALREADY_CHECKED_IN]
+                  activeCheckin:
+                    type: object
+                    nullable: true
+                    properties:
+                      visitId:
+                        type: string
+                        format: uuid
+                      rentalType:
+                        type: string
+                        nullable: true
+                      assignedResourceType:
+                        type: string
+                        nullable: true
+                        enum: [room, locker]
+                      assignedResourceNumber:
+                        type: string
+                        nullable: true
+                      checkinAt:
+                        type: string
+                        nullable: true
+                      checkoutAt:
+                        type: string
+                        nullable: true
+                      overdue:
+                        type: boolean
+                        nullable: true
+                      waitlist:
+                        type: object
+                        nullable: true
+                        properties:
+                          id:
+                            type: string
+                            format: uuid
+                          desiredTier:
+                            type: string
+                          backupTier:
+                            type: string
+                          status:
+                            type: string
 
   /v1/checkin/lane/{laneId}/select-rental:
     post:
@@ -490,6 +962,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Propose a rental type selection (customer or employee)
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -557,6 +1032,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Customer kiosk requests a 6-month membership purchase/renewal to include in the payment quote
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -573,7 +1051,8 @@ paths:
               properties:
                 intent:
                   type: string
-                  enum: [PURCHASE, RENEW]
+                  enum: [PURCHASE, RENEW, NONE]
+                  description: When NONE, clears any previously requested 6-month membership purchase/renewal intent.
                 sessionId:
                   type: string
                   format: uuid
@@ -590,6 +1069,98 @@ paths:
                     type: boolean
         '400':
           description: Invalid input or session not found
+        '404':
+          description: No active session found
+
+  /v1/checkin/lane/{laneId}/membership-choice:
+    post:
+      tags: [Check-in]
+      summary: Persist the kiosk membership-step choice (ONE_TIME vs SIX_MONTH) for the active lane session
+      security:
+        - kioskToken: []
+        - bearerAuth: []
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [choice]
+              properties:
+                choice:
+                  type: string
+                  enum: [ONE_TIME, SIX_MONTH, NONE]
+                  description: When NONE, clears any previously stored membership choice.
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
+      responses:
+        '200':
+          description: Membership choice recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Invalid input or session not found
+        '404':
+          description: No active session found
+
+  /v1/checkin/lane/{laneId}/highlight-option:
+    post:
+      tags: [Check-in]
+      summary: Ephemeral kiosk UI highlight for employee pending selections (LANGUAGE/MEMBERSHIP)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [step]
+              properties:
+                step:
+                  type: string
+                  enum: [LANGUAGE, MEMBERSHIP]
+                option:
+                  type: string
+                  nullable: true
+                  description: Option identifier for the step; null clears the highlight.
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
+      responses:
+        '200':
+          description: Highlight broadcast to lane
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+        '400':
+          description: Invalid input or session not found
+        '401':
+          description: Unauthorized
         '404':
           description: No active session found
 
@@ -775,6 +1346,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Store agreement signature
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -800,10 +1374,52 @@ paths:
         '200':
           description: Signature stored
 
+  /v1/checkin/lane/{laneId}/set-language:
+    post:
+      tags: [Check-in]
+      summary: Set customer primary language preference for the active lane session
+      security:
+        - kioskToken: []
+        - bearerAuth: []
+      parameters:
+        - name: laneId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language:
+                  type: string
+                  enum: [EN, ES]
+                sessionId:
+                  type: string
+                  format: uuid
+                  description: Optional lane session id; if omitted, the server uses the latest active session for the lane.
+                customerName:
+                  type: string
+                  description: Optional customer display name for fallback session resolution.
+      responses:
+        '200':
+          description: Language stored
+        '400':
+          description: Invalid input
+        '404':
+          description: No active session found
+
   /v1/checkin/lane/{laneId}/kiosk-ack:
     post:
       tags: [Check-in]
       summary: Kiosk acknowledgement of completion (UI-only; does not end/clear the lane session)
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -822,6 +1438,9 @@ paths:
     post:
       tags: [Check-in]
       summary: Customer confirms cross-type assignment
+      security:
+        - kioskToken: []
+        - bearerAuth: []
       parameters:
         - name: laneId
           in: path
@@ -834,8 +1453,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [confirmed]
+              required: [sessionId, confirmed]
               properties:
+                sessionId:
+                  type: string
+                  format: uuid
                 confirmed:
                   type: boolean
       responses:
@@ -863,6 +1485,85 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InventorySummary'
+
+  /v1/inventory/detailed:
+    get:
+      tags: [Inventory]
+      summary: Get detailed inventory with occupancy info (active check-in/out times)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Detailed inventory (rooms + lockers)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rooms:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        number:
+                          type: string
+                        tier:
+                          type: string
+                        status:
+                          type: string
+                        floor:
+                          type: integer
+                        lastStatusChange:
+                          type: string
+                        assignedTo:
+                          type: string
+                          nullable: true
+                        assignedMemberName:
+                          type: string
+                          nullable: true
+                        overrideFlag:
+                          type: boolean
+                        occupancyId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                        checkinAt:
+                          type: string
+                          nullable: true
+                        checkoutAt:
+                          type: string
+                          nullable: true
+                  lockers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        number:
+                          type: string
+                        status:
+                          type: string
+                        assignedTo:
+                          type: string
+                          nullable: true
+                        assignedMemberName:
+                          type: string
+                          nullable: true
+                        occupancyId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                        checkinAt:
+                          type: string
+                          nullable: true
+                        checkoutAt:
+                          type: string
+                          nullable: true
 
   /v1/cleaning/batch:
     post:
@@ -1225,6 +1926,7 @@ paths:
                       type: object
                       properties:
                         id: { type: string, format: uuid }
+                        customerId: { type: string, format: uuid }
                         desiredTier: { type: string, enum: [STANDARD, DOUBLE, SPECIAL] }
                         backupTier: { type: string }
                         status: { type: string }
@@ -1412,13 +2114,214 @@ paths:
         '200':
           description: Cash totals
 
+  /v1/documents/by-session/{sessionId}:
+    get:
+      tags: [Documents]
+      summary: List agreement documents by lane session (verification)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Documents for the session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        doc_type: { type: string, example: AGREEMENT_PDF }
+                        mime_type: { type: string, example: application/pdf }
+                        created_at: { type: string, format: date-time }
+                        has_signature: { type: boolean }
+                        signature_hash_prefix: { type: string, nullable: true }
+                        has_pdf: { type: boolean, nullable: true }
+        '401':
+          description: Unauthorized
+
+  /v1/documents/{documentId}/download:
+    get:
+      tags: [Documents]
+      summary: Download agreement PDF bytes (verification)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Agreement PDF bytes
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Document not found / PDF not stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
+        '401':
+          description: Unauthorized
+
+  /v1/sessions:
+    post:
+      tags: [Sessions]
+      summary: (Legacy) Create a new check-in session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId]
+              properties:
+                customerId:
+                  type: string
+                  format: uuid
+                roomId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                lockerId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                expectedDuration:
+                  type: integer
+                  description: Minutes (UPGRADE only); non-upgrade check-ins use 360 minutes server-side
+                checkinType:
+                  type: string
+                  enum: [INITIAL, RENEWAL, UPGRADE]
+      responses:
+        '201':
+          description: Session created
+        '401':
+          description: Unauthorized
+
+  /v1/sessions/scan-id:
+    post:
+      tags: [Sessions]
+      summary: (Legacy) Scan an ID to create/update a lane session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idNumber, lane]
+              properties:
+                idNumber:
+                  type: string
+                lane:
+                  type: string
+                  description: Lane identifier (e.g. lane-1 or lane-2)
+      responses:
+        '200':
+          description: Session updated
+        '401':
+          description: Unauthorized
+
+  /v1/sessions/scan-membership:
+    post:
+      tags: [Sessions]
+      summary: (Legacy) Scan a membership card to update a lane session
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [membershipNumber, lane]
+              properties:
+                membershipNumber:
+                  type: string
+                lane:
+                  type: string
+                  description: Lane identifier (e.g. lane-1 or lane-2)
+                sessionId:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '200':
+          description: Session updated
+        '401':
+          description: Unauthorized
+
+  /v1/checkins/{checkinId}/agreement-sign:
+    post:
+      tags: [Agreements]
+      summary: (Legacy) Sign the agreement for a check-in
+      security:
+        - kioskToken: []
+        - bearerAuth: []
+      parameters:
+        - name: checkinId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agreed]
+              properties:
+                agreed:
+                  type: boolean
+                signaturePngBase64:
+                  type: string
+                  nullable: true
+                signatureStrokesJson:
+                  type: object
+                  nullable: true
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Agreement signed
+        '401':
+          description: Unauthorized
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
-      description: Session token from PIN or WebAuthn login
+      bearerFormat: opaque
+      description: Opaque session token from PIN or WebAuthn login (stored/validated server-side; not a JWT)
+    kioskToken:
+      type: apiKey
+      in: header
+      name: x-kiosk-token
+      description: Shared kiosk token for kiosk-facing, state-mutating endpoints (configured on the API as KIOSK_TOKEN and in kiosk frontends as VITE_KIOSK_TOKEN)
 
   schemas:
     Staff:

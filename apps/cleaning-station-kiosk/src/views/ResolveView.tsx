@@ -1,6 +1,12 @@
 import { RoomStatus } from '@club-ops/shared';
 import { OverrideModal } from '../components/OverrideModal';
 
+const CLEANING_FLOW_STATUSES: readonly RoomStatus[] = [
+  RoomStatus.DIRTY,
+  RoomStatus.CLEANING,
+  RoomStatus.CLEAN,
+];
+
 export interface ScannedItem {
   tagCode: string;
   room: {
@@ -81,17 +87,17 @@ export function ResolveView({
                     <input
                       type="range"
                       min="0"
-                      max="2"
-                      value={Object.values(RoomStatus).indexOf(newStatus)}
+                      max={CLEANING_FLOW_STATUSES.length - 1}
+                      value={Math.max(0, CLEANING_FLOW_STATUSES.indexOf(newStatus))}
                       onChange={(e) => {
                         const statusIndex = parseInt(e.target.value, 10);
-                        const targetStatus = Object.values(RoomStatus)[statusIndex] as RoomStatus;
+                        const targetStatus = CLEANING_FLOW_STATUSES[statusIndex] ?? RoomStatus.DIRTY;
                         onChangeResolveStatus(item.room.roomId, targetStatus, index);
                       }}
                       className="status-range-input"
                     />
                     <div className="status-labels">
-                      {Object.values(RoomStatus).map((status) => (
+                      {CLEANING_FLOW_STATUSES.map((status) => (
                         <span
                           key={status}
                           className={`status-label ${newStatus === status ? 'active' : ''}`}

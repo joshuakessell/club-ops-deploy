@@ -1,4 +1,4 @@
-/* TailAdmin-inspired Dark Theme - Shared Design Tokens */
+/* Liquid Glass - Shared Design Tokens */
 
 :root {
   color-scheme: dark;
@@ -45,23 +45,24 @@
   --cs-info-dark: #0ea5e9;
 
   /* Semantic Colors - Dark Mode (Default) */
-  --cs-bg: #0f172a;
-  --cs-bg-secondary: #111827;
-  --cs-bg-card: #111827;
-  --cs-bg-sidebar: #0b1224;
-  --cs-bg-overlay: rgba(6, 9, 20, 0.85);
-  --cs-bg-hover: rgba(148, 163, 184, 0.12);
-  --cs-bg-active: rgba(60, 80, 224, 0.22);
+  /* Keep `--cs-bg` solid for stable kiosk backgrounds; use translucency for surfaces/cards. */
+  --cs-bg: #000000;
+  --cs-bg-secondary: rgba(0, 0, 0, 0.35);
+  --cs-bg-card: rgba(0, 0, 0, 0.2);
+  --cs-bg-sidebar: rgba(0, 0, 0, 0.24);
+  --cs-bg-overlay: rgba(0, 0, 0, 0.72);
+  --cs-bg-hover: rgba(255, 255, 255, 0.08);
+  --cs-bg-active: rgba(255, 255, 255, 0.14);
 
-  --cs-text: #e2e8f0;
-  --cs-text-primary: #f8fafc;
-  --cs-text-secondary: #cbd5e1;
-  --cs-text-muted: #94a3b8;
-  --cs-text-disabled: #64748b;
+  --cs-text: rgba(255, 255, 255, 0.92);
+  --cs-text-primary: rgba(255, 255, 255, 0.96);
+  --cs-text-secondary: rgba(255, 255, 255, 0.84);
+  --cs-text-muted: rgba(255, 255, 255, 0.72);
+  --cs-text-disabled: rgba(255, 255, 255, 0.45);
 
-  --cs-border: #1e293b;
-  --cs-border-light: #334155;
-  --cs-border-dark: #0f172a;
+  --cs-border: rgba(255, 255, 255, 0.12);
+  --cs-border-light: rgba(255, 255, 255, 0.2);
+  --cs-border-dark: rgba(0, 0, 0, 0.55);
 
   /* Typography */
   --cs-font-family:
@@ -154,21 +155,21 @@
 /* Light Mode Overrides (if needed) */
 [data-theme='light'] {
   --cs-bg: #f8fafc;
-  --cs-bg-secondary: #ffffff;
-  --cs-bg-card: #ffffff;
-  --cs-bg-sidebar: #ffffff;
+  --cs-bg-secondary: rgba(255, 255, 255, 0.72);
+  --cs-bg-card: rgba(255, 255, 255, 0.6);
+  --cs-bg-sidebar: rgba(255, 255, 255, 0.65);
   --cs-bg-hover: rgba(15, 23, 42, 0.06);
-  --cs-bg-active: rgba(60, 80, 224, 0.14);
+  --cs-bg-active: rgba(15, 23, 42, 0.1);
 
-  --cs-text: #0f172a;
-  --cs-text-primary: #0b1224;
-  --cs-text-secondary: #334155;
-  --cs-text-muted: #475569;
-  --cs-text-disabled: #94a3b8;
+  --cs-text: rgba(15, 23, 42, 0.92);
+  --cs-text-primary: rgba(15, 23, 42, 0.96);
+  --cs-text-secondary: rgba(15, 23, 42, 0.8);
+  --cs-text-muted: rgba(15, 23, 42, 0.62);
+  --cs-text-disabled: rgba(15, 23, 42, 0.4);
 
-  --cs-border: #e2e8f0;
-  --cs-border-light: #f1f5f9;
-  --cs-border-dark: #cbd5e1;
+  --cs-border: rgba(15, 23, 42, 0.12);
+  --cs-border-light: rgba(15, 23, 42, 0.18);
+  --cs-border-dark: rgba(15, 23, 42, 0.2);
 
   --cs-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.06);
   --cs-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.05);

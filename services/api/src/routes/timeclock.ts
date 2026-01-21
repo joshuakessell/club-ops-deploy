@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction } from '../db/index.js';
 import { requireAuth, requireAdmin } from '../auth/middleware.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 interface TimeclockRow {
   id: string;
@@ -162,11 +163,12 @@ export async function timeclockRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Write audit log
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'TIMECLOCK_ADJUSTED', 'timeclock_session', $2)`,
-            [staff.staffId, sessionId]
-          );
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'TIMECLOCK_ADJUSTED',
+            entityType: 'timeclock_session',
+            entityId: sessionId,
+          });
 
           // Return updated session
           const updated = await client.query<TimeclockRow>(
@@ -251,11 +253,12 @@ export async function timeclockRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Write audit log
-          await client.query(
-            `INSERT INTO audit_log (staff_id, action, entity_type, entity_id)
-           VALUES ($1, 'TIMECLOCK_CLOSED', 'timeclock_session', $2)`,
-            [staff.staffId, sessionId]
-          );
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'TIMECLOCK_CLOSED',
+            entityType: 'timeclock_session',
+            entityId: sessionId,
+          });
 
           // Return updated session
           const updated = await client.query<TimeclockRow>(

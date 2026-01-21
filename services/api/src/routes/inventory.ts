@@ -1,33 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { query } from '../db/index.js';
 import { requireAuth } from '../auth/middleware.js';
+import { getRoomTierFromNumber } from '@club-ops/shared';
+import { computeInventoryAvailable } from '../inventory/available.js';
 
 /**
  * Map room number to tier (Special, Double, or Standard).
  */
 function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
-  const num = parseInt(roomNumber, 10);
-
-  // Special: rooms 201, 232, 256
-  if (num === 201 || num === 232 || num === 256) {
-    return 'SPECIAL';
-  }
-
-  // Double: even rooms 216, 218, 232, 252, 256, 262 and odd room 225
-  if (
-    num === 216 ||
-    num === 218 ||
-    num === 232 ||
-    num === 252 ||
-    num === 256 ||
-    num === 262 ||
-    num === 225
-  ) {
-    return 'DOUBLE';
-  }
-
-  // All else standard
-  return 'STANDARD';
+  return getRoomTierFromNumber(parseInt(roomNumber, 10));
 }
 
 type RoomTier = 'SPECIAL' | 'DOUBLE' | 'STANDARD';
@@ -43,15 +24,9 @@ interface LockerCountRow {
   count: string;
 }
 
-interface WaitlistDemandRow {
-  tier: string;
-  count: string;
-}
-
 /**
  * Inventory routes for room and locker availability.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/inventory/summary - Get inventory summary by status and type
@@ -152,77 +127,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get('/v1/inventory/available', async (_request, reply) => {
     try {
-      const result = await query<{
-        number: string;
-        status: string;
-        assigned_to_customer_id: string | null;
-      }>(
-        `SELECT number, status, assigned_to_customer_id
-         FROM rooms
-         WHERE status = 'CLEAN'
-           AND assigned_to_customer_id IS NULL
-           AND type != 'LOCKER'`
-      );
-
-      const lockerResult = await query<{ count: string }>(
-        `SELECT COUNT(*) as count
-         FROM lockers
-         WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL`
-      );
-
-      // Part A: raw room availability by tier using room number mapping
-      const rawRooms: Record<RoomTier, number> = {
-        SPECIAL: 0,
-        DOUBLE: 0,
-        STANDARD: 0,
-      };
-
-      for (const row of result.rows) {
-        const tier: RoomTier = getRoomTier(row.number);
-        rawRooms[tier]++;
-      }
-
-      const lockers = parseInt(lockerResult.rows[0]?.count ?? '0', 10);
-
-      // Part B: active waitlist demand by desired tier (only ACTIVE/OFFERED, only while visit/block active)
-      const waitlistDemandRows = await query<WaitlistDemandRow>(
-        `SELECT w.desired_tier::text as tier, COUNT(*) as count
-         FROM waitlist w
-         JOIN checkin_blocks cb ON cb.id = w.checkin_block_id
-         JOIN visits v ON v.id = w.visit_id
-         WHERE w.status IN ('ACTIVE','OFFERED')
-           AND v.ended_at IS NULL
-           AND cb.ends_at > NOW()
-         GROUP BY w.desired_tier`
-      );
-
-      const waitlistDemand: Record<RoomTier, number> = {
-        SPECIAL: 0,
-        DOUBLE: 0,
-        STANDARD: 0,
-      };
-
-      for (const row of waitlistDemandRows.rows) {
-        const tier = row.tier as RoomTier;
-        if (tier === 'SPECIAL' || tier === 'DOUBLE' || tier === 'STANDARD') {
-          waitlistDemand[tier] = parseInt(row.count, 10);
-        }
-      }
-
-      // Part C: effective availability = raw - demand (clamped to 0)
-      const rooms: Record<RoomTier, number> = {
-        SPECIAL: Math.max(0, rawRooms.SPECIAL - waitlistDemand.SPECIAL),
-        DOUBLE: Math.max(0, rawRooms.DOUBLE - waitlistDemand.DOUBLE),
-        STANDARD: Math.max(0, rawRooms.STANDARD - waitlistDemand.STANDARD),
-      };
-
-      return reply.send({
-        rooms, // effective (for clients)
-        rawRooms,
-        waitlistDemand,
-        lockers,
-        total: rooms.SPECIAL + rooms.DOUBLE + rooms.STANDARD,
-      });
+      const payload = await computeInventoryAvailable(query);
+      return reply.send(payload);
     } catch (error) {
       fastify.log.error(error, 'Failed to fetch available inventory');
       return reply.status(500).send({ error: 'Internal server error' });
@@ -425,6 +331,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           assigned_to_customer_id: string | null;
           assigned_customer_name: string | null;
           override_flag: boolean;
+          occupancy_id: string | null;
+          checkin_at: Date | null;
           checkout_at: Date | null;
         }>(
           `SELECT 
@@ -437,10 +345,20 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           r.assigned_to_customer_id,
           c.name as assigned_customer_name,
           r.override_flag,
+          cb.occupancy_id as occupancy_id,
+          cb.starts_at as checkin_at,
           cb.ends_at as checkout_at
          FROM rooms r
          LEFT JOIN customers c ON r.assigned_to_customer_id = c.id
-         LEFT JOIN checkin_blocks cb ON cb.room_id = r.id AND cb.ends_at > NOW()
+         LEFT JOIN LATERAL (
+          SELECT cb.id as occupancy_id, cb.starts_at, cb.ends_at
+           FROM checkin_blocks cb
+           JOIN visits v ON v.id = cb.visit_id
+           WHERE cb.room_id = r.id
+             AND v.ended_at IS NULL
+           ORDER BY cb.ends_at DESC
+           LIMIT 1
+         ) cb ON TRUE
          WHERE r.type != 'LOCKER'
          ORDER BY 
            CASE WHEN r.status = 'CLEAN' THEN 0 ELSE 1 END,
@@ -455,6 +373,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           status: string;
           assigned_to_customer_id: string | null;
           assigned_customer_name: string | null;
+          occupancy_id: string | null;
+          checkin_at: Date | null;
           checkout_at: Date | null;
         }>(
           `SELECT 
@@ -463,10 +383,20 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           l.status,
           l.assigned_to_customer_id,
           c.name as assigned_customer_name,
+          cb.occupancy_id as occupancy_id,
+          cb.starts_at as checkin_at,
           cb.ends_at as checkout_at
          FROM lockers l
          LEFT JOIN customers c ON l.assigned_to_customer_id = c.id
-         LEFT JOIN checkin_blocks cb ON cb.locker_id = l.id AND cb.ends_at > NOW()
+         LEFT JOIN LATERAL (
+          SELECT cb.id as occupancy_id, cb.starts_at, cb.ends_at
+           FROM checkin_blocks cb
+           JOIN visits v ON v.id = cb.visit_id
+           WHERE cb.locker_id = l.id
+             AND v.ended_at IS NULL
+           ORDER BY cb.ends_at DESC
+           LIMIT 1
+         ) cb ON TRUE
          ORDER BY 
            CASE WHEN l.status = 'CLEAN' THEN 0 ELSE 1 END,
            cb.ends_at ASC NULLS LAST,
@@ -483,6 +413,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           assignedTo: row.assigned_to_customer_id || undefined,
           assignedMemberName: row.assigned_customer_name || undefined,
           overrideFlag: row.override_flag,
+          occupancyId: row.occupancy_id || undefined,
+          checkinAt: row.checkin_at ? new Date(row.checkin_at).toISOString() : undefined,
           checkoutAt: row.checkout_at ? new Date(row.checkout_at).toISOString() : undefined,
         }));
 
@@ -492,6 +424,8 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
           status: row.status,
           assignedTo: row.assigned_to_customer_id || undefined,
           assignedMemberName: row.assigned_customer_name || undefined,
+          occupancyId: row.occupancy_id || undefined,
+          checkinAt: row.checkin_at ? new Date(row.checkin_at).toISOString() : undefined,
           checkoutAt: row.checkout_at ? new Date(row.checkout_at).toISOString() : undefined,
         }));
 

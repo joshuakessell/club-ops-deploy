@@ -1,4 +1,4 @@
-import { RoomStatus } from './enums';
+import { RoomStatus } from './enums.js';
 
 /**
  * Defines valid adjacent transitions for room status.

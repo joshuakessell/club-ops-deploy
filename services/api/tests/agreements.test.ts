@@ -13,6 +13,9 @@ vi.mock('../src/auth/middleware.js', () => ({
   requireAuth: async (request: any, _reply: any) => {
     request.staff = { staffId: testStaffId, role: 'STAFF' };
   },
+  optionalAuth: async (request: any, _reply: any) => {
+    request.staff = { staffId: testStaffId, role: 'STAFF' };
+  },
   requireAdmin: async (_request: any, _reply: any) => {
     // No-op for tests
   },
@@ -94,7 +97,7 @@ describe('Agreement and Upgrade Flows', () => {
     // Insert test room with ON CONFLICT handling (handle number conflicts)
     await pool.query(
       `INSERT INTO rooms (id, number, type, status, floor)
-       VALUES ($1, 'TEST-101', 'STANDARD', 'CLEAN', 1)
+       VALUES ($1, '200', 'STANDARD', 'CLEAN', 1)
        ON CONFLICT (number) DO UPDATE SET id = EXCLUDED.id, type = EXCLUDED.type, status = EXCLUDED.status, floor = EXCLUDED.floor`,
       [testRoomId]
     );

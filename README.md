@@ -67,6 +67,8 @@ pnpm db:seed
 pnpm dev
 ```
 
+**Note on monorepo orchestration:** `pnpm dev`, `pnpm build`, `pnpm lint`, `pnpm typecheck`, and `pnpm test` are **Turbo-orchestrated** at the repo root (Turborepo / Turbo 2). Turbo ensures dependency build order (e.g. `@club-ops/shared` / `@club-ops/ui`) before starting apps/services that import `dist` exports.
+
 ### Development
 
 After setup, you can start all services with:
@@ -106,6 +108,8 @@ pnpm test
 pnpm build
 ```
 
+`pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm build` are **Turbo-orchestrated** root scripts (they fan out into the workspace packages, with the same exclusions described below).
+
 ### Commands
 
 | Command           | Description                                                     |
@@ -113,16 +117,16 @@ pnpm build
 | `pnpm install`    | Install all dependencies                                        |
 | `pnpm dev`        | Start all services in development mode                          |
 | `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check)          |
-| `pnpm doctor`     | Repo health scan (builds deps, runs typecheck/lint/tests/build) |
+| `pnpm doctor`     | Repo health scan (installs, builds shared/ui, runs checks)      |
 | `pnpm db:start`   | Start Postgres via `services/api/docker-compose.yml`            |
 | `pnpm db:stop`    | Stop Postgres                                                   |
 | `pnpm db:reset`   | Recreate Postgres volume and restart                            |
 | `pnpm db:migrate` | Run DB migrations                                               |
 | `pnpm db:seed`    | Seed DB with sample data                                        |
-| `pnpm build`      | Build all packages and apps                                     |
-| `pnpm test`       | Run all tests                                                   |
-| `pnpm lint`       | Lint all packages                                               |
-| `pnpm typecheck`  | TypeScript type checking                                        |
+| `pnpm build`      | Build all packages and apps (Turbo-orchestrated)                |
+| `pnpm test`       | Run all tests (Turbo-orchestrated)                              |
+| `pnpm lint`       | Lint all packages (Turbo-orchestrated)                          |
+| `pnpm typecheck`  | TypeScript type checking (Turbo-orchestrated)                   |
 | `pnpm format`     | Format code with Prettier                                       |
 
 ### Database Setup
@@ -152,9 +156,13 @@ pnpm db:reset
 pnpm db:seed
 ```
 
-### Demo seed (rich customers/visits)
+### Demo seed (busy Saturday stress test)
 
-- After a reset/migrate (`pnpm db:reset && pnpm db:migrate`), start the API with `DEMO_MODE=true` to auto-seed 100–200 demo customers, historical visits (6-hour blocks, ≤3 starts/week, no overlaps), a handful of active assignments, and a waitlist list long enough to exercise the UI. Shift/timeclock/demo documents still seed when shift data is absent.
+- In `DEMO_MODE=true`, you can seed a deterministic “busy Saturday night” dataset designed to stress the inventory/assignment UI:
+  - **Customers/Members**: 100
+  - **Rooms**: 55 total (200–262 excluding non-existent 247,249,251,253,255,257,259,261) with **54 occupied** and **1 STANDARD available**
+  - **Lockers**: 108 total (001–108) with **88 occupied** and **20 available**
+  - **Check-ins**: ~90 active, with `check_in_time` distributed across the last 24 hours (no hardcoded timestamps)
 
 ### One-step demo test run
 
@@ -163,6 +171,7 @@ pnpm db:seed
 ### One-step demo seed + run the full stack
 
 - `pnpm demo:dev` will seed demo data and then start the full dev stack (API + all apps). Use this when you want to browse the apps locally (e.g. **Employee Register** at `http://localhost:5175`).
+- If you explicitly want the API to seed during boot, start the stack with `DEMO_MODE=true SEED_ON_STARTUP=true` (see `pnpm demo:dev:seedOnBoot`).
 
 **Database Configuration:**
 
@@ -200,7 +209,7 @@ Fastify-based REST API server with WebSocket support:
 4. **Concurrency is safe** - Transactional updates with row locking
 5. **Realtime is push-based** - WebSocket broadcasts, no polling
 
-See [AGENTS.md](./AGENTS.md) for complete coding guidelines.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for complete coding guidelines.
 
 ## 🎬 Demo flow overview (single source for demo walkthrough)
 
@@ -223,7 +232,7 @@ For the full behavioral source of truth, see `SPEC.md` → **"Counter Check-in F
 ### Key Specification Files
 
 - **SPEC.md** - Technical specification and business rules (canonical)
-- **AGENTS.md** - Agent coding guidelines and project architecture
+- **CONTRIBUTING.md** - Engineering guide and project architecture rules
 - **openapi.yaml** - API contract (should match implemented endpoints)
 - **db/schema.sql** - Database schema snapshot (should match current migrations)
 
@@ -284,16 +293,6 @@ pnpm --filter @club-ops/shared test:watch
 
 **Deprecated / superseded**: The detailed “local test flow” walkthrough previously lived here and drifted into schema/audit specifics. Use the **Demo flow overview** above plus the authoritative flow spec in `SPEC.md` instead.
 
-## ☁️ Cursor Cloud Agents (optional)
-
-This repo includes a conservative `.cursor/environment.json` that runs:
-
-- `pnpm install`
-- `pnpm typecheck`
-- `pnpm test` (if Docker is available; otherwise runs unit tests that don’t require Postgres)
-
-To snapshot and reuse the environment, use Cursor’s **Cloud Agent Setup** workflow and commit any generated config files you want to keep reproducible.
-
 ## 📝 License
 
-Private - Internal use only.
+MIT. See `LICENSE`.

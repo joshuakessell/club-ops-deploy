@@ -4,6 +4,7 @@ import { query, transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, requireReauth } from '../auth/middleware.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
 import { expireWaitlistEntries } from '../waitlist/expireWaitlist.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -59,7 +60,6 @@ interface RoomRow {
 /**
  * Waitlist management routes.
  */
-// eslint-disable-next-line @typescript-eslint/require-await
 export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/waitlist - Get waitlist entries
@@ -143,6 +143,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           id: row.id,
           visitId: row.visit_id,
           checkinBlockId: row.checkin_block_id,
+          customerId: row.customer_id,
           desiredTier: row.desired_tier,
           backupTier: row.backup_tier,
           status: row.status,
@@ -223,10 +224,19 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
 
           const waitlist = waitlistResult.rows[0]!;
 
-          if (waitlist.status !== 'ACTIVE') {
+          if (waitlist.status !== 'ACTIVE' && waitlist.status !== 'OFFERED') {
             throw {
               statusCode: 409,
-              message: `Waitlist entry is not ACTIVE (current status: ${waitlist.status})`,
+              message: `Waitlist entry must be ACTIVE or OFFERED (current status: ${waitlist.status})`,
+            };
+          }
+
+          // If the entry is already OFFERED, it should already have a room hold. In that case,
+          // staff may only "confirm/extend" that same room's hold (per timed offer rules).
+          if (waitlist.status === 'OFFERED' && waitlist.room_id && waitlist.room_id !== body.roomId) {
+            throw {
+              statusCode: 409,
+              message: 'Waitlist entry already has an active hold for a different room',
             };
           }
 
@@ -260,6 +270,21 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 409, message: `Room ${room.number} is already assigned` };
           }
 
+          // Ensure the room is not already reserved via inventory_reservations (upgrade hold or lane selection).
+          const reservationConflict = await client.query<{ id: string }>(
+            `SELECT id
+             FROM inventory_reservations
+             WHERE resource_type = 'room'
+               AND resource_id = $1
+               AND released_at IS NULL
+               AND (waitlist_id IS NULL OR waitlist_id <> $2)
+             LIMIT 1`,
+            [body.roomId, id]
+          );
+          if (reservationConflict.rows.length > 0) {
+            throw { statusCode: 409, message: `Room ${room.number} is reserved` };
+          }
+
           // Verify tier matches desired tier
           if (String(room.type) !== String(waitlist.desired_tier)) {
             throw {
@@ -286,37 +311,63 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 409, message: `Room ${room.number} is reserved for another offer` };
           }
 
-          // Update waitlist entry to OFFERED and store room_id
+          // Timed hold semantics:
+          // - If this is the first offer (ACTIVE -> OFFERED), reserve for 10 minutes from now.
+          // - If already OFFERED, extend to max(existing expiry, now + 10 minutes).
+          const desiredExpiryRes = await client.query<{ offer_expires_at: Date | null }>(
+            `SELECT offer_expires_at FROM waitlist WHERE id = $1 FOR UPDATE`,
+            [id]
+          );
+          const existingExpiresAt = desiredExpiryRes.rows[0]?.offer_expires_at ?? null;
+          const tenFromNow = new Date(Date.now() + 10 * 60 * 1000);
+          const nextExpiresAt =
+            existingExpiresAt && existingExpiresAt.getTime() > tenFromNow.getTime()
+              ? existingExpiresAt
+              : tenFromNow;
+
+          // Ensure an inventory_reservations row exists/updated for this offer.
+          // The partial unique index on (resource_type, resource_id) WHERE released_at IS NULL enforces
+          // one active reservation per room.
+          await client.query(
+            `INSERT INTO inventory_reservations
+               (resource_type, resource_id, kind, waitlist_id, expires_at)
+             VALUES
+               ('room', $1, 'UPGRADE_HOLD', $2, $3)
+             ON CONFLICT DO NOTHING`,
+            [body.roomId, id, nextExpiresAt]
+          );
+          await client.query(
+            `UPDATE inventory_reservations
+             SET expires_at = $1
+             WHERE released_at IS NULL
+               AND kind = 'UPGRADE_HOLD'
+               AND waitlist_id = $2`,
+            [nextExpiresAt, id]
+          );
+
+          // Update waitlist entry to OFFERED and store room_id (and offer expiry).
+          // Note: we keep the customer in place in the queue; expiration/rotation is handled separately.
           await client.query(
             `UPDATE waitlist 
-           SET status = 'OFFERED', offered_at = NOW(), room_id = $1, updated_at = NOW()
-           WHERE id = $2`,
-            [body.roomId, id]
+           SET status = 'OFFERED',
+               offered_at = COALESCE(offered_at, NOW()),
+               room_id = $1,
+               offer_expires_at = $2,
+               last_offered_at = NOW(),
+               offer_attempts = offer_attempts + CASE WHEN status = 'ACTIVE' THEN 1 ELSE 0 END,
+               updated_at = NOW()
+           WHERE id = $3`,
+            [body.roomId, nextExpiresAt, id]
           );
 
           // Log audit
-          await client.query(
-            `INSERT INTO audit_log 
-           (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, 'WAITLIST_OFFERED', 'waitlist', $2, $3, $4)`,
-            [
-              staff.staffId,
-              id,
-              JSON.stringify({ status: 'ACTIVE' }),
-              JSON.stringify({ status: 'OFFERED', room_id: body.roomId, room_number: room.number }),
-            ]
-          );
-
-          // Broadcast waitlist update
-          fastify.broadcaster.broadcast({
-            type: 'WAITLIST_UPDATED',
-            payload: {
-              waitlistId: id,
-              status: 'OFFERED',
-              roomId: body.roomId,
-              roomNumber: room.number,
-            },
-            timestamp: new Date().toISOString(),
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'WAITLIST_OFFERED',
+            entityType: 'waitlist',
+            entityId: id,
+            oldValue: { status: 'ACTIVE' },
+            newValue: { status: 'OFFERED', room_id: body.roomId, room_number: room.number },
           });
 
           return {
@@ -326,6 +377,20 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             roomNumber: room.number,
           };
         });
+
+        // Broadcast AFTER commit so refetch-on-event sees the updated DB row immediately.
+        if (fastify.broadcaster) {
+          fastify.broadcaster.broadcast({
+            type: 'WAITLIST_UPDATED',
+            payload: {
+              waitlistId: result.waitlistId,
+              status: 'OFFERED',
+              roomId: result.roomId,
+              roomNumber: result.roomNumber,
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         return reply.send(result);
       } catch (error: unknown) {
@@ -362,7 +427,6 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(401).send({ error: 'Unauthorized' });
       }
 
-      const { id: _id } = request.params;
       let body: z.infer<typeof CompleteUpgradeSchema>;
 
       try {
@@ -404,7 +468,7 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/waitlist/:id/cancel',
     {
-      preHandler: [requireReauth],
+      preHandler: [requireAuth, requireReauth],
     },
     async (request, reply) => {
       const staff = request.staff;
@@ -454,26 +518,13 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Log audit
-          await client.query(
-            `INSERT INTO audit_log 
-           (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, 'WAITLIST_CANCELLED', 'waitlist', $2, $3, $4)`,
-            [
-              staff.staffId,
-              id,
-              JSON.stringify({ status: waitlist.status }),
-              JSON.stringify({ status: 'CANCELLED', reason: body.reason || 'Cancelled by staff' }),
-            ]
-          );
-
-          // Broadcast update
-          fastify.broadcaster.broadcast({
-            type: 'WAITLIST_UPDATED',
-            payload: {
-              waitlistId: id,
-              status: 'CANCELLED',
-            },
-            timestamp: new Date().toISOString(),
+          await insertAuditLog(client, {
+            staffId: staff.staffId,
+            action: 'WAITLIST_CANCELLED',
+            entityType: 'waitlist',
+            entityId: id,
+            oldValue: { status: waitlist.status },
+            newValue: { status: 'CANCELLED', reason: body.reason || 'Cancelled by staff' },
           });
 
           return {
@@ -481,6 +532,18 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
             status: 'CANCELLED',
           };
         });
+
+        // Broadcast AFTER commit so refetch-on-event sees the updated DB row immediately.
+        if (fastify.broadcaster) {
+          fastify.broadcaster.broadcast({
+            type: 'WAITLIST_UPDATED',
+            payload: {
+              waitlistId: result.waitlistId,
+              status: 'CANCELLED',
+            },
+            timestamp: new Date().toISOString(),
+          });
+        }
 
         return reply.send(result);
       } catch (error: unknown) {

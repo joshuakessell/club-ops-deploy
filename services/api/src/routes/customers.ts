@@ -34,7 +34,35 @@ function toDateOnly(dob: string): string | null {
   return dob;
 }
 
-// eslint-disable-next-line @typescript-eslint/require-await
+type NormalizedNameParts = {
+  normalizedFull: string;
+  firstToken: string;
+  lastToken: string;
+};
+
+function normalizePersonNameForMatch(input: string): string {
+  const lowered = input.toLowerCase().trim();
+  const noPunct = lowered.replace(/[^a-z0-9 ]+/g, ' ');
+  const collapsed = noPunct.replace(/\s+/g, ' ').trim();
+  if (!collapsed) return '';
+  const tokens = collapsed.split(' ').filter(Boolean);
+  const suffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
+  while (tokens.length > 1 && suffixes.has(tokens[tokens.length - 1]!)) {
+    tokens.pop();
+  }
+  return tokens.join(' ');
+}
+
+function splitNamePartsForMatch(input: string): NormalizedNameParts | null {
+  const normalizedFull = normalizePersonNameForMatch(input);
+  if (!normalizedFull) return null;
+  const tokens = normalizedFull.split(' ').filter(Boolean);
+  if (tokens.length === 0) return null;
+  const firstToken = tokens[0]!;
+  const lastToken = tokens[tokens.length - 1]!;
+  return { normalizedFull, firstToken, lastToken };
+}
+
 export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/customers/search - Prefix search by first or last name (case-insensitive).
@@ -261,6 +289,170 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
         });
       } catch (error) {
         request.log.error(error, 'Failed to create customer from scan');
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/customers/match-identity
+   *
+   * Staff-only endpoint for exact-ish identity match by (firstName,lastName,dob).
+   * Used by manual "First Time Customer / Alternate ID" to avoid accidental duplicates.
+   */
+  const MatchIdentitySchema = z.object({
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    dob: z.string().min(1), // YYYY-MM-DD
+  });
+
+  fastify.post(
+    '/v1/customers/match-identity',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+
+      let body: z.infer<typeof MatchIdentitySchema>;
+      try {
+        body = MatchIdentitySchema.parse(request.body);
+      } catch (error) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+        });
+      }
+
+      const dob = toDateOnly(body.dob);
+      if (!dob) return reply.status(400).send({ error: 'Invalid dob; expected YYYY-MM-DD' });
+
+      const inputParts = splitNamePartsForMatch(`${body.firstName} ${body.lastName}`);
+      if (!inputParts) return reply.status(400).send({ error: 'Invalid name' });
+
+      try {
+        const res = await query<{
+          id: string;
+          name: string;
+          dob: string | Date | null;
+          membership_number: string | null;
+          created_at: Date;
+        }>(
+          `SELECT id, name, dob, membership_number, created_at
+           FROM customers
+           WHERE dob = $1::date
+           ORDER BY created_at ASC
+           LIMIT 50`,
+          [dob]
+        );
+
+        const matches = res.rows
+          .map((row) => {
+            const parts = splitNamePartsForMatch(row.name);
+            if (!parts) return null;
+            const direct =
+              parts.firstToken === inputParts.firstToken && parts.lastToken === inputParts.lastToken;
+            const swapped =
+              parts.firstToken === inputParts.lastToken && parts.lastToken === inputParts.firstToken;
+            if (!direct && !swapped) return null;
+            const fullExact = parts.normalizedFull === inputParts.normalizedFull;
+            const score = (fullExact ? 3 : 0) + (direct ? 2 : swapped ? 1 : 0) + (row.membership_number ? 0.5 : 0);
+            return {
+              id: row.id,
+              name: row.name,
+              dob: row.dob instanceof Date ? row.dob.toISOString().slice(0, 10) : row.dob,
+              membershipNumber: row.membership_number,
+              score,
+              createdAt: row.created_at,
+            };
+          })
+          .filter(Boolean) as Array<{
+          id: string;
+          name: string;
+          dob: string | null;
+          membershipNumber: string | null;
+          score: number;
+          createdAt: Date;
+        }>;
+
+        matches.sort((a, b) => b.score - a.score || a.createdAt.getTime() - b.createdAt.getTime());
+        const best = matches[0] ?? null;
+
+        return reply.send({
+          matchCount: matches.length,
+          bestMatch: best
+            ? {
+                id: best.id,
+                name: best.name,
+                dob: best.dob,
+                membershipNumber: best.membershipNumber,
+              }
+            : null,
+        });
+      } catch (error) {
+        request.log.error(error, 'Failed to match customer identity');
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/customers/create-manual
+   *
+   * Staff-only endpoint to create a customer record from manual entry (firstName,lastName,dob).
+   * This intentionally does NOT de-dupe; caller should use /match-identity first if desired.
+   */
+  const CreateManualSchema = z.object({
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    dob: z.string().min(1), // YYYY-MM-DD
+  });
+
+  fastify.post(
+    '/v1/customers/create-manual',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+
+      let body: z.infer<typeof CreateManualSchema>;
+      try {
+        body = CreateManualSchema.parse(request.body);
+      } catch (error) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+        });
+      }
+
+      const dob = toDateOnly(body.dob);
+      if (!dob) return reply.status(400).send({ error: 'Invalid dob; expected YYYY-MM-DD' });
+
+      const name = `${body.firstName} ${body.lastName}`.trim().slice(0, 255);
+      if (!name) return reply.status(400).send({ error: 'Invalid name' });
+
+      try {
+        const inserted = await query<{
+          id: string;
+          name: string;
+          dob: Date | null;
+          membership_number: string | null;
+        }>(
+          `INSERT INTO customers (name, dob, created_at, updated_at)
+           VALUES ($1, $2::date, NOW(), NOW())
+           RETURNING id, name, dob, membership_number`,
+          [name, dob]
+        );
+
+        const row = inserted.rows[0]!;
+        return reply.send({
+          created: true,
+          customer: {
+            id: row.id,
+            name: row.name,
+            dob: row.dob ? row.dob.toISOString().slice(0, 10) : null,
+            membershipNumber: row.membership_number,
+          },
+        });
+      } catch (error) {
+        request.log.error(error, 'Failed to create customer (manual)');
         return reply.status(500).send({ error: 'Internal server error' });
       }
     }

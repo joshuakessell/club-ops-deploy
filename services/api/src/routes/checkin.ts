@@ -2,12 +2,16 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { query, transaction, serializableTransaction } from '../db/index.js';
 import { requireAuth, optionalAuth } from '../auth/middleware.js';
+import { requireKioskTokenOrStaff } from '../auth/kioskToken.js';
 import { verifyPin } from '../auth/utils.js';
+import { HttpError } from '../errors/HttpError.js';
 import { generateAgreementPdf } from '../utils/pdf-generator.js';
+import { stripSystemLateFeeNotes } from '../utils/lateFeeNotes.js';
 import { roundUpToQuarterHour } from '../time/rounding.js';
 import type { Broadcaster } from '../websocket/broadcaster.js';
+import { broadcastInventoryUpdate } from './sessions.js';
+import { insertAuditLog } from '../audit/auditLog.js';
 import type {
-  SessionUpdatedPayload,
   CustomerConfirmationRequiredPayload,
   CustomerConfirmedPayload,
   CustomerDeclinedPayload,
@@ -16,11 +20,23 @@ import type {
   SelectionProposedPayload,
   SelectionLockedPayload,
   SelectionAcknowledgedPayload,
+  CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
 import { calculatePriceQuote, type PricingInput } from '../pricing/engine.js';
-import { IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
-import crypto from 'crypto';
-import { Parse as ParseAamva } from 'aamva-parser';
+import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG, IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
+import {
+  calculateAge,
+  computeSha256Hex,
+  extractAamvaIdentity,
+  isLikelyAamvaPdf417Text,
+  normalizeScanText,
+  parseMembershipNumber,
+  passesFuzzyThresholds,
+  scoreNameMatch,
+  splitNamePartsForMatch,
+} from '../checkin/identity.js';
+import { computeWaitlistInfo, getRoomTier } from '../checkin/waitlist.js';
+import { buildFullSessionUpdatedPayload, getAllowedRentals } from '../checkin/payload.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -46,6 +62,7 @@ interface LaneSessionRow {
   payment_intent_id: string | null;
   membership_purchase_intent?: 'PURCHASE' | 'RENEW' | null;
   membership_purchase_requested_at?: Date | null;
+  membership_choice?: 'ONE_TIME' | 'SIX_MONTH' | null;
   kiosk_acknowledged_at?: Date | null;
   checkin_mode: string | null; // 'INITIAL' or 'RENEWAL'
   proposed_rental_type: string | null;
@@ -108,6 +125,64 @@ type PoolClient = Parameters<Parameters<typeof transaction>[0]>[0];
 
 type RoomRentalType = 'STANDARD' | 'DOUBLE' | 'SPECIAL';
 
+async function assertAssignedResourcePersistedAndUnavailable(params: {
+  client: PoolClient;
+  sessionId: string;
+  customerId: string;
+  resourceType: 'room' | 'locker';
+  resourceId: string;
+  resourceNumber?: string;
+}): Promise<void> {
+  const { client, sessionId, customerId, resourceType, resourceId, resourceNumber } = params;
+
+  if (resourceType === 'room') {
+    const row = (
+      await client.query<{
+        id: string;
+        number: string;
+        status: string;
+        assigned_to_customer_id: string | null;
+      }>(
+        `SELECT id, number, status, assigned_to_customer_id
+         FROM rooms
+         WHERE id = $1`,
+        [resourceId]
+      )
+    ).rows[0];
+
+    const number = resourceNumber ?? row?.number ?? '(unknown)';
+    const assignedOk = row?.assigned_to_customer_id === customerId;
+    const qualifiesForAvailable = row?.status === 'CLEAN' && row?.assigned_to_customer_id === null;
+    if (!assignedOk || qualifiesForAvailable) {
+      const detail = `Check-in persistence assertion failed (room): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`;
+      throw new HttpError(500, 'Check-in persistence assertion failed', { cause: new Error(detail) });
+    }
+    return;
+  }
+
+  const row = (
+    await client.query<{
+      id: string;
+      number: string;
+      status: string;
+      assigned_to_customer_id: string | null;
+    }>(
+      `SELECT id, number, status, assigned_to_customer_id
+       FROM lockers
+       WHERE id = $1`,
+      [resourceId]
+    )
+  ).rows[0];
+
+  const number = resourceNumber ?? row?.number ?? '(unknown)';
+  const assignedOk = row?.assigned_to_customer_id === customerId;
+  const qualifiesForAvailable = row?.status === 'CLEAN' && row?.assigned_to_customer_id === null;
+  if (!assignedOk || qualifiesForAvailable) {
+    const detail = `Check-in persistence assertion failed (locker): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`;
+    throw new HttpError(500, 'Check-in persistence assertion failed', { cause: new Error(detail) });
+  }
+}
+
 async function selectRoomForNewCheckin(
   client: PoolClient,
   rentalType: RoomRentalType
@@ -151,6 +226,22 @@ async function selectRoomForNewCheckin(
          AND assigned_to_customer_id IS NULL
          AND type = $1
          AND id <> ALL($2::uuid[])
+         -- Exclude rooms "selected" by an active lane session (reservation semantics).
+         AND NOT EXISTS (
+           SELECT 1
+           FROM lane_sessions ls
+           WHERE ls.assigned_resource_type = 'room'
+             AND ls.assigned_resource_id = rooms.id
+             AND ls.status = ANY (
+               ARRAY[
+                 'ACTIVE'::public.lane_session_status,
+                 'AWAITING_CUSTOMER'::public.lane_session_status,
+                 'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                 'AWAITING_PAYMENT'::public.lane_session_status,
+                 'AWAITING_SIGNATURE'::public.lane_session_status
+               ]
+             )
+         )
        ORDER BY number ASC
        OFFSET $3
        LIMIT 1
@@ -176,143 +267,25 @@ function toDate(value: unknown): Date | undefined {
   return Number.isFinite(d.getTime()) ? d : undefined;
 }
 
-function normalizeScanText(raw: string): string {
-  // Normalize line endings and whitespace while preserving line breaks.
-  // Honeywell scanners often emit already-decoded PDF417 text that may include \r\n or \r.
-  const lf = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const lines = lf.split('\n').map((line) => line.replace(/[ \t]+/g, ' ').trimEnd());
-  return lines.join('\n').trim();
-}
 
-function computeSha256Hex(value: string): string {
-  return crypto.createHash('sha256').update(value).digest('hex');
-}
-
-function isLikelyAamvaPdf417Text(raw: string): boolean {
-  // Heuristic detection for AAMVA DL/ID text payloads.
-  const s = raw;
-  return (
-    s.startsWith('@') ||
-    s.includes('ANSI ') ||
-    s.includes('AAMVA') ||
-    /\nDCS/.test(s) ||
-    /\nDAC/.test(s) ||
-    /\nDBD/.test(s) ||
-    /\nDAQ/.test(s)
+async function maybeAttachScanIdentifiers(params: {
+  client: PoolClient;
+  customerId: string;
+  existingIdScanHash: string | null;
+  existingIdScanValue: string | null;
+  idScanHash: string;
+  idScanValue: string;
+}): Promise<void> {
+  if (params.existingIdScanHash && params.existingIdScanValue) return;
+  await params.client.query(
+    `UPDATE customers
+     SET id_scan_hash = COALESCE(id_scan_hash, $1),
+         id_scan_value = COALESCE(id_scan_value, $2),
+         updated_at = NOW()
+     WHERE id = $3
+       AND (id_scan_hash IS NULL OR id_scan_value IS NULL)`,
+    [params.idScanHash, params.idScanValue, params.customerId]
   );
-}
-
-type ExtractedIdIdentity = {
-  firstName?: string;
-  lastName?: string;
-  fullName?: string;
-  dob?: string; // YYYY-MM-DD
-  idNumber?: string;
-  issuer?: string;
-  jurisdiction?: string;
-};
-
-function minimalAamvaExtract(raw: string): ExtractedIdIdentity {
-  const lines = raw.split('\n');
-  const out: ExtractedIdIdentity = {};
-  for (const lineRaw of lines) {
-    const line = lineRaw ?? '';
-    if (line.startsWith('DCS')) out.lastName = line.substring(3).trim() || out.lastName;
-    else if (line.startsWith('DAC')) out.firstName = line.substring(3).trim() || out.firstName;
-    else if (line.startsWith('DAA')) out.fullName = line.substring(3).trim() || out.fullName;
-    else if (line.startsWith('DAQ')) out.idNumber = line.substring(3).trim() || out.idNumber;
-    else if (line.startsWith('DBD')) {
-      const dobStr = line.substring(3).trim();
-      // Common AAMVA DBD format: YYYYMMDD
-      if (/^\d{8}$/.test(dobStr)) {
-        const yyyy = dobStr.slice(0, 4);
-        const mm = dobStr.slice(4, 6);
-        const dd = dobStr.slice(6, 8);
-        out.dob = `${yyyy}-${mm}-${dd}`;
-      }
-    } else if (line.startsWith('DCI')) {
-      const j = line.substring(3).trim();
-      if (j) {
-        out.jurisdiction = j;
-        out.issuer = out.issuer || j;
-      }
-    }
-  }
-  if (!out.fullName && out.firstName && out.lastName) {
-    out.fullName = `${out.firstName} ${out.lastName}`.trim();
-  }
-  return out;
-}
-
-function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity {
-  // Use a maintained parser first; fall back to minimal AAMVA tag parsing for robustness.
-  const minimal = minimalAamvaExtract(rawNormalized);
-  try {
-    const parsed = ParseAamva(rawNormalized) as unknown as {
-      firstName?: string | null;
-      lastName?: string | null;
-      dateOfBirth?: Date | string | null;
-      driversLicenseId?: string | null;
-      state?: string | null;
-      pdf417?: string | null;
-    };
-
-    const dob =
-      parsed?.dateOfBirth instanceof Date
-        ? parsed.dateOfBirth.toISOString().slice(0, 10)
-        : typeof parsed?.dateOfBirth === 'string'
-          ? (() => {
-              const d = new Date(parsed.dateOfBirth);
-              return Number.isFinite(d.getTime()) ? d.toISOString().slice(0, 10) : undefined;
-            })()
-          : undefined;
-
-    const merged: ExtractedIdIdentity = {
-      firstName: (parsed?.firstName ?? undefined) || minimal.firstName,
-      lastName: (parsed?.lastName ?? undefined) || minimal.lastName,
-      dob: dob || minimal.dob,
-      idNumber: (parsed?.driversLicenseId ?? undefined) || minimal.idNumber,
-      jurisdiction: (parsed?.state ?? undefined) || minimal.jurisdiction,
-      issuer: (parsed?.state ?? undefined) || minimal.issuer,
-    };
-    if (minimal.fullName) merged.fullName = minimal.fullName;
-    else if (merged.firstName && merged.lastName)
-      merged.fullName = `${merged.firstName} ${merged.lastName}`.trim();
-    return merged;
-  } catch {
-    return minimal;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function extractPaymentLineItems(
-  raw: unknown
-): Array<{ description: string; amount: number }> | undefined {
-  if (raw === null || raw === undefined) return undefined;
-  let parsed: unknown = raw;
-  if (typeof parsed === 'string') {
-    try {
-      parsed = JSON.parse(parsed);
-    } catch {
-      return undefined;
-    }
-  }
-  if (!isRecord(parsed)) return undefined;
-  const items = parsed['lineItems'];
-  if (!Array.isArray(items)) return undefined;
-
-  const normalized: Array<{ description: string; amount: number }> = [];
-  for (const it of items) {
-    if (!isRecord(it)) continue;
-    const description = it['description'];
-    const amount = toNumber(it['amount']);
-    if (typeof description !== 'string' || amount === undefined) continue;
-    normalized.push({ description, amount });
-  }
-  return normalized.length > 0 ? normalized : undefined;
 }
 
 function getHttpError(error: unknown): { statusCode: number; message?: string } | null {
@@ -324,341 +297,7 @@ function getHttpError(error: unknown): { statusCode: number; message?: string } 
   return { statusCode, message: typeof message === 'string' ? message : undefined };
 }
 
-async function buildFullSessionUpdatedPayload(
-  client: PoolClient,
-  sessionId: string
-): Promise<{ laneId: string; payload: SessionUpdatedPayload }> {
-  const sessionResult = await client.query<LaneSessionRow>(
-    `SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`,
-    [sessionId]
-  );
 
-  if (sessionResult.rows.length === 0) {
-    throw new Error(`Lane session not found: ${sessionId}`);
-  }
-
-  const session = sessionResult.rows[0]!;
-  const laneId = session.lane_id;
-
-  const customer = session.customer_id
-    ? (
-        await client.query<CustomerRow>(
-          `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, past_due_balance, primary_language, notes
-             FROM customers
-             WHERE id = $1
-             LIMIT 1`,
-          [session.customer_id]
-        )
-      ).rows[0]
-    : undefined;
-
-  const membershipNumber = customer?.membership_number || session.membership_number || undefined;
-
-  const allowedRentals = getAllowedRentals(membershipNumber);
-
-  const pastDueBalance = toNumber(customer?.past_due_balance) || 0;
-  const pastDueBypassed = !!session.past_due_bypassed;
-  const pastDueBlocked = pastDueBalance > 0 && !pastDueBypassed;
-
-  let customerDobMonthDay: string | undefined;
-  const customerDob = toDate(customer?.dob);
-  if (customerDob) {
-    customerDobMonthDay = `${String(customerDob.getMonth() + 1).padStart(2, '0')}/${String(
-      customerDob.getDate()
-    ).padStart(2, '0')}`;
-  }
-
-  let customerLastVisitAt: string | undefined;
-  if (session.customer_id) {
-    const lastVisitResult = await client.query<{ starts_at: Date }>(
-      `SELECT cb.starts_at
-       FROM checkin_blocks cb
-       JOIN visits v ON v.id = cb.visit_id
-       WHERE v.customer_id = $1
-       ORDER BY cb.starts_at DESC
-       LIMIT 1`,
-      [session.customer_id]
-    );
-    if (lastVisitResult.rows.length > 0) {
-      customerLastVisitAt = lastVisitResult.rows[0]!.starts_at.toISOString();
-    }
-  }
-
-  // Prefer a check-in block created by this lane session (when completed)
-  const blockForSession = (
-    await client.query<{
-      visit_id: string;
-      ends_at: Date;
-      agreement_signed: boolean;
-    }>(
-      `SELECT visit_id, ends_at, agreement_signed
-       FROM checkin_blocks
-       WHERE session_id = $1
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [session.id]
-    )
-  ).rows[0];
-
-  // Active visit info (useful for RENEWAL mode pre-completion)
-  let activeVisitId: string | undefined;
-  let activeBlockEndsAt: string | undefined;
-  if (session.customer_id) {
-    const activeVisitResult = await client.query<{ visit_id: string; ends_at: Date }>(
-      `SELECT v.id as visit_id, cb.ends_at
-       FROM visits v
-       JOIN checkin_blocks cb ON cb.visit_id = v.id
-       WHERE v.customer_id = $1 AND v.ended_at IS NULL
-       ORDER BY cb.ends_at DESC
-       LIMIT 1`,
-      [session.customer_id]
-    );
-    if (activeVisitResult.rows.length > 0) {
-      activeVisitId = activeVisitResult.rows[0]!.visit_id;
-      activeBlockEndsAt = activeVisitResult.rows[0]!.ends_at.toISOString();
-    }
-  }
-
-  let assignedResourceType = session.assigned_resource_type as 'room' | 'locker' | null;
-  let assignedResourceNumber: string | undefined;
-
-  if (session.assigned_resource_id && assignedResourceType) {
-    if (assignedResourceType === 'room') {
-      const roomResult = await client.query<{ number: string }>(
-        `SELECT number FROM rooms WHERE id = $1 LIMIT 1`,
-        [session.assigned_resource_id]
-      );
-      assignedResourceNumber = roomResult.rows[0]?.number;
-    } else if (assignedResourceType === 'locker') {
-      const lockerResult = await client.query<{ number: string }>(
-        `SELECT number FROM lockers WHERE id = $1 LIMIT 1`,
-        [session.assigned_resource_id]
-      );
-      assignedResourceNumber = lockerResult.rows[0]?.number;
-    }
-  }
-
-  // Payment intent: prefer the one pinned on the session, otherwise latest for session
-  let paymentIntent: PaymentIntentRow | undefined;
-  if (session.payment_intent_id) {
-    const intentResult = await client.query<PaymentIntentRow>(
-      `SELECT * FROM payment_intents WHERE id = $1 LIMIT 1`,
-      [session.payment_intent_id]
-    );
-    paymentIntent = intentResult.rows[0];
-  } else {
-    const intentResult = await client.query<PaymentIntentRow>(
-      `SELECT * FROM payment_intents
-       WHERE lane_session_id = $1
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [session.id]
-    );
-    paymentIntent = intentResult.rows[0];
-  }
-
-  const paymentTotal = toNumber(paymentIntent?.amount);
-  const paymentLineItems =
-    extractPaymentLineItems(session.price_quote_json) ??
-    extractPaymentLineItems(paymentIntent?.quote_json);
-
-  const membershipValidUntilRaw = (customer as any)?.membership_valid_until as unknown;
-  const customerMembershipValidUntil =
-    membershipValidUntilRaw instanceof Date
-      ? membershipValidUntilRaw.toISOString().slice(0, 10)
-      : typeof membershipValidUntilRaw === 'string'
-        ? membershipValidUntilRaw
-        : undefined;
-
-  const payload: SessionUpdatedPayload = {
-    sessionId: session.id,
-    customerName: customer?.name || session.customer_display_name || '',
-    membershipNumber,
-    customerMembershipValidUntil,
-    membershipPurchaseIntent: (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
-    kioskAcknowledgedAt: session.kiosk_acknowledged_at ? session.kiosk_acknowledged_at.toISOString() : undefined,
-    allowedRentals,
-    mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
-    status: session.status,
-    proposedRentalType: session.proposed_rental_type || undefined,
-    proposedBy: (session.proposed_by as 'CUSTOMER' | 'EMPLOYEE' | null) || undefined,
-    selectionConfirmed: !!session.selection_confirmed,
-    selectionConfirmedBy:
-      (session.selection_confirmed_by as 'CUSTOMER' | 'EMPLOYEE' | null) || undefined,
-    customerPrimaryLanguage: (customer?.primary_language as 'EN' | 'ES' | undefined) || undefined,
-    customerDobMonthDay,
-    customerLastVisitAt,
-    customerNotes: customer?.notes || undefined,
-    pastDueBalance: pastDueBalance > 0 ? pastDueBalance : undefined,
-    pastDueBlocked,
-    pastDueBypassed,
-    paymentIntentId: paymentIntent?.id,
-    paymentStatus: (paymentIntent?.status as 'DUE' | 'PAID' | undefined) || undefined,
-    paymentMethod: (paymentIntent?.payment_method as 'CASH' | 'CREDIT' | undefined) || undefined,
-    paymentTotal,
-    paymentLineItems,
-    paymentFailureReason: paymentIntent?.failure_reason || undefined,
-    agreementSigned: blockForSession ? !!blockForSession.agreement_signed : false,
-    assignedResourceType: assignedResourceType || undefined,
-    assignedResourceNumber,
-    visitId: blockForSession?.visit_id || activeVisitId,
-    blockEndsAt: blockForSession?.ends_at
-      ? blockForSession.ends_at.toISOString()
-      : activeBlockEndsAt,
-    checkoutAt: blockForSession?.ends_at ? blockForSession.ends_at.toISOString() : undefined,
-  };
-
-  return { laneId, payload };
-}
-
-/**
- * Check if a membership number is eligible for Gym Locker rental.
- */
-function isGymLockerEligible(membershipNumber: string | null | undefined): boolean {
-  if (!membershipNumber) {
-    return false;
-  }
-
-  const rangesEnv = process.env.GYM_LOCKER_ELIGIBLE_RANGES || '';
-  if (!rangesEnv.trim()) {
-    return false;
-  }
-
-  const membershipNum = parseInt(membershipNumber, 10);
-  if (isNaN(membershipNum)) {
-    return false;
-  }
-
-  const ranges = rangesEnv
-    .split(',')
-    .map((range) => range.trim())
-    .filter(Boolean);
-
-  for (const range of ranges) {
-    const [startStr, endStr] = range.split('-').map((s) => s.trim());
-    const start = parseInt(startStr || '', 10);
-    const end = parseInt(endStr || '', 10);
-
-    if (!isNaN(start) && !isNaN(end) && membershipNum >= start && membershipNum <= end) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Determine allowed rentals based on membership eligibility.
- */
-function getAllowedRentals(membershipNumber: string | null | undefined): string[] {
-  const allowed: string[] = ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'];
-
-  if (isGymLockerEligible(membershipNumber)) {
-    allowed.push('GYM_LOCKER');
-  }
-
-  return allowed;
-}
-
-/**
- * Parse membership number from scan input.
- * Supports configurable regex pattern.
- */
-function parseMembershipNumber(scanValue: string): string | null {
-  // Default: extract digits only
-  const pattern = process.env.MEMBERSHIP_SCAN_PATTERN || '\\d+';
-  const regex = new RegExp(pattern);
-  const match = scanValue.match(regex);
-  return match ? match[0] : null;
-}
-
-/**
- * Calculate customer age from date of birth.
- */
-function calculateAge(dob: Date | string | null): number | undefined {
-  const d = toDate(dob);
-  if (!d) {
-    return undefined;
-  }
-  const today = new Date();
-  let age = today.getFullYear() - d.getFullYear();
-  const monthDiff = today.getMonth() - d.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < d.getDate())) {
-    age--;
-  }
-  return age;
-}
-
-/**
- * Map room number to tier (Special, Double, or Standard).
- */
-function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
-  const num = parseInt(roomNumber, 10);
-
-  // Special: rooms 201, 232, 256
-  if (num === 201 || num === 232 || num === 256) {
-    return 'SPECIAL';
-  }
-
-  // Double: even rooms 216, 218, 232, 252, 256, 262 and odd room 225
-  if (
-    num === 216 ||
-    num === 218 ||
-    num === 232 ||
-    num === 252 ||
-    num === 256 ||
-    num === 262 ||
-    num === 225
-  ) {
-    return 'DOUBLE';
-  }
-
-  // All else standard
-  return 'STANDARD';
-}
-
-/**
- * Compute waitlist position and ETA for a desired tier.
- * Position is 1-based. ETA is computed from Nth occupied block's end time + 15 min buffer.
- */
-async function computeWaitlistInfo(
-  client: Parameters<Parameters<typeof transaction>[0]>[0],
-  desiredTier: string
-): Promise<{ position: number; estimatedReadyAt: Date | null }> {
-  // Count active waitlist entries for this tier (position = count + 1)
-  const waitlistCountResult = await client.query<{ count: string }>(
-    `SELECT COUNT(*) as count FROM waitlist 
-     WHERE desired_tier = $1 AND status = 'ACTIVE'`,
-    [desiredTier]
-  );
-  const position = parseInt(waitlistCountResult.rows[0]?.count || '0', 10) + 1;
-
-  // Find Nth occupied checkin_block where N = position
-  // Get blocks that will end and could free up a room of the desired tier
-  const blocksResult = await client.query<{
-    id: string;
-    ends_at: Date;
-    room_id: string | null;
-  }>(
-    `SELECT cb.id, cb.ends_at, cb.room_id
-     FROM checkin_blocks cb
-     LEFT JOIN rooms r ON cb.room_id = r.id
-     WHERE cb.ends_at > NOW()
-       AND (cb.room_id IS NOT NULL OR cb.locker_id IS NOT NULL)
-     ORDER BY cb.ends_at ASC
-     LIMIT $1`,
-    [position]
-  );
-
-  let estimatedReadyAt: Date | null = null;
-  if (blocksResult.rows.length >= position) {
-    // Found Nth block - ETA = block end + 15 min buffer
-    const nthBlock = blocksResult.rows[position - 1]!;
-    estimatedReadyAt = new Date(nthBlock.ends_at.getTime() + 15 * 60 * 1000);
-  }
-
-  return { position, estimatedReadyAt };
-}
 
 /**
  * Check-in flow routes.
@@ -789,11 +428,15 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             }
           }
 
-          // Determine mode (auto-detect renewal if active visit exists or explicit visitId provided)
+          // Determine mode (explicit renewal only). If an active visit exists and no explicit visitId
+          // is provided, treat as "already checked in" (lookup-only) and block a new check-in flow.
           let computedMode: 'INITIAL' | 'RENEWAL' = 'INITIAL';
           let visitIdForSession: string | null = null;
           let blockEndsAtDate: Date | null = null;
           let currentTotalHours = 0;
+          let activeAssignedResourceType: 'room' | 'locker' | null = null;
+          let activeAssignedResourceNumber: string | null = null;
+          let activeRentalType: string | null = null;
 
           const resolveVisitBlocks = async (activeVisitId: string) => {
             const blocksResult = await client.query<{
@@ -811,6 +454,33 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   (block.ends_at.getTime() - block.starts_at.getTime()) / (1000 * 60 * 60);
                 currentTotalHours += hours;
               }
+            }
+          };
+
+          const resolveActiveAssignment = async (activeVisitId: string) => {
+            const activeBlock = await client.query<{
+              rental_type: string;
+              room_number: string | null;
+              locker_number: string | null;
+            }>(
+              `SELECT cb.rental_type, r.number as room_number, l.number as locker_number
+               FROM checkin_blocks cb
+               LEFT JOIN rooms r ON cb.room_id = r.id
+               LEFT JOIN lockers l ON cb.locker_id = l.id
+               WHERE cb.visit_id = $1
+               ORDER BY cb.ends_at DESC
+               LIMIT 1`,
+              [activeVisitId]
+            );
+            const row = activeBlock.rows[0];
+            if (!row) return;
+            activeRentalType = row.rental_type;
+            if (row.room_number) {
+              activeAssignedResourceType = 'room';
+              activeAssignedResourceNumber = row.room_number;
+            } else if (row.locker_number) {
+              activeAssignedResourceType = 'locker';
+              activeAssignedResourceNumber = row.locker_number;
             }
           };
 
@@ -832,16 +502,78 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             visitIdForSession = visit.id;
             computedMode = 'RENEWAL';
             await resolveVisitBlocks(visit.id);
+            await resolveActiveAssignment(visit.id);
           } else if (customerId) {
-            // Auto-detect active visit for this customer
             const activeVisit = await client.query<{ id: string }>(
               `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
               [customerId]
             );
             if (activeVisit.rows.length > 0) {
-              visitIdForSession = activeVisit.rows[0]!.id;
-              computedMode = 'RENEWAL';
-              await resolveVisitBlocks(activeVisit.rows[0]!.id);
+              const activeVisitId = activeVisit.rows[0]!.id;
+
+              const activeBlock = await client.query<{
+                starts_at: Date;
+                ends_at: Date;
+                rental_type: string;
+                room_number: string | null;
+                locker_number: string | null;
+              }>(
+                `SELECT cb.starts_at, cb.ends_at, cb.rental_type, r.number as room_number, l.number as locker_number
+                 FROM checkin_blocks cb
+                 LEFT JOIN rooms r ON cb.room_id = r.id
+                 LEFT JOIN lockers l ON cb.locker_id = l.id
+                 WHERE cb.visit_id = $1
+                 ORDER BY cb.ends_at DESC
+                 LIMIT 1`,
+                [activeVisitId]
+              );
+
+              const block = activeBlock.rows[0];
+              const assignedResourceType: 'room' | 'locker' | null = block?.room_number
+                ? 'room'
+                : block?.locker_number
+                  ? 'locker'
+                  : null;
+              const assignedResourceNumber: string | null =
+                block?.room_number ?? block?.locker_number ?? null;
+
+              const waitlistResult = await client.query<{
+                id: string;
+                desired_tier: string;
+                backup_tier: string;
+                status: string;
+              }>(
+                `SELECT id, desired_tier, backup_tier, status
+                 FROM waitlist
+                 WHERE visit_id = $1 AND status IN ('ACTIVE', 'OFFERED')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [activeVisitId]
+              );
+              const wl = waitlistResult.rows[0];
+
+              throw {
+                statusCode: 409,
+                code: 'ALREADY_CHECKED_IN',
+                message: 'Customer is currently checked in',
+                activeCheckin: {
+                  visitId: activeVisitId,
+                  rentalType: block?.rental_type ?? null,
+                  assignedResourceType,
+                  assignedResourceNumber,
+                  checkinAt: block?.starts_at ? block.starts_at.toISOString() : null,
+                  checkoutAt: block?.ends_at ? block.ends_at.toISOString() : null,
+                  overdue: block?.ends_at ? block.ends_at.getTime() < Date.now() : null,
+                  waitlist: wl
+                    ? {
+                        id: wl.id,
+                        desiredTier: wl.desired_tier,
+                        backupTier: wl.backup_tier,
+                        status: wl.status,
+                      }
+                    : null,
+                },
+              };
             }
           }
 
@@ -919,6 +651,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             currentTotalHours: computedMode === 'RENEWAL' ? currentTotalHours : undefined,
             pastDueBalance,
             pastDueBlocked,
+            activeAssignedResourceType: activeAssignedResourceType || undefined,
+            activeAssignedResourceNumber: activeAssignedResourceNumber || undefined,
+            activeRentalType: activeRentalType || undefined,
           };
         });
 
@@ -934,8 +669,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (error && typeof error === 'object' && 'statusCode' in error) {
           const statusCode = (error as { statusCode: number }).statusCode;
           const message = (error as { message?: string }).message;
+          const code = (error as { code?: unknown }).code;
+          const activeCheckin = (error as { activeCheckin?: unknown }).activeCheckin;
           return reply.status(statusCode).send({
             error: message ?? 'Failed to start session',
+            code: typeof code === 'string' ? code : undefined,
+            activeCheckin: activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
           });
         }
         return reply.status(500).send({
@@ -960,6 +699,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   const CheckinScanBodySchema = z.object({
     laneId: z.string().min(1),
     rawScanText: z.string().min(1),
+    selectedCustomerId: z.string().uuid().optional(),
   });
 
   fastify.post('/v1/checkin/scan', { preHandler: [requireAuth] }, async (request, reply) => {
@@ -986,6 +726,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const isAamva = isLikelyAamvaPdf417Text(normalized);
+    if (body.selectedCustomerId && !isAamva) {
+      return reply.status(400).send({
+        result: 'ERROR',
+        error: { code: 'INVALID_SELECTION', message: 'Selected customer does not match this scan' },
+      });
+    }
 
     try {
       const result = await transaction(async (client) => {
@@ -1015,6 +761,94 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           const idScanValue = normalized;
           const idScanHash = computeSha256Hex(idScanValue);
 
+          // Employee-choice resolution (step after MULTIPLE_MATCHES)
+          if (body.selectedCustomerId) {
+            const selected = await client.query<CustomerIdentityRow>(
+              `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+               FROM customers
+               WHERE id = $1
+               LIMIT 1`,
+              [body.selectedCustomerId]
+            );
+            if (selected.rows.length === 0) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+            const chosen = selected.rows[0]!;
+
+            // Only allow selection resolution when scan has the identity fields needed.
+            if (!extracted.dob || !extracted.firstName || !extracted.lastName) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+
+            const chosenDob = chosen.dob ? chosen.dob.toISOString().slice(0, 10) : null;
+            if (chosenDob !== extracted.dob) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+
+            const scannedParts = splitNamePartsForMatch(
+              `${extracted.firstName} ${extracted.lastName}`.trim()
+            );
+            const storedParts = splitNamePartsForMatch(chosen.name);
+            if (!scannedParts || !storedParts) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+
+            const fuzzy = scoreNameMatch({
+              scannedFirst: scannedParts.firstToken,
+              scannedLast: scannedParts.lastToken,
+              storedFirst: storedParts.firstToken,
+              storedLast: storedParts.lastToken,
+            });
+            if (!passesFuzzyThresholds(fuzzy)) {
+              throw {
+                statusCode: 400,
+                code: 'INVALID_SELECTION',
+                message: 'Selected customer does not match this scan',
+              };
+            }
+
+            checkBanned(chosen);
+            await maybeAttachScanIdentifiers({
+              client,
+              customerId: chosen.id,
+              existingIdScanHash: chosen.id_scan_hash,
+              existingIdScanValue: chosen.id_scan_value,
+              idScanHash,
+              idScanValue,
+            });
+
+            return {
+              result: 'MATCHED' as const,
+              scanType: 'STATE_ID' as const,
+              normalizedRawScanText: idScanValue,
+              idScanHash,
+              customer: {
+                id: chosen.id,
+                name: chosen.name,
+                dob: chosen.dob ? chosen.dob.toISOString().slice(0, 10) : null,
+                membershipNumber: chosen.membership_number,
+              },
+              extracted,
+              enriched: Boolean(!chosen.id_scan_hash || !chosen.id_scan_value),
+            };
+          }
+
           // Matching order:
           // 1) customers.id_scan_hash OR customers.id_scan_value
           const byHashOrValue = await client.query<CustomerIdentityRow>(
@@ -1033,16 +867,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             checkBanned(matched);
 
             // Ensure both identifiers are persisted for future instant matches.
-            if (!matched.id_scan_hash || !matched.id_scan_value) {
-              await client.query(
-                `UPDATE customers
-                 SET id_scan_hash = COALESCE(id_scan_hash, $1),
-                     id_scan_value = COALESCE(id_scan_value, $2),
-                     updated_at = NOW()
-                 WHERE id = $3`,
-                [idScanHash, idScanValue, matched.id]
-              );
-            }
+            await maybeAttachScanIdentifiers({
+              client,
+              customerId: matched.id,
+              existingIdScanHash: matched.id_scan_hash,
+              existingIdScanValue: matched.id_scan_value,
+              idScanHash,
+              idScanValue,
+            });
 
             return {
               result: 'MATCHED' as const,
@@ -1080,14 +912,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 checkBanned(matched);
 
                 // Enrich customer for future instant matches
-                await client.query(
-                  `UPDATE customers
-                   SET id_scan_hash = COALESCE(id_scan_hash, $1),
-                       id_scan_value = COALESCE(id_scan_value, $2),
-                       updated_at = NOW()
-                   WHERE id = $3`,
-                  [idScanHash, idScanValue, matched.id]
-                );
+                await maybeAttachScanIdentifiers({
+                  client,
+                  customerId: matched.id,
+                  existingIdScanHash: matched.id_scan_hash,
+                  existingIdScanValue: matched.id_scan_value,
+                  idScanHash,
+                  idScanValue,
+                });
 
                 return {
                   result: 'MATCHED' as const,
@@ -1101,8 +933,83 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                     membershipNumber: matched.membership_number,
                   },
                   extracted,
-                  enriched: true,
+                  enriched: Boolean(!matched.id_scan_hash || !matched.id_scan_value),
                 };
+              }
+
+              // 2b) fuzzy match: exact DOB filter in SQL, then deterministic similarity in app code
+              const scannedParts = splitNamePartsForMatch(
+                `${extracted.firstName} ${extracted.lastName}`.trim()
+              );
+              if (scannedParts) {
+                const candidatesByDob = await client.query<CustomerIdentityRow>(
+                  `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+                   FROM customers
+                   WHERE dob = $1::date
+                   LIMIT 200`,
+                  [dobStr]
+                );
+
+                const scored = candidatesByDob.rows
+                  .map((row) => {
+                    const storedParts = splitNamePartsForMatch(row.name);
+                    if (!storedParts) return null;
+                    const s = scoreNameMatch({
+                      scannedFirst: scannedParts.firstToken,
+                      scannedLast: scannedParts.lastToken,
+                      storedFirst: storedParts.firstToken,
+                      storedLast: storedParts.lastToken,
+                    });
+                    return { row, score: s };
+                  })
+                  .filter((x): x is { row: CustomerIdentityRow; score: { score: number; firstMax: number; lastMax: number } } =>
+                    Boolean(x && passesFuzzyThresholds(x.score))
+                  )
+                  .sort((a, b) => b.score.score - a.score.score);
+
+                if (scored.length === 1) {
+                  const matched = scored[0]!.row;
+                  checkBanned(matched);
+                  await maybeAttachScanIdentifiers({
+                    client,
+                    customerId: matched.id,
+                    existingIdScanHash: matched.id_scan_hash,
+                    existingIdScanValue: matched.id_scan_value,
+                    idScanHash,
+                    idScanValue,
+                  });
+                  return {
+                    result: 'MATCHED' as const,
+                    scanType: 'STATE_ID' as const,
+                    normalizedRawScanText: idScanValue,
+                    idScanHash,
+                    customer: {
+                      id: matched.id,
+                      name: matched.name,
+                      dob: matched.dob ? matched.dob.toISOString().slice(0, 10) : null,
+                      membershipNumber: matched.membership_number,
+                    },
+                    extracted,
+                    enriched: Boolean(!matched.id_scan_hash || !matched.id_scan_value),
+                  };
+                }
+
+                if (scored.length > 1) {
+                  return {
+                    result: 'MULTIPLE_MATCHES' as const,
+                    scanType: 'STATE_ID' as const,
+                    normalizedRawScanText: idScanValue,
+                    idScanHash,
+                    extracted,
+                    candidates: scored.slice(0, 10).map(({ row, score }) => ({
+                      id: row.id,
+                      name: row.name,
+                      dob: row.dob ? row.dob.toISOString().slice(0, 10) : null,
+                      membershipNumber: row.membership_number,
+                      matchScore: score.score,
+                    })),
+                  };
+                }
               }
             }
           }
@@ -1320,6 +1227,84 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             };
           }
 
+          // If customer already has an active (not-ended) visit, block a new lane check-in session.
+          // Renewal/extension must be started explicitly via /start with visitId.
+          if (customerId) {
+            const activeVisit = await client.query<{ id: string }>(
+              `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
+              [customerId]
+            );
+            if (activeVisit.rows.length > 0) {
+              const activeVisitId = activeVisit.rows[0]!.id;
+
+              const activeBlock = await client.query<{
+                starts_at: Date;
+                ends_at: Date;
+                rental_type: string;
+                room_number: string | null;
+                locker_number: string | null;
+              }>(
+                `SELECT cb.starts_at, cb.ends_at, cb.rental_type, r.number as room_number, l.number as locker_number
+                 FROM checkin_blocks cb
+                 LEFT JOIN rooms r ON cb.room_id = r.id
+                 LEFT JOIN lockers l ON cb.locker_id = l.id
+                 WHERE cb.visit_id = $1
+                 ORDER BY cb.ends_at DESC
+                 LIMIT 1`,
+                [activeVisitId]
+              );
+
+              const block = activeBlock.rows[0];
+              const assignedResourceType: 'room' | 'locker' | null = block?.room_number
+                ? 'room'
+                : block?.locker_number
+                  ? 'locker'
+                  : null;
+              const assignedResourceNumber: string | null =
+                block?.room_number ?? block?.locker_number ?? null;
+
+              const waitlistResult = await client.query<{
+                id: string;
+                desired_tier: string;
+                backup_tier: string;
+                status: string;
+              }>(
+                `SELECT id, desired_tier, backup_tier, status
+                 FROM waitlist
+                 WHERE visit_id = $1 AND status IN ('ACTIVE', 'OFFERED')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [activeVisitId]
+              );
+              const wl = waitlistResult.rows[0];
+
+              throw {
+                statusCode: 409,
+                code: 'ALREADY_CHECKED_IN',
+                message: 'Customer is currently checked in',
+                activeCheckin: {
+                  visitId: activeVisitId,
+                  rentalType: block?.rental_type ?? null,
+                  assignedResourceType,
+                  assignedResourceNumber,
+                  checkinAt: block?.starts_at ? block.starts_at.toISOString() : null,
+                  checkoutAt: block?.ends_at ? block.ends_at.toISOString() : null,
+                  overdue: block?.ends_at ? block.ends_at.getTime() < Date.now() : null,
+                  waitlist: wl
+                    ? {
+                        id: wl.id,
+                        desiredTier: wl.desired_tier,
+                        backupTier: wl.backup_tier,
+                        status: wl.status,
+                      }
+                    : null,
+                },
+              };
+            }
+          }
+
+          const computedMode: 'INITIAL' | 'RENEWAL' = 'INITIAL';
+
           // Determine allowed rentals (no membership yet, so just basic options)
           const allowedRentals = getAllowedRentals(null);
 
@@ -1342,11 +1327,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                  customer_display_name = $2,
                  status = 'ACTIVE',
                  staff_id = $3,
-                 checkin_mode = COALESCE(checkin_mode, 'INITIAL'),
+                 checkin_mode = $4,
                  updated_at = NOW()
-             WHERE id = $4
+             WHERE id = $5
              RETURNING *`,
-              [customerId, customerName, staffId, existingSession.rows[0]!.id]
+              [customerId, customerName, staffId, computedMode, existingSession.rows[0]!.id]
             );
             session = updateResult.rows[0]!;
           } else {
@@ -1354,9 +1339,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             const newSessionResult = await client.query<LaneSessionRow>(
               `INSERT INTO lane_sessions 
              (lane_id, status, staff_id, customer_id, customer_display_name, checkin_mode)
-             VALUES ($1, 'ACTIVE', $2, $3, $4, 'INITIAL')
+             VALUES ($1, 'ACTIVE', $2, $3, $4, $5)
              RETURNING *`,
-              [laneId, staffId, customerId, customerName]
+              [laneId, staffId, customerId, customerName, computedMode]
             );
             session = newSessionResult.rows[0]!;
           }
@@ -1392,7 +1377,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             customerId: session.customer_id,
             customerName: session.customer_display_name,
             allowedRentals,
-            mode: session.checkin_mode || 'INITIAL',
+            mode: computedMode,
             pastDueBalance,
             pastDueBlocked,
             customerNotes,
@@ -1413,7 +1398,13 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (error && typeof error === 'object' && 'statusCode' in error) {
           const statusCode = (error as { statusCode: number }).statusCode;
           const message = (error as { message?: string }).message;
-          return reply.status(statusCode).send({ error: message ?? 'Failed to scan ID' });
+          const code = (error as { code?: unknown }).code;
+          const activeCheckin = (error as { activeCheckin?: unknown }).activeCheckin;
+          return reply.status(statusCode).send({
+            error: message ?? 'Failed to scan ID',
+            code: typeof code === 'string' ? code : undefined,
+            activeCheckin: activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
+          });
         }
         return reply.status(500).send({ error: 'Internal server error' });
       }
@@ -1525,7 +1516,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/checkin/lane/:laneId/propose-selection',
     {
-      preHandler: [optionalAuth],
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
     },
     async (request, reply) => {
       const { laneId } = request.params;
@@ -2009,6 +2000,33 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               };
             }
 
+            // Also prevent "double selection" across lane sessions (we only persist the selection on lane_sessions
+            // until agreement signing completes; treat that selection as a reservation).
+            const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+              `SELECT id, lane_id
+               FROM lane_sessions
+               WHERE id <> $1
+                 AND assigned_resource_type = 'room'
+                 AND assigned_resource_id = $2
+                 AND status = ANY (
+                   ARRAY[
+                     'ACTIVE'::public.lane_session_status,
+                     'AWAITING_CUSTOMER'::public.lane_session_status,
+                     'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                     'AWAITING_PAYMENT'::public.lane_session_status,
+                     'AWAITING_SIGNATURE'::public.lane_session_status
+                   ]
+                 )
+               LIMIT 1`,
+              [session.id, resourceId]
+            );
+            if (selectedByOther.rows.length > 0) {
+              throw {
+                statusCode: 409,
+                message: `Room ${room.number} is already selected by another lane session (race condition)`,
+              };
+            }
+
             // Verify tier matches desired rental type
             const roomTier = getRoomTier(room.number);
             const desiredType = session.desired_rental_type || session.backup_rental_type;
@@ -2025,17 +2043,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             );
 
             // Log audit
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'ASSIGN', 'room', $2, $3, $4)`,
-              [
-                staffId,
-                resourceId,
-                JSON.stringify({ assigned_to_customer_id: null }),
-                JSON.stringify({ selected_for_session_id: session.id }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'ASSIGN',
+              entityType: 'room',
+              entityId: resourceId,
+              oldValue: { assigned_to_customer_id: null },
+              newValue: { selected_for_session_id: session.id },
+            });
 
             // Broadcast assignment created
             const assignmentPayload: AssignmentCreatedPayload = {
@@ -2089,6 +2104,32 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               };
             }
 
+            // Prevent "double selection" across lane sessions (treat lane_sessions selection as reservation).
+            const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+              `SELECT id, lane_id
+               FROM lane_sessions
+               WHERE id <> $1
+                 AND assigned_resource_type = 'locker'
+                 AND assigned_resource_id = $2
+                 AND status = ANY (
+                   ARRAY[
+                     'ACTIVE'::public.lane_session_status,
+                     'AWAITING_CUSTOMER'::public.lane_session_status,
+                     'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                     'AWAITING_PAYMENT'::public.lane_session_status,
+                     'AWAITING_SIGNATURE'::public.lane_session_status
+                   ]
+                 )
+               LIMIT 1`,
+              [session.id, resourceId]
+            );
+            if (selectedByOther.rows.length > 0) {
+              throw {
+                statusCode: 409,
+                message: `Locker ${locker.number} is already selected by another lane session (race condition)`,
+              };
+            }
+
             // Record selected resource on session (actual inventory assignment happens after agreement signing)
             await client.query(
               `UPDATE lane_sessions
@@ -2100,17 +2141,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             );
 
             // Log audit
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'ASSIGN', 'locker', $2, $3, $4)`,
-              [
-                staffId,
-                resourceId,
-                JSON.stringify({ assigned_to_customer_id: null }),
-                JSON.stringify({ selected_for_session_id: session.id }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'ASSIGN',
+              entityType: 'locker',
+              entityId: resourceId,
+              oldValue: { assigned_to_customer_id: null },
+              newValue: { selected_for_session_id: session.id },
+            });
 
             // Broadcast assignment created
             const assignmentPayload: AssignmentCreatedPayload = {
@@ -2415,45 +2453,36 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           if (paymentType === 'UPGRADE' && quote.waitlistId) {
             // Import upgrade completion function (will be called via API)
             // For now, log that upgrade payment is ready
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'UPGRADE_PAID', 'payment_intent', $2, $3, $4)`,
-              [
-                staffId,
-                id,
-                JSON.stringify({ status: 'DUE' }),
-                JSON.stringify({ status: 'PAID', waitlistId: quote.waitlistId }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'UPGRADE_PAID',
+              entityType: 'payment_intent',
+              entityId: id,
+              oldValue: { status: 'DUE' },
+              newValue: { status: 'PAID', waitlistId: quote.waitlistId },
+            });
             // Note: Actual upgrade completion should be called via /v1/upgrades/complete
           }
           // Handle final extension payment completion
           else if (paymentType === 'FINAL_EXTENSION' && quote.visitId && quote.blockId) {
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'FINAL_EXTENSION_PAID', 'payment_intent', $2, $3, $4)`,
-              [
-                staffId,
-                id,
-                JSON.stringify({ status: 'DUE' }),
-                JSON.stringify({ status: 'PAID', visitId: quote.visitId, blockId: quote.blockId }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'FINAL_EXTENSION_PAID',
+              entityType: 'payment_intent',
+              entityId: id,
+              oldValue: { status: 'DUE' },
+              newValue: { status: 'PAID', visitId: quote.visitId, blockId: quote.blockId },
+            });
 
             // Mark final extension as completed
-            await client.query(
-              `INSERT INTO audit_log 
-             (staff_id, action, entity_type, entity_id, old_value, new_value)
-             VALUES ($1, 'FINAL_EXTENSION_COMPLETED', 'visit', $2, $3, $4)`,
-              [
-                staffId,
-                quote.visitId,
-                JSON.stringify({ paymentIntentId: id, status: 'DUE' }),
-                JSON.stringify({ paymentIntentId: id, status: 'PAID', blockId: quote.blockId }),
-              ]
-            );
+            await insertAuditLog(client, {
+              staffId,
+              action: 'FINAL_EXTENSION_COMPLETED',
+              entityType: 'visit',
+              entityId: quote.visitId,
+              oldValue: { paymentIntentId: id, status: 'DUE' },
+              newValue: { paymentIntentId: id, status: 'PAID', blockId: quote.blockId },
+            });
           }
           // Handle regular check-in payment
           else {
@@ -2500,7 +2529,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           );
         }
 
-        const { laneSessionToBroadcast: _laneSessionToBroadcast, ...apiResult } = result;
+        const { laneSessionToBroadcast, ...apiResult } = result;
+        void laneSessionToBroadcast;
         return reply.send(apiResult);
       } catch (error: unknown) {
         request.log.error(error, 'Failed to mark payment as paid');
@@ -2530,7 +2560,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/checkin/lane/:laneId/sign-agreement',
     {
-      preHandler: [optionalAuth],
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
     },
     async (request, reply) => {
       const { laneId } = request.params;
@@ -2598,18 +2628,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             };
           }
 
-          // Get customer info for PDF
+          // Get customer identity info for PDF + signature snapshot
           const customerResult = session.customer_id
-            ? await client.query<CustomerRow>(
-                `SELECT name, membership_number FROM customers WHERE id = $1`,
-                [session.customer_id]
-              )
-            : { rows: [] };
+            ? await client.query<{
+                name: string;
+                dob: Date | string | null;
+                membership_number: string | null;
+                primary_language: string | null;
+              }>(`SELECT name, dob, membership_number, primary_language FROM customers WHERE id = $1`, [
+                session.customer_id,
+              ])
+            : { rows: [] as Array<{ name: string; dob: Date | string | null; membership_number: string | null; primary_language: string | null }> };
 
-          const customerName =
-            customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
-          const membershipNumber =
-            customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const customerName = customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
+          const customerDob = customerResult.rows[0]?.dob ?? null;
+          const membershipNumber = customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const customerLang = customerResult.rows[0]?.primary_language === 'ES' ? 'ES' : 'EN';
 
           // Get active agreement text
           const agreementResult = await client.query<{
@@ -2637,18 +2671,25 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           const signedAt = new Date();
+          const checkinAt = signedAt; // demo flow uses "now" for check-in start; keep PDF consistent with stored block.starts_at
+
+          const agreementTextSnapshot =
+            customerLang === 'ES' ? AGREEMENT_LEGAL_BODY_HTML_BY_LANG.ES : agreement.body_text;
+          const agreementTitleForPdf = customerLang === 'ES' ? 'Acuerdo del Club' : agreement.title;
 
           // Generate PDF (robust pdf-lib)
           let pdfBuffer: Buffer;
           try {
             pdfBuffer = await generateAgreementPdf({
-              agreementTitle: agreement.title,
+              agreementTitle: agreementTitleForPdf,
               agreementVersion: agreement.version,
+              agreementText: agreementTextSnapshot,
               customerName,
+              customerDob,
               membershipNumber,
-              agreementText: agreement.body_text,
-              signatureImageBase64: signatureData,
+              checkinAt,
               signedAt,
+              signatureImageBase64: signatureData,
             });
           } catch (e) {
             request.log.warn(
@@ -2690,6 +2731,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   message: `Selected room ${room.number} is no longer available`,
                 };
               }
+              // Ensure another active lane session did not also "select" this room.
+              const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+                `SELECT id, lane_id
+                 FROM lane_sessions
+                 WHERE id <> $1
+                   AND assigned_resource_type = 'room'
+                   AND assigned_resource_id = $2
+                   AND status = ANY (
+                     ARRAY[
+                       'ACTIVE'::public.lane_session_status,
+                       'AWAITING_CUSTOMER'::public.lane_session_status,
+                       'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                       'AWAITING_PAYMENT'::public.lane_session_status,
+                       'AWAITING_SIGNATURE'::public.lane_session_status
+                     ]
+                   )
+                 LIMIT 1`,
+                [session.id, assignedResourceId]
+              );
+              if (selectedByOther.rows.length > 0) {
+                throw {
+                  statusCode: 409,
+                  message: `Selected room ${room.number} is reserved by another lane session`,
+                };
+              }
               assignedResourceNumber = room.number;
             } else {
               const locker = (
@@ -2708,6 +2774,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   message: `Selected locker ${locker.number} is no longer available`,
                 };
               }
+              // Ensure another active lane session did not also "select" this locker.
+              const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+                `SELECT id, lane_id
+                 FROM lane_sessions
+                 WHERE id <> $1
+                   AND assigned_resource_type = 'locker'
+                   AND assigned_resource_id = $2
+                   AND status = ANY (
+                     ARRAY[
+                       'ACTIVE'::public.lane_session_status,
+                       'AWAITING_CUSTOMER'::public.lane_session_status,
+                       'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                       'AWAITING_PAYMENT'::public.lane_session_status,
+                       'AWAITING_SIGNATURE'::public.lane_session_status
+                     ]
+                   )
+                 LIMIT 1`,
+                [session.id, assignedResourceId]
+              );
+              if (selectedByOther.rows.length > 0) {
+                throw {
+                  statusCode: 409,
+                  message: `Selected locker ${locker.number} is reserved by another lane session`,
+                };
+              }
               assignedResourceNumber = locker.number;
             }
           } else {
@@ -2717,6 +2808,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   `SELECT id, number, status, assigned_to_customer_id
                  FROM lockers
                  WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL
+                 -- Exclude lockers "selected" by an active lane session (reservation semantics).
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM lane_sessions ls
+                   WHERE ls.assigned_resource_type = 'locker'
+                     AND ls.assigned_resource_id = lockers.id
+                     AND ls.status = ANY (
+                       ARRAY[
+                         'ACTIVE'::public.lane_session_status,
+                         'AWAITING_CUSTOMER'::public.lane_session_status,
+                         'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                         'AWAITING_PAYMENT'::public.lane_session_status,
+                         'AWAITING_SIGNATURE'::public.lane_session_status
+                       ]
+                     )
+                 )
                  ORDER BY number
                  LIMIT 1
                  FOR UPDATE SKIP LOCKED`
@@ -2796,7 +2903,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             blockType = 'INITIAL';
           }
 
-          const startsAt = new Date(); // demo: now (UTC)
+          const startsAt = checkinAt; // demo: now (consistent with PDF)
           const endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
 
           // Create checkin_block with PDF
@@ -2821,6 +2928,52 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const checkinBlockId = blockResult.rows[0]!.id;
 
+          // If customer elected a waitlist/upgrade path (desired tier + backup tier), persist waitlist entry now.
+          if (session.waitlist_desired_type && session.backup_rental_type) {
+            const waitlistResult = await client.query<{ id: string }>(
+              `INSERT INTO waitlist
+               (visit_id, checkin_block_id, desired_tier, backup_tier, locker_or_room_assigned_initially, status)
+               VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+               RETURNING id`,
+              [
+                visitId,
+                checkinBlockId,
+                session.waitlist_desired_type,
+                session.backup_rental_type,
+                assignedResourceId,
+              ]
+            );
+            const waitlistId = waitlistResult.rows[0]!.id;
+
+            await client.query(`UPDATE checkin_blocks SET waitlist_id = $1 WHERE id = $2`, [
+              waitlistId,
+              checkinBlockId,
+            ]);
+
+            // Broadcast waitlist update (employee register will refetch list)
+            fastify.broadcaster.broadcast({
+              type: 'WAITLIST_UPDATED',
+              payload: {
+                waitlistId,
+                status: 'ACTIVE',
+                visitId,
+                desiredTier: session.waitlist_desired_type,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          // Part A: server-side assertion (same TX) that assignment persisted and the resource
+          // cannot qualify as "available" immediately after successful check-in creation.
+          await assertAssignedResourcePersistedAndUnavailable({
+            client,
+            sessionId: session.id,
+            customerId: session.customer_id,
+            resourceType: assignedResourceType === 'room' ? 'room' : 'locker',
+            resourceId: assignedResourceId,
+            resourceNumber: assignedResourceNumber,
+          });
+
           // Store signature as immutable audit artifact
           await client.query(
             `INSERT INTO agreement_signatures
@@ -2834,12 +2987,29 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               membershipNumber || null,
               signedAt,
               signatureData,
-              agreement.body_text,
+              agreementTextSnapshot,
               agreement.version,
               request.headers['user-agent'] || null,
               request.ip || null,
             ]
           );
+
+          // Auto-archive system late-fee notes after they have been shown on the next visit.
+          // Manual notes (staff-entered) must persist and are never auto-archived.
+          if (session.customer_id) {
+            const notesRes = await client.query<{ notes: string | null }>(
+              `SELECT notes FROM customers WHERE id = $1 LIMIT 1`,
+              [session.customer_id]
+            );
+            const existing = notesRes.rows[0]?.notes ?? null;
+            const cleaned = stripSystemLateFeeNotes(existing);
+            if (cleaned !== existing) {
+              await client.query(`UPDATE customers SET notes = $1, updated_at = NOW() WHERE id = $2`, [
+                cleaned,
+                session.customer_id,
+              ]);
+            }
+          }
 
           // Update session status
           await client.query(
@@ -2865,6 +3035,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           buildFullSessionUpdatedPayload(client, result.sessionId)
         );
         fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+        await broadcastInventoryUpdate(fastify.broadcaster);
 
         return reply.send(result);
       } catch (error: unknown) {
@@ -2963,18 +3134,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             };
           }
 
-          // Get customer info for PDF
+          // Get customer identity info for PDF + signature snapshot
           const customerResult = session.customer_id
-            ? await client.query<CustomerRow>(
-                `SELECT name, membership_number FROM customers WHERE id = $1`,
-                [session.customer_id]
-              )
-            : { rows: [] };
+            ? await client.query<{
+                name: string;
+                dob: Date | string | null;
+                membership_number: string | null;
+                primary_language: string | null;
+              }>(`SELECT name, dob, membership_number, primary_language FROM customers WHERE id = $1`, [
+                session.customer_id,
+              ])
+            : { rows: [] as Array<{ name: string; dob: Date | string | null; membership_number: string | null; primary_language: string | null }> };
 
-          const customerName =
-            customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
-          const membershipNumber =
-            customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const customerName = customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
+          const customerDob = customerResult.rows[0]?.dob ?? null;
+          const membershipNumber = customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const customerLang = customerResult.rows[0]?.primary_language === 'ES' ? 'ES' : 'EN';
 
           // Get active agreement text
           const agreementResult = await client.query<{
@@ -2993,16 +3168,23 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           const agreement = agreementResult.rows[0]!;
 
           const signedAt = new Date();
+          const checkinAt = signedAt;
+
+          const agreementTextSnapshot =
+            customerLang === 'ES' ? AGREEMENT_LEGAL_BODY_HTML_BY_LANG.ES : agreement.body_text;
+          const agreementTitleForPdf = customerLang === 'ES' ? 'Acuerdo del Club' : agreement.title;
 
           // Generate PDF with override text instead of signature image
           let pdfBuffer: Buffer;
           try {
             pdfBuffer = await generateAgreementPdf({
-              agreementTitle: agreement.title,
+              agreementTitle: agreementTitleForPdf,
               agreementVersion: agreement.version,
+              agreementText: agreementTextSnapshot,
               customerName,
+              customerDob,
               membershipNumber,
-              agreementText: agreement.body_text,
+              checkinAt,
               signatureText: 'Manual Signature Override',
               signedAt,
             });
@@ -3039,6 +3221,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   message: `Selected room ${room.number} is no longer available`,
                 };
               }
+              // Ensure another active lane session did not also "select" this room.
+              const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+                `SELECT id, lane_id
+                 FROM lane_sessions
+                 WHERE id <> $1
+                   AND assigned_resource_type = 'room'
+                   AND assigned_resource_id = $2
+                   AND status = ANY (
+                     ARRAY[
+                       'ACTIVE'::public.lane_session_status,
+                       'AWAITING_CUSTOMER'::public.lane_session_status,
+                       'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                       'AWAITING_PAYMENT'::public.lane_session_status,
+                       'AWAITING_SIGNATURE'::public.lane_session_status
+                     ]
+                   )
+                 LIMIT 1`,
+                [session.id, assignedResourceId]
+              );
+              if (selectedByOther.rows.length > 0) {
+                throw {
+                  statusCode: 409,
+                  message: `Selected room ${room.number} is reserved by another lane session`,
+                };
+              }
               assignedResourceNumber = room.number;
             } else {
               const locker = (
@@ -3057,6 +3264,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   message: `Selected locker ${locker.number} is no longer available`,
                 };
               }
+              // Ensure another active lane session did not also "select" this locker.
+              const selectedByOther = await client.query<{ id: string; lane_id: string }>(
+                `SELECT id, lane_id
+                 FROM lane_sessions
+                 WHERE id <> $1
+                   AND assigned_resource_type = 'locker'
+                   AND assigned_resource_id = $2
+                   AND status = ANY (
+                     ARRAY[
+                       'ACTIVE'::public.lane_session_status,
+                       'AWAITING_CUSTOMER'::public.lane_session_status,
+                       'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                       'AWAITING_PAYMENT'::public.lane_session_status,
+                       'AWAITING_SIGNATURE'::public.lane_session_status
+                     ]
+                   )
+                 LIMIT 1`,
+                [session.id, assignedResourceId]
+              );
+              if (selectedByOther.rows.length > 0) {
+                throw {
+                  statusCode: 409,
+                  message: `Selected locker ${locker.number} is reserved by another lane session`,
+                };
+              }
               assignedResourceNumber = locker.number;
             }
           } else {
@@ -3066,6 +3298,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   `SELECT id, number, status, assigned_to_customer_id
                  FROM lockers
                  WHERE status = 'CLEAN' AND assigned_to_customer_id IS NULL
+                 -- Exclude lockers "selected" by an active lane session (reservation semantics).
+                 AND NOT EXISTS (
+                   SELECT 1
+                   FROM lane_sessions ls
+                   WHERE ls.assigned_resource_type = 'locker'
+                     AND ls.assigned_resource_id = lockers.id
+                     AND ls.status = ANY (
+                       ARRAY[
+                         'ACTIVE'::public.lane_session_status,
+                         'AWAITING_CUSTOMER'::public.lane_session_status,
+                         'AWAITING_ASSIGNMENT'::public.lane_session_status,
+                         'AWAITING_PAYMENT'::public.lane_session_status,
+                         'AWAITING_SIGNATURE'::public.lane_session_status
+                       ]
+                     )
+                 )
                  ORDER BY number
                  LIMIT 1
                  FOR UPDATE SKIP LOCKED`
@@ -3167,6 +3415,51 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const blockId = blockResult.rows[0]!.id;
 
+          // If customer elected a waitlist/upgrade path (desired tier + backup tier), persist waitlist entry now.
+          if (session.waitlist_desired_type && session.backup_rental_type) {
+            const waitlistResult = await client.query<{ id: string }>(
+              `INSERT INTO waitlist
+               (visit_id, checkin_block_id, desired_tier, backup_tier, locker_or_room_assigned_initially, status)
+               VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+               RETURNING id`,
+              [
+                visitId,
+                blockId,
+                session.waitlist_desired_type,
+                session.backup_rental_type,
+                assignedResourceId,
+              ]
+            );
+            const waitlistId = waitlistResult.rows[0]!.id;
+
+            await client.query(`UPDATE checkin_blocks SET waitlist_id = $1 WHERE id = $2`, [
+              waitlistId,
+              blockId,
+            ]);
+
+            fastify.broadcaster.broadcast({
+              type: 'WAITLIST_UPDATED',
+              payload: {
+                waitlistId,
+                status: 'ACTIVE',
+                visitId,
+                desiredTier: session.waitlist_desired_type,
+              },
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          // Part A: server-side assertion (same TX) that assignment persisted and the resource
+          // cannot qualify as "available" immediately after successful check-in creation.
+          await assertAssignedResourcePersistedAndUnavailable({
+            client,
+            sessionId: session.id,
+            customerId: session.customer_id,
+            resourceType: assignedResourceType === 'room' ? 'room' : 'locker',
+            resourceId: assignedResourceId,
+            resourceNumber: assignedResourceNumber,
+          });
+
           // Update lane session status to COMPLETED
           await client.query(
             `UPDATE lane_sessions
@@ -3177,23 +3470,22 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           );
 
           // Log audit entry for manual override
-          await client.query(
-            `INSERT INTO audit_logs (staff_id, action, details, created_at)
-           VALUES ($1, 'MANUAL_SIGNATURE_OVERRIDE', $2, NOW())`,
-            [
-              request.staff?.staffId ?? null,
-              JSON.stringify({
-                sessionId: session.id,
-                laneId,
-                customerId: session.customer_id,
-                customerName,
-                blockId,
-                rentalType,
-                assignedResourceType,
-                assignedResourceNumber,
-              }),
-            ]
-          );
+          await insertAuditLog(client, {
+            staffId: request.staff?.staffId ?? null,
+            action: 'OVERRIDE',
+            entityType: 'checkin_block',
+            entityId: blockId,
+            metadata: {
+              overrideType: 'MANUAL_SIGNATURE_OVERRIDE',
+              sessionId: session.id,
+              laneId,
+              customerId: session.customer_id,
+              customerName,
+              rentalType,
+              assignedResourceType,
+              assignedResourceNumber,
+            },
+          });
 
           return {
             success: true,
@@ -3210,6 +3502,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           buildFullSessionUpdatedPayload(client, result.sessionId)
         );
         fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+        await broadcastInventoryUpdate(fastify.broadcaster);
 
         return reply.send(result);
       } catch (error: unknown) {
@@ -3236,7 +3529,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post<{
     Params: { laneId: string };
     Body: { sessionId: string; confirmed: boolean };
-  }>('/v1/checkin/lane/:laneId/customer-confirm', async (request, reply) => {
+  }>(
+    '/v1/checkin/lane/:laneId/customer-confirm',
+    { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
+    async (request, reply) => {
     const { laneId } = request.params;
     const { sessionId, confirmed } = request.body;
 
@@ -3254,14 +3550,46 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         const session = sessionResult.rows[0]!;
 
         if (confirmed) {
-          // Customer confirmed - broadcast confirmation
+          // Customer confirmed - broadcast confirmation.
+          //
+          // IMPORTANT: assigned_resource_id is a UUID. The customer-confirm event payload expects
+          // a human-facing type+number (room tier + room number, or locker number). Do NOT derive
+          // tier/number from the UUID.
+          if (!session.assigned_resource_type || !session.assigned_resource_id) {
+            throw { statusCode: 400, message: 'No assigned resource to confirm' };
+          }
+
+          let confirmedType: string;
+          let confirmedNumber: string;
+
+          if (session.assigned_resource_type === 'room') {
+            const roomRes = await client.query<{ number: string }>(
+              `SELECT number FROM rooms WHERE id = $1 LIMIT 1`,
+              [session.assigned_resource_id]
+            );
+            if (roomRes.rows.length === 0) {
+              throw { statusCode: 404, message: 'Assigned room not found' };
+            }
+            confirmedNumber = roomRes.rows[0]!.number;
+            confirmedType = getRoomTier(confirmedNumber);
+          } else if (session.assigned_resource_type === 'locker') {
+            const lockerRes = await client.query<{ number: string }>(
+              `SELECT number FROM lockers WHERE id = $1 LIMIT 1`,
+              [session.assigned_resource_id]
+            );
+            if (lockerRes.rows.length === 0) {
+              throw { statusCode: 404, message: 'Assigned locker not found' };
+            }
+            confirmedNumber = lockerRes.rows[0]!.number;
+            confirmedType = 'LOCKER';
+          } else {
+            throw { statusCode: 400, message: 'Invalid assigned resource type' };
+          }
+
           const confirmedPayload: CustomerConfirmedPayload = {
             sessionId: session.id,
-            confirmedType:
-              session.assigned_resource_type === 'room'
-                ? getRoomTier(session.assigned_resource_id || '')
-                : 'LOCKER',
-            confirmedNumber: session.assigned_resource_id || '',
+            confirmedType,
+            confirmedNumber,
           };
           fastify.broadcaster.broadcastCustomerConfirmed(confirmedPayload, laneId);
         } else {
@@ -3269,12 +3597,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           if (session.assigned_resource_id) {
             if (session.assigned_resource_type === 'room') {
               await client.query(
-                `UPDATE rooms SET assigned_to = NULL, updated_at = NOW() WHERE id = $1`,
+                `UPDATE rooms SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
                 [session.assigned_resource_id]
               );
             } else if (session.assigned_resource_type === 'locker') {
               await client.query(
-                `UPDATE lockers SET assigned_to = NULL, updated_at = NOW() WHERE id = $1`,
+                `UPDATE lockers SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
                 [session.assigned_resource_id]
               );
             }
@@ -3309,7 +3637,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         message: 'Failed to process customer confirmation',
       });
     }
-  });
+    }
+  );
 
   /**
    * Complete check-in: create visit, check-in block, and transition resources.
@@ -3414,20 +3743,25 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
     const blockId = blockResult.rows[0]!.id;
 
-    // Transition room/locker to OCCUPIED status
+    // Transition room/locker to OCCUPIED status + persist assignment (server-authoritative)
     if (session.assigned_resource_type === 'room') {
       await client.query(
         `UPDATE rooms 
-         SET status = 'OCCUPIED', last_status_change = NOW(), updated_at = NOW()
-         WHERE id = $1`,
-        [session.assigned_resource_id]
+         SET status = 'OCCUPIED',
+             assigned_to_customer_id = $1,
+             last_status_change = NOW(),
+             updated_at = NOW()
+         WHERE id = $2`,
+        [session.customer_id, session.assigned_resource_id]
       );
     } else if (session.assigned_resource_type === 'locker') {
       await client.query(
         `UPDATE lockers 
-         SET status = 'OCCUPIED', updated_at = NOW()
-         WHERE id = $1`,
-        [session.assigned_resource_id]
+         SET status = 'OCCUPIED',
+             assigned_to_customer_id = $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [session.customer_id, session.assigned_resource_id]
       );
     }
 
@@ -3443,21 +3777,18 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       staffId !== 'system' &&
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(staffId)
     ) {
-      await client.query(
-        `INSERT INTO audit_log 
-         (staff_id, action, entity_type, entity_id, old_value, new_value)
-         VALUES ($1, 'CHECK_IN', 'visit', $2, $3, $4)`,
-        [
-          staffId,
-          visitId,
-          JSON.stringify({}),
-          JSON.stringify({
-            visit_id: visitId,
-            block_id: blockId,
-            resource_type: session.assigned_resource_type,
-          }),
-        ]
-      );
+      await insertAuditLog(client, {
+        staffId,
+        action: 'CHECK_IN',
+        entityType: 'visit',
+        entityId: visitId,
+        oldValue: {},
+        newValue: {
+          visit_id: visitId,
+          block_id: blockId,
+          resource_type: session.assigned_resource_type,
+        },
+      });
     }
 
     // Create waitlist entry if waitlist_desired_type is set
@@ -3484,29 +3815,40 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         blockId,
       ]);
 
-      // Log waitlist created
+      // Log waitlist created (include desired+backup and the assigned resource number for debugging)
       if (
         staffId &&
         staffId !== 'system' &&
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(staffId)
       ) {
-        await client.query(
-          `INSERT INTO audit_log 
-           (staff_id, action, entity_type, entity_id, old_value, new_value)
-           VALUES ($1, 'WAITLIST_CREATED', 'waitlist', $2, $3, $4)`,
-          [
-            staffId,
-            waitlistId,
-            JSON.stringify({}),
-            JSON.stringify({
-              visit_id: visitId,
-              checkin_block_id: blockId,
-              desired_tier: session.waitlist_desired_type,
-              backup_tier: session.backup_rental_type,
-              initial_resource_id: session.assigned_resource_id,
-            }),
-          ]
-        );
+        let assignedResourceNumber: string | null = null;
+        if (session.assigned_resource_type === 'room') {
+          const r = await client.query<{ number: string }>(`SELECT number FROM rooms WHERE id = $1`, [
+            session.assigned_resource_id,
+          ]);
+          assignedResourceNumber = r.rows[0]?.number ?? null;
+        } else if (session.assigned_resource_type === 'locker') {
+          const l = await client.query<{ number: string }>(`SELECT number FROM lockers WHERE id = $1`, [
+            session.assigned_resource_id,
+          ]);
+          assignedResourceNumber = l.rows[0]?.number ?? null;
+        }
+
+        await insertAuditLog(client, {
+          staffId,
+          action: 'WAITLIST_CREATED',
+          entityType: 'waitlist',
+          entityId: waitlistId,
+          oldValue: {},
+          newValue: {
+            visit_id: visitId,
+            checkin_block_id: blockId,
+            desired_tier: session.waitlist_desired_type,
+            backup_tier: session.backup_rental_type,
+            initial_resource_id: session.assigned_resource_id,
+            initial_resource_number: assignedResourceNumber,
+          },
+        });
       }
 
       // Broadcast waitlist update
@@ -3894,7 +4236,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post<{
     Params: { laneId: string };
     Body: { language: 'EN' | 'ES'; sessionId?: string; customerName?: string };
-  }>('/v1/checkin/lane/:laneId/set-language', async (request, reply) => {
+  }>(
+    '/v1/checkin/lane/:laneId/set-language',
+    { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
+    async (request, reply) => {
     const { laneId } = request.params;
     const { language, sessionId, customerName } = request.body;
 
@@ -3915,7 +4260,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         message: 'Failed to set language',
       });
     }
-  });
+    }
+  );
 
   /**
    * POST /v1/checkin/lane/:laneId/membership-purchase-intent
@@ -3930,16 +4276,16 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{
     Params: { laneId: string };
-    Body: { intent: 'PURCHASE' | 'RENEW'; sessionId?: string };
+    Body: { intent: 'PURCHASE' | 'RENEW' | 'NONE'; sessionId?: string };
   }>(
     '/v1/checkin/lane/:laneId/membership-purchase-intent',
     {
-      preHandler: [optionalAuth],
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
     },
     async (request, reply) => {
       const { laneId } = request.params;
       const bodySchema = z.object({
-        intent: z.enum(['PURCHASE', 'RENEW']),
+        intent: z.enum(['PURCHASE', 'RENEW', 'NONE']),
         sessionId: z.string().uuid().optional(),
       });
       const parsed = bodySchema.safeParse(request.body);
@@ -3976,15 +4322,17 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           // Persist membership purchase intent on lane session.
+          const intentValue: 'PURCHASE' | 'RENEW' | null = intent === 'NONE' ? null : intent;
+          const requestedAt = intent === 'NONE' ? null : new Date();
           const updatedSession = (
             await client.query<LaneSessionRow>(
               `UPDATE lane_sessions
                SET membership_purchase_intent = $1,
-                   membership_purchase_requested_at = NOW(),
+                   membership_purchase_requested_at = $2,
                    updated_at = NOW()
-               WHERE id = $2
+               WHERE id = $3
                RETURNING *`,
-              [intent, session.id]
+              [intentValue, requestedAt, session.id]
             )
           ).rows[0]!;
 
@@ -4019,7 +4367,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 checkInTime: new Date(),
                 membershipCardType,
                 membershipValidUntil,
-                includeSixMonthMembershipPurchase: true,
+                includeSixMonthMembershipPurchase: intent !== 'NONE',
               };
 
               const quote = calculatePriceQuote(pricingInput);
@@ -4063,6 +4411,175 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(500).send({
           error: 'Internal Server Error',
           message: 'Failed to set membership purchase intent',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/checkin/lane/:laneId/highlight-option
+   *
+   * Ephemeral (non-persisted) kiosk UI highlight for employee "pending" selections
+   * during the LANGUAGE and MEMBERSHIP steps.
+   *
+   * Security: requireAuth (staff only).
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { step: 'LANGUAGE' | 'MEMBERSHIP'; option: string | null; sessionId?: string };
+  }>(
+    '/v1/checkin/lane/:laneId/highlight-option',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+      const { laneId } = request.params;
+
+      const bodySchema = z.object({
+        step: z.enum(['LANGUAGE', 'MEMBERSHIP']),
+        option: z.string().min(1).nullable(),
+        sessionId: z.string().uuid().optional(),
+      });
+      const parsed = bodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' });
+      }
+      const { step, option, sessionId } = parsed.data;
+
+      try {
+        const resolved = await transaction(async (client) => {
+          const sessionResult = sessionId
+            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
+                sessionId,
+              ])
+            : await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE lane_id = $1
+                   AND status IN ('ACTIVE', 'AWAITING_CUSTOMER', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [laneId]
+              );
+
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'No active session found' };
+          }
+
+          const session = sessionResult.rows[0]!;
+          return { laneId: session.lane_id || laneId, sessionId: session.id };
+        });
+
+        const payload: CheckinOptionHighlightedPayload = {
+          sessionId: resolved.sessionId,
+          step,
+          option,
+          by: 'EMPLOYEE',
+        };
+
+        fastify.broadcaster.broadcastToLane(
+          { type: 'CHECKIN_OPTION_HIGHLIGHTED', payload, timestamp: new Date().toISOString() },
+          resolved.laneId
+        );
+
+        return reply.send({ success: true });
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to highlight option');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to highlight option',
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to highlight option',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/checkin/lane/:laneId/membership-choice
+   *
+   * Persist the kiosk "membership step" choice (ONE_TIME vs SIX_MONTH) on the lane session
+   * so employee-register can mirror the kiosk step-by-step reliably.
+   *
+   * Security: optionalAuth (kiosk does not have staff token).
+   *
+   * Notes:
+   * - This does NOT change pricing logic directly.
+   * - SIX_MONTH is usually set automatically via /membership-purchase-intent.
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { choice: 'ONE_TIME' | 'NONE' | 'SIX_MONTH'; sessionId?: string };
+  }>(
+    '/v1/checkin/lane/:laneId/membership-choice',
+    { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
+    async (request, reply) => {
+      const { laneId } = request.params;
+      const bodySchema = z.object({
+        choice: z.enum(['ONE_TIME', 'SIX_MONTH', 'NONE']),
+        sessionId: z.string().uuid().optional(),
+      });
+      const parsed = bodySchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' });
+      }
+      const { choice, sessionId } = parsed.data;
+
+      try {
+        const result = await transaction(async (client) => {
+          const sessionResult = sessionId
+            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
+                sessionId,
+              ])
+            : await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE lane_id = $1
+                   AND status IN ('ACTIVE', 'AWAITING_CUSTOMER', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [laneId]
+              );
+
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'No active session found' };
+          }
+
+          const session = sessionResult.rows[0]!;
+          const resolvedLaneId = session.lane_id || laneId;
+
+          const value: 'ONE_TIME' | 'SIX_MONTH' | null =
+            choice === 'NONE' ? null : (choice as 'ONE_TIME' | 'SIX_MONTH');
+
+          await client.query(
+            `UPDATE lane_sessions
+             SET membership_choice = $1,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [value, session.id]
+          );
+
+          return { sessionId: session.id, laneId: resolvedLaneId };
+        });
+
+        const { payload } = await transaction((client) =>
+          buildFullSessionUpdatedPayload(client, result.sessionId)
+        );
+        fastify.broadcaster.broadcastSessionUpdated(payload, result.laneId || laneId);
+
+        return reply.send({ success: true });
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to set membership choice');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to set membership choice',
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to set membership choice',
         });
       }
     }
@@ -4561,7 +5078,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
   }>(
     '/v1/checkin/lane/:laneId/kiosk-ack',
     {
-      preHandler: [optionalAuth],
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
     },
     async (request, reply) => {
       const { laneId } = request.params;

@@ -17,6 +17,236 @@
   --er-border: rgba(255, 255, 255, 0.14);
   --er-text: rgba(255, 255, 255, 0.92);
   --er-text-muted: rgba(255, 255, 255, 0.72);
+
+  /* Employee Register: keep typography close to baseline liquid-glass defaults */
+  --er-text-downshift: 0px;
+  --er-text-upshift: 0px;
+  --er-search-text-downshift: 0px;
+
+  /* Employee Register: consistent control sizes (slightly larger than inventory card text) */
+  --er-font-btn: 18px;
+  --er-font-label: 16px;
+  --er-font-input: 18px;
+  --er-font-help: 14px;
+  --er-font-icon: 22px;
+
+  /* Employee Register: edge safe area to avoid drawer tab overlap */
+  --er-edge-safe: 0px;
+  --er-drawer-tab-width: 54px;
+  /* Main content gutter (header + right panel content). */
+  --er-body-gutter: 1rem;
+  /* Left edge should be flush so the left tabs can hit the screen edge. */
+  --er-left-safe: 0px;
+  --er-right-safe: 0.75rem;
+
+  /* Fixed top bar (employee + register number) */
+  --er-topbar-height: 60px;
+  /* Minimum breathing room between toolbar/content and content/bottom edge */
+  --er-viewport-gap: 16px;
+  /* Small inset so tabs/rails don't touch the toolbar or bottom edge */
+  --er-rail-gap: 12px;
+  /* Left home rail width (fixed-position, like right drawer tabs) */
+  --er-home-rail-width: 210px;
+  /* Space between left rail buttons and the right-side card content */
+  --er-home-content-gap: 16px;
+}
+
+/* ------------------------------------------------------------
+   Employee Register ONLY: Tablet usability tweaks (runtime-gated)
+
+   We add `.er-ui-tweaks` to `#root` only after measuring baseline
+   computed font sizes (see `useEmployeeRegisterTabletUiTweaks`).
+------------------------------------------------------------ */
+
+.er-ui-tweaks {
+  /* Keep app text consistent; buttons/inputs override explicitly below. */
+  font-size: 1rem;
+}
+
+.er-ui-tweaks .cs-liquid-button {
+  font-size: var(--er-font-btn) !important;
+  line-height: 1.15 !important;
+  padding: 0.7rem 1rem !important;
+  min-height: 56px !important;
+  white-space: nowrap;
+  gap: 0.65rem !important;
+}
+
+.er-ui-tweaks .cs-liquid-button.cs-liquid-button--secondary {
+  font-size: var(--er-font-btn) !important;
+}
+
+.er-ui-tweaks label {
+  font-size: var(--er-font-label) !important;
+  line-height: 1.2 !important;
+}
+
+/* Search Customer bar text: input + helper text */
+.er-ui-tweaks #customer-search {
+  font-size: var(--er-font-input) !important;
+  line-height: 1.2 !important;
+  padding: 0.75rem 1rem !important;
+}
+
+.er-ui-tweaks .typeahead-section span {
+  line-height: 1.2;
+}
+
+/* Search helper text is treated as part of "Search Customer bar text" */
+.er-ui-tweaks .er-search-help {
+  font-size: var(--er-font-help) !important;
+}
+
+/* Action buttons (icon + label) */
+.er-ui-tweaks .action-buttons {
+  /* Prevent long single-line labels from wrapping by giving more room */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.er-ui-tweaks .action-btn {
+  /* Uses column layout; keep text on one line */
+  white-space: nowrap;
+  font-size: var(--er-font-btn) !important;
+  padding: 1.5rem !important;
+  gap: 0.75rem !important;
+}
+
+.er-ui-tweaks .btn-icon {
+  font-size: var(--er-font-icon) !important;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.er-ui-tweaks .cs-liquid-button svg {
+  width: 1.35em;
+  height: 1.35em;
+}
+
+/* Search Customer bar: exactly 50% baseline width, centered (measurement clone) */
+.er-search-half {
+  position: relative;
+  width: 100%;
+}
+
+.er-search-half__measure {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.er-search-half__center {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* Required tender outcome modal (replaces bottom toolbar) */
+.er-required-modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.er-required-modal {
+  width: min(720px, 92vw);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.er-required-modal__title {
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  font-size: 1.6rem;
+}
+
+.er-required-modal__subtitle {
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.er-required-modal__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.er-required-modal__continue {
+  width: 100%;
+}
+
+/* Transaction completion modal (replaces fixed bottom bar) */
+@keyframes erTxnCompleteOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes erTxnCompleteModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.er-txn-complete-modal__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1800; /* below ModalFrame(2000), above main UI */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: erTxnCompleteOverlayIn 180ms ease-out;
+}
+
+.er-txn-complete-modal {
+  width: min(760px, 94vw);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: erTxnCompleteModalIn 220ms var(--cs-ease-decelerate, ease-out);
+}
+
+.er-txn-complete-modal__title {
+  font-weight: 950;
+  letter-spacing: 0.01em;
+  font-size: 1.7rem;
+  text-align: center;
+}
+
+.er-txn-complete-modal__notice,
+.er-txn-complete-modal__assignment {
+  padding: 14px;
+  border-radius: 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.er-txn-complete-modal__verify,
+.er-txn-complete-modal__complete {
+  width: 100%;
 }
 
 .er-surface {
@@ -45,24 +275,77 @@
   color: var(--er-text-muted);
 }
 
-/* Solid black background with very dark overlay */
+/* ------------------------------------------------------------
+   Employee Register: text utilities (avoid inline fontSize)
+------------------------------------------------------------ */
+
+.er-text-xs {
+  font-size: 12px;
+}
+
+.er-text-sm {
+  font-size: 14px;
+}
+
+.er-text-md {
+  font-size: 16px;
+}
+
+.er-text-lg {
+  font-size: 18px;
+}
+
+.er-text-xl {
+  font-size: 20px;
+}
+
+.er-text-2xl {
+  font-size: 26px;
+}
+
+.er-header-action-btn {
+  /* Ensure Sign Out + Close Out match exactly (size/shape), only color differs by variant */
+  padding: 0.45rem 0.85rem;
+  min-height: 44px;
+  font-weight: 800;
+  border-radius: 9999px;
+}
+
+.er-ui-tweaks .er-header-action-btn {
+  /* Header is a toolbar cluster: keep both buttons the same text size regardless of variant class. */
+  font-size: var(--er-font-btn) !important;
+  line-height: 1.1 !important;
+}
+
+/* Background: let the Blink bridge/theme decide the base color */
 body {
-  background-image: url('./assets/background.png');
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-color: #000000;
+  background-color: var(--bg);
   position: relative;
 }
 
+/* Prevent page scroll (internal panels may scroll as needed) */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Fixed background image layer (keeps background still while UI scrolls) */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  /* Let the background photo read while still keeping a dark, high-contrast UI */
-  background: rgba(0, 0, 0, 0.62);
+  background-image: url('./assets/background.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   z-index: 0;
   pointer-events: none;
+}
+
+/* Background overlay removed per UX request (keep only the photo). */
+body::after {
+  content: none;
 }
 
 /* Ensure app content always renders above the fixed overlay */
@@ -73,13 +356,106 @@ body::before {
 }
 
 .container {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 1.5rem;
+  /* Let internal panels control scrolling; keep the overall app pinned to the viewport. */
+  padding: 0 var(--er-right-safe) 0 var(--er-left-safe);
   background: transparent;
   position: relative;
   z-index: 1;
+  overflow: hidden;
+}
+
+.er-search-section-half {
+  width: min(50%, 840px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 900px) {
+  .er-search-section-half {
+    width: 100%;
+  }
+}
+
+.er-search-help {
+  color: #94a3b8;
+  font-size: 0.875rem;
+}
+
+/* Local button variants missing from shared stylesheet */
+.cs-liquid-button--warning {
+  background: color-mix(in oklch, var(--color-warning) 16%, transparent);
+  border-color: color-mix(in oklch, var(--color-warning) 60%, transparent);
+}
+.cs-liquid-button--warning:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-warning) 28%, transparent);
+}
+
+.cs-liquid-button--success {
+  background: color-mix(in oklch, var(--color-success) 16%, transparent);
+  border-color: color-mix(in oklch, var(--color-success) 60%, transparent);
+}
+.cs-liquid-button--success:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-success) 28%, transparent);
+}
+
+/* Inventory cards (rooms/lockers) */
+.er-inv-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 150ms ease, filter 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.er-inv-item--highlight {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
+}
+
+.er-inv-item:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.er-inv-item:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.er-inv-item--selected {
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 2px rgba(96, 165, 250, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.er-inv-item--warning {
+  border-color: rgba(245, 158, 11, 0.70);
+  background: linear-gradient(145deg, rgba(245, 158, 11, 0.18), rgba(255, 255, 255, 0.06));
+}
+
+.er-inv-item--danger {
+  border-color: rgba(239, 68, 68, 0.70);
+  background: linear-gradient(145deg, rgba(239, 68, 68, 0.18), rgba(255, 255, 255, 0.06));
+}
+
+.er-inv-item--waitlist {
+  border-color: rgba(245, 158, 11, 0.70);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 2px rgba(245, 158, 11, 0.20),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.er-inv-meta {
+  color: rgba(148, 163, 184, 0.95);
 }
 
 .header {
@@ -89,6 +465,14 @@ body::before {
   margin-bottom: 2rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid var(--border);
+}
+
+/* Second bar (Employee Register + Sign Out/Close Out): centered with small gutters */
+.header.er-surface-strong {
+  margin-left: var(--er-body-gutter);
+  margin-right: var(--er-body-gutter);
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
 }
 
 .header.er-surface-strong {
@@ -107,28 +491,128 @@ body::before {
   gap: 0.75rem;
 }
 
-.badge {
-  padding: 0.375rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.badge-success {
-  background: rgba(34, 197, 94, 0.2);
-  color: var(--success);
-}
-
-.badge-error {
-  background: rgba(239, 68, 68, 0.2);
-  color: var(--error);
-}
-
 .main {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2rem;
+  min-height: 0;
+  overflow: hidden;
+  padding-left: var(--er-body-gutter);
+  padding-right: var(--er-body-gutter);
+  /* Guarantee at least 5px between toolbar and the top of the active card,
+     and at least 5px between the bottom of the active card and the viewport bottom. */
+  padding-top: var(--er-viewport-gap);
+  padding-bottom: var(--er-viewport-gap);
+}
+
+/* Make the home actions area occupy the remaining height so the left rail is height-stable
+   (Clear Session stays pinned to the bottom regardless of right-panel content height). */
+.actions-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.actions-panel > .er-home-layout {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------
+   Home actions (left tabs + right panel)
+------------------------------------------------------------ */
+
+.er-home-layout {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+.er-home-tabs {
+  /* Fixed-position left rail (behaves like the right drawer tabs) */
+  position: fixed;
+  left: 0;
+  top: calc(var(--er-topbar-height) + var(--er-viewport-gap));
+  bottom: var(--er-viewport-gap);
+  width: var(--er-home-rail-width);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+
+  padding: 0.5rem 0;
+  z-index: 90; /* under .register-top-bar (100), above main content */
+  pointer-events: auto;
+}
+
+.er-home-tab-btn {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  /* Slightly shorter so all tabs fit on landscape iPad */
+  padding: 0.9rem 1.05rem !important;
+  min-height: 64px !important;
+  font-weight: 800;
+  border-radius: 0 9999px 9999px 0;
+}
+
+.er-home-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+
+  /* Keep content fully visible to the right of the fixed rail,
+     with a gutter that matches the right edge gutter. */
+  margin-left: var(--er-home-rail-width);
+  padding-left: var(--er-home-content-gap);
+  padding-right: var(--er-home-content-gap);
+}
+
+/* Standardized right-panel "main card" padding across all home tabs. */
+.er-main-panel-card {
+  padding: 1rem;
+}
+
+.er-home-tab-btn--checkout {
+  font-size: 22px !important;
+  letter-spacing: 0.01em;
+}
+
+/* Right-panel panels: always fill available height.
+   - Center vertically when short
+   - Scroll internally when long */
+.er-home-panel {
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.er-home-panel--center {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.er-home-panel--top {
+  justify-content: flex-start;
+  align-items: stretch;
+  text-align: left;
+}
+
+.er-home-panel--no-scroll {
+  overflow: hidden;
 }
 
 .inventory-panel h2,
@@ -216,9 +700,9 @@ body::before {
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
-  padding: 1.5rem;
+  padding: 1.25rem;
   color: var(--text);
-  font-size: 0.875rem;
+  font-size: 0.825rem;
   font-weight: 600;
   cursor: pointer;
   transition: transform var(--cs-transition-base) var(--cs-ease-standard);
@@ -229,7 +713,13 @@ body::before {
 }
 
 .btn-icon {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
+}
+
+/* Top action buttons: same size as Lane Session buttons, but not inside a bar/card */
+.register-top-actions {
+  margin-top: 0.75rem;
+  margin-bottom: 1rem; /* keep symmetric spacing around the Lane Session header */
 }
 
 .footer {
@@ -434,137 +924,54 @@ body::before {
   color: var(--text-muted) !important;
 }
 
-/* Full-screen Scan Mode (keyboard-wedge scanner) */
-.scan-mode-overlay {
+@keyframes erSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Passive scan processing feedback (home screen scanning) */
+.er-scan-processing-overlay {
   position: fixed;
   inset: 0;
   z-index: 10000;
-  background: rgba(2, 6, 23, 0.96);
-  color: var(--text);
-  display: flex;
-  flex-direction: column;
-}
-
-.scan-mode-topbar {
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.92);
-}
-
-.scan-mode-title {
-  font-weight: 800;
-  letter-spacing: 0.02em;
-}
-
-.scan-mode-spacer {
-  width: 120px;
-}
-
-.scan-mode-cancel {
-  width: 120px;
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.scan-mode-exit {
-  width: 120px;
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.scan-mode-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem 1rem;
-  gap: 2rem;
-}
-
-.scan-mode-reticle {
-  width: min(720px, 92vw);
-  height: min(360px, 40vh);
-  border-radius: 20px;
-  border: 2px solid rgba(59, 130, 246, 0.6);
-  box-shadow:
-    0 0 0 6px rgba(59, 130, 246, 0.12),
-    0 20px 60px rgba(0, 0, 0, 0.55);
-  position: relative;
-}
-
-.scan-mode-reticle-inner {
-  position: absolute;
-  inset: 14px;
-  border-radius: 14px;
-  border: 1px dashed rgba(148, 163, 184, 0.35);
-}
-
-.scan-mode-status {
-  text-align: center;
-  max-width: 720px;
-}
-
-.scan-mode-status-text {
-  font-size: 2rem;
-  font-weight: 900;
-}
-
-.scan-mode-message {
-  margin-top: 0.75rem;
-  font-size: 1rem;
-  color: rgba(226, 232, 240, 0.9);
-}
-
-.scan-mode-subhint {
-  margin-top: 0.75rem;
-  font-size: 0.95rem;
-  color: rgba(148, 163, 184, 0.9);
-}
-
-.scan-mode-actions {
-  margin-top: 0.5rem;
-}
-
-.scan-mode-primary {
-  padding: 0.9rem 1.25rem;
-  border-radius: 0.9rem;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.scan-mode-processing-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
 }
 
-.scan-mode-processing-card {
+.er-scan-processing-overlay--active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.er-scan-processing-card {
   padding: 1rem 1.25rem;
   border-radius: 0.75rem;
   color: var(--text);
   font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
-.scan-mode-hidden-input {
-  position: fixed;
-  left: -9999px;
-  top: 0;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
+.er-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 255, 255, 0.95);
+  animation: erSpin 0.9s linear infinite;
+}
+
+.er-scan-processing-text {
+  letter-spacing: 0.01em;
 }
 
 /* Manual Entry Form */
@@ -673,12 +1080,14 @@ body::before {
 
 /* Register Sign-In Styles */
 .register-sign-in-container {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: transparent;
   color: var(--cs-text);
   position: relative;
+  overflow: hidden;
 }
 
 .register-sign-in-logo {
@@ -704,9 +1113,9 @@ body::before {
 
 .register-sign-in-button {
   position: absolute;
-  top: 60%;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   padding: 1.25rem 2.5rem;
   color: var(--cs-text);
   font-size: 1.25rem;
@@ -718,19 +1127,18 @@ body::before {
 
 /* Preserve centering transform on press (cs-liquid-button:active sets transform and would override translateX(-50%)). */
 .register-sign-in-button:active:not(:disabled) {
-  transform: translateX(-50%) translateY(1px);
+  transform: translate(-50%, -50%) translateY(1px);
 }
 
 .register-top-bar {
-  position: fixed;
+  /* Keep it part of layout so nothing can render behind it. */
+  position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
+  height: var(--er-topbar-height);
   background: var(--er-surface-strong);
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   padding: 0 1.5rem;
   z-index: 100;
   border-bottom: 1px solid var(--er-border);
@@ -738,11 +1146,49 @@ body::before {
   -webkit-backdrop-filter: blur(16px);
 }
 
+.register-top-bar-left {
+  justify-self: start;
+  min-width: 0;
+}
+
+.register-top-bar-title {
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .register-top-bar-center {
-  flex: 1;
-  text-align: center;
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
   font-size: 1rem;
   font-weight: 600;
+  min-width: 0;
+}
+
+.register-top-bar-dev {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.register-top-bar-right {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Slightly smaller top-toolbar buttons so they don't touch the toolbar edges
+   (also overrides `.er-ui-tweaks .cs-liquid-button` sizing). */
+.register-top-bar-right .cs-liquid-button {
+  padding: 0.5rem 0.85rem !important;
+  min-height: 46px !important;
+  font-size: 16px !important;
+  line-height: 1.1 !important;
 }
 
 .register-menu-button {
@@ -764,10 +1210,10 @@ body::before {
 
 .register-menu {
   position: fixed;
-  top: 60px;
+  top: var(--er-topbar-height);
   right: 0;
   width: 300px;
-  height: calc(100vh - 60px);
+  height: calc(100vh - var(--er-topbar-height));
   background: rgba(15, 23, 42, 0.96);
   border-left: 1px solid var(--cs-border);
   z-index: 99;
@@ -981,6 +1427,43 @@ body::before {
   filter: none;
 }
 
+/* Slow pulsing glows for drawer handle alerts */
+@keyframes erPulseDanger {
+  0%,
+  100% {
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      0 0 0 0 rgba(239, 68, 68, 0.0);
+  }
+  50% {
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      0 0 22px 6px rgba(239, 68, 68, 0.38);
+  }
+}
+
+@keyframes erPulseSuccess {
+  0%,
+  100% {
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      0 0 0 0 rgba(34, 197, 94, 0.0);
+  }
+  50% {
+    box-shadow:
+      0 18px 40px rgba(0, 0, 0, 0.45),
+      0 0 22px 6px rgba(34, 197, 94, 0.35);
+  }
+}
+
+.er-pulse-danger:not(:disabled) {
+  animation: erPulseDanger 2.6s ease-in-out infinite;
+}
+
+.er-pulse-success:not(:disabled) {
+  animation: erPulseSuccess 2.6s ease-in-out infinite;
+}
+
 /* Offer Upgrade Modal */
 .offer-upgrade-modal-overlay {
   position: fixed;
@@ -1093,164 +1576,6 @@ body::before {
   cursor: not-allowed;
 }
 
-/* Availability Status Bar */
-.availability-bar {
-  display: flex;
-  gap: 0.85rem;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin: 0.75rem 0 1rem;
-  padding: 0.65rem 0.75rem;
-}
-
-.availability-label {
-  font-weight: 600;
-  font-size: 1rem;
-  color: #fff;
-  white-space: nowrap;
-}
-
-.availability-pill {
-  padding: 0.5rem 0.75rem;
-  font-weight: 800;
-  font-size: 0.9rem;
-  cursor: pointer;
-}
-
-.availability-pill:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-/* Availability Modal (placeholder) */
-.availability-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 3200;
-  background: rgba(0, 0, 0, 0.82);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-
-.availability-modal {
-  width: min(720px, 96vw);
-  color: var(--text);
-}
-
-.availability-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.9rem 1rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.availability-modal-title {
-  font-weight: 900;
-  letter-spacing: 0.01em;
-}
-
-.availability-modal-close {
-  font-size: 1.6rem;
-  cursor: pointer;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-}
-
-.availability-modal-body {
-  padding: 1rem;
-}
-
-.availability-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem 0.5rem;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-}
-
-.availability-modal-refresh,
-.availability-modal-close-btn {
-  padding: 0.45rem 1rem;
-  color: var(--text);
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--cs-transition-base) var(--cs-ease-standard);
-}
-
-.availability-modal-refresh:hover:not(:disabled),
-.availability-modal-close-btn:hover {
-  border-color: rgba(59, 130, 246, 0.55);
-}
-
-.availability-modal-refresh:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-.availability-modal-list {
-  max-height: 70vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.availability-modal-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.8rem 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
-}
-
-.availability-modal-row:last-child {
-  border-bottom: none;
-}
-
-.availability-modal-row-title {
-  font-weight: 700;
-  font-size: 1rem;
-}
-
-.availability-modal-status {
-  margin-top: 0.1rem;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-.availability-modal-row-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  align-items: flex-end;
-  text-align: right;
-  min-width: 120px;
-}
-
-.availability-modal-subtext {
-  font-size: 0.78rem;
-  color: rgba(226, 232, 240, 0.8);
-}
-
-.availability-modal-empty,
-.availability-modal-error,
-.availability-modal-loading {
-  padding: 1rem;
-  text-align: center;
-  color: rgba(148, 163, 184, 0.95);
-}
-
-.availability-modal-error {
-  color: #fecaca;
-}
 
 /* Landscape-only layout */
 @media (orientation: portrait) {

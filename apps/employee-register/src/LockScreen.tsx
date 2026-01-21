@@ -1,11 +1,12 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { LiquidGlassPinInput } from '@club-ops/ui';
 import {
   isWebAuthnSupported,
   requestAuthenticationOptions,
   getCredential,
   authenticationCredentialToJSON,
   verifyAuthentication,
-} from './webauthn';
+} from '@club-ops/ui';
 
 const API_BASE = '/api';
 
@@ -104,8 +105,8 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
     }
   };
 
-  const handlePinSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handlePinSubmit = async (e?: FormEvent) => {
+    e?.preventDefault();
 
     if (!staffLookup.trim() || !pin.trim()) {
       setError('Please enter your name/ID and PIN');
@@ -215,7 +216,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
             </button>
           </div>
         ) : (
-          <form className="lock-screen-pin" onSubmit={(e) => void handlePinSubmit(e)}>
+          <div className="lock-screen-pin">
             <input
               type="text"
               className="staff-lookup-input cs-liquid-input"
@@ -225,24 +226,16 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
               disabled={isLoading}
               autoFocus
             />
-            <input
-              type="password"
-              className="pin-input cs-liquid-input"
-              placeholder="Enter 6-digit PIN"
+            <LiquidGlassPinInput
+              length={6}
               value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              onChange={(next) => setPin(next)}
+              onSubmit={() => void handlePinSubmit()}
+              submitLabel={isLoading ? 'Logging in…' : 'Login'}
+              submitDisabled={isLoading || !staffLookup.trim()}
               disabled={isLoading}
-              maxLength={6}
-              inputMode="numeric"
-              pattern="[0-9]*"
+              displayAriaLabel="Staff PIN"
             />
-            <button
-              type="submit"
-              className="pin-submit-button cs-liquid-button"
-              disabled={isLoading || pin.trim().length !== 6 || !staffLookup.trim()}
-            >
-              {isLoading ? 'Logging in...' : 'Login'}
-            </button>
             {webauthnSupported && (
               <button
                 type="button"
@@ -256,7 +249,7 @@ export function LockScreen({ onLogin, deviceId }: LockScreenProps) {
                 Use fingerprint instead
               </button>
             )}
-          </form>
+          </div>
         )}
       </div>
     </div>

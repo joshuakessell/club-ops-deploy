@@ -14,6 +14,10 @@
       "types": "./dist/styles.d.ts",
       "import": "./dist/styles.js"
     },
+    "./styles/index.css": "./src/styles/index.css",
+    "./styles/tokens.css": "./src/styles/tokens.css",
+    "./styles/components.css": "./src/styles/components.css",
+    "./styles/liquid-glass.css": "./src/styles/liquid-glass.css",
     "./src/styles/tokens.css": "./src/styles/tokens.css",
     "./src/styles/components.css": "./src/styles/components.css",
     "./src/styles/liquid-glass.css": "./src/styles/liquid-glass.css"
@@ -29,5 +33,8 @@
   "devDependencies": {
     "@types/react": "^18.2.0",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@club-ops/shared": "workspace:*"
   }
 }
