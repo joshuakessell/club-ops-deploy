@@ -3,8 +3,9 @@ import { SignInModal } from './SignInModal';
 import type { WebSocketEvent, RegisterSessionUpdatedPayload } from '@club-ops/shared';
 import { closeLaneSessionClient, useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
+import { getApiUrl, getWebSocketUrl } from '@/lib/apiBase';
 
-const API_BASE = '/api';
+const API_BASE = getApiUrl('/api');
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -282,8 +283,7 @@ function RegisterSessionWs({
   deviceId: string;
   onInvalidated: () => void;
 }) {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  const wsUrl = getWebSocketUrl('/ws');
   const rawEnv = import.meta.env as unknown as Record<string, unknown>;
   const kioskToken =
     typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()

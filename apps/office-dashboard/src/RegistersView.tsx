@@ -5,8 +5,9 @@ import type { RegisterSessionUpdatedPayload, WebSocketEvent } from '@club-ops/sh
 import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
 import { wsBaseUrl } from './api';
+import { getApiUrl } from '@/lib/apiBase';
 
-const API_BASE = '/api';
+const API_BASE = getApiUrl('/api');
 
 interface RegisterSession {
   registerNumber: 1 | 2;
