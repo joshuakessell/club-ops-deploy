@@ -2,7 +2,7 @@
 
 This file is the **canonical, human-maintained** map of the repository layout.
 
-## Rules (for all agents)
+## Rules (for all contributors)
 - If you **add, remove, rename, or move** any top-level area (apps/packages/services/docs/db/scripts/tools/infra), you **must** update this file in the same change.
 - If you add a **new app/package/service** (or a new major sub-area under an existing one), you **must** add it here with a 1–2 line description.
 - Keep this doc **stable and skim-friendly**:
@@ -12,7 +12,7 @@ This file is the **canonical, human-maintained** map of the repository layout.
 ## Top-level layout
 
 ```
-AGENTS.md                  # Agent operating rules (scope, non-negotiables, quality gates)
+CONTRIBUTING.md            # Engineering guide (scope, non-negotiables, quality gates)
 SPEC.md                    # Business invariants + pointers (keep short)
 openapi.yaml               # API contract (source of truth)
 db/                        # Schema snapshot + database assets
@@ -48,7 +48,6 @@ packages/
   shared/                  # Shared types, realtime schemas, domain helpers used across repo
   ui/                      # Shared UI primitives/styles used by apps
   app-kit/                 # App scaffolding/utilities (build/runtime helpers)
-  blink-react/             # Blink UI components/preset integration
 ```
 
 ## services/

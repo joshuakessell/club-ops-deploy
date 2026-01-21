@@ -2,8 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { installTelemetry, TelemetryErrorBoundary } from '@club-ops/ui';
 import App from './App';
-import '@club-ops/ui/src/styles/tokens.css';
-import './blink.css';
+import '@club-ops/ui/styles/index.css';
 import './styles.css';
 
 const root = document.getElementById('root');
