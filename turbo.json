@@ -1,9 +1,5 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "env": [
-    "VITE_KIOSK_TOKEN",
-    "VITE_API_BASE_URL"
-  ],
   "globalDependencies": [
     "tsconfig.base.json",
     "tsconfig.json",
@@ -36,6 +32,10 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
+      "env": [
+        "VITE_KIOSK_TOKEN",
+        "VITE_API_BASE_URL"
+      ],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["dist/**", "build/**"]
     },
