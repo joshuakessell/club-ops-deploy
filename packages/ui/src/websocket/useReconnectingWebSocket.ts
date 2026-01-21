@@ -109,9 +109,12 @@ export function useReconnectingWebSocket(
 
   const reconnectNow = useCallback(() => {
     // Explicit user action only: force a fresh guarded connection (no loops).
+    const laneId = extractLaneIdFromUrl(url);
+    closeLaneSessionClient(laneId, role);
     setRetryCount(0);
+    setStatus('reconnecting');
     setConnectNonce((n) => n + 1);
-  }, []);
+  }, [role, url]);
 
   const sendJson = useCallback(
     (msg: unknown) => {

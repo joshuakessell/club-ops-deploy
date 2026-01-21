@@ -48,6 +48,7 @@ export function CustomerAccountPanel(props: {
     blockEndsAt?: string;
     activeAssignedResourceType?: 'room' | 'locker';
     activeAssignedResourceNumber?: string;
+    customerHasEncryptedLookupMarker?: boolean;
   }) => void;
 
   // employee-side lane actions
