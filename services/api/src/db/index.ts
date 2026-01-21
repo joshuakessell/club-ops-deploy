@@ -14,13 +14,49 @@ export interface DatabaseConfig {
   connectionTimeoutMillis?: number;
 }
 
+function parseDatabaseUrl(urlString: string): {
+  host?: string;
+  port?: number;
+  database?: string;
+  user?: string;
+} {
+  try {
+    const url = new URL(urlString);
+
+    // Best-effort support for postgres connection strings used by hosting providers.
+    if (url.protocol !== 'postgres:' && url.protocol !== 'postgresql:') {
+      return {};
+    }
+
+    const host = url.hostname || undefined;
+    const port = url.port ? parseInt(url.port, 10) : undefined;
+    const databaseFromPath = url.pathname.replace(/^\/+/, '');
+    const database = databaseFromPath ? databaseFromPath : undefined;
+    const user = url.username || undefined;
+
+    return {
+      host,
+      port: typeof port === 'number' && !Number.isNaN(port) ? port : undefined,
+      database,
+      user,
+    };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Load database configuration from environment variables.
  */
 export function loadDatabaseConfig(): pg.PoolConfig {
   if (process.env.DATABASE_URL) {
+    const parsed = parseDatabaseUrl(process.env.DATABASE_URL);
     return {
       connectionString: process.env.DATABASE_URL,
+      ...(parsed.host ? { host: parsed.host } : {}),
+      ...(typeof parsed.port === 'number' ? { port: parsed.port } : {}),
+      ...(parsed.database ? { database: parsed.database } : {}),
+      ...(parsed.user ? { user: parsed.user } : {}),
       ssl: {
         rejectUnauthorized: false,
       },
