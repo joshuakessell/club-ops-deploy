@@ -47,6 +47,7 @@ import { InventoryDrawer, type InventoryDrawerSection } from '../components/inve
 import { usePassiveScannerInput } from '../usePassiveScannerInput';
 import { useRegisterLaneSessionState } from './useRegisterLaneSessionState';
 import { useRegisterWebSocketEvents } from './useRegisterWebSocketEvents';
+import { getApiUrl } from '@/lib/apiBase';
 
 interface HealthStatus {
   status: string;
@@ -66,7 +67,7 @@ type SessionDocument = {
   has_pdf?: boolean;
 };
 
-const API_BASE = '/api';
+const API_BASE = getApiUrl('/api');
 
 interface StaffSession {
   staffId: string;
@@ -759,7 +760,7 @@ export function AppRoot() {
       setCustomerSearchLoading(true);
       try {
         const response = await fetch(
-          `/api/v1/customers/search?q=${encodeURIComponent(query)}&limit=10`,
+          getApiUrl(`/api/v1/customers/search?q=${encodeURIComponent(query)}&limit=10`),
           {
             headers: {
               Authorization: `Bearer ${session.sessionToken}`,

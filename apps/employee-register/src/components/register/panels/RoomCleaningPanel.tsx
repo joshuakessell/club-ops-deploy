@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { getApiUrl } from '@/lib/apiBase';
 
 type DetailedRoom = {
   id: string;
@@ -48,7 +49,7 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch('/api/v1/inventory/detailed', {
+        const res = await fetch(getApiUrl('/api/v1/inventory/detailed'), {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
         if (!res.ok) throw new Error('Failed to load inventory');
@@ -95,7 +96,7 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
     setError(null);
     try {
       const targetStatus = activeList === 'DIRTY' ? 'CLEANING' : 'CLEAN';
-      const res = await fetch('/api/v1/cleaning/batch', {
+      const res = await fetch(getApiUrl('/api/v1/cleaning/batch'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
