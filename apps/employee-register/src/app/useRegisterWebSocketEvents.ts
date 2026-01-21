@@ -10,6 +10,7 @@ import {
 } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
 import type { BottomToastTone } from '../components/register/toasts/BottomToastStack';
+import { getWebSocketUrl } from '@/lib/apiBase';
 
 export function useRegisterWebSocketEvents(params: {
   lane: string;
@@ -43,8 +44,7 @@ export function useRegisterWebSocketEvents(params: {
   onCustomerDeclined: () => void;
 }): { connected: boolean } {
   const { lane } = params;
-  const wsScheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${wsScheme}//${window.location.host}/ws?lane=${encodeURIComponent(lane)}`;
+  const wsUrl = getWebSocketUrl(`/ws?lane=${encodeURIComponent(lane)}`);
   const rawEnv = import.meta.env as unknown as Record<string, unknown>;
   const kioskToken =
     typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()

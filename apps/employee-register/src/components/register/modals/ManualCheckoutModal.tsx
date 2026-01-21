@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModalFrame } from './ModalFrame';
+import { getApiUrl } from '@/lib/apiBase';
 
 type Step = 'select' | 'confirm';
 
@@ -111,7 +112,7 @@ export function ManualCheckoutModal({
       setLoadingCandidates(true);
       setCandidatesError(null);
       try {
-        const res = await fetch('/api/v1/checkout/manual-candidates', {
+        const res = await fetch(getApiUrl('/api/v1/checkout/manual-candidates'), {
           headers: { Authorization: `Bearer ${sessionToken}` },
         });
         if (!res.ok) throw new Error('Failed to load candidates');
@@ -144,7 +145,7 @@ export function ManualCheckoutModal({
     setIsSubmitting(true);
     try {
       const resolveOne = async (payload: { occupancyId?: string; number?: string }) => {
-        const res = await fetch('/api/v1/checkout/manual-resolve', {
+        const res = await fetch(getApiUrl('/api/v1/checkout/manual-resolve'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -180,7 +181,7 @@ export function ManualCheckoutModal({
     if (!current) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/v1/checkout/manual-complete', {
+      const res = await fetch(getApiUrl('/api/v1/checkout/manual-complete'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

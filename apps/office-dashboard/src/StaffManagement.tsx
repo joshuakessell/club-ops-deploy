@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import type { StaffSession } from './LockScreen';
 import { ReAuthModal } from './ReAuthModal';
+import { getApiUrl } from '@/lib/apiBase';
 
-const API_BASE = '/api';
+const API_BASE = getApiUrl('/api');
 
 interface StaffMember {
   id: string;
