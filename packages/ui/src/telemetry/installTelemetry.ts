@@ -349,10 +349,12 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
 
   const flushBreadcrumbs = (options?: { useBeacon?: boolean }) => {
     if (!breadcrumbsEnabled || breadcrumbs.length === 0 || !incidentTraceId || !incidentId) return;
+    const activeIncidentId = incidentId;
+    const activeIncidentReason = incidentReason ?? undefined;
     const toSend = breadcrumbs.splice(0, breadcrumbs.length).map((span) => ({
       ...span,
-      incidentId,
-      incidentReason: incidentReason ?? undefined,
+      incidentId: activeIncidentId,
+      incidentReason: activeIncidentReason,
       meta: { ...(span.meta ?? {}), breadcrumb: true },
     }));
     incidentBreadcrumbCount += toSend.length;
