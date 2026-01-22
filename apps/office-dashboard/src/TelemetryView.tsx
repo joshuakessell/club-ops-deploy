@@ -552,13 +552,13 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                           <div className="telemetry-label">Meta</div>
                           <pre>{formatMeta(span.meta)}</pre>
                         </div>
-                        {(span.request_headers || span.response_headers) && (
+                        {(Boolean(span.request_headers) || Boolean(span.response_headers)) && (
                           <div className="telemetry-meta">
                             <div className="telemetry-label">Headers</div>
                             <pre>{formatMeta({ request: span.request_headers, response: span.response_headers })}</pre>
                           </div>
                         )}
-                        {(span.request_body || span.response_body) && (
+                        {(Boolean(span.request_body) || Boolean(span.response_body)) && (
                           <div className="telemetry-meta">
                             <div className="telemetry-label">Bodies</div>
                             <pre>{formatMeta({ request: span.request_body, response: span.response_body })}</pre>
