@@ -120,45 +120,45 @@ export function RegisterSignIn({
     <RegisterSessionWs deviceId={deviceId} onInvalidated={handleSessionInvalidated} />
   ) : null;
 
+  const sendHeartbeat = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE}/v1/registers/heartbeat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId }),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        // If 404 or DEVICE_DISABLED, session is invalid
+        if (response.status === 404 || (isRecord(errorPayload) && errorPayload.code === 'DEVICE_DISABLED')) {
+          handleSessionInvalidated();
+          return;
+        }
+        throw new Error('Heartbeat failed');
+      }
+    } catch (error) {
+      console.error('Heartbeat failed:', error);
+      // If heartbeat fails, session may have been cleaned up
+      // Check status again
+      const stillActive = await checkRegisterStatus();
+      if (!stillActive) {
+        handleSessionInvalidated();
+      }
+    }
+  }, [checkRegisterStatus, deviceId, handleSessionInvalidated]);
+
   const startHeartbeat = useCallback(() => {
     stopHeartbeat();
 
-    // Send heartbeat every 60 seconds (90 second TTL on server)
+    // Send heartbeat every 30 seconds (server TTL is much higher, but browsers can throttle timers).
+    void sendHeartbeat();
     const interval = setInterval(() => {
-      void (async () => {
-        try {
-          const response = await fetch(`${API_BASE}/v1/registers/heartbeat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId }),
-          });
-
-          if (!response.ok) {
-            const errorPayload: unknown = await response.json().catch(() => null);
-            // If 404 or DEVICE_DISABLED, session is invalid
-            if (
-              response.status === 404 ||
-              (isRecord(errorPayload) && errorPayload.code === 'DEVICE_DISABLED')
-            ) {
-              handleSessionInvalidated();
-              return;
-            }
-            throw new Error('Heartbeat failed');
-          }
-        } catch (error) {
-          console.error('Heartbeat failed:', error);
-          // If heartbeat fails, session may have been cleaned up
-          // Check status again
-          const stillActive = await checkRegisterStatus();
-          if (!stillActive) {
-            handleSessionInvalidated();
-          }
-        }
-      })();
-    }, 60000);
+      void sendHeartbeat();
+    }, 30000);
 
     heartbeatIntervalRef.current = interval;
-  }, [checkRegisterStatus, deviceId, handleSessionInvalidated, stopHeartbeat]);
+  }, [sendHeartbeat, stopHeartbeat]);
 
   // Start/stop heartbeat based on register session
   useEffect(() => {
@@ -169,6 +169,21 @@ export function RegisterSignIn({
     stopHeartbeat();
     return;
   }, [registerSession, startHeartbeat, stopHeartbeat]);
+
+  // Wake-up heartbeats: browsers can throttle timers in background tabs/windows.
+  useEffect(() => {
+    if (!registerSession) return;
+    const onFocus = () => void sendHeartbeat();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void sendHeartbeat();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [registerSession, sendHeartbeat]);
 
   const handleSignIn = async (session: RegisterSession) => {
     // After register sign-in, also create a staff session for API calls

@@ -703,6 +703,32 @@ export function AppRoot() {
   const lane = registerSession ? `lane-${registerSession.registerNumber}` : 'lane-1';
 
   const handleLogout = async () => {
+    const inProgress = Boolean(
+      currentSessionId && customerName && customerName.trim().length > 0 && !checkoutAt
+    );
+
+    if (inProgress) {
+      const confirmed = window.confirm(
+        'A check-in is still in progress on this lane. Signing out will end the customer kiosk session. Continue?'
+      );
+      if (!confirmed) return;
+      if (!session?.sessionToken) {
+        alert('Not authenticated');
+        return;
+      }
+      const resetResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/reset`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+      });
+      if (!resetResponse.ok) {
+        const errorPayload: unknown = await resetResponse.json().catch(() => null);
+        alert(getErrorMessage(errorPayload) || 'Failed to reset lane session');
+        return;
+      }
+    }
+
     try {
       if (session?.sessionToken) {
         // IMPORTANT: release the register session (server-side) before logging out staff.
@@ -1922,6 +1948,71 @@ export function AppRoot() {
     setWsConnected(ws.connected);
   }, [ws.connected]);
 
+  // ---------------------------------------------------------------------------
+  // Polling fallback (mirrors customer-kiosk): keeps UI in sync if WS is flaky.
+  // ---------------------------------------------------------------------------
+  const kioskToken = (import.meta.env as any).VITE_KIOSK_TOKEN ?? null;
+
+  const pollOnce = useCallback(async () => {
+    try {
+      const headers: Record<string, string> = {};
+      if (typeof kioskToken === 'string' && kioskToken) {
+        headers['x-kiosk-token'] = kioskToken;
+      }
+      const res = await fetch(
+        `${API_BASE}/v1/checkin/lane/${encodeURIComponent(lane)}/session-snapshot`,
+        { headers }
+      );
+      if (!res.ok) return;
+      const data = await readJson<unknown>(res);
+      if (!isRecord(data)) return;
+      const sessionPayload = data['session'];
+      if (sessionPayload == null) {
+        laneSessionActions.resetCleared();
+        return;
+      }
+      if (isRecord(sessionPayload)) {
+        laneSessionActions.applySessionUpdated(sessionPayload as any);
+      }
+    } catch {
+      // Best-effort; polling is a fallback.
+    }
+  }, [kioskToken, lane, laneSessionActions]);
+
+  const pollingDelayTimerRef = useRef<number | null>(null);
+  const pollingIntervalRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (pollingDelayTimerRef.current !== null) {
+      window.clearTimeout(pollingDelayTimerRef.current);
+      pollingDelayTimerRef.current = null;
+    }
+    if (pollingIntervalRef.current !== null) {
+      window.clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+
+    if (wsConnected) return;
+
+    pollingDelayTimerRef.current = window.setTimeout(() => {
+      if (wsConnected) return;
+      void pollOnce();
+      pollingIntervalRef.current = window.setInterval(() => {
+        void pollOnce();
+      }, 2000);
+    }, 1200);
+
+    return () => {
+      if (pollingDelayTimerRef.current !== null) {
+        window.clearTimeout(pollingDelayTimerRef.current);
+        pollingDelayTimerRef.current = null;
+      }
+      if (pollingIntervalRef.current !== null) {
+        window.clearInterval(pollingIntervalRef.current);
+        pollingIntervalRef.current = null;
+      }
+    };
+  }, [pollOnce, wsConnected]);
+
   const handleInventorySelect = (
     type: 'room' | 'locker',
     id: string,
@@ -1981,6 +2072,7 @@ export function AppRoot() {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to set language');
       }
+      await pollOnce();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to set language');
     } finally {
@@ -2015,6 +2107,7 @@ export function AppRoot() {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to set membership choice');
       }
+      await pollOnce();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to set membership choice');
     } finally {
@@ -2043,6 +2136,7 @@ export function AppRoot() {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to set membership purchase intent');
       }
+      await pollOnce();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to set membership purchase intent');
     } finally {
@@ -2066,6 +2160,7 @@ export function AppRoot() {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to propose selection');
       }
+      await pollOnce();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to propose selection');
     } finally {
@@ -2088,6 +2183,7 @@ export function AppRoot() {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to select rental');
       }
+      await pollOnce();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to select rental');
     } finally {
@@ -2121,6 +2217,7 @@ export function AppRoot() {
       setSelectionConfirmed(true);
       laneSessionActions.patch({ selectionConfirmedBy: 'EMPLOYEE', selectionAcknowledged: true });
       setCustomerSelectedType(proposedRentalType);
+      await pollOnce();
     } catch (error) {
       console.error('Failed to confirm selection:', error);
       alert(

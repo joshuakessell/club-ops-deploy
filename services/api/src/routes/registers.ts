@@ -853,7 +853,7 @@ export async function registerRoutes(
 }
 
 /**
- * Clean up abandoned register sessions (no heartbeat for > 90 seconds).
+ * Clean up abandoned register sessions (no heartbeat for > 15 minutes).
  * Should be called periodically (e.g., every 30 seconds).
  * Broadcasts REGISTER_SESSION_UPDATED events for expired sessions.
  */
@@ -869,7 +869,7 @@ export async function cleanupAbandonedRegisterSessions(
       `SELECT id, register_number
        FROM register_sessions
        WHERE signed_out_at IS NULL
-       AND last_heartbeat < NOW() - INTERVAL '90 seconds'`
+       AND last_heartbeat < NOW() - INTERVAL '15 minutes'`
     );
 
     if (expiredSessions.rows.length === 0) {
@@ -881,7 +881,7 @@ export async function cleanupAbandonedRegisterSessions(
       `UPDATE register_sessions
        SET signed_out_at = NOW()
        WHERE signed_out_at IS NULL
-       AND last_heartbeat < NOW() - INTERVAL '90 seconds'`
+       AND last_heartbeat < NOW() - INTERVAL '15 minutes'`
     );
 
     // Broadcast events if broadcaster available
