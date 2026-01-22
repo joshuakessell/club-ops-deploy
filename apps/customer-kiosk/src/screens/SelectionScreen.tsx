@@ -58,7 +58,11 @@ export function SelectionScreen({
   const prereqsSatisfied = isMember || membershipChoice !== null;
   const showPendingApprovalOverlay =
     proposedBy === 'CUSTOMER' && Boolean(proposedRentalType) && prereqsSatisfied && !selectionConfirmed;
-  const canInteract = !isSubmitting && !session.pastDueBlocked && !showPendingApprovalOverlay;
+  const canInteract =
+    !isSubmitting &&
+    !session.pastDueBlocked &&
+    !showPendingApprovalOverlay &&
+    !!session.customerPrimaryLanguage;
 
   const activeStep: 'MEMBERSHIP' | 'RENTAL' | null = (() => {
     if (!canInteract) return null;
@@ -87,6 +91,13 @@ export function SelectionScreen({
                   : t(session.customerPrimaryLanguage, 'welcome')}
               </h1>
             </div>
+
+            {/* Defensive fallback: if language isn't selected yet, block interactions and instruct the customer. */}
+            {!session.customerPrimaryLanguage && (
+              <div className="past-due-block-message">
+                <p>{t('EN', 'selectLanguage')}</p>
+              </div>
+            )}
 
             {/* Past-due block message */}
             {session.pastDueBlocked && (
@@ -225,7 +236,11 @@ export function SelectionScreen({
                           inventory?.rooms[rental] || (rental === 'LOCKER' ? inventory?.lockers : 0) || 0;
                         const showWarning = availableCount > 0 && availableCount <= 5;
                         const isUnavailable = availableCount === 0;
-                        const isDisabled = session.pastDueBlocked || (isNonMember && !membershipChoice) || showPendingApprovalOverlay;
+                        const isDisabled =
+                          !session.customerPrimaryLanguage ||
+                          session.pastDueBlocked ||
+                          (isNonMember && !membershipChoice) ||
+                          showPendingApprovalOverlay;
                         // Show the customer's chosen rental as selected even while waiting for attendant approval,
                         // so the UI gives immediate visual feedback before/under the pending overlay.
                         const isSelected =

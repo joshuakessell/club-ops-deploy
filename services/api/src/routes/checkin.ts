@@ -288,13 +288,20 @@ async function maybeAttachScanIdentifiers(params: {
   );
 }
 
-function getHttpError(error: unknown): { statusCode: number; message?: string } | null {
+function getHttpError(
+  error: unknown
+): { statusCode: number; message?: string; code?: string } | null {
   if (!error || typeof error !== 'object') return null;
   if (!('statusCode' in error)) return null;
   const statusCode = (error as { statusCode: unknown }).statusCode;
   if (typeof statusCode !== 'number') return null;
   const message = (error as { message?: unknown }).message;
-  return { statusCode, message: typeof message === 'string' ? message : undefined };
+  const code = (error as { code?: unknown }).code;
+  return {
+    statusCode,
+    message: typeof message === 'string' ? message : undefined,
+    code: typeof code === 'string' ? code : undefined,
+  };
 }
 
 
@@ -313,6 +320,27 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     .refine((val) => !!val.customerId || !!val.idScanValue, {
       message: 'customerId or idScanValue is required',
     });
+
+  async function assertCustomerLanguageSelected(
+    client: PoolClient,
+    session: LaneSessionRow
+  ): Promise<void> {
+    if (!session.customer_id) {
+      throw { statusCode: 400, message: 'Session has no customer' };
+    }
+    const result = await client.query<{ primary_language: string | null }>(
+      `SELECT primary_language FROM customers WHERE id = $1 LIMIT 1`,
+      [session.customer_id]
+    );
+    const primaryLanguage = result.rows[0]?.primary_language;
+    if (!primaryLanguage || primaryLanguage.trim().length === 0) {
+      throw {
+        statusCode: 409,
+        code: 'LANGUAGE_REQUIRED',
+        message: 'Language selection required',
+      };
+    }
+  }
 
   /**
    * POST /v1/checkin/lane/:laneId/start
@@ -1597,6 +1625,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const session = sessionResult.rows[0]!;
 
+          await assertCustomerLanguageSelected(client, session);
+
           // Check past-due blocking
           const { blocked } = await checkPastDueBlocked(
             client,
@@ -1667,6 +1697,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (httpErr) {
           return reply.status(httpErr.statusCode).send({
             error: httpErr.message ?? 'Failed to propose selection',
+            code: httpErr.code,
           });
         }
         return reply.status(500).send({
@@ -1722,6 +1753,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           const session = sessionResult.rows[0]!;
+
+          await assertCustomerLanguageSelected(client, session);
 
           // Check past-due blocking
           const { blocked } = await checkPastDueBlocked(
@@ -1812,6 +1845,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (httpErr) {
           return reply.status(httpErr.statusCode).send({
             error: httpErr.message ?? 'Failed to confirm selection',
+            code: httpErr.code,
           });
         }
         return reply.status(500).send({
@@ -4368,6 +4402,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 400, message: 'Session has no customer' };
           }
 
+          await assertCustomerLanguageSelected(client, session);
+
           // Persist membership purchase intent on lane session.
           const intentValue: 'PURCHASE' | 'RENEW' | null = intent === 'NONE' ? null : intent;
           const requestedAt = intent === 'NONE' ? null : new Date();
@@ -4453,6 +4489,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (httpErr) {
           return reply.status(httpErr.statusCode).send({
             error: httpErr.message ?? 'Failed to set membership purchase intent',
+            code: httpErr.code,
           });
         }
         return reply.status(500).send({
@@ -4596,6 +4633,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           const session = sessionResult.rows[0]!;
           const resolvedLaneId = session.lane_id || laneId;
 
+          await assertCustomerLanguageSelected(client, session);
+
           const value: 'ONE_TIME' | 'SIX_MONTH' | null =
             choice === 'NONE' ? null : (choice as 'ONE_TIME' | 'SIX_MONTH');
 
@@ -4622,6 +4661,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         if (httpErr) {
           return reply.status(httpErr.statusCode).send({
             error: httpErr.message ?? 'Failed to set membership choice',
+            code: httpErr.code,
           });
         }
         return reply.status(500).send({
