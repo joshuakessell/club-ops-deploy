@@ -674,6 +674,15 @@ export function AppRoot() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
+        if (
+          response.status === 409 &&
+          isRecord(errorPayload) &&
+          errorPayload.code === 'LANGUAGE_REQUIRED'
+        ) {
+          setView('language');
+          alert(t('EN', 'selectLanguage'));
+          return;
+        }
         throw new Error(getErrorMessage(errorPayload) || 'Failed to propose selection');
       }
 
@@ -714,6 +723,15 @@ export function AppRoot() {
 
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
+        if (
+          response.status === 409 &&
+          isRecord(errorPayload) &&
+          errorPayload.code === 'LANGUAGE_REQUIRED'
+        ) {
+          setView('language');
+          alert(t('EN', 'selectLanguage'));
+          return;
+        }
         throw new Error(getErrorMessage(errorPayload) || 'Failed to process waitlist selection');
       }
 
@@ -963,11 +981,18 @@ export function AppRoot() {
     // Persist the explicit choice so employee-register can mirror the kiosk step reliably.
     if (session.sessionId) {
       try {
-        await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
+        const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
           body: JSON.stringify({ choice: 'ONE_TIME', sessionId: session.sessionId }),
         });
+        if (!response.ok && response.status === 409) {
+          const errorPayload: unknown = await response.json().catch(() => null);
+          if (isRecord(errorPayload) && errorPayload.code === 'LANGUAGE_REQUIRED') {
+            setView('language');
+            alert(t('EN', 'selectLanguage'));
+          }
+        }
         // SESSION_UPDATED will reconcile; we don't need to block UX on this.
       } catch {
         // Best-effort (UI still works locally).
@@ -990,6 +1015,15 @@ export function AppRoot() {
       );
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
+        if (
+          response.status === 409 &&
+          isRecord(errorPayload) &&
+          errorPayload.code === 'LANGUAGE_REQUIRED'
+        ) {
+          setView('language');
+          alert(t('EN', 'selectLanguage'));
+          return;
+        }
         throw new Error(getErrorMessage(errorPayload) || 'Failed to clear membership intent');
       }
       // Immediate UX; server WS broadcast will also reconcile.
@@ -1017,6 +1051,15 @@ export function AppRoot() {
       );
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
+        if (
+          response.status === 409 &&
+          isRecord(errorPayload) &&
+          errorPayload.code === 'LANGUAGE_REQUIRED'
+        ) {
+          setView('language');
+          alert(t('EN', 'selectLanguage'));
+          return;
+        }
         throw new Error(getErrorMessage(errorPayload) || 'Failed to request membership purchase');
       }
       // Immediate UX; server WS broadcast will also reconcile.

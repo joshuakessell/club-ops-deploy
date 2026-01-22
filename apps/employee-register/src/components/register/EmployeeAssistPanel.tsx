@@ -151,7 +151,7 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         {step === 'LANGUAGE' && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-              Tap once to highlight on kiosk, tap again to confirm.
+              Tap once to set the language (it will also highlight on the kiosk).
             </div>
             {([
               { id: 'EN' as const, label: 'English' },
@@ -169,14 +169,9 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                   disabled={isSubmitting}
                   onClick={() => {
                     if (isSubmitting) return;
-                    if (isPending) {
-                      setPending(null);
-                      onHighlightLanguage(null);
-                      void onConfirmLanguage(opt.id);
-                      return;
-                    }
                     setPending({ step: 'LANGUAGE', option: opt.id });
                     onHighlightLanguage(opt.id);
+                    void onConfirmLanguage(opt.id);
                   }}
                   style={{ width: '100%', padding: '0.9rem 1rem', fontWeight: 900 }}
                 >
