@@ -128,34 +128,62 @@ function reducer(state: RegisterLaneSessionState, action: Action): RegisterLaneS
         return { ...initialState };
       }
 
-      const next: RegisterLaneSessionState = { ...state };
+      const sessionIdChanged =
+        typeof p.sessionId === 'string' && p.sessionId && p.sessionId !== state.currentSessionId;
+
+      // If this is a new sessionId, reset server-driven fields so we don't carry stale step state forward.
+      const next: RegisterLaneSessionState = sessionIdChanged ? { ...initialState } : { ...state };
 
       if (p.sessionId !== undefined) next.currentSessionId = p.sessionId || null;
       if (p.customerName !== undefined) next.customerName = p.customerName || '';
       if (p.membershipNumber !== undefined) next.membershipNumber = p.membershipNumber || '';
-      if (p.customerMembershipValidUntil !== undefined) next.customerMembershipValidUntil = p.customerMembershipValidUntil || null;
-      if (p.membershipChoice !== undefined) next.membershipChoice = p.membershipChoice || null;
-      if (p.membershipPurchaseIntent !== undefined) next.membershipPurchaseIntent = p.membershipPurchaseIntent || null;
+      if (p.customerMembershipValidUntil !== undefined) {
+        next.customerMembershipValidUntil = p.customerMembershipValidUntil || null;
+      }
       if (Array.isArray(p.allowedRentals)) next.allowedRentals = p.allowedRentals;
 
       if (p.agreementSigned !== undefined) next.agreementSigned = Boolean(p.agreementSigned);
 
-      if (p.proposedRentalType) {
-        next.proposedRentalType = p.proposedRentalType;
-        next.proposedBy = p.proposedBy || null;
-      }
-      if (p.selectionConfirmed !== undefined) {
-        next.selectionConfirmed = p.selectionConfirmed;
-        next.selectionConfirmedBy = p.selectionConfirmedBy || null;
-        if (p.selectionConfirmed) {
-          next.customerSelectedType = p.proposedRentalType || null;
-        }
+      // Treat SESSION_UPDATED as a "full snapshot" for these fields (clear stale values when omitted).
+      const nextProposedRentalType = p.proposedRentalType ?? null;
+      const nextSelectionConfirmed = Boolean(p.selectionConfirmed);
+
+      next.proposedRentalType = nextProposedRentalType;
+      next.proposedBy = (p.proposedBy ?? null) as RegisterLaneSessionState['proposedBy'];
+      next.selectionConfirmed = nextSelectionConfirmed;
+      next.selectionConfirmedBy = (p.selectionConfirmedBy ?? null) as RegisterLaneSessionState['selectionConfirmedBy'];
+
+      next.paymentIntentId = p.paymentIntentId ?? null;
+      next.paymentStatus = p.paymentStatus ?? null;
+
+      next.assignedResourceType = (p.assignedResourceType ?? null) as RegisterLaneSessionState['assignedResourceType'];
+      next.assignedResourceNumber = p.assignedResourceNumber ?? null;
+      next.checkoutAt = p.checkoutAt ?? null;
+
+      next.customerPrimaryLanguage = p.customerPrimaryLanguage;
+
+      next.waitlistDesiredTier = p.waitlistDesiredType ?? null;
+      next.waitlistBackupType = p.backupRentalType ?? null;
+
+      next.membershipChoice = p.membershipChoice ?? null;
+      next.membershipPurchaseIntent = p.membershipPurchaseIntent ?? null;
+
+      // Selection acknowledgement is a UI-only coordination flag.
+      // Reset it to false when:
+      // - sessionId changes, OR
+      // - proposedRentalType changes, OR
+      // - selectionConfirmed becomes false
+      if (
+        sessionIdChanged ||
+        nextProposedRentalType !== state.proposedRentalType ||
+        !nextSelectionConfirmed
+      ) {
+        next.selectionAcknowledged = false;
       }
 
-      if (p.waitlistDesiredType !== undefined) next.waitlistDesiredTier = p.waitlistDesiredType || null;
-      if (p.backupRentalType !== undefined) next.waitlistBackupType = p.backupRentalType || null;
+      // Derived local field: customer's chosen type (mirrors locked selection).
+      next.customerSelectedType = nextSelectionConfirmed ? nextProposedRentalType : null;
 
-      if (p.customerPrimaryLanguage !== undefined) next.customerPrimaryLanguage = p.customerPrimaryLanguage;
       if (p.customerDobMonthDay !== undefined) next.customerDobMonthDay = p.customerDobMonthDay;
       if (p.customerLastVisitAt !== undefined) next.customerLastVisitAt = p.customerLastVisitAt;
       if (p.customerNotes !== undefined) next.customerNotes = p.customerNotes;
@@ -163,12 +191,6 @@ function reducer(state: RegisterLaneSessionState, action: Action): RegisterLaneS
         next.customerHasEncryptedLookupMarker = Boolean(p.customerHasEncryptedLookupMarker);
       }
 
-      if (p.assignedResourceType !== undefined) next.assignedResourceType = p.assignedResourceType ?? null;
-      if (p.assignedResourceNumber !== undefined) next.assignedResourceNumber = p.assignedResourceNumber ?? null;
-      if (p.checkoutAt !== undefined) next.checkoutAt = p.checkoutAt ?? null;
-
-      if (p.paymentIntentId !== undefined) next.paymentIntentId = p.paymentIntentId || null;
-      if (p.paymentStatus !== undefined) next.paymentStatus = p.paymentStatus ?? null;
       if (p.paymentTotal !== undefined || p.paymentLineItems !== undefined) {
         next.paymentQuote = (() => {
           const total = p.paymentTotal ?? state.paymentQuote?.total ?? 0;
