@@ -9,6 +9,7 @@ import { WaitlistManagementView } from './WaitlistManagementView';
 import { CustomerAdminToolsView } from './CustomerAdminToolsView';
 import { ReportsDemoView } from './ReportsDemoView';
 import { MessagesView } from './MessagesView';
+import { TelemetryView } from './TelemetryView';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -532,6 +533,10 @@ function App() {
                 <Navigate to="/schedule" replace />
               )
             }
+          />
+          <Route
+            path="/telemetry"
+            element={isAdmin ? <TelemetryView session={session} /> : <Navigate to="/schedule" replace />}
           />
 
           <Route
