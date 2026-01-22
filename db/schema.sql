@@ -1629,12 +1629,6 @@ CREATE INDEX idx_register_sessions_employee ON public.register_sessions USING bt
 
 
 --
--- Name: idx_register_sessions_employee_active; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_register_sessions_employee_active ON public.register_sessions USING btree (employee_id) WHERE (signed_out_at IS NULL);
-
-
 --
 -- Name: idx_register_sessions_heartbeat; Type: INDEX; Schema: public; Owner: -
 --
