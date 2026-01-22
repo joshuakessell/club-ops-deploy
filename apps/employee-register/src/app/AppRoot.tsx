@@ -702,7 +702,7 @@ export function AppRoot() {
   // Derive lane from register number
   const lane = registerSession ? `lane-${registerSession.registerNumber}` : 'lane-1';
 
-  const handleLogout = async () => {
+  const handleLogout = async (options?: { signOutAll?: boolean }) => {
     const inProgress = Boolean(
       currentSessionId && customerName && customerName.trim().length > 0 && !checkoutAt
     );
@@ -734,13 +734,17 @@ export function AppRoot() {
         // IMPORTANT: release the register session (server-side) before logging out staff.
         // This makes the separate "menu sign out" redundant and keeps register availability correct.
         try {
-          await fetch(`${API_BASE}/v1/registers/signout`, {
+          const endpoint = options?.signOutAll
+            ? `${API_BASE}/v1/registers/signout-all`
+            : `${API_BASE}/v1/registers/signout`;
+          const body = options?.signOutAll ? {} : { deviceId };
+          await fetch(endpoint, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${session.sessionToken}`,
             },
-            body: JSON.stringify({ deviceId }),
+            body: JSON.stringify(body),
           });
         } catch (err) {
           console.warn('Register signout failed (continuing):', err);
@@ -764,9 +768,11 @@ export function AppRoot() {
   };
 
   const handleCloseOut = async () => {
-    const confirmed = window.confirm('Close Out: this will sign you out of the register. Continue?');
+    const confirmed = window.confirm(
+      'Close Out: this will sign you out of all registers. Continue?'
+    );
     if (!confirmed) return;
-    await handleLogout();
+    await handleLogout({ signOutAll: true });
   };
   const runCustomerSearch = useMemo(
     () =>

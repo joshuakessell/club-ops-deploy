@@ -26,6 +26,8 @@ interface Employee {
   id: string;
   name: string;
   role: string;
+  signedIn: boolean;
+  registerNumbers: number[];
 }
 
 interface SignInModalProps {
@@ -83,7 +85,15 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
           (e) =>
             typeof e.id === 'string' && typeof e.name === 'string' && typeof e.role === 'string'
         )
-        .map((e) => ({ id: e.id as string, name: e.name as string, role: e.role as string }));
+        .map((e) => ({
+          id: e.id as string,
+          name: e.name as string,
+          role: e.role as string,
+          signedIn: Boolean(e.signedIn),
+          registerNumbers: Array.isArray(e.registerNumbers)
+            ? e.registerNumbers.filter((n) => typeof n === 'number')
+            : [],
+        }));
       setEmployees(employees);
     } catch (error) {
       console.error('Failed to fetch employees:', error);
@@ -259,6 +269,14 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     setError(null);
   };
 
+  const formatSignedInLabel = (employee: Employee) => {
+    if (!employee.signedIn) return '';
+    const registers = employee.registerNumbers
+      .map((num) => `Register ${num}`)
+      .join(', ');
+    return registers ? ` (Signed in: ${registers})` : ' (Signed in)';
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -278,7 +296,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
             {error && <div className="sign-in-error">{error}</div>}
             <div className="employee-list">
               {employees.length === 0 ? (
-                <p>No available employees</p>
+                <p>No employees found</p>
               ) : (
                 employees.map((emp) => (
                   <button
@@ -288,6 +306,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                     disabled={isLoading}
                   >
                     {emp.name}
+                    {formatSignedInLabel(emp)}
                   </button>
                 ))
               )}
@@ -339,20 +358,26 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
                 {([1, 2] as const).map((num) => {
                   const reg = registers.find((r) => r.registerNumber === num);
                   const occupied = reg?.occupied ?? false;
-                  const occupiedLabel = reg?.employee?.name
-                    ? ` (In use: ${reg.employee.name})`
-                    : ' (In use)';
+                  const occupiedBySelectedEmployee = reg?.employee?.id === selectedEmployee?.id;
+                  const occupiedLabel = occupied
+                    ? occupiedBySelectedEmployee
+                      ? ' (Signed in)'
+                      : reg?.employee?.name
+                        ? ` (In use: ${reg.employee.name})`
+                        : ' (In use)'
+                    : '';
+                  const disabled = isLoading || occupied;
 
                   return (
                     <button
                       key={num}
                       className="register-button cs-liquid-button"
                       onClick={() => void handleSelectRegister(num)}
-                      disabled={isLoading || occupied}
+                      disabled={disabled}
                       title={occupied ? `Register ${num} is occupied` : `Use Register ${num}`}
                     >
                       Register {num}
-                      {occupied ? occupiedLabel : ''}
+                      {occupiedLabel}
                     </button>
                   );
                 })}

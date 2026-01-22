@@ -107,8 +107,7 @@ export async function registerRoutes(
   /**
    * GET /v1/employees/available
    *
-   * Returns list of employees available for register sign-in.
-   * Excludes employees already signed into any register.
+   * Returns list of employees for register sign-in, including signed-in status.
    */
   fastify.get('/v1/employees/available', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -121,29 +120,37 @@ export async function registerRoutes(
       );
 
       // Get employees currently signed into registers
-      const signedInEmployees = await query<{ employee_id: string }>(
-        `SELECT DISTINCT employee_id
+      const activeSessions = await query<{ employee_id: string; register_number: number }>(
+        `SELECT employee_id, register_number
          FROM register_sessions
          WHERE signed_out_at IS NULL`
       );
 
-      const signedInIds = new Set(signedInEmployees.rows.map((r) => r.employee_id));
+      const registersByEmployee = new Map<string, number[]>();
+      for (const row of activeSessions.rows) {
+        const current = registersByEmployee.get(row.employee_id) ?? [];
+        current.push(row.register_number);
+        registersByEmployee.set(row.employee_id, current);
+      }
 
-      // Filter out signed-in employees
-      const available = allEmployees.rows
-        .filter((emp) => !signedInIds.has(emp.id))
-        .map((emp) => ({
+      const employees = allEmployees.rows.map((emp) => {
+        const registerNumbers = registersByEmployee.get(emp.id) ?? [];
+        registerNumbers.sort((a, b) => a - b);
+        return {
           id: emp.id,
           name: emp.name,
           role: emp.role,
-        }));
+          signedIn: registerNumbers.length > 0,
+          registerNumbers,
+        };
+      });
 
-      return reply.send({ employees: available });
+      return reply.send({ employees });
     } catch (error) {
-      request.log.error(error, 'Failed to fetch available employees');
+      request.log.error(error, 'Failed to fetch employees');
       return reply.status(500).send({
         error: 'Internal Server Error',
-        message: 'Failed to fetch available employees',
+        message: 'Failed to fetch employees',
       });
     }
   });
@@ -327,18 +334,6 @@ export async function registerRoutes(
         }
 
         const result = await transaction(async (client) => {
-          // Check if employee is already signed in
-          const existingSession = await client.query<RegisterSessionRow>(
-            `SELECT * FROM register_sessions
-           WHERE employee_id = $1
-           AND signed_out_at IS NULL`,
-            [body.employeeId]
-          );
-
-          if (existingSession.rows.length > 0) {
-            throw new Error('Employee already signed into a register');
-          }
-
           // Check if device is already signed in
           const existingDevice = await client.query<RegisterSessionRow>(
             `SELECT * FROM register_sessions
@@ -432,17 +427,6 @@ export async function registerRoutes(
 
         const result = await transaction(async (client) => {
           // Double-check constraints before inserting
-          const existingEmployee = await client.query<RegisterSessionRow>(
-            `SELECT * FROM register_sessions
-           WHERE employee_id = $1
-           AND signed_out_at IS NULL`,
-            [body.employeeId]
-          );
-
-          if (existingEmployee.rows.length > 0) {
-            throw new Error('Employee already signed into a register');
-          }
-
           const existingDevice = await client.query<RegisterSessionRow>(
             `SELECT * FROM register_sessions
            WHERE device_id = $1
@@ -765,6 +749,101 @@ export async function registerRoutes(
         return reply.send(result);
       } catch (error) {
         request.log.error(error, 'Sign out error');
+        const message = error instanceof Error ? error.message : 'Failed to sign out';
+        return reply.status(400).send({
+          error: 'Sign out failed',
+          message,
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/registers/signout-all
+   *
+   * Signs out an employee from all active register sessions.
+   * Requires authentication (session token).
+   */
+  fastify.post(
+    '/v1/registers/signout-all',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      const staff = request.staff;
+      if (!staff) {
+        return reply.status(401).send({
+          error: 'Unauthorized',
+        });
+      }
+
+      try {
+        const result = await transaction(async (client) => {
+          const sessionResult = await client.query<RegisterSessionRow>(
+            `UPDATE register_sessions
+             SET signed_out_at = NOW()
+             WHERE employee_id = $1
+             AND signed_out_at IS NULL
+             RETURNING *`,
+            [staff.staffId]
+          );
+
+          if (sessionResult.rows.length === 0) {
+            return { success: true, signedOutCount: 0 };
+          }
+
+          for (const session of sessionResult.rows) {
+            await insertAuditLog(client, {
+              staffId: request.staff!.staffId,
+              action: 'REGISTER_SIGN_OUT',
+              entityType: 'register_session',
+              entityId: session.id,
+            });
+
+            const payload = {
+              registerNumber: session.register_number as 1 | 2,
+              active: false,
+              sessionId: null,
+              employee: null,
+              deviceId: null,
+              createdAt: null,
+              lastHeartbeatAt: null,
+              reason: 'SIGNED_OUT' as const,
+            };
+
+            fastify.broadcaster.broadcastRegisterSessionUpdated(payload);
+          }
+
+          const otherRegisterSession = await client.query<{ count: string }>(
+            `SELECT COUNT(*) as count FROM register_sessions
+             WHERE employee_id = $1 AND signed_out_at IS NULL`,
+            [staff.staffId]
+          );
+
+          const otherStaffSession = await client.query<{ count: string }>(
+            `SELECT COUNT(*) as count FROM staff_sessions
+             WHERE staff_id = $1 AND revoked_at IS NULL AND expires_at > NOW()`,
+            [staff.staffId]
+          );
+
+          if (
+            parseInt(otherRegisterSession.rows[0]?.count || '0', 10) === 0 &&
+            parseInt(otherStaffSession.rows[0]?.count || '0', 10) === 0
+          ) {
+            await client.query(
+              `UPDATE timeclock_sessions
+               SET clock_out_at = NOW()
+               WHERE employee_id = $1 AND clock_out_at IS NULL`,
+              [staff.staffId]
+            );
+          }
+
+          return { success: true, signedOutCount: sessionResult.rows.length };
+        });
+
+        return reply.send(result);
+      } catch (error) {
+        request.log.error(error, 'Sign out all error');
         const message = error instanceof Error ? error.message : 'Failed to sign out';
         return reply.status(400).send({
           error: 'Sign out failed',
