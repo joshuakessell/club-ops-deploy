@@ -32,17 +32,24 @@ describe('Telemetry', () => {
     }
   });
 
-  it('ingests a single event and echoes x-request-id', async () => {
+  it('ingests spans and echoes x-request-id', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/v1/telemetry',
       headers: { 'x-request-id': 'ingest-1' },
       payload: {
-        timestamp: new Date().toISOString(),
+        traceId: 'trace-1',
         app: 'customer-kiosk',
-        level: 'error',
-        kind: 'ui.error',
-        message: 'boom',
+        deviceId: 'device-1',
+        sessionId: 'session-1',
+        spans: [
+          {
+            spanType: 'ui.click',
+            level: 'info',
+            name: 'Click: Submit',
+            route: '/start',
+          },
+        ],
       },
     });
 
@@ -50,20 +57,23 @@ describe('Telemetry', () => {
     expect(res.headers['x-request-id']).toBe('ingest-1');
 
     const rows = await query<{
+      span_type: string;
+      trace_id: string;
       app: string;
-      kind: string;
-      request_id: string | null;
-      message: string | null;
-    }>(`SELECT app, kind, request_id, message FROM telemetry_events ORDER BY id DESC LIMIT 1`);
+      device_id: string;
+      session_id: string;
+    }>(
+      `SELECT span_type, trace_id, app, device_id, session_id FROM telemetry_spans ORDER BY started_at DESC LIMIT 1`
+    );
 
+    expect(rows.rows[0]?.span_type).toBe('ui.click');
+    expect(rows.rows[0]?.trace_id).toBe('trace-1');
     expect(rows.rows[0]?.app).toBe('customer-kiosk');
-    expect(rows.rows[0]?.kind).toBe('ui.error');
-    // Fallback when event.requestId is omitted.
-    expect(rows.rows[0]?.request_id).toBe('ingest-1');
-    expect(rows.rows[0]?.message).toBe('boom');
+    expect(rows.rows[0]?.device_id).toBe('device-1');
+    expect(rows.rows[0]?.session_id).toBe('session-1');
   });
 
-  it('auto-captures backend 5xx responses with requestId', async () => {
+  it('auto-captures backend 5xx responses', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/boom',
@@ -73,10 +83,9 @@ describe('Telemetry', () => {
     expect(res.statusCode).toBe(500);
     expect(res.headers['x-request-id']).toBe('req-500');
 
-    const rows = await query<{ kind: string; request_id: string | null }>(
-      `SELECT kind, request_id FROM telemetry_events WHERE request_id = $1 ORDER BY id DESC`,
-      ['req-500']
+    const rows = await query<{ span_type: string; status: number | null }>(
+      `SELECT span_type, status FROM telemetry_spans WHERE status = 500 ORDER BY started_at DESC`
     );
-    expect(rows.rows.some((r) => r.kind === 'backend.http_5xx')).toBe(true);
+    expect(rows.rows.some((r) => r.span_type === 'api.response')).toBe(true);
   });
 });

@@ -5,56 +5,68 @@ import { requireAuth, requireAdmin } from '../auth/middleware';
 import { parseSince } from '../telemetry/parseSince';
 import { decodeCursor, encodeCursor, type TelemetryCursor } from '../telemetry/pagination';
 
-const TelemetryBaseQuerySchema = z.object({
+const TelemetryTraceQuerySchema = z.object({
   since: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
-
   app: z.string().optional(),
-  level: z.string().optional(),
-  kind: z.string().optional(),
-  lane: z.string().optional(),
   deviceId: z.string().optional(),
-  requestId: z.string().optional(),
-
-  q: z.string().optional(),
-});
-
-const TelemetryEventsQuerySchema = TelemetryBaseQuerySchema.extend({
+  sessionId: z.string().optional(),
+  traceId: z.string().optional(),
+  incidentOnly: z.string().optional(),
   cursor: z.string().optional(),
   direction: z.enum(['next', 'prev']).optional(),
   limit: z.string().optional(),
 });
 
-const TelemetryExportQuerySchema = TelemetryBaseQuerySchema.extend({
+const TelemetryTraceDetailSchema = z.object({
+  incidentId: z.string().optional(),
+  limit: z.string().optional(),
+});
+
+const TelemetryExportSchema = z.object({
+  traceId: z.string().min(1),
+  incidentId: z.string().optional(),
+  bundle: z.string().optional(),
   format: z.enum(['json', 'csv']).optional().default('json'),
-  cursorFrom: z.string().optional(),
-  cursorTo: z.string().optional(),
-  limit: z.string().optional(),
 });
 
-const TelemetryTailQuerySchema = TelemetryBaseQuerySchema.extend({
-  after: z.string().optional(),
-  includePage: z.string().optional(),
-  limit: z.string().optional(),
-});
-
-type TelemetryEventRow = {
-  id: string;
-  created_at: Date;
+type TelemetryTraceRow = {
+  trace_id: string;
   app: string;
+  device_id: string;
+  session_id: string;
+  started_at: Date;
+  last_seen_at: Date;
+  incident_open: boolean;
+  incident_last_at: Date | null;
+};
+
+type TelemetrySpanRow = {
+  id: string;
+  trace_id: string;
+  app: string;
+  device_id: string;
+  session_id: string;
+  span_type: string;
+  name: string | null;
   level: string;
-  kind: string;
+  started_at: Date;
+  ended_at: Date | null;
+  duration_ms: number | null;
   route: string | null;
-  message: string | null;
-  stack: string | null;
-  request_id: string | null;
-  session_id: string | null;
-  device_id: string | null;
-  lane: string | null;
   method: string | null;
   status: number | null;
   url: string | null;
+  message: string | null;
+  stack: string | null;
+  request_headers: unknown;
+  response_headers: unknown;
+  request_body: unknown;
+  response_body: unknown;
+  request_key: string | null;
+  incident_id: string | null;
+  incident_reason: string | null;
   meta: unknown;
 };
 
@@ -65,9 +77,8 @@ type TelemetryPage = {
   prevCursor: string | null;
 };
 
-const TELEMETRY_SORT_COLUMNS = new Set(['created_at', 'id']);
-const EVENTS_ORDER_DESC = `created_at DESC, id DESC`;
-const EVENTS_ORDER_ASC = `created_at ASC, id ASC`;
+const TRACES_ORDER_DESC = `last_seen_at DESC, trace_id DESC`;
+const TRACES_ORDER_ASC = `last_seen_at ASC, trace_id ASC`;
 
 function parseIsoDate(value: string): Date | null {
   const d = new Date(value);
@@ -87,7 +98,24 @@ function parseBoolean(raw: unknown): boolean {
   return v === 'true' || v === '1' || v === 'yes';
 }
 
-function buildTelemetryWhere(input: z.infer<typeof TelemetryBaseQuerySchema>): {
+function addCursorBound(
+  where: string[],
+  params: unknown[],
+  op: '<' | '>' | '<=' | '>=',
+  cursor: TelemetryCursor
+): void {
+  params.push(cursor.createdAt, cursor.id);
+  where.push(`(last_seen_at, trace_id) ${op} ($${params.length - 1}, $${params.length})`);
+}
+
+function decodeCursorOrThrow(raw: string | undefined, label: string): TelemetryCursor | null {
+  if (!raw) return null;
+  const decoded = decodeCursor(raw);
+  if (!decoded) throw new Error(`Invalid ${label} cursor`);
+  return decoded;
+}
+
+function buildTraceWhere(input: z.infer<typeof TelemetryTraceQuerySchema>): {
   where: string[];
   params: unknown[];
 } {
@@ -120,43 +148,22 @@ function buildTelemetryWhere(input: z.infer<typeof TelemetryBaseQuerySchema>): {
   if (input.to && !toDate) throw new Error('Invalid `to`');
   if (input.since && !input.from && !sinceDate) throw new Error('Invalid `since`');
 
-  addGte('created_at', fromDate ?? undefined);
-  addLte('created_at', toDate ?? undefined);
+  addGte('last_seen_at', fromDate ?? undefined);
+  addLte('last_seen_at', toDate ?? undefined);
 
   addEq('app', input.app);
-  addEq('level', input.level);
-  addEq('kind', input.kind);
-  addEq('lane', input.lane);
   addEq('device_id', input.deviceId);
-  addEq('request_id', input.requestId);
+  addEq('session_id', input.sessionId);
+  addEq('trace_id', input.traceId);
 
-  if (input.q && input.q.trim()) {
-    params.push(`%${input.q.trim()}%`);
-    const p = `$${params.length}`;
-    where.push(`(COALESCE(message, '') ILIKE ${p} OR kind ILIKE ${p} OR COALESCE(route, '') ILIKE ${p})`);
+  if (parseBoolean(input.incidentOnly)) {
+    where.push('(incident_open = true OR incident_last_at IS NOT NULL)');
   }
 
   return { where, params };
 }
 
-function addCursorBound(
-  where: string[],
-  params: unknown[],
-  op: '<' | '>' | '<=' | '>=',
-  cursor: TelemetryCursor
-): void {
-  params.push(cursor.createdAt, cursor.id);
-  where.push(`(created_at, id) ${op} ($${params.length - 1}, $${params.length})`);
-}
-
-function decodeCursorOrThrow(raw: string | undefined, label: string): TelemetryCursor | null {
-  if (!raw) return null;
-  const decoded = decodeCursor(raw);
-  if (!decoded) throw new Error(`Invalid ${label} cursor`);
-  return decoded;
-}
-
-function getPageMeta(rows: TelemetryEventRow[], limit: number, hasMore: boolean): TelemetryPage {
+function getPageMeta(rows: TelemetryTraceRow[], limit: number, hasMore: boolean): TelemetryPage {
   if (rows.length === 0) {
     return { limit, hasMore: false, nextCursor: null, prevCursor: null };
   }
@@ -166,8 +173,8 @@ function getPageMeta(rows: TelemetryEventRow[], limit: number, hasMore: boolean)
   return {
     limit,
     hasMore,
-    nextCursor: hasMore ? encodeCursor({ createdAt: last.created_at, id: last.id }) : null,
-    prevCursor: encodeCursor({ createdAt: first.created_at, id: first.id }),
+    nextCursor: hasMore ? encodeCursor({ createdAt: last.last_seen_at, id: last.trace_id }) : null,
+    prevCursor: encodeCursor({ createdAt: first.last_seen_at, id: first.trace_id }),
   };
 }
 
@@ -188,25 +195,51 @@ function csvEscape(value: unknown): string {
   return needsQuotes ? `"${escaped}"` : escaped;
 }
 
+async function loadIncidentBundle(traceId: string, incidentId: string): Promise<TelemetrySpanRow[]> {
+  const incidentRes = await query<TelemetrySpanRow>(
+    `
+    SELECT *
+    FROM telemetry_spans
+    WHERE trace_id = $1 AND incident_id = $2
+    ORDER BY started_at ASC
+    `,
+    [traceId, incidentId]
+  );
+
+  if (incidentRes.rows.length === 0) return [];
+  const incidentStart = incidentRes.rows[0]!.started_at;
+
+  const breadcrumbsRes = await query<TelemetrySpanRow>(
+    `
+    SELECT *
+    FROM telemetry_spans
+    WHERE trace_id = $1
+      AND started_at <= $2
+      AND (meta->>'breadcrumb')::boolean = true
+    ORDER BY started_at DESC
+    LIMIT 200
+    `,
+    [traceId, incidentStart]
+  );
+
+  const breadcrumbs = breadcrumbsRes.rows.reverse();
+  return [...breadcrumbs, ...incidentRes.rows];
+}
+
 export async function adminTelemetryRoutes(fastify: FastifyInstance): Promise<void> {
   /**
-   * GET /v1/admin/telemetry/events
-   * Admin-only telemetry inspection.
-   *
-   * Manual test notes:
-   * - Fetch first page (no cursor) and verify page metadata.
-   * - Use nextCursor with direction=next to page older.
-   * - Use prevCursor with direction=prev to page newer.
+   * GET /v1/admin/telemetry/traces
+   * Admin-only trace list.
    */
   fastify.get<{
-    Querystring: z.infer<typeof TelemetryEventsQuerySchema>;
+    Querystring: z.infer<typeof TelemetryTraceQuerySchema>;
   }>(
-    '/v1/admin/telemetry/events',
+    '/v1/admin/telemetry/traces',
     {
       preHandler: [requireAuth, requireAdmin],
     },
     async (request, reply) => {
-      const parsed = TelemetryEventsQuerySchema.safeParse(request.query ?? {});
+      const parsed = TelemetryTraceQuerySchema.safeParse(request.query ?? {});
       if (!parsed.success) {
         return reply.status(400).send({ error: 'Bad Request', message: 'Invalid query params' });
       }
@@ -227,7 +260,7 @@ export async function adminTelemetryRoutes(fastify: FastifyInstance): Promise<vo
       let where: string[] = [];
       let params: unknown[] = [];
       try {
-        const built = buildTelemetryWhere(parsed.data);
+        const built = buildTraceWhere(parsed.data);
         where = built.where;
         params = built.params;
       } catch (err) {
@@ -239,17 +272,12 @@ export async function adminTelemetryRoutes(fastify: FastifyInstance): Promise<vo
       }
 
       const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-      const orderBy = EVENTS_ORDER_DESC;
-      if (!TELEMETRY_SORT_COLUMNS.has('created_at') || !TELEMETRY_SORT_COLUMNS.has('id')) {
-        return reply.status(500).send({ error: 'Internal server error' });
-      }
+      const orderBy = direction === 'prev' ? TRACES_ORDER_ASC : TRACES_ORDER_DESC;
 
-      const res = await query<TelemetryEventRow>(
+      const res = await query<TelemetryTraceRow>(
         `
-        SELECT id, created_at, app, level, kind, route, message, stack,
-               request_id, session_id, device_id, lane,
-               method, status, url, meta
-        FROM telemetry_events
+        SELECT trace_id, app, device_id, session_id, started_at, last_seen_at, incident_open, incident_last_at
+        FROM telemetry_traces
         ${whereSql}
         ORDER BY ${orderBy}
         LIMIT ${limit + 1}
@@ -259,202 +287,163 @@ export async function adminTelemetryRoutes(fastify: FastifyInstance): Promise<vo
 
       const hasMore = res.rows.length > limit;
       const rows = hasMore ? res.rows.slice(0, limit) : res.rows;
+      const page = getPageMeta(rows, limit, hasMore);
 
-      let page: TelemetryPage = { limit, hasMore, nextCursor: null, prevCursor: null };
-      if (rows.length > 0) {
-        const first = rows[0]!;
-        const last = rows[rows.length - 1]!;
-        const prevCursor = encodeCursor({ createdAt: first.created_at, id: first.id });
-        const nextCursor = encodeCursor({ createdAt: last.created_at, id: last.id });
-        page =
-          direction === 'prev'
-            ? { limit, hasMore, nextCursor, prevCursor }
-            : { limit, hasMore, nextCursor: hasMore ? nextCursor : null, prevCursor };
-      }
-
-      return reply.status(200).send({ events: rows, page });
+      return reply.status(200).send({ traces: rows, page });
     }
   );
 
   /**
-   * GET /v1/admin/telemetry/tail
-   * Admin-only tail for efficient polling.
+   * GET /v1/admin/telemetry/traces/:traceId
+   * Admin-only trace detail with spans.
    */
   fastify.get<{
-    Querystring: z.infer<typeof TelemetryTailQuerySchema>;
+    Params: { traceId: string };
+    Querystring: z.infer<typeof TelemetryTraceDetailSchema>;
   }>(
-    '/v1/admin/telemetry/tail',
+    '/v1/admin/telemetry/traces/:traceId',
     {
       preHandler: [requireAuth, requireAdmin],
     },
     async (request, reply) => {
-      const parsed = TelemetryTailQuerySchema.safeParse(request.query ?? {});
+      const parsed = TelemetryTraceDetailSchema.safeParse(request.query ?? {});
       if (!parsed.success) {
         return reply.status(400).send({ error: 'Bad Request', message: 'Invalid query params' });
       }
 
-      if (!parsed.data.after) {
-        return reply.status(400).send({ error: 'Bad Request', message: '`after` is required' });
-      }
+      const limit = parseLimit(parsed.data.limit, 2000);
+      const traceId = request.params.traceId;
 
-      let afterCursor: TelemetryCursor | null = null;
-      try {
-        afterCursor = decodeCursorOrThrow(parsed.data.after, 'after');
-      } catch (err) {
-        return reply.status(400).send({ error: 'Bad Request', message: (err as Error).message });
-      }
-
-      if (!afterCursor) {
-        return reply.status(400).send({ error: 'Bad Request', message: 'Invalid after cursor' });
-      }
-
-      const limit = parseLimit(parsed.data.limit, 200);
-      const includePage = parseBoolean(parsed.data.includePage);
-
-      let where: string[] = [];
-      let params: unknown[] = [];
-      try {
-        const built = buildTelemetryWhere(parsed.data);
-        where = built.where;
-        params = built.params;
-      } catch (err) {
-        return reply.status(400).send({ error: 'Bad Request', message: (err as Error).message });
-      }
-
-      addCursorBound(where, params, '>', afterCursor);
-
-      const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-      const orderBy = EVENTS_ORDER_ASC;
-      if (!TELEMETRY_SORT_COLUMNS.has('created_at') || !TELEMETRY_SORT_COLUMNS.has('id')) {
-        return reply.status(500).send({ error: 'Internal server error' });
-      }
-
-      const tailLimit = includePage ? limit + 1 : limit;
-      const res = await query<TelemetryEventRow>(
+      const traceRes = await query<TelemetryTraceRow>(
         `
-        SELECT id, created_at, app, level, kind, route, message, stack,
-               request_id, session_id, device_id, lane,
-               method, status, url, meta
-        FROM telemetry_events
-        ${whereSql}
-        ORDER BY ${orderBy}
-        LIMIT ${tailLimit}
+        SELECT trace_id, app, device_id, session_id, started_at, last_seen_at, incident_open, incident_last_at
+        FROM telemetry_traces
+        WHERE trace_id = $1
         `,
-        params
+        [traceId]
       );
 
-      const hasMore = includePage && res.rows.length > limit;
-      const rows = hasMore ? res.rows.slice(0, limit) : res.rows;
-      const latestCursor =
-        rows.length > 0 ? encodeCursor({ createdAt: rows[rows.length - 1]!.created_at, id: rows[rows.length - 1]!.id }) : parsed.data.after;
-
-      const response: { events: TelemetryEventRow[]; cursor: { latestCursor: string | null }; page?: TelemetryPage } = {
-        events: rows,
-        cursor: { latestCursor },
-      };
-
-      if (includePage) {
-        response.page = getPageMeta(rows, limit, hasMore);
+      if (traceRes.rows.length === 0) {
+        return reply.status(404).send({ error: 'Not found' });
       }
 
-      return reply.status(200).send(response);
+      let spans: TelemetrySpanRow[] = [];
+      if (parsed.data.incidentId) {
+        spans = await loadIncidentBundle(traceId, parsed.data.incidentId);
+      } else {
+        const spanRes = await query<TelemetrySpanRow>(
+          `
+          SELECT *
+          FROM telemetry_spans
+          WHERE trace_id = $1
+          ORDER BY started_at ASC
+          LIMIT $2
+          `,
+          [traceId, limit]
+        );
+        spans = spanRes.rows;
+      }
+
+      return reply.status(200).send({ trace: traceRes.rows[0], spans });
     }
   );
 
   /**
    * GET /v1/admin/telemetry/export
-   * Admin-only export for triage / ChatGPT import.
+   * Admin-only export (trace or incident bundle).
    */
   fastify.get<{
-    Querystring: z.infer<typeof TelemetryExportQuerySchema>;
+    Querystring: z.infer<typeof TelemetryExportSchema>;
   }>(
     '/v1/admin/telemetry/export',
     {
       preHandler: [requireAuth, requireAdmin],
     },
     async (request, reply) => {
-      const parsed = TelemetryExportQuerySchema.safeParse(request.query ?? {});
+      const parsed = TelemetryExportSchema.safeParse(request.query ?? {});
       if (!parsed.success) {
         return reply.status(400).send({ error: 'Bad Request', message: 'Invalid query params' });
       }
 
-      const limit = parseLimit(parsed.data.limit, 200);
+      const traceId = parsed.data.traceId;
+      const incidentId = parsed.data.incidentId;
+      const bundle = parseBoolean(parsed.data.bundle);
 
-      let cursorFrom: TelemetryCursor | null = null;
-      let cursorTo: TelemetryCursor | null = null;
-      try {
-        cursorFrom = decodeCursorOrThrow(parsed.data.cursorFrom, 'cursorFrom');
-        cursorTo = decodeCursorOrThrow(parsed.data.cursorTo, 'cursorTo');
-      } catch (err) {
-        return reply.status(400).send({ error: 'Bad Request', message: (err as Error).message });
+      let spans: TelemetrySpanRow[] = [];
+      if (incidentId && bundle) {
+        spans = await loadIncidentBundle(traceId, incidentId);
+      } else if (incidentId) {
+        const spanRes = await query<TelemetrySpanRow>(
+          `
+          SELECT *
+          FROM telemetry_spans
+          WHERE trace_id = $1 AND incident_id = $2
+          ORDER BY started_at ASC
+          `,
+          [traceId, incidentId]
+        );
+        spans = spanRes.rows;
+      } else {
+        const spanRes = await query<TelemetrySpanRow>(
+          `
+          SELECT *
+          FROM telemetry_spans
+          WHERE trace_id = $1
+          ORDER BY started_at ASC
+          `,
+          [traceId]
+        );
+        spans = spanRes.rows;
       }
-
-      let where: string[] = [];
-      let params: unknown[] = [];
-      try {
-        const built = buildTelemetryWhere(parsed.data);
-        where = built.where;
-        params = built.params;
-      } catch (err) {
-        return reply.status(400).send({ error: 'Bad Request', message: (err as Error).message });
-      }
-
-      if (cursorFrom) addCursorBound(where, params, '<=', cursorFrom);
-      if (cursorTo) addCursorBound(where, params, '>=', cursorTo);
-
-      const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-      const orderBy = EVENTS_ORDER_DESC;
-      if (!TELEMETRY_SORT_COLUMNS.has('created_at') || !TELEMETRY_SORT_COLUMNS.has('id')) {
-        return reply.status(500).send({ error: 'Internal server error' });
-      }
-
-      const res = await query<TelemetryEventRow>(
-        `
-        SELECT id, created_at, app, level, kind, route, message, stack,
-               request_id, session_id, device_id, lane,
-               method, status, url, meta
-        FROM telemetry_events
-        ${whereSql}
-        ORDER BY ${orderBy}
-        LIMIT ${limit}
-        `,
-        params
-      );
 
       if (parsed.data.format === 'csv') {
         const header = [
-          'created_at',
+          'started_at',
+          'trace_id',
           'app',
-          'level',
-          'kind',
-          'route',
-          'message',
-          'request_id',
-          'session_id',
           'device_id',
-          'lane',
+          'session_id',
+          'span_type',
+          'name',
+          'level',
+          'route',
           'method',
           'status',
           'url',
+          'message',
+          'request_key',
+          'incident_id',
+          'incident_reason',
           'meta',
+          'request_headers',
+          'response_headers',
+          'request_body',
+          'response_body',
         ].join(',');
 
-        const rows = res.rows.map((r) =>
+        const rows = spans.map((s) =>
           [
-            csvEscape(r.created_at),
-            csvEscape(r.app),
-            csvEscape(r.level),
-            csvEscape(r.kind),
-            csvEscape(r.route),
-            csvEscape(r.message),
-            csvEscape(r.request_id),
-            csvEscape(r.session_id),
-            csvEscape(r.device_id),
-            csvEscape(r.lane),
-            csvEscape(r.method),
-            csvEscape(r.status),
-            csvEscape(r.url),
-            csvEscape(r.meta),
+            csvEscape(s.started_at),
+            csvEscape(s.trace_id),
+            csvEscape(s.app),
+            csvEscape(s.device_id),
+            csvEscape(s.session_id),
+            csvEscape(s.span_type),
+            csvEscape(s.name),
+            csvEscape(s.level),
+            csvEscape(s.route),
+            csvEscape(s.method),
+            csvEscape(s.status),
+            csvEscape(s.url),
+            csvEscape(s.message),
+            csvEscape(s.request_key),
+            csvEscape(s.incident_id),
+            csvEscape(s.incident_reason),
+            csvEscape(s.meta),
+            csvEscape(s.request_headers),
+            csvEscape(s.response_headers),
+            csvEscape(s.request_body),
+            csvEscape(s.response_body),
           ].join(',')
         );
 
@@ -463,7 +452,12 @@ export async function adminTelemetryRoutes(fastify: FastifyInstance): Promise<vo
         return reply.status(200).send(csv);
       }
 
-      return reply.status(200).send({ events: res.rows });
+      return reply.status(200).send({
+        traceId,
+        incidentId: incidentId ?? null,
+        bundle,
+        spans,
+      });
     }
   );
 }

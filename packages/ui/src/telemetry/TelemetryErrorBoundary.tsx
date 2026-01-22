@@ -6,9 +6,10 @@ export class TelemetryErrorBoundary extends React.Component<{ children: ReactNod
   override componentDidCatch(error: Error, info: React.ErrorInfo): void {
     try {
       const telemetry = getInstalledTelemetry();
+      telemetry?.startIncident('react.error');
       telemetry?.capture({
+        spanType: 'react.error',
         level: 'error',
-        kind: 'react.error',
         message: error.message,
         stack: error.stack,
         meta: { componentStack: info.componentStack },
