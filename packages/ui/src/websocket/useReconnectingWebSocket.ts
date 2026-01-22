@@ -174,8 +174,8 @@ export function useReconnectingWebSocket(
     } catch (err) {
       try {
         getInstalledTelemetry()?.capture({
+          spanType: 'ws.guard_error',
           level: 'error',
-          kind: 'ws.guard_error',
           message: err instanceof Error ? err.message : 'Failed to init guarded WebSocket',
           url,
         });
@@ -226,8 +226,8 @@ export function useReconnectingWebSocket(
       if (!current || current !== ws) return;
       try {
         getInstalledTelemetry()?.capture({
+          spanType: 'ws.error',
           level: 'error',
-          kind: 'ws.error',
           message: 'WebSocket error',
           url,
           meta: { type: event.type },

@@ -17,5 +17,7 @@ export * from './components/LiquidGlassPinInput.js';
 export * from './telemetry/installTelemetry.js';
 export * from './telemetry/TelemetryErrorBoundary.js';
 export * from './telemetry/types.js';
+export * from './telemetry/ReportIssueButton.js';
+export * from './telemetry/interactionTelemetry.js';
 
 export * from './webauthn/client.js';

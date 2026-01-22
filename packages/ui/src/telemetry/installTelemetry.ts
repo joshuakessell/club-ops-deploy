@@ -1,17 +1,36 @@
 import { getInstalledTelemetry, setInstalledTelemetry } from './global.js';
-import type { TelemetryClient, TelemetryEvent } from './types.js';
+import { getCurrentRoute } from './interactionTelemetry.js';
+import type { TelemetryClient, TelemetryContext, TelemetrySpanInput } from './types.js';
 
 export type InstallTelemetryOptions = {
   app: 'customer-kiosk' | 'employee-register' | string;
   endpoint?: string;
   isDev?: boolean;
-  captureConsoleWarnInDev?: boolean;
   maxBatchSize?: number;
   flushIntervalMs?: number;
   getLane?: () => string | undefined;
+  breadcrumbsEnabled?: boolean;
+  deepOnWarn?: boolean;
+  deepOnError?: boolean;
+  deepWindowMs?: number;
+  breadcrumbLimit?: number;
+  breadcrumbSampleRate?: number;
 };
 
 const DEFAULT_ENDPOINT = '/api/v1/telemetry';
+const DEFAULT_BREADCRUMB_LIMIT = 200;
+const DEFAULT_DEEP_WINDOW_MS = 60_000;
+const HEADER_BLOCKLIST = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'x-auth-token',
+  'x-csrf-token',
+  'csrf-token',
+  'proxy-authorization',
+]);
+const BODY_DENYLIST = ['/payment', '/square', '/auth', '/login', '/pin'];
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -72,16 +91,105 @@ function getOrCreateStorageId(storage: Storage, key: string): string {
   }
 }
 
-function currentRoute(): string {
-  const path = window.location.pathname || '/';
-  const search = window.location.search || '';
-  return `${path}${search}`;
-}
-
 function shouldSkipUrl(url: string, endpoint: string): boolean {
   if (url.includes(endpoint)) return true;
   if (url.includes('/v1/telemetry')) return true;
   return false;
+}
+
+function shouldCaptureBody(url: string): boolean {
+  const lower = url.toLowerCase();
+  return !BODY_DENYLIST.some((part) => lower.includes(part));
+}
+
+function stripQuery(url: string): { path: string; queryKeys: string[] } {
+  try {
+    const base = 'http://local.invalid';
+    const u = new URL(url, base);
+    const queryKeys = Array.from(new Set(Array.from(u.searchParams.keys())));
+    u.search = '';
+    u.hash = '';
+    return { path: u.pathname || url, queryKeys };
+  } catch {
+    const [path] = url.split('?');
+    return { path: path || url, queryKeys: [] };
+  }
+}
+
+function redactHeaders(headers: Headers): Record<string, string> {
+  const out: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    if (HEADER_BLOCKLIST.has(key.toLowerCase())) {
+      out[key] = '[redacted]';
+    } else {
+      out[key] = value.slice(0, 512);
+    }
+  });
+  return out;
+}
+
+function truncateBody(value: string, maxBytes: number): { value: string; truncated: boolean } {
+  const bytes = new TextEncoder().encode(value).length;
+  if (bytes <= maxBytes) return { value, truncated: false };
+  return { value: value.slice(0, maxBytes), truncated: true };
+}
+
+function redactBody(payload: unknown): unknown {
+  if (payload == null) return payload;
+  if (Array.isArray(payload)) return payload.map((item) => redactBody(item));
+  if (typeof payload === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(payload as Record<string, unknown>)) {
+      const lower = k.toLowerCase();
+      if (
+        lower.includes('password') ||
+        lower.includes('passcode') ||
+        lower === 'pin' ||
+        lower.includes('token') ||
+        lower.includes('secret') ||
+        lower.includes('apikey') ||
+        lower.includes('authorization') ||
+        lower.includes('cardnumber') ||
+        lower.includes('cvv') ||
+        lower.includes('cvc') ||
+        lower === 'exp' ||
+        lower.includes('expiry') ||
+        lower.includes('expiration') ||
+        lower.includes('accountnumber') ||
+        lower.includes('routingnumber') ||
+        lower.includes('ssn')
+      ) {
+        out[k] = '[redacted]';
+      } else {
+        out[k] = redactBody(v);
+      }
+    }
+    return out;
+  }
+  return payload;
+}
+
+function serializeBody(value: unknown): { body: unknown | null; meta: Record<string, unknown> } {
+  const meta: Record<string, unknown> = {};
+  if (value == null) return { body: null, meta };
+  let data: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      data = JSON.parse(value);
+    } catch {
+      return { body: null, meta: { bodyParseError: true } };
+    }
+  }
+  if (typeof data !== 'object') return { body: null, meta };
+  const scrubbed = redactBody(data);
+  const json = JSON.stringify(scrubbed);
+  const truncated = truncateBody(json, 32 * 1024);
+  if (truncated.truncated) meta.bodyTruncated = true;
+  try {
+    return { body: JSON.parse(truncated.value), meta };
+  } catch {
+    return { body: null, meta: { ...meta, bodyParseError: true } };
+  }
 }
 
 export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient {
@@ -92,7 +200,17 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     const noop: TelemetryClient = {
       capture: () => {},
       flush: () => {},
-      getContext: () => ({ app: opts.app, route: '/', sessionId: 'server', deviceId: 'server' }),
+      startIncident: () => 'noop',
+      endIncident: () => {},
+      setTraceId: () => {},
+      getContext: () => ({
+        app: opts.app,
+        route: '/',
+        sessionId: 'server',
+        deviceId: 'server',
+        traceId: 'server',
+      }),
+      flushBreadcrumbs: () => {},
     };
     setInstalledTelemetry(noop);
     return noop;
@@ -100,34 +218,83 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
 
   const endpoint = opts.endpoint ?? DEFAULT_ENDPOINT;
   const isDev = opts.isDev ?? false;
-  const captureWarn = (opts.captureConsoleWarnInDev ?? true) && isDev;
   const maxBatchSize = opts.maxBatchSize ?? 25;
   const flushIntervalMs = opts.flushIntervalMs ?? 5000;
+  const breadcrumbsEnabled = opts.breadcrumbsEnabled ?? true;
+  const deepOnWarn = opts.deepOnWarn ?? true;
+  const deepOnError = opts.deepOnError ?? true;
+  const deepWindowMs = opts.deepWindowMs ?? DEFAULT_DEEP_WINDOW_MS;
+  const breadcrumbLimit = opts.breadcrumbLimit ?? DEFAULT_BREADCRUMB_LIMIT;
+  const breadcrumbSampleRate = opts.breadcrumbSampleRate ?? (isDev ? 1 : 0.2);
 
   const deviceId = getOrCreateStorageId(localStorage, 'clubops.deviceId');
   const sessionId = getOrCreateStorageId(sessionStorage, 'clubops.telemetry.sessionId');
+  let baseTraceId = getOrCreateStorageId(sessionStorage, 'clubops.telemetry.traceId');
 
-  const pending: TelemetryEvent[] = [];
+  type QueuedSpan = {
+    traceId: string;
+    span: TelemetrySpanInput;
+  };
+
+  const pending: QueuedSpan[] = [];
+  const breadcrumbs: TelemetrySpanInput[] = [];
   let flushTimer: number | null = null;
+
+  let incidentActive = false;
+  let incidentId: string | null = null;
+  let incidentReason: string | null = null;
+  let incidentTraceId: string | null = null;
+  let incidentStartedAt = 0;
+  let incidentTimer: number | null = null;
+  let pendingIncident: { incidentId: string; reason: string; startedAt: string } | null = null;
+  let incidentSpanCount = 0;
+  let incidentDeepCount = 0;
+  let incidentBreadcrumbCount = 0;
 
   const originalFetch = window.fetch.bind(window);
   const originalConsoleError = console.error.bind(console);
   const originalConsoleWarn = console.warn.bind(console);
+  const originalPushState = history.pushState.bind(history);
+  const originalReplaceState = history.replaceState.bind(history);
 
-  const getContext = () => {
+  const getActiveTraceId = () => incidentTraceId ?? baseTraceId;
+
+  const getContext = (): TelemetryContext => {
     const lane = opts.getLane?.() ?? safeString(sessionStorage.getItem('lane'), 64);
     return {
       app: opts.app,
-      route: currentRoute(),
+      route: getCurrentRoute(),
       sessionId,
       deviceId,
+      traceId: getActiveTraceId(),
+      incidentId: incidentId ?? undefined,
       lane: lane || undefined,
     };
   };
 
-  const send = (events: TelemetryEvent[], useBeacon: boolean) => {
-    if (events.length === 0) return;
-    const payload = JSON.stringify(events);
+  const enqueue = (span: TelemetrySpanInput, traceId: string) => {
+    pending.push({ span, traceId });
+    if (pending.length >= maxBatchSize) {
+      flush();
+    } else {
+      scheduleFlush();
+    }
+  };
+
+  const send = (spans: TelemetrySpanInput[], traceId: string, useBeacon: boolean) => {
+    if (spans.length === 0) return;
+    const payload = JSON.stringify({
+      traceId,
+      app: opts.app,
+      deviceId,
+      sessionId,
+      spans,
+      incident: pendingIncident && traceId === incidentTraceId ? pendingIncident : undefined,
+    });
+
+    if (pendingIncident && traceId === incidentTraceId) {
+      pendingIncident = null;
+    }
 
     if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
       try {
@@ -153,7 +320,15 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     const useBeacon = options?.useBeacon ?? false;
     if (pending.length === 0) return;
     const batch = pending.splice(0, pending.length);
-    send(batch, useBeacon);
+    const grouped = new Map<string, TelemetrySpanInput[]>();
+    for (const item of batch) {
+      const list = grouped.get(item.traceId) ?? [];
+      list.push(item.span);
+      grouped.set(item.traceId, list);
+    }
+    for (const [traceId, spans] of grouped.entries()) {
+      send(spans, traceId, useBeacon);
+    }
   };
 
   const scheduleFlush = () => {
@@ -164,32 +339,209 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     }, flushIntervalMs);
   };
 
-  const capture = (event: Omit<TelemetryEvent, 'timestamp' | 'app'> & { app?: string }) => {
+  const recordBreadcrumb = (span: TelemetrySpanInput) => {
+    if (!breadcrumbsEnabled) return;
+    breadcrumbs.push(span);
+    if (breadcrumbs.length > breadcrumbLimit) {
+      breadcrumbs.splice(0, breadcrumbs.length - breadcrumbLimit);
+    }
+  };
+
+  const flushBreadcrumbs = (options?: { useBeacon?: boolean }) => {
+    if (!breadcrumbsEnabled || breadcrumbs.length === 0 || !incidentTraceId || !incidentId) return;
+    const toSend = breadcrumbs.splice(0, breadcrumbs.length).map((span) => ({
+      ...span,
+      incidentId,
+      incidentReason: incidentReason ?? undefined,
+      meta: { ...(span.meta ?? {}), breadcrumb: true },
+    }));
+    incidentBreadcrumbCount += toSend.length;
+    send(toSend, incidentTraceId, options?.useBeacon ?? false);
+  };
+
+  const startIncident = (reason: string, opts?: { forceNew?: boolean }) => {
+    if (incidentActive && !opts?.forceNew) {
+      if (incidentTimer) window.clearTimeout(incidentTimer);
+      incidentTimer = window.setTimeout(endIncident, deepWindowMs);
+      return incidentId ?? 'incident';
+    }
+
+    if (incidentActive && opts?.forceNew) {
+      endIncident();
+    }
+
+    incidentActive = true;
+    incidentId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    incidentReason = reason;
+    incidentTraceId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    incidentStartedAt = Date.now();
+    incidentSpanCount = 0;
+    incidentDeepCount = 0;
+    incidentBreadcrumbCount = 0;
+
+    pendingIncident = { incidentId, reason, startedAt: nowIso() };
+    flushBreadcrumbs();
+    if (incidentTimer) window.clearTimeout(incidentTimer);
+    incidentTimer = window.setTimeout(endIncident, deepWindowMs);
+    return incidentId;
+  };
+
+  const endIncident = () => {
+    if (!incidentActive || !incidentId || !incidentTraceId) return;
+    const durationMs = Date.now() - incidentStartedAt;
+    const span: TelemetrySpanInput = {
+      spanType: 'incident.end',
+      level: 'info',
+      startedAt: nowIso(),
+      durationMs,
+      incidentId,
+      incidentReason: incidentReason ?? undefined,
+      meta: {
+        spanCount: incidentSpanCount,
+        deepSpanCount: incidentDeepCount,
+        breadcrumbCount: incidentBreadcrumbCount,
+      },
+    };
+    enqueue(span, incidentTraceId);
+    incidentActive = false;
+    incidentId = null;
+    incidentReason = null;
+    incidentTraceId = null;
+    incidentStartedAt = 0;
+    pendingIncident = null;
+    if (incidentTimer) window.clearTimeout(incidentTimer);
+    incidentTimer = null;
+  };
+
+  const setTraceId = (traceId: string) => {
+    if (!traceId || !traceId.trim()) return;
+    try {
+      sessionStorage.setItem('clubops.telemetry.traceId', traceId);
+      baseTraceId = traceId;
+    } catch {
+      // ignore
+    }
+  };
+
+  const shouldSampleBreadcrumb = () => Math.random() <= breadcrumbSampleRate;
+
+  const capture = (span: TelemetrySpanInput) => {
     try {
       const ctx = getContext();
-      const full: TelemetryEvent = {
-        timestamp: nowIso(),
-        app: event.app ?? ctx.app,
-        level: event.level,
-        kind: event.kind,
-        route: event.route ?? ctx.route,
-        message: safeString(event.message, 2000),
-        stack: safeString(event.stack, 8000),
-        requestId: safeString(event.requestId, 128),
-        sessionId: ctx.sessionId,
-        deviceId: ctx.deviceId,
-        lane: event.lane ?? ctx.lane,
-        method: safeString(event.method, 16),
-        status: typeof event.status === 'number' ? event.status : undefined,
-        url: safeString(event.url, 2000),
-        meta: event.meta ?? {},
-      };
-      pending.push(full);
-      if (pending.length >= maxBatchSize) {
-        flush();
-      } else {
-        scheduleFlush();
+      const isBreadcrumb =
+        span.meta?.breadcrumb === true ||
+        span.spanType === 'ui.click' ||
+        span.spanType === 'ui.nav' ||
+        span.spanType === 'net.request' ||
+        span.spanType === 'net.response';
+
+      if (isBreadcrumb && !incidentActive && breadcrumbsEnabled && !shouldSampleBreadcrumb()) {
+        return;
       }
+
+      const enriched: TelemetrySpanInput = {
+        ...span,
+        startedAt: span.startedAt ?? nowIso(),
+        route: span.route ?? ctx.route,
+        meta: span.meta ?? {},
+        incidentId: incidentActive ? incidentId ?? undefined : span.incidentId,
+        incidentReason: incidentActive ? incidentReason ?? undefined : span.incidentReason,
+      };
+
+      if (isBreadcrumb) {
+        recordBreadcrumb(enriched);
+      }
+      if (incidentActive) {
+        incidentSpanCount += 1;
+        if (enriched.meta?.deep === true) incidentDeepCount += 1;
+      }
+      enqueue(enriched, getActiveTraceId());
+    } catch {
+      // ignore
+    }
+  };
+
+  const captureNav = () => {
+    capture({
+      spanType: 'ui.nav',
+      name: `Nav: ${window.location.pathname || '/'}`,
+      level: 'info',
+      meta: { breadcrumb: true },
+    });
+  };
+
+  const captureClick = (event: MouseEvent) => {
+    if (!breadcrumbsEnabled) return;
+    const target = event.target as HTMLElement | null;
+    if (!target) return;
+
+    let el: HTMLElement | null = target;
+    let label = '';
+    let tag = '';
+    let testId = '';
+    let ariaLabel = '';
+
+    while (el && el !== document.body) {
+      tag = el.tagName.toLowerCase();
+      testId = el.getAttribute('data-testid') ?? '';
+      ariaLabel = el.getAttribute('aria-label') ?? '';
+      if (testId || ariaLabel || tag === 'button' || tag === 'a') {
+        label = testId || ariaLabel || (el.textContent ?? '').trim();
+        break;
+      }
+      el = el.parentElement;
+    }
+
+    if (!label) {
+      label = (target.textContent ?? '').trim();
+    }
+
+    const truncatedLabel = truncate(label || tag || 'click', 60);
+    capture({
+      spanType: 'ui.click',
+      name: `Click: ${truncatedLabel || 'unknown'}`,
+      level: 'info',
+      meta: {
+        breadcrumb: true,
+        element: {
+          tag: tag || target.tagName.toLowerCase(),
+          testId: testId || undefined,
+          ariaLabel: ariaLabel || undefined,
+          text: truncatedLabel || undefined,
+        },
+      },
+    });
+  };
+
+  const handleRouteChange = () => {
+    captureNav();
+  };
+
+  const onWarn = (...args: unknown[]) => {
+    try {
+      capture({
+        spanType: 'console.warn',
+        level: 'warn',
+        message: safeString(args[0], 2000),
+        meta: { args: safeJson(args, 4000) },
+      });
+      if (deepOnWarn) startIncident('console.warn');
+    } catch {
+      // ignore
+    }
+  };
+
+  const onError = (...args: unknown[]) => {
+    try {
+      const firstErr = args.find((a) => a instanceof Error) as Error | undefined;
+      capture({
+        spanType: 'console.error',
+        level: 'error',
+        message: firstErr?.message ?? safeString(args[0], 2000),
+        stack: firstErr?.stack ? safeString(firstErr.stack, 8000) : undefined,
+        meta: { args: safeJson(args, 4000) },
+      });
+      if (deepOnError) startIncident('console.error');
     } catch {
       // ignore
     }
@@ -204,8 +556,8 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
       colno?: unknown;
     };
     capture({
+      spanType: 'ui.error',
       level: 'error',
-      kind: 'ui.error',
       message: safeString(anyEv.message, 2000) ?? 'Unhandled error',
       stack: safeErrorStack(anyEv.error),
       meta: {
@@ -214,50 +566,41 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
         colno: anyEv.colno,
       },
     });
+    if (deepOnError) startIncident('ui.error');
   });
 
   window.addEventListener('unhandledrejection', (ev) => {
     const reason = (ev as PromiseRejectionEvent).reason;
     capture({
+      spanType: 'ui.unhandledrejection',
       level: 'error',
-      kind: 'ui.unhandledrejection',
       message: safeErrorMessage(reason) ?? 'Unhandled rejection',
       stack: safeErrorStack(reason),
       meta: { reason: safeJson(reason, 2000) },
     });
+    if (deepOnError) startIncident('unhandledrejection');
   });
 
   console.error = (...args: unknown[]) => {
-    try {
-      const firstErr = args.find((a) => a instanceof Error) as Error | undefined;
-      capture({
-        level: 'error',
-        kind: 'console.error',
-        message: firstErr?.message ?? safeString(args[0], 2000) ?? 'console.error',
-        stack: firstErr?.stack ? safeString(firstErr.stack, 8000) : undefined,
-        meta: { args: safeJson(args, 4000) },
-      });
-    } catch {
-      // ignore
-    }
+    onError(...args);
     originalConsoleError(...args);
   };
 
-  if (captureWarn) {
     console.warn = (...args: unknown[]) => {
-      try {
-        capture({
-          level: 'warn',
-          kind: 'console.warn',
-          message: safeString(args[0], 2000) ?? 'console.warn',
-          meta: { args: safeJson(args, 4000) },
-        });
-      } catch {
-        // ignore
-      }
+    onWarn(...args);
       originalConsoleWarn(...args);
     };
-  }
+
+  document.addEventListener('click', captureClick, true);
+  window.addEventListener('popstate', handleRouteChange);
+  history.pushState = (...args) => {
+    originalPushState(...args);
+    handleRouteChange();
+  };
+  history.replaceState = (...args) => {
+    originalReplaceState(...args);
+    handleRouteChange();
+  };
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
@@ -271,15 +614,21 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
       return originalFetch(input, init);
     }
 
-    const requestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    const requestKey = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
     const method =
       safeString(init?.method, 16) ??
       (typeof input === 'string' || input instanceof URL ? 'GET' : safeString(input.method, 16) ?? 'GET');
-
+    const { path, queryKeys } = stripQuery(url);
     const headers = new Headers(
       init?.headers ?? (typeof input === 'string' || input instanceof URL ? undefined : input.headers)
     );
-    headers.set('x-request-id', requestId);
+
+    headers.set('x-request-key', requestKey);
+    headers.set('x-trace-id', getActiveTraceId());
+    headers.set('x-device-id', deviceId);
+    headers.set('x-session-id', sessionId);
+    headers.set('x-app-name', opts.app);
+    if (incidentActive) headers.set('x-telemetry-deep', '1');
 
     const req =
       typeof input === 'string' || input instanceof URL
@@ -287,46 +636,100 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
         : new Request(input, { ...init, headers });
 
     const start = performance.now();
+    const requestMeta: Record<string, unknown> = { breadcrumb: true, requestKey };
+    if (queryKeys.length > 0) requestMeta.queryKeys = queryKeys;
+
+    if (incidentActive) {
+      requestMeta.deep = true;
+      requestMeta.incidentId = incidentId;
+    }
+
+    let requestHeaders: Record<string, unknown> | undefined;
+    let requestBody: unknown | undefined;
+    let requestMetaExtra: Record<string, unknown> = {};
+
+    if (incidentActive) {
+      requestHeaders = redactHeaders(headers);
+      if (shouldCaptureBody(path) && headers.get('content-type')?.includes('application/json')) {
+        const serialized = serializeBody(init?.body);
+        requestBody = serialized.body ?? undefined;
+        requestMetaExtra = serialized.meta;
+      }
+    }
+
+    capture({
+      spanType: 'net.request',
+      level: 'info',
+      method,
+      url: path,
+      requestHeaders,
+      requestBody,
+      requestKey,
+      meta: { ...requestMeta, ...requestMetaExtra },
+    });
+
     try {
       const res = await originalFetch(req);
       const durationMs = Math.round(performance.now() - start);
-      const shouldLog = res.status >= 500 || (isDev && res.status >= 400 && res.status < 500);
-      if (shouldLog) {
-        let snippet: string | undefined;
-        try {
-          const contentLength = Number(res.headers.get('content-length') || '0');
-          if (!Number.isFinite(contentLength) || contentLength <= 20_000) {
+      const responseMeta: Record<string, unknown> = {
+        breadcrumb: !incidentActive,
+        requestKey,
+        durationMs,
+      };
+      if (queryKeys.length > 0) responseMeta.queryKeys = queryKeys;
+      if (incidentActive) {
+        responseMeta.deep = true;
+        responseMeta.incidentId = incidentId;
+      }
+
+      let responseHeaders: Record<string, unknown> | undefined;
+      let responseBody: unknown | undefined;
+      let responseMetaExtra: Record<string, unknown> = {};
+
+      if (incidentActive) {
+        responseHeaders = redactHeaders(res.headers);
+        if (shouldCaptureBody(path) && res.headers.get('content-type')?.includes('application/json')) {
             const text = await res.clone().text().catch(() => '');
-            snippet = safeString(text, 500);
-          }
-        } catch {
-          // ignore
+          const serialized = serializeBody(text);
+          responseBody = serialized.body ?? undefined;
+          responseMetaExtra = serialized.meta;
+        }
         }
 
         capture({
-          level: res.status >= 500 ? 'error' : 'warn',
-          kind: 'http.error',
-          message: `HTTP ${res.status}`,
-          requestId,
+        spanType: 'net.response',
+        level: res.status >= 500 ? 'error' : res.status >= 400 ? 'warn' : 'info',
           method,
           status: res.status,
-          url,
-          meta: { durationMs, statusText: res.statusText, snippet },
-        });
+        url: path,
+        durationMs,
+        responseHeaders,
+        responseBody,
+        requestKey,
+        meta: { ...responseMeta, ...responseMetaExtra },
+      });
+
+      if (res.status >= 500 && deepOnError) {
+        startIncident('http_error');
+      } else if (res.status >= 400 && deepOnWarn) {
+        startIncident('http_warn');
       }
+
       return res;
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
       capture({
+        spanType: 'net.response',
         level: 'error',
-        kind: 'http.exception',
+        method,
+        url: path,
         message: safeErrorMessage(err) ?? 'Fetch failed',
         stack: safeErrorStack(err),
-        requestId,
-        method,
-        url,
-        meta: { durationMs },
+        durationMs,
+        requestKey,
+        meta: { breadcrumb: !incidentActive, requestKey, durationMs, error: true },
       });
+      if (deepOnError) startIncident('network_error');
       throw err;
     }
   };
@@ -338,7 +741,15 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     if (document.visibilityState === 'hidden') flushOnHide();
   });
 
-  const client: TelemetryClient = { capture, flush, getContext };
+  const client: TelemetryClient = {
+    capture,
+    flush,
+    startIncident,
+    endIncident,
+    setTraceId,
+    getContext,
+    flushBreadcrumbs,
+  };
   setInstalledTelemetry(client);
   return client;
 }
