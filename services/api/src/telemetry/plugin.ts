@@ -1,6 +1,8 @@
+import crypto from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { insertTelemetryEvents } from './store';
-import { sanitizeTelemetryEventInput, type TelemetryEventRow } from './types';
+import { registerTelemetryHttpHooks } from './httpHooks';
+import { storeTelemetrySpans } from './storeTelemetrySpans';
+import type { TelemetrySpanInput } from './spanTypes';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -10,6 +12,7 @@ declare module 'fastify' {
 
 const TELEMETRY_PATH = '/v1/telemetry';
 const BACKEND_APP = 'services/api';
+const SERVER_DEVICE = 'server';
 
 function isTelemetryRequest(request: FastifyRequest): boolean {
   const url = request.url || '';
@@ -44,7 +47,7 @@ function getRouteForRequest(request: FastifyRequest): string | null {
   return toTruncatedString(url.split('?')[0], 256);
 }
 
-function errorToTelemetryRow(params: {
+function errorToSpan(params: {
   requestId: string | null;
   route: string | null;
   method: string | null;
@@ -53,7 +56,7 @@ function errorToTelemetryRow(params: {
   kind: string;
   err: unknown;
   meta?: Record<string, unknown>;
-}): TelemetryEventRow {
+}): TelemetrySpanInput {
   const err = params.err;
   const message =
     err instanceof Error
@@ -63,21 +66,15 @@ function errorToTelemetryRow(params: {
         : 'Unknown error';
   const stack = err instanceof Error ? err.stack ?? null : null;
   return {
-    createdAt: new Date(),
-    app: BACKEND_APP,
+    spanType: params.kind,
     level: 'error',
-    kind: params.kind,
-    route: params.route,
-    message: toTruncatedString(message, 2000),
-    stack: toTruncatedString(stack, 8000),
-    requestId: params.requestId,
-    sessionId: null,
-    deviceId: null,
-    lane: null,
-    method: params.method,
-    status: params.status,
-    url: params.url,
-    meta: params.meta ?? {},
+    route: params.route ?? undefined,
+    method: params.method ?? undefined,
+    status: params.status ?? undefined,
+    url: params.url ?? undefined,
+    message: toTruncatedString(message, 2000) ?? undefined,
+    stack: toTruncatedString(stack, 8000) ?? undefined,
+    meta: { requestId: params.requestId, ...(params.meta ?? {}) },
   };
 }
 
@@ -100,9 +97,15 @@ function extractLogError(args: unknown[]): { err: unknown; message: string | nul
 
 let processHandlersInstalled = false;
 
-async function safeInsert(events: TelemetryEventRow[]): Promise<void> {
+async function safeInsert(spans: TelemetrySpanInput[], traceId?: string): Promise<void> {
   try {
-    await insertTelemetryEvents(events);
+    await storeTelemetrySpans({
+      traceId: traceId ?? crypto.randomUUID(),
+      app: BACKEND_APP,
+      deviceId: SERVER_DEVICE,
+      sessionId: SERVER_DEVICE,
+      spans,
+    });
   } catch {
     // Telemetry must never impact request flow.
   }
@@ -116,29 +119,34 @@ export async function setupTelemetry(fastify: FastifyInstance): Promise<void> {
     reply.header('x-request-id', requestId);
   });
 
+  registerTelemetryHttpHooks(fastify);
+
   // Ingest frontend telemetry; best-effort and always 200.
-  fastify.post(TELEMETRY_PATH, async (request, reply) => {
+  fastify.post(TELEMETRY_PATH, { bodyLimit: 1024 * 1024 }, async (request, reply) => {
     try {
       const body = request.body as unknown;
-      const rawEvents: unknown[] = Array.isArray(body)
-        ? body
-        : body && typeof body === 'object' && Array.isArray((body as { events?: unknown }).events)
-          ? ((body as { events: unknown[] }).events as unknown[])
-          : body && typeof body === 'object'
-            ? [body]
-            : [];
+      const payload =
+        body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
 
-      const sanitized: TelemetryEventRow[] = [];
-      for (const raw of rawEvents) {
-        const row = sanitizeTelemetryEventInput(raw);
-        if (!row) continue;
-        // Ensure correlation if the client omitted requestId.
-        row.requestId = row.requestId ?? request.requestId ?? null;
-        sanitized.push(row);
-      }
+      const spans = payload?.spans;
+      const traceId = (payload?.traceId as string | undefined) ?? getHeaderString(request, 'x-trace-id');
+      const deviceId = (payload?.deviceId as string | undefined) ?? getHeaderString(request, 'x-device-id');
+      const sessionId = (payload?.sessionId as string | undefined) ?? getHeaderString(request, 'x-session-id');
+      const app = (payload?.app as string | undefined) ?? getHeaderString(request, 'x-app-name');
+      const incident = payload?.incident as
+        | { incidentId?: string; reason?: string; startedAt?: string | number }
+        | undefined;
 
-      if (sanitized.length > 0) {
-        await safeInsert(sanitized);
+      const spansArray: TelemetrySpanInput[] = Array.isArray(spans) ? (spans as TelemetrySpanInput[]) : [];
+      if (spansArray.length > 0) {
+        await storeTelemetrySpans({
+          traceId: traceId ?? undefined,
+          app: app ?? undefined,
+          deviceId: deviceId ?? undefined,
+          sessionId: sessionId ?? undefined,
+          spans: spansArray,
+          incident,
+        });
       }
     } catch {
       // ignore
@@ -154,45 +162,44 @@ export async function setupTelemetry(fastify: FastifyInstance): Promise<void> {
       return;
     }
 
-    void safeInsert([
-      errorToTelemetryRow({
-        requestId: request.requestId ?? null,
-        route: getRouteForRequest(request),
-        method: toTruncatedString(request.method, 16),
-        status: typeof reply.statusCode === 'number' ? reply.statusCode : 500,
-        url: toTruncatedString(request.url, 2000),
-        kind: 'backend.error',
-        err: error,
-        meta: {
-          // Some Fastify errors carry a code; keep it for grouping.
-          code: (error as unknown as { code?: unknown }).code,
-        },
-      }),
-    ]);
+    void safeInsert(
+      [
+        errorToSpan({
+          requestId: request.requestId ?? null,
+          route: getRouteForRequest(request),
+          method: toTruncatedString(request.method, 16),
+          status: typeof reply.statusCode === 'number' ? reply.statusCode : 500,
+          url: toTruncatedString(request.url, 2000),
+          kind: 'backend.error',
+          err: error,
+          meta: {
+            // Some Fastify errors carry a code; keep it for grouping.
+            code: (error as unknown as { code?: unknown }).code,
+          },
+        }),
+      ],
+      request.telemetryContext?.traceId ?? undefined
+    );
   });
 
   fastify.addHook('onResponse', async (request, reply) => {
     if (isTelemetryRequest(request)) return;
     if (reply.statusCode < 500) return;
-    void safeInsert([
-      {
-        createdAt: new Date(),
-        app: BACKEND_APP,
-        level: 'error',
-        kind: 'backend.http_5xx',
-        route: getRouteForRequest(request),
-        message: `HTTP ${reply.statusCode}`,
-        stack: null,
-        requestId: request.requestId ?? null,
-        sessionId: null,
-        deviceId: null,
-        lane: null,
-        method: toTruncatedString(request.method, 16),
-        status: reply.statusCode,
-        url: toTruncatedString(request.url, 2000),
-        meta: {},
-      },
-    ]);
+    void safeInsert(
+      [
+        {
+          spanType: 'backend.http_5xx',
+          level: 'error',
+          route: getRouteForRequest(request) ?? undefined,
+          message: `HTTP ${reply.statusCode}`,
+          method: toTruncatedString(request.method, 16) ?? undefined,
+          status: reply.statusCode,
+          url: toTruncatedString(request.url, 2000) ?? undefined,
+          meta: {},
+        },
+      ],
+      request.telemetryContext?.traceId ?? undefined
+    );
   });
 
   // Persist explicit fastify.log.error calls (best-effort).
@@ -203,7 +210,7 @@ export async function setupTelemetry(fastify: FastifyInstance): Promise<void> {
     try {
       const extracted = extractLogError(args);
       void safeInsert([
-        errorToTelemetryRow({
+        errorToSpan({
           requestId: null,
           route: null,
           method: null,
@@ -228,7 +235,7 @@ export async function setupTelemetry(fastify: FastifyInstance): Promise<void> {
 
     process.on('unhandledRejection', (reason) => {
       void safeInsert([
-        errorToTelemetryRow({
+        errorToSpan({
           requestId: null,
           route: null,
           method: null,
@@ -242,7 +249,7 @@ export async function setupTelemetry(fastify: FastifyInstance): Promise<void> {
 
     process.once('uncaughtException', (err) => {
       void safeInsert([
-        errorToTelemetryRow({
+        errorToSpan({
           requestId: null,
           route: null,
           method: null,

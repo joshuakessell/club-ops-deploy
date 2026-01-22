@@ -1,6 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { installTelemetry, TelemetryErrorBoundary } from '@club-ops/ui';
+import {
+  installTelemetry,
+  ReportIssueButton,
+  setCurrentRouteProvider,
+  TelemetryErrorBoundary,
+} from '@club-ops/ui';
 import App from './App';
 import '@club-ops/ui/styles/index.css';
 import './styles.css';
@@ -36,12 +41,41 @@ if (!kioskToken) {
     throw err;
   });
 } else {
+  const readBool = (value: unknown, fallback: boolean) => {
+    if (typeof value !== 'string') return fallback;
+    const v = value.trim().toLowerCase();
+    if (!v) return fallback;
+    return v === 'true' || v === '1' || v === 'yes';
+  };
+  const readNumber = (value: unknown, fallback: number) => {
+    if (typeof value !== 'string') return fallback;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const reportEnabled =
+    import.meta.env.DEV ||
+    readBool((rawEnv.VITE_TELEMETRY_REPORT_BUTTON as string | undefined) ?? '', false);
+  const reportFlushBreadcrumbsOnInfo = readBool(
+    rawEnv.VITE_TELEMETRY_REPORT_FLUSH_BREADCRUMBS_ON_INFO,
+    false
+  );
+
+  setCurrentRouteProvider(() => {
+    if (typeof window === 'undefined') return 'unknown';
+    return `${window.location.pathname || '/'}${window.location.search || ''}`;
+  });
+
   installTelemetry({
     app: 'customer-kiosk',
     endpoint: getApiUrl('/api/v1/telemetry'),
     isDev: import.meta.env.DEV,
-    captureConsoleWarnInDev: true,
     getLane: () => sessionStorage.getItem('lane') ?? undefined,
+    breadcrumbsEnabled: readBool(rawEnv.VITE_TELEMETRY_BREADCRUMBS, true),
+    deepOnWarn: readBool(rawEnv.VITE_TELEMETRY_DEEP_ON_WARN, true),
+    deepOnError: readBool(rawEnv.VITE_TELEMETRY_DEEP_ON_ERROR, true),
+    deepWindowMs: readNumber(rawEnv.VITE_TELEMETRY_DEEP_WINDOW_MS, 60000),
+    breadcrumbLimit: readNumber(rawEnv.VITE_TELEMETRY_BREADCRUMB_LIMIT, 200),
   });
 
   createRoot(root).render(
@@ -53,6 +87,9 @@ if (!kioskToken) {
           message="This screen must be used in portrait mode."
         >
           <App />
+          {reportEnabled && (
+            <ReportIssueButton flushBreadcrumbsOnInfo={reportFlushBreadcrumbsOnInfo} />
+          )}
         </OrientationGuard>
       </TelemetryErrorBoundary>
     </StrictMode>
