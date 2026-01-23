@@ -246,7 +246,6 @@ async function tryEmbedClubLogoPng(pdfDoc: PDFDocument): Promise<ReturnType<PDFD
   const candidates = [
     envPath,
     path.resolve(process.cwd(), '../../apps/customer-kiosk/src/assets/the-clubs-logo.png'),
-    path.resolve(process.cwd(), '../../apps/checkout-kiosk/src/assets/the-clubs-logo.png'),
     path.resolve(process.cwd(), '../apps/customer-kiosk/src/assets/the-clubs-logo.png'),
     path.resolve(process.cwd(), 'apps/customer-kiosk/src/assets/the-clubs-logo.png'),
   ].filter(Boolean) as string[];

@@ -34,7 +34,6 @@ corepack --version
 
 ### Notes
 
-- Some vite.config.ts files were modified to add `/ws` proxy configuration for cleaning-station-kiosk
 - All other changes are expected development artifacts
 
 ---
@@ -63,8 +62,7 @@ pnpm build
 
 ### Fixes Applied
 
-1. **Vite Config Updates:** Added `/ws` WebSocket proxy to `apps/cleaning-station-kiosk/vite.config.ts` for consistency with other apps
-2. **Linting Fixes:** Previously resolved in earlier phases (React hooks, type safety, promise handling)
+1. **Linting Fixes:** Previously resolved in earlier phases (React hooks, type safety, promise handling)
 
 ---
 
@@ -145,25 +143,15 @@ pnpm dev
    - Status: ✅ Running
    - URL: http://localhost:5173/
 
-3. **Cleaning Station Kiosk** (`apps/cleaning-station-kiosk`)
-   - Port: 5174
-   - Status: ✅ Running
-   - URL: http://localhost:5174/
-
-4. **Employee Register** (`apps/employee-register`)
+3. **Employee Register** (`apps/employee-register`)
    - Port: 5175
    - Status: ✅ Running
    - URL: http://localhost:5175/
 
-5. **Office Dashboard** (`apps/office-dashboard`)
+4. **Office Dashboard** (`apps/office-dashboard`)
    - Port: 5176
    - Status: ✅ Running
    - URL: http://localhost:5176/
-
-6. **Checkout Kiosk** (`apps/checkout-kiosk`)
-   - Port: 5177
-   - Status: ✅ Running
-   - URL: http://localhost:5177/
 
 ### Verification
 
@@ -311,8 +299,7 @@ This phase was deferred to focus on core check-in flow validation. The availabil
 
 ### Fixes Applied During Test
 
-1. **Vite Config:** Added `/ws` proxy to cleaning-station-kiosk for WebSocket support
-2. **Service Restart:** Dev stack was restarted to ensure clean state
+1. **Service Restart:** Dev stack was restarted to ensure clean state
 
 ---
 
@@ -337,7 +324,7 @@ The Club Operations POS system successfully passed the end-to-end smoke test for
 - **pnpm:** 10.27.0
 - **Postgres:** Running on port 5433
 - **API:** http://localhost:3001
-- **Apps:** Ports 5173-5177
+- **Apps:** Ports 5173, 5175, 5176
 
 ---
 

@@ -35,8 +35,6 @@ const SOURCE_ROOTS_TO_SCAN = [
   'packages/ui/src',
   'apps/customer-kiosk/src',
   'apps/employee-register/src',
-  'apps/cleaning-station-kiosk/src',
-  'apps/checkout-kiosk/src',
   'apps/office-dashboard/src',
 ].map((p) => join(ROOT_DIR, p));
 

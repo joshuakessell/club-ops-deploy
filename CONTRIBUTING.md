@@ -12,10 +12,6 @@ Actively maintained:
 - `apps/employee-register`
 - `apps/office-dashboard`
 
-Paused (avoid changes unless explicitly needed):
-- `apps/checkout-kiosk`
-- `apps/cleaning-station-kiosk`
-
 ## Source of Truth (must stay aligned)
 
 These files are authoritative:

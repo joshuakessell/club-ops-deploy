@@ -8,9 +8,7 @@ A multi-application system for managing club check-ins, room inventory, cleaning
 club-operations-pos/
 ├── apps/
 │   ├── customer-kiosk/      # Tablet-based kiosk UI for check-ins
-│   ├── cleaning-station-kiosk/ # Staff tablet kiosk for cleaning workflow
 │   ├── employee-register/   # Employee-facing tablet app (with Square POS)
-│   ├── checkout-kiosk/      # Customer kiosk for self-service checkout initiation
 │   └── office-dashboard/    # Web app for administration
 ├── services/
 │   └── api/                 # Fastify REST API + WebSocket server
@@ -82,10 +80,8 @@ This starts:
 - **API Server**: http://localhost:3001
   - Health check: http://localhost:3001/health
 - **Customer Kiosk**: http://localhost:5173
-- **Cleaning Station Kiosk**: http://localhost:5174
 - **Employee Register**: http://localhost:5175
 - **Office Dashboard**: http://localhost:5176
-- **Checkout Kiosk**: http://localhost:5177
 
 ### WebSockets
 

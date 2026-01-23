@@ -49,8 +49,6 @@ async function main() {
       '--filter=@club-ops/customer-kiosk',
       '--filter=@club-ops/employee-register',
       '--filter=@club-ops/office-dashboard',
-      '--filter=@club-ops/cleaning-station-kiosk',
-      '--filter=@club-ops/checkout-kiosk',
     ].join(' ')
   );
 }

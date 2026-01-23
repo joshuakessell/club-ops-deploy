@@ -35,8 +35,6 @@ apps/
   customer-kiosk/          # Customer-facing kiosk UI
   employee-register/       # Staff register UI (sign-in, register workflows)
   office-dashboard/        # Admin/office dashboard UI
-  checkout-kiosk/          # (Paused) legacy/paused kiosk app — do not modify unless requested
-  cleaning-station-kiosk/  # (Paused) legacy/paused kiosk app — do not modify unless requested
 ```
 
 ## packages/
