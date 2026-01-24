@@ -51,7 +51,7 @@ export const SessionUpdatedPayloadSchema: z.ZodType<SessionUpdatedPayload, z.Zod
     kioskAcknowledgedAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
     // Server normally includes this, but keep tolerant so older servers/tests don't drop WS events.
     allowedRentals: z.array(z.string()).default([]),
-    mode: z.enum(['INITIAL', 'RENEWAL']).optional(),
+    mode: z.enum(['CHECKIN', 'RENEWAL']).optional(),
     blockEndsAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
     visitId: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
     waitlistDesiredType: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),

@@ -5,7 +5,7 @@ import type { RegisterSessionUpdatedPayload, WebSocketEvent } from '@club-ops/sh
 import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
 import { wsBaseUrl } from './api';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 

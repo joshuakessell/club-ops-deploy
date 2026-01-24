@@ -25,7 +25,7 @@ interface LaneSessionRow {
   membership_purchase_requested_at?: Date | null;
   membership_choice?: 'ONE_TIME' | 'SIX_MONTH' | null;
   kiosk_acknowledged_at?: Date | null;
-  checkin_mode: string | null; // 'INITIAL' or 'RENEWAL'
+  checkin_mode: string | null; // 'CHECKIN' or 'RENEWAL'
   proposed_rental_type: string | null;
   proposed_by: string | null;
   selection_confirmed: boolean;
@@ -313,7 +313,7 @@ export async function buildFullSessionUpdatedPayload(
     membershipPurchaseIntent: (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
     kioskAcknowledgedAt: session.kiosk_acknowledged_at ? session.kiosk_acknowledged_at.toISOString() : undefined,
     allowedRentals,
-    mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+    mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'CHECKIN',
     status: session.status,
     proposedRentalType: session.proposed_rental_type || undefined,
     proposedBy: (session.proposed_by as 'CUSTOMER' | 'EMPLOYEE' | null) || undefined,

@@ -7,8 +7,9 @@ type Pending =
   | { step: 'LANGUAGE'; option: 'EN' | 'ES' }
   | { step: 'MEMBERSHIP'; option: 'ONE_TIME' | 'SIX_MONTH' }
   | { step: 'WAITLIST_BACKUP'; option: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' }
-  | { step: 'RENTAL'; option: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' }
-  | null;
+  | { step: 'RENTAL'; option: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' };
+
+type PendingState = Pending | null;
 
 export interface EmployeeAssistPanelProps {
   sessionId: string;
@@ -84,7 +85,7 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     onApproveRental,
   } = props;
 
-  const [pending, setPending] = useState<Pending>(null);
+  const [pending, setPending] = useState<PendingState>(null);
 
   const runTwoStep = (
     step: Pending['step'],

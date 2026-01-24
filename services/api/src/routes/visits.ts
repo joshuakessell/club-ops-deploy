@@ -3,9 +3,8 @@ import { z } from 'zod';
 import { serializableTransaction, query } from '../db';
 import { requireAuth, requireReauth } from '../auth/middleware';
 import type { Broadcaster } from '../websocket/broadcaster';
-import type { SessionUpdatedPayload } from '@club-ops/shared';
 import { roundUpToQuarterHour } from '../time/rounding';
-import { broadcastInventoryUpdate } from './sessions';
+import { broadcastInventoryUpdate } from '../inventory/broadcast';
 import { insertAuditLog } from '../audit/auditLog';
 
 declare module 'fastify' {
@@ -22,7 +21,6 @@ const CreateVisitSchema = z.object({
   rentalType: z.enum(['STANDARD', 'DOUBLE', 'SPECIAL', 'LOCKER', 'GYM_LOCKER']),
   roomId: z.string().uuid().optional(),
   lockerId: z.string().uuid().optional(),
-  lane: z.string().min(1).optional(),
 }).superRefine((v, ctx) => {
   const hasRoom = Boolean(v.roomId);
   const hasLocker = Boolean(v.lockerId);
@@ -78,7 +76,6 @@ const RenewVisitSchema = z.object({
   rentalType: z.enum(['STANDARD', 'DOUBLE', 'SPECIAL', 'LOCKER', 'GYM_LOCKER']),
   roomId: z.string().uuid().optional(),
   lockerId: z.string().uuid().optional(),
-  lane: z.string().min(1).optional(),
 }).superRefine((v, ctx) => {
   const hasRoom = Boolean(v.roomId);
   const hasLocker = Boolean(v.lockerId);
@@ -338,28 +335,6 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
         const block = blockResult.rows[0]!;
 
-        // 7. Create a session for backward compatibility
-        const sessionResult = await client.query<{ id: string }>(
-          `INSERT INTO sessions (customer_id, member_name, membership_number, room_id, locker_id, expected_duration, status, checkin_type, checkout_at, visit_id, lane)
-           VALUES ($1, $2, $3, $4, $5, 360, 'ACTIVE', 'INITIAL', $6, $7, $8)
-           RETURNING id`,
-          [
-            customer.id,
-            customer.name,
-            customer.membership_number,
-            assignedRoomId,
-            assignedLockerId,
-            initialBlockEndsAt,
-            visit.id,
-            body.lane || null,
-          ]
-        );
-
-        const sessionId = sessionResult.rows[0]!.id;
-
-        // NOTE: `checkin_blocks.session_id` links to `lane_sessions` (coordination state).
-        // Legacy `sessions` link to visits via `sessions.visit_id`; do not write legacy session IDs into checkin_blocks.
-
         return {
           visit: {
             id: visit.id,
@@ -378,65 +353,12 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
             rentalType: block.rental_type,
             roomId: block.room_id,
             lockerId: block.locker_id,
-            sessionId,
             agreementSigned: block.agreement_signed,
             createdAt: block.created_at,
             updatedAt: block.updated_at,
           },
-          sessionId,
         };
       });
-
-      // Broadcast session update if lane is provided
-      if (body.lane && fastify.broadcaster) {
-        const customerResult = await query<CustomerRow>(
-          'SELECT name, membership_number FROM customers WHERE id = $1',
-          [body.customerId]
-        );
-        const customer = customerResult.rows[0]!;
-
-        // Determine allowed rentals (simplified - reuse logic from sessions.ts)
-        const allowedRentals = ['STANDARD', 'DOUBLE', 'SPECIAL'];
-        if (customer.membership_number) {
-          // Check gym locker eligibility (simplified)
-          const rangesEnv = process.env.GYM_LOCKER_ELIGIBLE_RANGES || '';
-          if (rangesEnv.trim()) {
-            const membershipNum = parseInt(customer.membership_number, 10);
-            if (!isNaN(membershipNum)) {
-              const ranges = rangesEnv
-                .split(',')
-                .map((range) => range.trim())
-                .filter(Boolean);
-              for (const range of ranges) {
-                const [startStr, endStr] = range.split('-').map((s) => s.trim());
-                const start = parseInt(startStr || '', 10);
-                const end = parseInt(endStr || '', 10);
-                if (
-                  !isNaN(start) &&
-                  !isNaN(end) &&
-                  membershipNum >= start &&
-                  membershipNum <= end
-                ) {
-                  allowedRentals.push('GYM_LOCKER');
-                  break;
-                }
-              }
-            }
-          }
-        }
-
-        const payload: SessionUpdatedPayload = {
-          sessionId: result.sessionId,
-          customerName: customer.name,
-          membershipNumber: customer.membership_number || undefined,
-          allowedRentals,
-          mode: 'INITIAL',
-          blockEndsAt: result.block.endsAt.toISOString(),
-          visitId: result.visit.id,
-        };
-
-        fastify.broadcaster.broadcastSessionUpdated(payload, body.lane);
-      }
 
       // Broadcast inventory update AFTER commit for immediate UI refresh.
       if (fastify.broadcaster) {
@@ -634,30 +556,6 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
           const block = blockResult.rows[0]!;
 
-          // 9. Create a session for backward compatibility
-          // Reuse member from earlier in the function (line 398)
-
-          const sessionResult = await client.query<{ id: string }>(
-            `INSERT INTO sessions (customer_id, member_name, membership_number, room_id, locker_id, expected_duration, status, checkin_type, checkout_at, visit_id, lane)
-           VALUES ($1, $2, $3, $4, $5, 360, 'ACTIVE', 'RENEWAL', $6, $7, $8)
-           RETURNING id`,
-            [
-              customer.id,
-              customer.name,
-              customer.membership_number,
-              assignedRoomId,
-              assignedLockerId,
-              renewalEndsAt,
-              visit.id,
-              body.lane || null,
-            ]
-          );
-
-          const sessionId = sessionResult.rows[0]!.id;
-
-          // NOTE: `checkin_blocks.session_id` links to `lane_sessions` (coordination state).
-          // Legacy `sessions` link to visits via `sessions.visit_id`; do not write legacy session IDs into checkin_blocks.
-
           return {
             visit: {
               id: visit.id,
@@ -676,63 +574,12 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
               rentalType: block.rental_type,
               roomId: block.room_id,
               lockerId: block.locker_id,
-              sessionId,
               agreementSigned: block.agreement_signed,
               createdAt: block.created_at,
               updatedAt: block.updated_at,
             },
-            sessionId,
           };
         });
-
-        // Broadcast session update if lane is provided
-        if (body.lane && fastify.broadcaster) {
-          const customerResult = await query<CustomerRow>(
-            'SELECT name, membership_number FROM customers WHERE id = $1',
-            [result.visit.customerId]
-          );
-          const customer = customerResult.rows[0]!;
-
-          const allowedRentals = ['STANDARD', 'DOUBLE', 'SPECIAL'];
-          if (customer.membership_number) {
-            const rangesEnv = process.env.GYM_LOCKER_ELIGIBLE_RANGES || '';
-            if (rangesEnv.trim()) {
-              const membershipNum = parseInt(customer.membership_number, 10);
-              if (!isNaN(membershipNum)) {
-                const ranges = rangesEnv
-                  .split(',')
-                  .map((range) => range.trim())
-                  .filter(Boolean);
-                for (const range of ranges) {
-                  const [startStr, endStr] = range.split('-').map((s) => s.trim());
-                  const start = parseInt(startStr || '', 10);
-                  const end = parseInt(endStr || '', 10);
-                  if (
-                    !isNaN(start) &&
-                    !isNaN(end) &&
-                    membershipNum >= start &&
-                    membershipNum <= end
-                  ) {
-                    allowedRentals.push('GYM_LOCKER');
-                    break;
-                  }
-                }
-              }
-            }
-          }
-
-          const payload: SessionUpdatedPayload = {
-            sessionId: result.sessionId,
-            customerName: customer.name,
-            membershipNumber: customer.membership_number || undefined,
-            allowedRentals,
-            mode: 'RENEWAL',
-            blockEndsAt: result.block.endsAt.toISOString(),
-            visitId: result.visit.id,
-          };
-
-          fastify.broadcaster.broadcastSessionUpdated(payload, body.lane);
-        }
 
         // Broadcast inventory update AFTER commit for immediate UI refresh.
         if (fastify.broadcaster) {

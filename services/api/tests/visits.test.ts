@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import Fastify, { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { visitRoutes } from '../src/routes/visits.js';
-import { agreementRoutes } from '../src/routes/agreements.js';
 import { createBroadcaster } from '../src/websocket/broadcaster.js';
 import { truncateAllTables } from './testDb.js';
 
@@ -36,7 +35,6 @@ describe('Visit and Renewal Flows', () => {
 
   const testCustomerId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const testRoomId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-  const testAgreementId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
   beforeAll(async () => {
     const dbConfig = {
@@ -64,7 +62,6 @@ describe('Visit and Renewal Flows', () => {
 
     // Register routes
     await fastify.register(visitRoutes);
-    await fastify.register(agreementRoutes);
     await fastify.ready();
   });
 
@@ -102,13 +99,6 @@ describe('Visit and Renewal Flows', () => {
       [testRoomId]
     );
 
-    // Insert active agreement with ON CONFLICT handling
-    await pool.query(
-      `INSERT INTO agreements (id, version, title, body_text, active)
-       VALUES ($1, 'placeholder-v1', 'Club Agreement', '', true)
-       ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version, title = EXCLUDED.title, body_text = EXCLUDED.body_text, active = EXCLUDED.active`,
-      [testAgreementId]
-    );
   });
 
   const runIfDbAvailable = (testFn: () => Promise<void>) => async () => {
@@ -139,7 +129,6 @@ describe('Visit and Renewal Flows', () => {
       expect(data.block).toBeDefined();
       expect(data.block.blockType).toBe('INITIAL');
       expect(data.block.rentalType).toBe('STANDARD');
-      expect(data.sessionId).toBeDefined();
 
       // Verify block duration is 6 hours
       const startsAt = new Date(data.block.startsAt);
@@ -248,119 +237,6 @@ describe('Visit and Renewal Flows', () => {
     })
   );
 
-  it(
-    'should require agreement signature for INITIAL block',
-    runIfDbAvailable(async () => {
-      // Create initial visit
-      const visitResponse = await fastify.inject({
-        method: 'POST',
-        url: '/v1/visits',
-        payload: {
-          customerId: testCustomerId,
-          rentalType: 'STANDARD',
-          roomId: testRoomId,
-        },
-      });
-
-      const visitData = JSON.parse(visitResponse.body);
-      const visitId = visitData.visit.id;
-      const sessionId = visitData.sessionId;
-
-      // Sign agreement
-      const signResponse = await fastify.inject({
-        method: 'POST',
-        url: `/v1/checkins/${sessionId}/agreement-sign`,
-        payload: {
-          // 1x1 transparent PNG (base64) - valid signature payload for PDF generation
-          signaturePngBase64:
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          agreed: true,
-        },
-        headers: {
-          'x-device-type': 'customer-kiosk',
-          'x-device-id': 'test-device',
-        },
-      });
-
-      expect(signResponse.statusCode).toBe(200);
-
-      // Verify block is marked as agreement signed
-      const blockResult = await pool.query(
-        'SELECT agreement_signed FROM checkin_blocks WHERE visit_id = $1 ORDER BY created_at DESC LIMIT 1',
-        [visitId]
-      );
-      expect(blockResult.rows[0]?.agreement_signed).toBe(true);
-
-      // Verify signature is linked to block
-      const signatureResult = await pool.query(
-        'SELECT checkin_block_id FROM agreement_signatures WHERE checkin_id = $1',
-        [sessionId]
-      );
-      expect(signatureResult.rows[0]?.checkin_block_id).toBeDefined();
-    })
-  );
-
-  it(
-    'should require agreement signature for RENEWAL block',
-    runIfDbAvailable(async () => {
-      // Create initial visit
-      const initialResponse = await fastify.inject({
-        method: 'POST',
-        url: '/v1/visits',
-        payload: {
-          customerId: testCustomerId,
-          rentalType: 'STANDARD',
-          roomId: testRoomId,
-        },
-      });
-
-      const initialData = JSON.parse(initialResponse.body);
-      const visitId = initialData.visit.id;
-
-      // Create renewal
-      const renewalResponse = await fastify.inject({
-        method: 'POST',
-        url: `/v1/visits/${visitId}/renew`,
-        payload: {
-          rentalType: 'STANDARD',
-          roomId: testRoomId,
-        },
-      });
-
-      const renewalData = JSON.parse(renewalResponse.body);
-      const renewalSessionId = renewalData.sessionId;
-
-      // Sign agreement for renewal
-      const signResponse = await fastify.inject({
-        method: 'POST',
-        url: `/v1/checkins/${renewalSessionId}/agreement-sign`,
-        payload: {
-          // 1x1 transparent PNG (base64) - valid signature payload for PDF generation
-          signaturePngBase64:
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          agreed: true,
-        },
-        headers: {
-          'x-device-type': 'customer-kiosk',
-          'x-device-id': 'test-device',
-        },
-      });
-
-      expect(signResponse.statusCode).toBe(200);
-
-      // Verify renewal block is marked as agreement signed
-      const blockResult = await pool.query(
-        `SELECT agreement_signed
-       FROM checkin_blocks
-       WHERE visit_id = $1 AND block_type = 'RENEWAL'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-        [visitId]
-      );
-      expect(blockResult.rows[0]?.agreement_signed).toBe(true);
-      expect(blockResult.rows[0]?.agreement_signed).toBe(true);
-    })
-  );
 
   it(
     'should search active visits by membership number',

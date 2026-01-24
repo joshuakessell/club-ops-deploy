@@ -4,7 +4,7 @@ import { safeJsonParse } from '@club-ops/ui';
 import { useLaneSession } from '@club-ops/shared';
 import { getRoomTier } from './utils/getRoomTier';
 import { ModalFrame } from './components/register/modals/ModalFrame';
-import { getApiUrl, getWebSocketUrl } from '@/lib/apiBase';
+import { getApiUrl, getWebSocketUrl } from '@club-ops/shared';
 
 const INVENTORY_COLUMN_HEADER_STYLE: CSSProperties = {
   fontWeight: 700,

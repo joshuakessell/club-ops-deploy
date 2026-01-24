@@ -260,9 +260,7 @@ Other markdown files may describe workflows, but **must not redefine** these ent
 
 ## Legacy / non-authoritative identity tables
 
-### `members` (deprecated)
-
-`members` exists only as a temporary legacy artifact. **All operational workflows must use `customers` as authoritative identity**.
+Legacy identity tables have been removed. **All operational workflows must use `customers` as authoritative identity**.
 
 ---
 

@@ -119,7 +119,11 @@ For the canonical database meaning/contracts, see:
 For the current schema snapshot and history, see:
 
 - `db/schema.sql`
-- `services/api/migrations/`
+- `services/api/migrations/001_init.sql` (baseline)
+- `services/api/migrations/_archive/` (legacy migration history before re-baseline)
+
+Note: the re-baselined migration history assumes a clean database. If you're coming from older migrations,
+run `pnpm db:reset` before `pnpm db:migrate`.
 
 ## Creating New Migrations
 
@@ -131,7 +135,8 @@ NNN_description.sql
 
 Where `NNN` is a zero-padded sequence number (e.g., `009_add_staff_table.sql`).
 
-Migrations are executed in alphabetical order and tracked in the `schema_migrations` table.
+Migrations are executed in alphabetical order and tracked in the `schema_migrations` table. The current
+baseline is `001_init.sql`, so new migrations should start at `002_...`.
 
 ## Development
 

@@ -3,7 +3,7 @@ import { SignInModal } from './SignInModal';
 import type { WebSocketEvent, RegisterSessionUpdatedPayload } from '@club-ops/shared';
 import { closeLaneSessionClient, useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
-import { getApiUrl, getWebSocketUrl } from '@/lib/apiBase';
+import { getApiUrl, getWebSocketUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 

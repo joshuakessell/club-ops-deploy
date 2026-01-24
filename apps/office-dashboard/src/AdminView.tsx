@@ -4,7 +4,7 @@ import type { StaffSession } from './LockScreen';
 import type { WebSocketEvent } from '@club-ops/shared';
 import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 
@@ -397,7 +397,7 @@ export function AdminView({ session }: AdminViewProps) {
                         colSpan={5}
                         style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}
                       >
-                        No active room sessions
+                        No active room stays
                       </td>
                     </tr>
                   ) : (

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { StaffSession } from './LockScreen';
 import { ReAuthModal } from './ReAuthModal';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 

@@ -1,38 +1,8 @@
---
--- PostgreSQL database dump
---
+-- Baseline schema snapshot (re-baselined from db/schema.sql)
+-- NOTE: Excludes schema_migrations (managed by the migration runner).
 
-\restrict CFrzBp80k6cGa6pb5iAAwgv8pu1egAkcf5tM9wfKrHnKSswkf0SRvkA8Y2Aogze
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Dumped from database version 16.11
--- Dumped by pg_dump version 16.11
-
-SET statement_timeout = 0;
-SET lock_timeout = 0;
-SET idle_in_transaction_session_timeout = 0;
-SET client_encoding = 'UTF8';
-SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
-SET check_function_bodies = false;
-SET xmloption = content;
-SET client_min_messages = warning;
-SET row_security = off;
-
---
--- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
-
-
---
--- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
-
-
---
 -- Name: audit_action; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -272,7 +242,8 @@ CREATE TABLE public.agreement_signatures (
     user_agent text,
     ip_address inet,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    checkin_block_id uuid
+    checkin_block_id uuid,
+    CONSTRAINT agreement_signatures_pkey PRIMARY KEY (id)
 );
 
 
@@ -286,7 +257,8 @@ CREATE TABLE public.agreements (
     title character varying(255) NOT NULL,
     body_text text DEFAULT ''::text NOT NULL,
     active boolean DEFAULT false NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT agreements_pkey PRIMARY KEY (id)
 );
 
 
@@ -308,7 +280,8 @@ CREATE TABLE public.audit_log (
     user_agent text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     staff_id uuid,
-    metadata jsonb
+    metadata jsonb,
+    CONSTRAINT audit_log_pkey PRIMARY KEY (id)
 );
 
 
@@ -323,7 +296,8 @@ CREATE TABLE public.charges (
     type character varying(50) NOT NULL,
     amount numeric(10,2) NOT NULL,
     payment_intent_id uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT charges_pkey PRIMARY KEY (id)
 );
 
 
@@ -347,7 +321,8 @@ CREATE TABLE public.checkin_blocks (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     has_tv_remote boolean DEFAULT false NOT NULL,
     waitlist_id uuid,
-    rental_type public.rental_type NOT NULL
+    rental_type public.rental_type NOT NULL,
+    CONSTRAINT checkin_blocks_pkey PRIMARY KEY (id)
 );
 
 
@@ -373,7 +348,8 @@ CREATE TABLE public.checkout_requests (
     completed_at timestamp with time zone,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     customer_id uuid NOT NULL,
-    status public.checkout_request_status DEFAULT 'SUBMITTED'::public.checkout_request_status
+    status public.checkout_request_status DEFAULT 'SUBMITTED'::public.checkout_request_status,
+    CONSTRAINT checkout_requests_pkey PRIMARY KEY (id)
 );
 
 
@@ -390,7 +366,8 @@ CREATE TABLE public.cleaning_batch_rooms (
     transition_time timestamp with time zone DEFAULT now() NOT NULL,
     override_flag boolean DEFAULT false NOT NULL,
     override_reason text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cleaning_batch_rooms_pkey PRIMARY KEY (id)
 );
 
 
@@ -405,7 +382,8 @@ CREATE TABLE public.cleaning_batches (
     completed_at timestamp with time zone,
     room_count integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cleaning_batches_pkey PRIMARY KEY (id)
 );
 
 
@@ -424,7 +402,8 @@ CREATE TABLE public.cleaning_events (
     override_flag boolean DEFAULT false NOT NULL,
     override_reason text,
     device_id character varying(255),
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT cleaning_events_pkey PRIMARY KEY (id)
 );
 
 
@@ -447,7 +426,8 @@ CREATE TABLE public.customers (
     past_due_balance numeric(10,2) DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT customers_primary_language_check CHECK ((primary_language = ANY (ARRAY['EN'::text, 'ES'::text])))
+    CONSTRAINT customers_primary_language_check CHECK ((primary_language = ANY (ARRAY['EN'::text, 'ES'::text]))),
+    CONSTRAINT customers_pkey PRIMARY KEY (id)
 );
 
 
@@ -459,7 +439,8 @@ CREATE TABLE public.devices (
     device_id character varying(255) NOT NULL,
     display_name character varying(255) NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT devices_pkey PRIMARY KEY (device_id)
 );
 
 
@@ -499,7 +480,8 @@ CREATE TABLE public.employee_shifts (
     updated_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT employee_shifts_shift_code_check CHECK ((shift_code = ANY (ARRAY['A'::text, 'B'::text, 'C'::text])))
+    CONSTRAINT employee_shifts_shift_code_check CHECK ((shift_code = ANY (ARRAY['A'::text, 'B'::text, 'C'::text]))),
+    CONSTRAINT employee_shifts_pkey PRIMARY KEY (id)
 );
 
 
@@ -519,7 +501,8 @@ CREATE TABLE public.inventory_reservations (
     released_at timestamp with time zone,
     release_reason text,
     CONSTRAINT inventory_reservations_lane_session_required CHECK (((kind <> 'LANE_SELECTION'::public.inventory_reservation_kind) OR (lane_session_id IS NOT NULL))),
-    CONSTRAINT inventory_reservations_waitlist_required CHECK (((kind <> 'UPGRADE_HOLD'::public.inventory_reservation_kind) OR (waitlist_id IS NOT NULL)))
+    CONSTRAINT inventory_reservations_waitlist_required CHECK (((kind <> 'UPGRADE_HOLD'::public.inventory_reservation_kind) OR (waitlist_id IS NOT NULL))),
+    CONSTRAINT inventory_reservations_pkey PRIMARY KEY (id)
 );
 
 
@@ -544,7 +527,8 @@ END +
 CASE
     WHEN (locker_id IS NULL) THEN 0
     ELSE 1
-END) = 1))
+END) = 1)),
+    CONSTRAINT key_tags_pkey PRIMARY KEY (id)
 );
 
 
@@ -582,7 +566,8 @@ CREATE TABLE public.lane_sessions (
     selection_locked_at timestamp with time zone,
     CONSTRAINT lane_sessions_membership_choice_check CHECK ((((membership_choice)::text = ANY (ARRAY[('ONE_TIME'::character varying)::text, ('SIX_MONTH'::character varying)::text])) OR (membership_choice IS NULL))),
     CONSTRAINT lane_sessions_proposed_by_check CHECK (((proposed_by)::text = ANY (ARRAY[('CUSTOMER'::character varying)::text, ('EMPLOYEE'::character varying)::text]))),
-    CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY (ARRAY[('CUSTOMER'::character varying)::text, ('EMPLOYEE'::character varying)::text])))
+    CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY (ARRAY[('CUSTOMER'::character varying)::text, ('EMPLOYEE'::character varying)::text]))),
+    CONSTRAINT lane_sessions_pkey PRIMARY KEY (id)
 );
 
 
@@ -598,7 +583,8 @@ CREATE TABLE public.late_checkout_events (
     fee_amount numeric(10,2) NOT NULL,
     ban_applied boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    customer_id uuid NOT NULL
+    customer_id uuid NOT NULL,
+    CONSTRAINT late_checkout_events_pkey PRIMARY KEY (id)
 );
 
 
@@ -612,7 +598,8 @@ CREATE TABLE public.lockers (
     status public.room_status DEFAULT 'CLEAN'::public.room_status NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    assigned_to_customer_id uuid
+    assigned_to_customer_id uuid,
+    CONSTRAINT lockers_pkey PRIMARY KEY (id)
 );
 
 
@@ -629,7 +616,8 @@ CREATE TABLE public.payment_intents (
     square_transaction_id character varying(255),
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    paid_at timestamp with time zone
+    paid_at timestamp with time zone,
+    CONSTRAINT payment_intents_pkey PRIMARY KEY (id)
 );
 
 
@@ -645,7 +633,8 @@ CREATE TABLE public.register_sessions (
     last_heartbeat timestamp with time zone DEFAULT now() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     signed_out_at timestamp with time zone,
-    CONSTRAINT register_sessions_register_number_check CHECK ((register_number = ANY (ARRAY[1, 2])))
+    CONSTRAINT register_sessions_register_number_check CHECK ((register_number = ANY (ARRAY[1, 2]))),
+    CONSTRAINT register_sessions_pkey PRIMARY KEY (id)
 );
 
 
@@ -665,39 +654,9 @@ CREATE TABLE public.rooms (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     assigned_to_customer_id uuid,
-    CONSTRAINT rooms_type_no_deprecated CHECK ((type <> ALL (ARRAY['DELUXE'::public.room_type, 'VIP'::public.room_type])))
+    CONSTRAINT rooms_type_no_deprecated CHECK ((type <> ALL (ARRAY['DELUXE'::public.room_type, 'VIP'::public.room_type]))),
+    CONSTRAINT rooms_pkey PRIMARY KEY (id)
 );
-
-
---
--- Name: schema_migrations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.schema_migrations (
-    id integer NOT NULL,
-    name character varying(255) NOT NULL,
-    executed_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
-
---
--- Name: schema_migrations_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.schema_migrations_id_seq
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: schema_migrations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.schema_migrations_id_seq OWNED BY public.schema_migrations.id;
 
 
 --
@@ -712,7 +671,8 @@ CREATE TABLE public.staff (
     pin_hash character varying(255),
     active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT staff_pkey PRIMARY KEY (id)
 );
 
 
@@ -729,7 +689,8 @@ CREATE TABLE public.staff_sessions (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     revoked_at timestamp with time zone,
     expires_at timestamp with time zone NOT NULL,
-    reauth_ok_until timestamp with time zone
+    reauth_ok_until timestamp with time zone,
+    CONSTRAINT staff_sessions_pkey PRIMARY KEY (id)
 );
 
 
@@ -747,7 +708,8 @@ CREATE TABLE public.staff_webauthn_credentials (
     transports jsonb,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     last_used_at timestamp with time zone,
-    revoked_at timestamp with time zone
+    revoked_at timestamp with time zone,
+    CONSTRAINT staff_webauthn_credentials_pkey PRIMARY KEY (id)
 );
 
 
@@ -772,7 +734,8 @@ CREATE TABLE public.telemetry_events (
     status integer,
     url text,
     meta jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT telemetry_events_level_check CHECK ((level = ANY (ARRAY['error'::text, 'warn'::text, 'info'::text])))
+    CONSTRAINT telemetry_events_level_check CHECK ((level = ANY (ARRAY['error'::text, 'warn'::text, 'info'::text]))),
+    CONSTRAINT telemetry_events_pkey PRIMARY KEY (id)
 );
 
 
@@ -824,7 +787,8 @@ CREATE TABLE public.telemetry_spans (
     request_key text,
     incident_id text,
     incident_reason text,
-    meta jsonb DEFAULT '{}'::jsonb NOT NULL
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT telemetry_spans_pkey PRIMARY KEY (id)
 );
 
 
@@ -841,7 +805,8 @@ CREATE TABLE public.telemetry_traces (
     last_seen_at timestamp with time zone DEFAULT now() NOT NULL,
     incident_open boolean DEFAULT false NOT NULL,
     incident_last_at timestamp with time zone,
-    meta jsonb DEFAULT '{}'::jsonb NOT NULL
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT telemetry_traces_pkey PRIMARY KEY (trace_id)
 );
 
 
@@ -891,7 +856,8 @@ CREATE TABLE public.visits (
     ended_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    customer_id uuid NOT NULL
+    customer_id uuid NOT NULL,
+    CONSTRAINT visits_pkey PRIMARY KEY (id)
 );
 
 
@@ -916,7 +882,8 @@ CREATE TABLE public.waitlist (
     offer_attempts integer DEFAULT 0 NOT NULL,
     completed_at timestamp with time zone,
     cancelled_at timestamp with time zone,
-    cancelled_by_staff_id uuid
+    cancelled_by_staff_id uuid,
+    CONSTRAINT waitlist_pkey PRIMARY KEY (id)
 );
 
 
@@ -931,15 +898,9 @@ CREATE TABLE public.webauthn_challenges (
     device_id character varying(255),
     type character varying(50) NOT NULL,
     expires_at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT webauthn_challenges_pkey PRIMARY KEY (id)
 );
-
-
---
--- Name: schema_migrations id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schema_migrations ALTER COLUMN id SET DEFAULT nextval('public.schema_migrations_id_seq'::regclass);
 
 
 --
@@ -950,51 +911,21 @@ ALTER TABLE ONLY public.telemetry_events ALTER COLUMN id SET DEFAULT nextval('pu
 
 
 --
--- Name: agreement_signatures agreement_signatures_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.agreement_signatures
-    ADD CONSTRAINT agreement_signatures_pkey PRIMARY KEY (id);
 
 
 --
--- Name: agreements agreements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.agreements
-    ADD CONSTRAINT agreements_pkey PRIMARY KEY (id);
 
 
 --
--- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.audit_log
-    ADD CONSTRAINT audit_log_pkey PRIMARY KEY (id);
 
 
 --
--- Name: charges charges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.charges
-    ADD CONSTRAINT charges_pkey PRIMARY KEY (id);
 
 
 --
--- Name: checkin_blocks checkin_blocks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.checkin_blocks
-    ADD CONSTRAINT checkin_blocks_pkey PRIMARY KEY (id);
 
 
 --
--- Name: checkout_requests checkout_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.checkout_requests
-    ADD CONSTRAINT checkout_requests_pkey PRIMARY KEY (id);
 
 
 --
@@ -1006,67 +937,27 @@ ALTER TABLE ONLY public.cleaning_batch_rooms
 
 
 --
--- Name: cleaning_batch_rooms cleaning_batch_rooms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.cleaning_batch_rooms
-    ADD CONSTRAINT cleaning_batch_rooms_pkey PRIMARY KEY (id);
 
 
 --
--- Name: cleaning_batches cleaning_batches_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.cleaning_batches
-    ADD CONSTRAINT cleaning_batches_pkey PRIMARY KEY (id);
 
 
 --
--- Name: cleaning_events cleaning_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.cleaning_events
-    ADD CONSTRAINT cleaning_events_pkey PRIMARY KEY (id);
 
 
 --
--- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.customers
-    ADD CONSTRAINT customers_pkey PRIMARY KEY (id);
 
 
 --
--- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.devices
-    ADD CONSTRAINT devices_pkey PRIMARY KEY (device_id);
 
 
 --
--- Name: employee_shifts employee_shifts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.employee_shifts
-    ADD CONSTRAINT employee_shifts_pkey PRIMARY KEY (id);
 
 
 --
--- Name: inventory_reservations inventory_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.inventory_reservations
-    ADD CONSTRAINT inventory_reservations_pkey PRIMARY KEY (id);
 
 
 --
--- Name: key_tags key_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.key_tags
-    ADD CONSTRAINT key_tags_pkey PRIMARY KEY (id);
 
 
 --
@@ -1078,19 +969,9 @@ ALTER TABLE ONLY public.key_tags
 
 
 --
--- Name: lane_sessions lane_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lane_sessions
-    ADD CONSTRAINT lane_sessions_pkey PRIMARY KEY (id);
 
 
 --
--- Name: late_checkout_events late_checkout_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.late_checkout_events
-    ADD CONSTRAINT late_checkout_events_pkey PRIMARY KEY (id);
 
 
 --
@@ -1102,27 +983,12 @@ ALTER TABLE ONLY public.lockers
 
 
 --
--- Name: lockers lockers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lockers
-    ADD CONSTRAINT lockers_pkey PRIMARY KEY (id);
 
 
 --
--- Name: payment_intents payment_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.payment_intents
-    ADD CONSTRAINT payment_intents_pkey PRIMARY KEY (id);
 
 
 --
--- Name: register_sessions register_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.register_sessions
-    ADD CONSTRAINT register_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1134,35 +1000,9 @@ ALTER TABLE ONLY public.rooms
 
 
 --
--- Name: rooms rooms_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.rooms
-    ADD CONSTRAINT rooms_pkey PRIMARY KEY (id);
 
 
 --
--- Name: schema_migrations schema_migrations_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schema_migrations
-    ADD CONSTRAINT schema_migrations_name_key UNIQUE (name);
-
-
---
--- Name: schema_migrations schema_migrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.schema_migrations
-    ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (id);
-
-
---
--- Name: staff staff_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.staff
-    ADD CONSTRAINT staff_pkey PRIMARY KEY (id);
 
 
 --
@@ -1174,11 +1014,6 @@ ALTER TABLE ONLY public.staff
 
 
 --
--- Name: staff_sessions staff_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.staff_sessions
-    ADD CONSTRAINT staff_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1190,51 +1025,21 @@ ALTER TABLE ONLY public.staff_sessions
 
 
 --
--- Name: staff_webauthn_credentials staff_webauthn_credentials_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.staff_webauthn_credentials
-    ADD CONSTRAINT staff_webauthn_credentials_pkey PRIMARY KEY (id);
 
 
 --
--- Name: telemetry_events telemetry_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.telemetry_events
-    ADD CONSTRAINT telemetry_events_pkey PRIMARY KEY (id);
 
 
 --
--- Name: telemetry_spans telemetry_spans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.telemetry_spans
-    ADD CONSTRAINT telemetry_spans_pkey PRIMARY KEY (id);
 
 
 --
--- Name: telemetry_traces telemetry_traces_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.telemetry_traces
-    ADD CONSTRAINT telemetry_traces_pkey PRIMARY KEY (trace_id);
 
 
 --
--- Name: visits visits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.visits
-    ADD CONSTRAINT visits_pkey PRIMARY KEY (id);
 
 
 --
--- Name: waitlist waitlist_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.waitlist
-    ADD CONSTRAINT waitlist_pkey PRIMARY KEY (id);
 
 
 --
@@ -1246,11 +1051,6 @@ ALTER TABLE ONLY public.webauthn_challenges
 
 
 --
--- Name: webauthn_challenges webauthn_challenges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.webauthn_challenges
-    ADD CONSTRAINT webauthn_challenges_pkey PRIMARY KEY (id);
 
 
 --
@@ -2531,6 +2331,3 @@ ALTER TABLE ONLY public.webauthn_challenges
 --
 -- PostgreSQL database dump complete
 --
-
-\unrestrict CFrzBp80k6cGa6pb5iAAwgv8pu1egAkcf5tM9wfKrHnKSswkf0SRvkA8Y2Aogze
-

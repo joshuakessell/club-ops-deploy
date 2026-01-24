@@ -9,7 +9,7 @@ import { generateAgreementPdf } from '../utils/pdf-generator';
 import { stripSystemLateFeeNotes } from '../utils/lateFeeNotes';
 import { roundUpToQuarterHour } from '../time/rounding';
 import type { Broadcaster } from '../websocket/broadcaster';
-import { broadcastInventoryUpdate } from './sessions';
+import { broadcastInventoryUpdate } from '../inventory/broadcast';
 import { insertAuditLog } from '../audit/auditLog';
 import type {
   CustomerConfirmationRequiredPayload,
@@ -64,7 +64,7 @@ interface LaneSessionRow {
   membership_purchase_requested_at?: Date | null;
   membership_choice?: 'ONE_TIME' | 'SIX_MONTH' | null;
   kiosk_acknowledged_at?: Date | null;
-  checkin_mode: string | null; // 'INITIAL' or 'RENEWAL'
+  checkin_mode: string | null; // 'CHECKIN' or 'RENEWAL'
   proposed_rental_type: string | null;
   proposed_by: string | null;
   selection_confirmed: boolean;
@@ -388,7 +388,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             ? parseMembershipNumber(membershipScanValue)
             : null;
 
-          // Look up or create customer (customers is canonical identity; members is deprecated)
+          // Look up or create customer (customers is canonical identity)
           let customerId: string | null = null;
           let customerName = 'Customer';
           let customerHasEncryptedLookupMarker = false;
@@ -463,7 +463,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           // Determine mode (explicit renewal only). If an active visit exists and no explicit visitId
           // is provided, treat as "already checked in" (lookup-only) and block a new check-in flow.
-          let computedMode: 'INITIAL' | 'RENEWAL' = 'INITIAL';
+          let computedMode: 'CHECKIN' | 'RENEWAL' = 'CHECKIN';
           let visitIdForSession: string | null = null;
           let blockEndsAtDate: Date | null = null;
           let currentTotalHours = 0;
@@ -1393,7 +1393,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             }
           }
 
-          const computedMode: 'INITIAL' | 'RENEWAL' = 'INITIAL';
+          const computedMode: 'CHECKIN' | 'RENEWAL' = 'CHECKIN';
 
           // Determine allowed rentals (no membership yet, so just basic options)
           const allowedRentals = getAllowedRentals(null);
@@ -2773,11 +2773,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const session = sessionResult.rows[0]!;
 
-          // Agreement signing is required only for INITIAL and RENEWAL checkin_blocks
-          if (session.checkin_mode !== 'INITIAL' && session.checkin_mode !== 'RENEWAL') {
+          // Agreement signing is required only for CHECKIN and RENEWAL lane sessions
+          if (session.checkin_mode !== 'CHECKIN' && session.checkin_mode !== 'RENEWAL') {
             throw {
               statusCode: 400,
-              message: 'Agreement signing is only required for INITIAL and RENEWAL check-ins',
+              message: 'Agreement signing is only required for CHECKIN and RENEWAL check-ins',
             };
           }
 
@@ -3159,11 +3159,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           // Store signature as immutable audit artifact
           await client.query(
             `INSERT INTO agreement_signatures
-           (agreement_id, checkin_id, checkin_block_id, customer_name, membership_number, signed_at, signature_png_base64, agreement_text_snapshot, agreement_version, user_agent, ip_address)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+           (agreement_id, checkin_block_id, customer_name, membership_number, signed_at, signature_png_base64, agreement_text_snapshot, agreement_version, user_agent, ip_address)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [
               agreement.id,
-              null,
               checkinBlockId,
               customerName,
               membershipNumber || null,
@@ -3281,11 +3280,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const session = sessionResult.rows[0]!;
 
-          // Agreement signing is required only for INITIAL and RENEWAL checkin_blocks
-          if (session.checkin_mode !== 'INITIAL' && session.checkin_mode !== 'RENEWAL') {
+          // Agreement signing is required only for CHECKIN and RENEWAL lane sessions
+          if (session.checkin_mode !== 'CHECKIN' && session.checkin_mode !== 'RENEWAL') {
             throw {
               statusCode: 400,
-              message: 'Agreement signing is only required for INITIAL and RENEWAL check-ins',
+              message: 'Agreement signing is only required for CHECKIN and RENEWAL check-ins',
             };
           }
 
@@ -3748,10 +3747,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           const session = sessionResult.rows[0]!;
 
-          if (session.checkin_mode !== 'INITIAL' && session.checkin_mode !== 'RENEWAL') {
+          if (session.checkin_mode !== 'CHECKIN' && session.checkin_mode !== 'RENEWAL') {
             throw {
               statusCode: 400,
-              message: 'Agreement bypass is only required for INITIAL and RENEWAL check-ins',
+              message: 'Agreement bypass is only required for CHECKIN and RENEWAL check-ins',
             };
           }
 
@@ -3993,7 +3992,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000)); // 6 hours from previous checkout, rounded up
       blockType = 'RENEWAL';
     } else {
-      // For INITIAL: create new visit
+      // For CHECKIN: create new visit
       const visitResult = await client.query<{ id: string }>(
         `INSERT INTO visits (customer_id, started_at)
          VALUES ($1, NOW())

@@ -44,7 +44,7 @@ export function CustomerAccountPanel(props: {
     sessionId?: string;
     customerName?: string;
     membershipNumber?: string;
-    mode?: 'INITIAL' | 'RENEWAL';
+    mode?: 'CHECKIN' | 'RENEWAL';
     blockEndsAt?: string;
     activeAssignedResourceType?: 'room' | 'locker';
     activeAssignedResourceNumber?: string;
