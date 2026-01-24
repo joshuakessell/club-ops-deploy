@@ -5,6 +5,7 @@ This repository is a TypeScript monorepo (pnpm workspaces + Turborepo). The goal
 ## Scope & Ownership
 
 Actively maintained:
+
 - `services/api`
 - `packages/shared`
 - `packages/ui`
@@ -15,6 +16,7 @@ Actively maintained:
 ## Source of Truth (must stay aligned)
 
 These files are authoritative:
+
 - `SPEC.md` (business invariants + pointers only; keep short)
 - `openapi.yaml` (API contract)
 - `docs/database/DATABASE_SOURCE_OF_TRUTH.md` + `docs/database/DATABASE_ENTITY_DETAILS.md` (DB meaning)
@@ -22,8 +24,9 @@ These files are authoritative:
 - `docs/FILE_STRUCTURE.md` (canonical monorepo layout map; keep updated when structure changes)
 
 If code conflicts with these, either:
-1) change code to match, or
-2) propose a spec change with explicit diffs and justification.
+
+1. change code to match, or
+2. propose a spec change with explicit diffs and justification.
 
 ## Security & Correctness Invariants (non‑negotiables)
 
@@ -39,6 +42,7 @@ If code conflicts with these, either:
 ## Quality Gates (run before finishing)
 
 From repo root:
+
 - `pnpm lint`
 - `pnpm typecheck`
 - `pnpm test`
@@ -80,5 +84,5 @@ import './styles.css';
 ## Repository Layout Discipline
 
 `docs/FILE_STRUCTURE.md` is the canonical layout reference.
-- If you add/remove/rename/move any top-level area or major app/package/service, update `docs/FILE_STRUCTURE.md` in the same change.
 
+- If you add/remove/rename/move any top-level area or major app/package/service, update `docs/FILE_STRUCTURE.md` in the same change.

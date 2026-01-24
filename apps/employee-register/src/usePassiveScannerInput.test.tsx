@@ -59,7 +59,9 @@ describe('usePassiveScannerInput', () => {
     const onCapture = vi.fn();
     const onStart = vi.fn();
     const onEnd = vi.fn();
-    render(<Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />);
+    render(
+      <Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />
+    );
 
     keyOnWindow('A');
     expect(onStart).toHaveBeenCalledTimes(1);
@@ -130,7 +132,9 @@ describe('usePassiveScannerInput', () => {
     const onCapture = vi.fn();
     const onStart = vi.fn();
     const onEnd = vi.fn();
-    render(<Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />);
+    render(
+      <Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />
+    );
 
     keyOnWindow('A');
     expect(onStart).toHaveBeenCalledTimes(1);
@@ -142,4 +146,3 @@ describe('usePassiveScannerInput', () => {
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 });
-

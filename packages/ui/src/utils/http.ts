@@ -34,7 +34,9 @@ export async function readJson<T>(response: Response): Promise<T> {
   if (!isJson) {
     // Gracefully handle empty bodies (common for some endpoints).
     if (!trimmed) return null as unknown as T;
-    throw new Error(`Expected JSON but received ${contentType || 'unknown content-type'} — ${snippet}`);
+    throw new Error(
+      `Expected JSON but received ${contentType || 'unknown content-type'} — ${snippet}`
+    );
   }
 
   // If Response.text() isn't available (test mocks), prefer Response.json().
@@ -53,4 +55,3 @@ export async function readJson<T>(response: Response): Promise<T> {
     throw new Error(`Failed to parse JSON — ${snippet || '(empty body)'}`);
   }
 }
-

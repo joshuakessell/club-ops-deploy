@@ -11,7 +11,12 @@ function truncate(s: string, max: number) {
 
 function isSecretKey(key: string) {
   const k = key.toLowerCase();
-  return k.includes('authorization') || k.includes('cookie') || k.includes('token') || k.includes('secret');
+  return (
+    k.includes('authorization') ||
+    k.includes('cookie') ||
+    k.includes('token') ||
+    k.includes('secret')
+  );
 }
 
 function scrubSecrets(value: unknown, seen: WeakSet<object>, depth: number): unknown {
@@ -49,7 +54,11 @@ export function sanitizeTelemetryRow(row: unknown) {
     if (typeof clean.stack === 'string') clean.stack = truncate(clean.stack, MAX_STACK);
 
     const payload = clean.payload;
-    const scrubbed = scrubSecrets(payload && typeof payload === 'object' ? payload : {}, new WeakSet(), 0);
+    const scrubbed = scrubSecrets(
+      payload && typeof payload === 'object' ? payload : {},
+      new WeakSet(),
+      0
+    );
     clean.payload = scrubbed && typeof scrubbed === 'object' ? scrubbed : {};
 
     try {
@@ -70,4 +79,3 @@ export function sanitizeTelemetryRow(row: unknown) {
     };
   }
 }
-

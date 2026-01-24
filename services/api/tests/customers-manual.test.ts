@@ -61,7 +61,10 @@ describe('Customers manual identity endpoints', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { matchCount?: number; bestMatch?: { id?: string; name?: string } | null };
+    const body = JSON.parse(res.body) as {
+      matchCount?: number;
+      bestMatch?: { id?: string; name?: string } | null;
+    };
     expect(body.matchCount).toBe(1);
     expect(body.bestMatch?.id).toBe(inserted.rows[0]!.id);
     expect(body.bestMatch?.name).toBe('John Smith');
@@ -86,7 +89,10 @@ describe('Customers manual identity endpoints', () => {
       payload: { firstName: 'Alex', lastName: 'Rivera', dob: '1992-03-14' },
     });
     expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body) as { created?: boolean; customer?: { id?: string; name?: string; dob?: string } };
+    const body = JSON.parse(res.body) as {
+      created?: boolean;
+      customer?: { id?: string; name?: string; dob?: string };
+    };
     expect(body.created).toBe(true);
     expect(body.customer?.id).toBeDefined();
     expect(body.customer?.name).toBe('Alex Rivera');
@@ -100,4 +106,3 @@ describe('Customers manual identity endpoints', () => {
     expect(db.rows[0]?.dob).toBe('1992-03-14');
   });
 });
-

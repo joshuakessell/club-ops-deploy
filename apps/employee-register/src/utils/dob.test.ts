@@ -31,4 +31,3 @@ describe('dob utils', () => {
     expect(parseDobDigitsToIso('02302000')).toBeNull(); // Feb 30 invalid
   });
 });
-

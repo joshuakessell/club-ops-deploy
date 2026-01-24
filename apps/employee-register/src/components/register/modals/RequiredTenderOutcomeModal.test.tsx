@@ -38,4 +38,3 @@ describe('RequiredTenderOutcomeModal', () => {
     expect(m.getByText('Select Tender Outcome')).toBeDefined();
   });
 });
-

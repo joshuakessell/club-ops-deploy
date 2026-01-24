@@ -282,10 +282,7 @@ export function StaffManagement({ session }: StaffManagementProps) {
           >
             ← Back to Admin
           </button>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="cs-liquid-button"
-          >
+          <button onClick={() => setShowCreateModal(true)} className="cs-liquid-button">
             + Create Staff
           </button>
         </div>
@@ -305,9 +302,27 @@ export function StaffManagement({ session }: StaffManagementProps) {
             onChange={(e) => setSearch(e.target.value)}
           />
           <div className="cs-liquid-search__icon">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M14 14L11.1 11.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M14 14L11.1 11.1"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
         </div>
@@ -420,7 +435,11 @@ export function StaffManagement({ session }: StaffManagementProps) {
                       </button>
                       <button
                         onClick={() => handleToggleActive(member.id, member.active)}
-                        className={member.active ? 'cs-liquid-button cs-liquid-button--danger' : 'cs-liquid-button'}
+                        className={
+                          member.active
+                            ? 'cs-liquid-button cs-liquid-button--danger'
+                            : 'cs-liquid-button'
+                        }
                       >
                         {member.active ? 'Deactivate' : 'Activate'}
                       </button>
@@ -639,10 +658,7 @@ function CreateStaffModal({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="cs-liquid-button"
-            >
+            <button type="submit" className="cs-liquid-button">
               Create
             </button>
           </div>
@@ -865,13 +881,13 @@ function StaffDetailModal({
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
-            <button
-              onClick={onPinReset}
-              className="cs-liquid-button cs-liquid-button--secondary"
-              style={{ marginRight: '1rem' }}
-            >
-              Reset PIN
-            </button>
+              <button
+                onClick={onPinReset}
+                className="cs-liquid-button cs-liquid-button--secondary"
+                style={{ marginRight: '1rem' }}
+              >
+                Reset PIN
+              </button>
             </div>
           </>
         )}
@@ -954,10 +970,7 @@ function StaffDetailModal({
               }}
             >
               <h3 style={{ fontSize: '1.25rem' }}>Documents</h3>
-              <button
-                onClick={() => setShowUploadModal(true)}
-                className="cs-liquid-button"
-              >
+              <button onClick={() => setShowUploadModal(true)} className="cs-liquid-button">
                 Upload Document
               </button>
             </div>
@@ -1163,11 +1176,7 @@ function UploadDocumentModal({
           >
             Cancel
           </button>
-          <button
-            onClick={handleSubmit}
-            disabled={uploading || !file}
-            className="cs-liquid-button"
-          >
+          <button onClick={handleSubmit} disabled={uploading || !file} className="cs-liquid-button">
             {uploading ? 'Uploading...' : 'Upload'}
           </button>
         </div>
@@ -1255,10 +1264,7 @@ function PinResetModal({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              className="cs-liquid-button"
-            >
+            <button type="submit" className="cs-liquid-button">
               Reset PIN
             </button>
           </div>

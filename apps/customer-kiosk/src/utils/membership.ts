@@ -34,7 +34,10 @@ export function getMembershipStatus(
 ): 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'NON_MEMBER' {
   if (session.membershipPurchaseIntent) return 'PENDING';
   const base = getCustomerMembershipStatus(
-    { membershipNumber: session.membershipNumber, membershipValidUntil: session.membershipValidUntil },
+    {
+      membershipNumber: session.membershipNumber,
+      membershipValidUntil: session.membershipValidUntil,
+    },
     new Date(nowMs)
   );
   if (base === 'ACTIVE') return 'ACTIVE';

@@ -12,7 +12,11 @@ export function RegisterTopActionsBar({ onCheckout, onRoomCleaning }: RegisterTo
         </span>
         Checkout
       </button>
-      <button type="button" className="action-btn cs-liquid-button cs-liquid-button--secondary" onClick={onRoomCleaning}>
+      <button
+        type="button"
+        className="action-btn cs-liquid-button cs-liquid-button--secondary"
+        onClick={onRoomCleaning}
+      >
         <span className="btn-icon" aria-hidden="true">
           🧹
         </span>
@@ -21,5 +25,3 @@ export function RegisterTopActionsBar({ onCheckout, onRoomCleaning }: RegisterTo
     </div>
   );
 }
-
-

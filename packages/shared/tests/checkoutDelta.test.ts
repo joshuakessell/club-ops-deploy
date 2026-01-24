@@ -47,4 +47,3 @@ describe('checkout delta display (15-min round down)', () => {
     expect(formatCheckoutDelta(d)).toBe('1h 0m late');
   });
 });
-

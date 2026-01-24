@@ -82,10 +82,7 @@ export function OfficeShell({
           <h1>{isAdmin ? 'Office Dashboard (Admin)' : 'Office Dashboard (Staff)'}</h1>
           <div className="topbar-status" style={{ display: 'flex', alignItems: 'center' }}>
             <span style={{ color: 'var(--text-muted)' }}>{location.pathname}</span>
-            <button
-              onClick={onLogout}
-              className="cs-liquid-button cs-liquid-button--danger"
-            >
+            <button onClick={onLogout} className="cs-liquid-button cs-liquid-button--danger">
               Sign Out
             </button>
           </div>

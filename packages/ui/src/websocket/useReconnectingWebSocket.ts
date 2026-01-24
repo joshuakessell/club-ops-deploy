@@ -52,7 +52,8 @@ function extractLaneIdFromUrl(rawUrl: string): string {
 }
 
 function extractKioskTokenFromProtocols(protocols?: string | string[]): string | null {
-  const list = typeof protocols === 'string' ? [protocols] : Array.isArray(protocols) ? protocols : [];
+  const list =
+    typeof protocols === 'string' ? [protocols] : Array.isArray(protocols) ? protocols : [];
   for (const p of list) {
     const s = String(p).trim();
     if (s.startsWith('kiosk-token.')) {
@@ -116,23 +117,20 @@ export function useReconnectingWebSocket(
     setConnectNonce((n) => n + 1);
   }, [role, url]);
 
-  const sendJson = useCallback(
-    (msg: unknown) => {
-      const raw = JSON.stringify(msg);
-      const ws = wsRef.current;
-      if (isSocketOpen(ws)) {
-        try {
-          ws.send(raw);
-          return;
-        } catch {
-          // fall through to queue
-        }
+  const sendJson = useCallback((msg: unknown) => {
+    const raw = JSON.stringify(msg);
+    const ws = wsRef.current;
+    if (isSocketOpen(ws)) {
+      try {
+        ws.send(raw);
+        return;
+      } catch {
+        // fall through to queue
       }
-      sendQueueRef.current.push(raw);
-      if (closedByUserRef.current) return;
-    },
-    []
-  );
+    }
+    sendQueueRef.current.push(raw);
+    if (closedByUserRef.current) return;
+  }, []);
 
   const close = useCallback(() => {
     closedByUserRef.current = true;
@@ -266,5 +264,3 @@ export function useReconnectingWebSocket(
     close,
   };
 }
-
-

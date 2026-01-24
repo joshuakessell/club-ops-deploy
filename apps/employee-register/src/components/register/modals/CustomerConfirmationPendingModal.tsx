@@ -16,7 +16,12 @@ export function CustomerConfirmationPendingModal({
   onCancel,
 }: CustomerConfirmationPendingModalProps) {
   return (
-    <ModalFrame isOpen={isOpen} title="Waiting for Customer Confirmation" onClose={() => {}} closeOnOverlayClick={false}>
+    <ModalFrame
+      isOpen={isOpen}
+      title="Waiting for Customer Confirmation"
+      onClose={() => {}}
+      closeOnOverlayClick={false}
+    >
       <p style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
         Staff selected a different option: {data.selected} {data.number}. Waiting for customer to
         accept or decline on their device.
@@ -39,4 +44,3 @@ export function CustomerConfirmationPendingModal({
     </ModalFrame>
   );
 }
-

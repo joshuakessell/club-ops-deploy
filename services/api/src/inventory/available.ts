@@ -26,7 +26,9 @@ function getRoomTier(roomNumber: string): RoomTier {
  * - GET /v1/inventory/available
  * - INVENTORY_UPDATED broadcaster helpers
  */
-export async function computeInventoryAvailable(queryFn: QueryFn): Promise<InventoryAvailableResponse> {
+export async function computeInventoryAvailable(
+  queryFn: QueryFn
+): Promise<InventoryAvailableResponse> {
   const result = await queryFn<{
     number: string;
     status: string;
@@ -129,5 +131,3 @@ export async function computeInventoryAvailable(queryFn: QueryFn): Promise<Inven
     total: rooms.SPECIAL + rooms.DOUBLE + rooms.STANDARD,
   };
 }
-
-

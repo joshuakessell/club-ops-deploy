@@ -66,5 +66,3 @@ export function useRegisterTopActionsOverlays(opts: {
 
   return { openCheckout, openRoomCleaning, overlays };
 }
-
-

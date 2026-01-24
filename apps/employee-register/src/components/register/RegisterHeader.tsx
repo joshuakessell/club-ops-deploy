@@ -40,10 +40,7 @@ export function RegisterHeader({
         <h1 className="er-title" style={{ margin: 0 }}>
           Employee Register
         </h1>
-        <div
-          className="status-badges"
-          style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}
-        >
+        <div className="status-badges" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           <span
             className={`cs-badge ${health?.status === 'ok' ? 'cs-badge--success' : 'cs-badge--error'}`}
           >
@@ -76,4 +73,3 @@ export function RegisterHeader({
     </header>
   );
 }
-

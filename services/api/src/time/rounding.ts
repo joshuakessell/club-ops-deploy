@@ -9,5 +9,3 @@ export function roundUpToQuarterHour(d: Date): Date {
   const rounded = Math.ceil(ms / FIFTEEN_MIN_MS) * FIFTEEN_MIN_MS;
   return new Date(rounded);
 }
-
-

@@ -248,4 +248,3 @@ export function extractErrorLike(value: unknown): { message?: string; stack?: st
   if (typeof value === 'string') return { message: value };
   return { message: undefined, stack: undefined };
 }
-

@@ -66,7 +66,8 @@ describe('Check-in Flow', () => {
       return originalBroadcastSessionUpdated(payload, lane);
     };
     // Capture CUSTOMER_CONFIRMED payloads for assertions.
-    const originalBroadcastCustomerConfirmed = broadcaster.broadcastCustomerConfirmed.bind(broadcaster);
+    const originalBroadcastCustomerConfirmed =
+      broadcaster.broadcastCustomerConfirmed.bind(broadcaster);
     broadcaster.broadcastCustomerConfirmed = (payload, lane) => {
       customerConfirmedEvents.push({ lane, payload });
       return originalBroadcastCustomerConfirmed(payload, lane);
@@ -350,10 +351,12 @@ describe('Check-in Flow', () => {
         );
         expect(roomAfter.rows[0]!.assigned_to_customer_id).toBeNull();
 
-        const sessionAfter = await query<{ assigned_resource_id: string | null; assigned_resource_type: string | null }>(
-          `SELECT assigned_resource_id, assigned_resource_type FROM lane_sessions WHERE id = $1`,
-          [startJson.sessionId]
-        );
+        const sessionAfter = await query<{
+          assigned_resource_id: string | null;
+          assigned_resource_type: string | null;
+        }>(`SELECT assigned_resource_id, assigned_resource_type FROM lane_sessions WHERE id = $1`, [
+          startJson.sessionId,
+        ]);
         expect(sessionAfter.rows[0]!.assigned_resource_id).toBeNull();
         expect(sessionAfter.rows[0]!.assigned_resource_type).toBeNull();
       })
@@ -751,7 +754,7 @@ describe('Check-in Flow', () => {
 
   describe('POST /v1/checkin/lane/:laneId/membership-purchase-intent', () => {
     it(
-      "should allow intent=NONE to clear a prior 6-month intent (stored as NULL) and recompute the DUE quote",
+      'should allow intent=NONE to clear a prior 6-month intent (stored as NULL) and recompute the DUE quote',
       runIfDbAvailable(async () => {
         // Start a lane session
         const startResponse = await app.inject({
@@ -858,7 +861,8 @@ describe('Check-in Flow', () => {
         expect(clearedRow.rows[0]!.membership_purchase_requested_at).toBeNull();
 
         const clearedQuote = await getQuote();
-        const clearedItems: Array<{ description: string; amount: number }> = clearedQuote.lineItems ?? [];
+        const clearedItems: Array<{ description: string; amount: number }> =
+          clearedQuote.lineItems ?? [];
         expect(clearedItems.some((li) => li.description === 'Membership Fee')).toBe(true);
         expect(clearedItems.some((li) => li.description === '6 Month Membership')).toBe(false);
       })
@@ -1330,10 +1334,11 @@ describe('Check-in Flow', () => {
           customer_id: string | null;
           kiosk_acknowledged_at: string | null;
           status: string;
-        }>(`SELECT customer_display_name, customer_id, kiosk_acknowledged_at::text, status::text as status
-            FROM lane_sessions WHERE id = $1`, [
-          sessionId,
-        ]);
+        }>(
+          `SELECT customer_display_name, customer_id, kiosk_acknowledged_at::text, status::text as status
+            FROM lane_sessions WHERE id = $1`,
+          [sessionId]
+        );
         // Contract: kiosk-ack is UI-only and must not clear customer association.
         expect(cleared.rows[0]!.customer_display_name).toBe('Done Customer');
         expect(cleared.rows[0]!.status).not.toBe('COMPLETED');
@@ -1494,7 +1499,9 @@ describe('Check-in Flow', () => {
         expect(ids).toContain(id2);
         // Sorted by descending matchScore
         for (let i = 1; i < data.candidates.length; i++) {
-          expect(data.candidates[i - 1].matchScore).toBeGreaterThanOrEqual(data.candidates[i].matchScore);
+          expect(data.candidates[i - 1].matchScore).toBeGreaterThanOrEqual(
+            data.candidates[i].matchScore
+          );
         }
       })
     );

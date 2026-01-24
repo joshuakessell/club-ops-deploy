@@ -49,7 +49,9 @@ export async function seedDemoData(): Promise<void> {
       console.log('🌱 Seeding busy Saturday demo dataset (resetting customer data)...');
 
       // Keep employees unchanged
-      const staffCountBefore = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM staff');
+      const staffCountBefore = await query<{ count: string }>(
+        'SELECT COUNT(*)::text as count FROM staff'
+      );
 
       // Deterministic PRNG so the dataset is stable across runs
       function seededRng(seed: number): () => number {
@@ -137,19 +139,27 @@ export async function seedDemoData(): Promise<void> {
         // 1) Ensure non-existent rooms are not present
         const nonExistentRoomNumbers = NONEXISTENT_ROOM_NUMBERS.map(String);
         if (nonExistentRoomNumbers.length > 0) {
-          await client.query(`DELETE FROM rooms WHERE number = ANY($1::text[])`, [nonExistentRoomNumbers]);
+          await client.query(`DELETE FROM rooms WHERE number = ANY($1::text[])`, [
+            nonExistentRoomNumbers,
+          ]);
         }
 
         // 2) Remove any invalid legacy inventory rows not in the contract
         await client.query(`DELETE FROM rooms WHERE NOT (number = ANY($1::text[]))`, [
           ROOM_NUMBERS.map(String),
         ]);
-        await client.query(`DELETE FROM lockers WHERE NOT (number = ANY($1::text[]))`, [LOCKER_NUMBERS]);
+        await client.query(`DELETE FROM lockers WHERE NOT (number = ANY($1::text[]))`, [
+          LOCKER_NUMBERS,
+        ]);
 
         // 3) Upsert rooms + lockers (idempotent)
         for (const r of ROOMS) {
           const type: RoomType =
-            r.tier === 'DOUBLE' ? RoomType.DOUBLE : r.tier === 'SPECIAL' ? RoomType.SPECIAL : RoomType.STANDARD;
+            r.tier === 'DOUBLE'
+              ? RoomType.DOUBLE
+              : r.tier === 'SPECIAL'
+                ? RoomType.SPECIAL
+                : RoomType.STANDARD;
           await client.query(
             `INSERT INTO rooms (number, type, status, floor, last_status_change)
              VALUES ($1, $2, 'CLEAN', $3, NOW())
@@ -318,7 +328,10 @@ export async function seedDemoData(): Promise<void> {
         const ACTIVE_LOCKER_OCCUPANCY = ACTIVE_LOCKERS_TARGET;
 
         const roomCustomerIds = customerIds.slice(0, ACTIVE_ROOM_OCCUPANCY);
-        const lockerCustomerIds = customerIds.slice(ACTIVE_ROOM_OCCUPANCY, ACTIVE_ROOM_OCCUPANCY + ACTIVE_LOCKER_OCCUPANCY);
+        const lockerCustomerIds = customerIds.slice(
+          ACTIVE_ROOM_OCCUPANCY,
+          ACTIVE_ROOM_OCCUPANCY + ACTIVE_LOCKER_OCCUPANCY
+        );
         const extraCustomerIds = customerIds.slice(ACTIVE_ROOM_OCCUPANCY + ACTIVE_LOCKER_OCCUPANCY);
 
         // Choose the last occupied locker customer to be the overdue one
@@ -359,7 +372,15 @@ export async function seedDemoData(): Promise<void> {
             `INSERT INTO checkin_blocks
              (id, visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, session_id, agreement_signed, agreement_signed_at, created_at, updated_at, has_tv_remote, waitlist_id)
              VALUES ($1, $2, 'INITIAL', $3, $4, $5, $6, $7, NULL, false, NULL, NOW(), NOW(), false, NULL)`,
-            [blockId, visitId, params.checkInAt, params.scheduledCheckoutAt, params.rentalType, params.roomId, params.lockerId]
+            [
+              blockId,
+              visitId,
+              params.checkInAt,
+              params.scheduledCheckoutAt,
+              params.rentalType,
+              params.roomId,
+              params.lockerId,
+            ]
           );
         }
 
@@ -460,14 +481,22 @@ export async function seedDemoData(): Promise<void> {
           activeCheckInByLockerId.set(lockerId, activeLockerCheckInTimes[i]!);
         }
 
-        function pickCompletedResource(idx: number): { roomId: string | null; lockerId: string | null; rentalType: RentalType } {
+        function pickCompletedResource(idx: number): {
+          roomId: string | null;
+          lockerId: string | null;
+          rentalType: RentalType;
+        } {
           // Slight bias toward rooms (more churn) but include lockers heavily too
           const useRoom = idx % 5 !== 0; // 80% rooms, 20% lockers
           if (useRoom) {
             const roomNumber = ROOM_NUMBERS[idx % ROOM_NUMBERS.length]!;
             const roomMeta = roomIdByNumber.get(String(roomNumber));
             if (!roomMeta) throw new Error(`Missing room inventory row for ${roomNumber}`);
-            return { roomId: roomMeta.id, lockerId: null, rentalType: rentalTypeForRoomNumber(roomNumber) };
+            return {
+              roomId: roomMeta.id,
+              lockerId: null,
+              rentalType: rentalTypeForRoomNumber(roomNumber),
+            };
           }
 
           const lockerNumber = LOCKER_NUMBERS[idx % LOCKER_NUMBERS.length]!;
@@ -491,7 +520,10 @@ export async function seedDemoData(): Promise<void> {
           // Ensure the scheduled checkout is in the past (completed) and doesn't overlap active check-in on same resource.
           const latestScheduled = new Date(now.getTime() - 60 * 1000); // <= now-1m
           if (scheduledCheckoutAt.getTime() > latestScheduled.getTime()) {
-            const shiftMs = scheduledCheckoutAt.getTime() - latestScheduled.getTime() + randInt(0, 60) * 60 * 1000;
+            const shiftMs =
+              scheduledCheckoutAt.getTime() -
+              latestScheduled.getTime() +
+              randInt(0, 60) * 60 * 1000;
             checkInAt = new Date(checkInAt.getTime() - shiftMs);
             scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, durationMinutes);
           }
@@ -601,19 +633,25 @@ export async function seedDemoData(): Promise<void> {
       });
 
       // Post-seed assertions + concise summary (throw on failure)
-      const staffCountAfter = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM staff');
+      const staffCountAfter = await query<{ count: string }>(
+        'SELECT COUNT(*)::text as count FROM staff'
+      );
       if (staffCountBefore.rows[0]!.count !== staffCountAfter.rows[0]!.count) {
         throw new Error(
           `Staff count changed unexpectedly (${staffCountBefore.rows[0]!.count} -> ${staffCountAfter.rows[0]!.count})`
         );
       }
 
-      const customerCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM customers');
+      const customerCount = await query<{ count: string }>(
+        'SELECT COUNT(*)::text as count FROM customers'
+      );
       const membershipCustomerCount = await query<{ count: string }>(
         `SELECT COUNT(*)::text as count FROM customers WHERE membership_number IS NOT NULL`
       );
       const roomCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM rooms');
-      const lockerCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM lockers');
+      const lockerCount = await query<{ count: string }>(
+        'SELECT COUNT(*)::text as count FROM lockers'
+      );
 
       const nonExistentRoomsPresent = await query<{ count: string }>(
         `SELECT COUNT(*)::text as count FROM rooms WHERE number = ANY($1::text[])`,
@@ -708,12 +746,18 @@ export async function seedDemoData(): Promise<void> {
         );
       if (asInt(customerCount.rows[0]!) < 142)
         throw new Error(`Expected at least 142 customers, got ${customerCount.rows[0]!.count}`);
-      if (asInt(roomCount.rows[0]!) !== 55) throw new Error(`Expected 55 rooms, got ${roomCount.rows[0]!.count}`);
+      if (asInt(roomCount.rows[0]!) !== 55)
+        throw new Error(`Expected 55 rooms, got ${roomCount.rows[0]!.count}`);
       if (asInt(nonExistentRoomsPresent.rows[0]!) !== 0)
-        throw new Error(`Non-existent rooms present in DB (${nonExistentRoomsPresent.rows[0]!.count})`);
-      if (asInt(lockerCount.rows[0]!) !== 108) throw new Error(`Expected 108 lockers, got ${lockerCount.rows[0]!.count}`);
+        throw new Error(
+          `Non-existent rooms present in DB (${nonExistentRoomsPresent.rows[0]!.count})`
+        );
+      if (asInt(lockerCount.rows[0]!) !== 108)
+        throw new Error(`Expected 108 lockers, got ${lockerCount.rows[0]!.count}`);
       if (asInt(bothInBlocks.rows[0]!) !== 0)
-        throw new Error(`Exclusive assignment violated in checkin_blocks (${bothInBlocks.rows[0]!.count})`);
+        throw new Error(
+          `Exclusive assignment violated in checkin_blocks (${bothInBlocks.rows[0]!.count})`
+        );
 
       // Current occupancy at NOW
       if (asInt(roomsAssigned.rows[0]!) !== 54)
@@ -751,9 +795,13 @@ export async function seedDemoData(): Promise<void> {
         [SPECIAL_ROOM_NUMBERS.map(String)]
       );
       if (asInt(missingDouble.rows[0]!) !== 0)
-        throw new Error(`Expected all DOUBLE rooms occupied, missing=${missingDouble.rows[0]!.count}`);
+        throw new Error(
+          `Expected all DOUBLE rooms occupied, missing=${missingDouble.rows[0]!.count}`
+        );
       if (asInt(missingSpecial.rows[0]!) !== 0)
-        throw new Error(`Expected all SPECIAL rooms occupied, missing=${missingSpecial.rows[0]!.count}`);
+        throw new Error(
+          `Expected all SPECIAL rooms occupied, missing=${missingSpecial.rows[0]!.count}`
+        );
 
       // Active stays at NOW
       const expectedActiveNow = 54 + ACTIVE_LOCKERS_TARGET;
@@ -762,11 +810,15 @@ export async function seedDemoData(): Promise<void> {
           `Expected ${expectedActiveNow} active check-in blocks at now, got ${activeBlocksNow.rows[0]!.count}`
         );
       if (asInt(activeVisitsNow.rows[0]!) !== expectedActiveNow)
-        throw new Error(`Expected ${expectedActiveNow} active visits at now, got ${activeVisitsNow.rows[0]!.count}`);
+        throw new Error(
+          `Expected ${expectedActiveNow} active visits at now, got ${activeVisitsNow.rows[0]!.count}`
+        );
 
       // Exactly one overdue active block
       if (overdueActiveBlocks.rows.length !== 1)
-        throw new Error(`Expected exactly 1 overdue active block, got ${overdueActiveBlocks.rows.length}`);
+        throw new Error(
+          `Expected exactly 1 overdue active block, got ${overdueActiveBlocks.rows.length}`
+        );
       const overdue = overdueActiveBlocks.rows[0]!;
       // Overdue session checkout is seeded on a 15-minute boundary and set to the prior 15-minute tick.
       const expectedLateMs = floorTo15Min(now).getTime() - 15 * 60 * 1000;

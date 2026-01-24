@@ -23,20 +23,17 @@ export function DemoOverview({ session }: { session: StaffSession }) {
   const [docSessionId, setDocSessionId] = useState('');
   const [docLookupBusy, setDocLookupBusy] = useState(false);
   const [docLookupError, setDocLookupError] = useState<string | null>(null);
-  const [docLookup, setDocLookup] = useState<
-    | null
-    | {
-        documents: Array<{
-          id: string;
-          doc_type: string;
-          mime_type: string;
-          created_at: string;
-          has_signature: boolean;
-          signature_hash_prefix?: string;
-          has_pdf?: boolean;
-        }>;
-      }
-  >(null);
+  const [docLookup, setDocLookup] = useState<null | {
+    documents: Array<{
+      id: string;
+      doc_type: string;
+      mime_type: string;
+      created_at: string;
+      has_signature: boolean;
+      signature_hash_prefix?: string;
+      has_pdf?: boolean;
+    }>;
+  }>(null);
 
   const lowAvailability = useMemo(() => {
     const byType = inventory?.byType || {};
@@ -85,7 +82,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
         '/v1/metrics/waitlist',
         { sessionToken: session.sessionToken }
       )
-        .then((m) => setWaitlistMetrics({ activeCount: m.activeCount, offeredCount: m.offeredCount }))
+        .then((m) =>
+          setWaitlistMetrics({ activeCount: m.activeCount, offeredCount: m.offeredCount })
+        )
         .catch(() => setWaitlistMetrics(null));
     }
   }, [lastMessage, session.sessionToken]);
@@ -146,11 +145,15 @@ export function DemoOverview({ session }: { session: StaffSession }) {
             </div>
 
             <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
-              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Agreement PDF verification</div>
+              <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
+                Agreement PDF verification
+              </div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Paste a lane session ID to verify PDF + signature artifacts, and download the PDF.
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div
+                style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}
+              >
                 <input
                   value={docSessionId}
                   onChange={(e) => setDocSessionId(e.target.value)}
@@ -176,8 +179,14 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                     apiJson<{ documents: any[] }>(`/v1/documents/by-session/${sid}`, {
                       sessionToken: session.sessionToken,
                     })
-                      .then((data) => setDocLookup({ documents: Array.isArray(data.documents) ? (data.documents as any) : [] }))
-                      .catch((e) => setDocLookupError(e instanceof Error ? e.message : 'Failed to fetch'))
+                      .then((data) =>
+                        setDocLookup({
+                          documents: Array.isArray(data.documents) ? (data.documents as any) : [],
+                        })
+                      )
+                      .catch((e) =>
+                        setDocLookupError(e instanceof Error ? e.message : 'Failed to fetch')
+                      )
                       .finally(() => setDocLookupBusy(false));
                   }}
                 >
@@ -185,7 +194,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                 </button>
               </div>
               {docLookupError && (
-                <div style={{ marginTop: '0.75rem', color: '#fecaca', fontWeight: 700 }}>{docLookupError}</div>
+                <div style={{ marginTop: '0.75rem', color: '#fecaca', fontWeight: 700 }}>
+                  {docLookupError}
+                </div>
               )}
               {docLookup && (
                 <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
@@ -196,12 +207,30 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                       <div
                         key={d.id}
                         className="er-surface"
-                        style={{ padding: '0.75rem', borderRadius: 12, display: 'grid', gap: '0.35rem' }}
+                        style={{
+                          padding: '0.75rem',
+                          borderRadius: 12,
+                          display: 'grid',
+                          gap: '0.35rem',
+                        }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: '0.75rem',
+                            flexWrap: 'wrap',
+                          }}
+                        >
                           <div style={{ fontWeight: 900 }}>
                             {d.doc_type}{' '}
-                            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--text-muted)' }}>
+                            <span
+                              style={{
+                                fontFamily: 'monospace',
+                                fontWeight: 700,
+                                color: 'var(--text-muted)',
+                              }}
+                            >
                               {d.id}
                             </span>
                           </div>
@@ -210,8 +239,11 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                           </div>
                         </div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                          PDF stored: {d.has_pdf ? 'yes' : 'no'} • Signature stored: {d.has_signature ? 'yes' : 'no'}
-                          {d.signature_hash_prefix ? ` • sig hash: ${d.signature_hash_prefix}…` : ''}
+                          PDF stored: {d.has_pdf ? 'yes' : 'no'} • Signature stored:{' '}
+                          {d.has_signature ? 'yes' : 'no'}
+                          {d.signature_hash_prefix
+                            ? ` • sig hash: ${d.signature_hash_prefix}…`
+                            : ''}
                         </div>
                         <div>
                           <button
@@ -228,7 +260,11 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                                   window.open(obj, '_blank', 'noopener,noreferrer');
                                   window.setTimeout(() => URL.revokeObjectURL(obj), 60_000);
                                 })
-                                .catch((e) => setDocLookupError(e instanceof Error ? e.message : 'Download failed'));
+                                .catch((e) =>
+                                  setDocLookupError(
+                                    e instanceof Error ? e.message : 'Download failed'
+                                  )
+                                );
                             }}
                           >
                             Download PDF
@@ -299,7 +335,10 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                     </td>
                     <td>
                       {row.available < 5 ? (
-                        <button className="cs-liquid-button cs-liquid-button--secondary" onClick={() => navigate('/monitor')}>
+                        <button
+                          className="cs-liquid-button cs-liquid-button--secondary"
+                          onClick={() => navigate('/monitor')}
+                        >
                           Monitor lanes
                         </button>
                       ) : (

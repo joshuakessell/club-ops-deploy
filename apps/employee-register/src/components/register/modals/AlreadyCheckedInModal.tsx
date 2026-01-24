@@ -8,14 +8,12 @@ export type ActiveCheckinDetails = {
   checkinAt: string | null;
   checkoutAt: string | null;
   overdue: boolean | null;
-  waitlist:
-    | null
-    | {
-        id: string;
-        desiredTier: string;
-        backupTier: string;
-        status: string;
-      };
+  waitlist: null | {
+    id: string;
+    desiredTier: string;
+    backupTier: string;
+    status: string;
+  };
 };
 
 export interface AlreadyCheckedInModalProps {
@@ -38,8 +36,12 @@ export function AlreadyCheckedInModal({
         }`
       : '—';
 
-  const checkoutAtLabel = activeCheckin?.checkoutAt ? new Date(activeCheckin.checkoutAt).toLocaleString() : '—';
-  const checkinAtLabel = activeCheckin?.checkinAt ? new Date(activeCheckin.checkinAt).toLocaleString() : '—';
+  const checkoutAtLabel = activeCheckin?.checkoutAt
+    ? new Date(activeCheckin.checkoutAt).toLocaleString()
+    : '—';
+  const checkinAtLabel = activeCheckin?.checkinAt
+    ? new Date(activeCheckin.checkinAt).toLocaleString()
+    : '—';
 
   return (
     <ModalFrame isOpen={isOpen} title="Already Checked In" onClose={onClose}>
@@ -48,8 +50,8 @@ export function AlreadyCheckedInModal({
           <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>{customerLabel}</div>
         ) : null}
         <div style={{ lineHeight: 1.5 }}>
-          This customer currently has an active check-in. Please use the current visit (or check them out) instead of
-          starting a new check-in.
+          This customer currently has an active check-in. Please use the current visit (or check
+          them out) instead of starting a new check-in.
         </div>
       </div>
 
@@ -92,4 +94,3 @@ export function AlreadyCheckedInModal({
     </ModalFrame>
   );
 }
-

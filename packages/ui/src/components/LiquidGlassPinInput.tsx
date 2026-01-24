@@ -101,12 +101,18 @@ export function LiquidGlassPinInput({
         <div className="cs-liquid-pin__dots" aria-hidden="true">
           {typeof length === 'number' ? (
             Array.from({ length }).map((_, i) => (
-              <span key={i} className={['cs-liquid-pin__dot', i < pin.length ? 'is-filled' : ''].join(' ')} />
+              <span
+                key={i}
+                className={['cs-liquid-pin__dot', i < pin.length ? 'is-filled' : ''].join(' ')}
+              />
             ))
           ) : (
             <>
               {Array.from({ length: Math.max(1, pin.length) }).map((_, i) => (
-                <span key={i} className={['cs-liquid-pin__dot', i < pin.length ? 'is-filled' : ''].join(' ')} />
+                <span
+                  key={i}
+                  className={['cs-liquid-pin__dot', i < pin.length ? 'is-filled' : ''].join(' ')}
+                />
               ))}
             </>
           )}
@@ -125,4 +131,3 @@ export function LiquidGlassPinInput({
     </div>
   );
 }
-

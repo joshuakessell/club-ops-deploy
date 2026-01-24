@@ -42,4 +42,3 @@ export type TelemetryClient = {
   getContext: () => TelemetryContext;
   flushBreadcrumbs: (opts?: { useBeacon?: boolean }) => void;
 };
-

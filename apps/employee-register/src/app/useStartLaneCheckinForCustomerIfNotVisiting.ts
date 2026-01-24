@@ -42,8 +42,10 @@ export function useStartLaneCheckinForCustomerIfNotVisiting(params: {
   const lastAttemptKeyRef = useRef<string | null>(null);
 
   const [state, setState] = useState<StartLaneCheckinState>(() => {
-    if (!customerId) return { mode: 'ERROR', isStarting: false, errorMessage: 'No customer selected.' };
-    if (!sessionToken) return { mode: 'ERROR', isStarting: false, errorMessage: 'Not authenticated.' };
+    if (!customerId)
+      return { mode: 'ERROR', isStarting: false, errorMessage: 'No customer selected.' };
+    if (!sessionToken)
+      return { mode: 'ERROR', isStarting: false, errorMessage: 'Not authenticated.' };
     return { mode: 'CHECKING_IN', isStarting: true };
   });
 
@@ -73,7 +75,9 @@ export function useStartLaneCheckinForCustomerIfNotVisiting(params: {
 
     // Prevent repeated attempts for the same customer unless explicitly retried.
     if (lastAttemptKeyRef.current === key && retryNonce === 0) {
-      setState((prev) => (prev.mode === 'CHECKING_IN' ? { mode: 'CHECKING_IN', isStarting: false } : prev));
+      setState((prev) =>
+        prev.mode === 'CHECKING_IN' ? { mode: 'CHECKING_IN', isStarting: false } : prev
+      );
       return;
     }
 
@@ -83,29 +87,41 @@ export function useStartLaneCheckinForCustomerIfNotVisiting(params: {
 
     void (async () => {
       try {
-        const response = await fetch(`${API_BASE}/v1/checkin/lane/${encodeURIComponent(lane)}/start`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionToken}`,
-          },
-          body: JSON.stringify({ customerId }),
-        });
+        const response = await fetch(
+          `${API_BASE}/v1/checkin/lane/${encodeURIComponent(lane)}/start`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sessionToken}`,
+            },
+            body: JSON.stringify({ customerId }),
+          }
+        );
 
         const payload: unknown = await response.json().catch(() => null);
 
         if (!response.ok) {
-          if (response.status === 409 && isRecord(payload) && payload['code'] === 'ALREADY_CHECKED_IN') {
+          if (
+            response.status === 409 &&
+            isRecord(payload) &&
+            payload['code'] === 'ALREADY_CHECKED_IN'
+          ) {
             const ac = payload['activeCheckin'];
             if (isRecord(ac) && typeof ac['visitId'] === 'string') {
               if (!cancelled) {
-                setState({ mode: 'ALREADY_VISITING', isStarting: false, activeCheckin: ac as ActiveCheckinDetails });
+                setState({
+                  mode: 'ALREADY_VISITING',
+                  isStarting: false,
+                  activeCheckin: ac as ActiveCheckinDetails,
+                });
               }
               return;
             }
           }
 
-          const msg = getErrorMessage(payload) || `Failed to start check-in (HTTP ${response.status})`;
+          const msg =
+            getErrorMessage(payload) || `Failed to start check-in (HTTP ${response.status})`;
           if (!cancelled) setState({ mode: 'ERROR', isStarting: false, errorMessage: msg });
           return;
         }
@@ -123,7 +139,15 @@ export function useStartLaneCheckinForCustomerIfNotVisiting(params: {
     return () => {
       cancelled = true;
     };
-  }, [customerId, sessionToken, lane, key, retryNonce, currentLaneSession.currentSessionId, currentLaneSession.customerId]);
+  }, [
+    customerId,
+    sessionToken,
+    lane,
+    key,
+    retryNonce,
+    currentLaneSession.currentSessionId,
+    currentLaneSession.customerId,
+  ]);
 
   const retry = useCallback(() => {
     setRetryNonce((n) => n + 1);

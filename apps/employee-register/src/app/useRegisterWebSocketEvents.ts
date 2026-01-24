@@ -21,8 +21,14 @@ export function useRegisterWebSocketEvents(params: {
   // lane session reducer actions
   laneSessionActions: {
     applySessionUpdated: (payload: SessionUpdatedPayload) => void;
-    applySelectionProposed: (payload: { rentalType: string; proposedBy: 'CUSTOMER' | 'EMPLOYEE' }) => void;
-    applySelectionLocked: (payload: { rentalType: string; confirmedBy: 'CUSTOMER' | 'EMPLOYEE' }) => void;
+    applySelectionProposed: (payload: {
+      rentalType: string;
+      proposedBy: 'CUSTOMER' | 'EMPLOYEE';
+    }) => void;
+    applySelectionLocked: (payload: {
+      rentalType: string;
+      confirmedBy: 'CUSTOMER' | 'EMPLOYEE';
+    }) => void;
     applySelectionForced: (payload: { rentalType: string }) => void;
     selectionAcknowledged: () => void;
   };
@@ -73,103 +79,106 @@ export function useRegisterWebSocketEvents(params: {
       const message = safeParseWebSocketEvent(parsed);
       if (!message) return;
 
-        const p = paramsRef.current;
-        if (message.type === 'CHECKOUT_REQUESTED') {
-          const payload = message.payload;
-          p.setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.set(payload.request.requestId, payload.request);
-            return next;
-          });
-        } else if (message.type === 'CHECKOUT_CLAIMED') {
-          const payload = message.payload;
-          p.setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.delete(payload.requestId);
-            return next;
-          });
-        } else if (message.type === 'CHECKOUT_UPDATED') {
-          const payload = message.payload;
-          if (p.selectedCheckoutRequestRef.current === payload.requestId) {
-            p.setCheckoutItemsConfirmed(payload.itemsConfirmed);
-            p.setCheckoutFeePaid(payload.feePaid);
-          }
-        } else if (message.type === 'CHECKOUT_COMPLETED') {
-          const payload = message.payload;
-          p.setCheckoutRequests((prev) => {
-            const next = new Map(prev);
-            next.delete(payload.requestId);
-            return next;
-          });
-          if (p.selectedCheckoutRequestRef.current === payload.requestId) {
-            p.setSelectedCheckoutRequest(null);
-            p.setCheckoutChecklist({});
-            p.setCheckoutItemsConfirmed(false);
-            p.setCheckoutFeePaid(false);
-          }
-        } else if (message.type === 'SESSION_UPDATED') {
-          const payload = message.payload;
-          p.laneSessionActions.applySessionUpdated(payload);
-          if (payload?.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
-            p.onLaneSessionCleared();
-          }
-        } else if (message.type === 'WAITLIST_UPDATED') {
-          p.onWaitlistUpdated();
-        } else if (message.type === 'UPGRADE_HOLD_AVAILABLE') {
-          const payload = message.payload;
-          p.pushBottomToast({
-            message: `Room ${payload.roomNumber} available for ${payload.customerName}'s ${payload.desiredTier} upgrade.`,
-            tone: 'warning',
-          });
-          p.onWaitlistUpdated();
-        } else if (message.type === 'UPGRADE_OFFER_EXPIRED') {
-          const payload = message.payload;
-          p.pushBottomToast({
-            message: `Upgrade offer expired for ${payload.customerName}.`,
-            tone: 'warning',
-          });
-          p.onWaitlistUpdated();
-        } else if (message.type === 'SELECTION_PROPOSED') {
-          const payload = message.payload;
-          if (payload.sessionId === p.currentSessionIdRef.current) {
-            p.laneSessionActions.applySelectionProposed({
-              rentalType: payload.rentalType,
-              proposedBy: payload.proposedBy,
-            });
-          }
-        } else if (message.type === 'SELECTION_LOCKED') {
-          const payload = message.payload;
-          if (payload.sessionId === p.currentSessionIdRef.current) {
-            p.laneSessionActions.applySelectionLocked({
-              rentalType: payload.rentalType,
-              confirmedBy: payload.confirmedBy,
-            });
-          }
-        } else if (message.type === 'SELECTION_FORCED') {
-          const payload = message.payload;
-          if (payload.sessionId === p.currentSessionIdRef.current) {
-            p.laneSessionActions.applySelectionForced({ rentalType: payload.rentalType });
-          }
-        } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
-          p.laneSessionActions.selectionAcknowledged();
-        } else if (message.type === 'INVENTORY_UPDATED' || message.type === 'ROOM_STATUS_CHANGED') {
-          p.onInventoryUpdated();
-        } else if (message.type === 'ASSIGNMENT_FAILED') {
-          const payload = message.payload;
-          if (payload.sessionId === p.currentSessionIdRef.current) {
-            p.onAssignmentFailed(payload);
-          }
-        } else if (message.type === 'CUSTOMER_CONFIRMED') {
-          const payload = message.payload;
-          if (payload.sessionId === p.currentSessionIdRef.current) {
-            p.onCustomerConfirmed();
-          }
-        } else if (message.type === 'CUSTOMER_DECLINED') {
-          const payload = message.payload;
-          if (payload.sessionId === p.currentSessionIdRef.current) {
-            p.onCustomerDeclined();
-          }
+      const p = paramsRef.current;
+      if (message.type === 'CHECKOUT_REQUESTED') {
+        const payload = message.payload;
+        p.setCheckoutRequests((prev) => {
+          const next = new Map(prev);
+          next.set(payload.request.requestId, payload.request);
+          return next;
+        });
+      } else if (message.type === 'CHECKOUT_CLAIMED') {
+        const payload = message.payload;
+        p.setCheckoutRequests((prev) => {
+          const next = new Map(prev);
+          next.delete(payload.requestId);
+          return next;
+        });
+      } else if (message.type === 'CHECKOUT_UPDATED') {
+        const payload = message.payload;
+        if (p.selectedCheckoutRequestRef.current === payload.requestId) {
+          p.setCheckoutItemsConfirmed(payload.itemsConfirmed);
+          p.setCheckoutFeePaid(payload.feePaid);
         }
+      } else if (message.type === 'CHECKOUT_COMPLETED') {
+        const payload = message.payload;
+        p.setCheckoutRequests((prev) => {
+          const next = new Map(prev);
+          next.delete(payload.requestId);
+          return next;
+        });
+        if (p.selectedCheckoutRequestRef.current === payload.requestId) {
+          p.setSelectedCheckoutRequest(null);
+          p.setCheckoutChecklist({});
+          p.setCheckoutItemsConfirmed(false);
+          p.setCheckoutFeePaid(false);
+        }
+      } else if (message.type === 'SESSION_UPDATED') {
+        const payload = message.payload;
+        p.laneSessionActions.applySessionUpdated(payload);
+        if (
+          payload?.status === 'COMPLETED' &&
+          (!payload.customerName || payload.customerName === '')
+        ) {
+          p.onLaneSessionCleared();
+        }
+      } else if (message.type === 'WAITLIST_UPDATED') {
+        p.onWaitlistUpdated();
+      } else if (message.type === 'UPGRADE_HOLD_AVAILABLE') {
+        const payload = message.payload;
+        p.pushBottomToast({
+          message: `Room ${payload.roomNumber} available for ${payload.customerName}'s ${payload.desiredTier} upgrade.`,
+          tone: 'warning',
+        });
+        p.onWaitlistUpdated();
+      } else if (message.type === 'UPGRADE_OFFER_EXPIRED') {
+        const payload = message.payload;
+        p.pushBottomToast({
+          message: `Upgrade offer expired for ${payload.customerName}.`,
+          tone: 'warning',
+        });
+        p.onWaitlistUpdated();
+      } else if (message.type === 'SELECTION_PROPOSED') {
+        const payload = message.payload;
+        if (payload.sessionId === p.currentSessionIdRef.current) {
+          p.laneSessionActions.applySelectionProposed({
+            rentalType: payload.rentalType,
+            proposedBy: payload.proposedBy,
+          });
+        }
+      } else if (message.type === 'SELECTION_LOCKED') {
+        const payload = message.payload;
+        if (payload.sessionId === p.currentSessionIdRef.current) {
+          p.laneSessionActions.applySelectionLocked({
+            rentalType: payload.rentalType,
+            confirmedBy: payload.confirmedBy,
+          });
+        }
+      } else if (message.type === 'SELECTION_FORCED') {
+        const payload = message.payload;
+        if (payload.sessionId === p.currentSessionIdRef.current) {
+          p.laneSessionActions.applySelectionForced({ rentalType: payload.rentalType });
+        }
+      } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
+        p.laneSessionActions.selectionAcknowledged();
+      } else if (message.type === 'INVENTORY_UPDATED' || message.type === 'ROOM_STATUS_CHANGED') {
+        p.onInventoryUpdated();
+      } else if (message.type === 'ASSIGNMENT_FAILED') {
+        const payload = message.payload;
+        if (payload.sessionId === p.currentSessionIdRef.current) {
+          p.onAssignmentFailed(payload);
+        }
+      } else if (message.type === 'CUSTOMER_CONFIRMED') {
+        const payload = message.payload;
+        if (payload.sessionId === p.currentSessionIdRef.current) {
+          p.onCustomerConfirmed();
+        }
+      } else if (message.type === 'CUSTOMER_DECLINED') {
+        const payload = message.payload;
+        if (payload.sessionId === p.currentSessionIdRef.current) {
+          p.onCustomerDeclined();
+        }
+      }
     } catch (error) {
       console.error('Failed to parse WebSocket message:', error);
     }
@@ -177,4 +186,3 @@ export function useRegisterWebSocketEvents(params: {
 
   return { connected };
 }
-

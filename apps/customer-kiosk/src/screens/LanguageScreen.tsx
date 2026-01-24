@@ -65,4 +65,3 @@ export function LanguageScreen({
     </I18nProvider>
   );
 }
-

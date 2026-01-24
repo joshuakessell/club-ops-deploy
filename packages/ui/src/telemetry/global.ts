@@ -12,4 +12,3 @@ export function getInstalledTelemetry(): TelemetryClient | null {
 export function setInstalledTelemetry(client: TelemetryClient | null): void {
   (globalThis as unknown as Record<string, unknown>)[TELEMETRY_KEY] = client;
 }
-

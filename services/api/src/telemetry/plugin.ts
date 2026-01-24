@@ -59,12 +59,8 @@ function errorToSpan(params: {
 }): TelemetrySpanInput {
   const err = params.err;
   const message =
-    err instanceof Error
-      ? err.message
-      : typeof err === 'string'
-        ? err
-        : 'Unknown error';
-  const stack = err instanceof Error ? err.stack ?? null : null;
+    err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error';
+  const stack = err instanceof Error ? (err.stack ?? null) : null;
   return {
     spanType: params.kind,
     level: 'error',
@@ -78,7 +74,11 @@ function errorToSpan(params: {
   };
 }
 
-function extractLogError(args: unknown[]): { err: unknown; message: string | null; meta: Record<string, unknown> } {
+function extractLogError(args: unknown[]): {
+  err: unknown;
+  message: string | null;
+  meta: Record<string, unknown>;
+} {
   let err: unknown = null;
   let message: string | null = null;
   let meta: Record<string, unknown> = {};
@@ -126,18 +126,25 @@ export async function setupTelemetry(fastify: FastifyInstance): Promise<void> {
     try {
       const body = request.body as unknown;
       const payload =
-        body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+        body && typeof body === 'object' && !Array.isArray(body)
+          ? (body as Record<string, unknown>)
+          : null;
 
       const spans = payload?.spans;
-      const traceId = (payload?.traceId as string | undefined) ?? getHeaderString(request, 'x-trace-id');
-      const deviceId = (payload?.deviceId as string | undefined) ?? getHeaderString(request, 'x-device-id');
-      const sessionId = (payload?.sessionId as string | undefined) ?? getHeaderString(request, 'x-session-id');
+      const traceId =
+        (payload?.traceId as string | undefined) ?? getHeaderString(request, 'x-trace-id');
+      const deviceId =
+        (payload?.deviceId as string | undefined) ?? getHeaderString(request, 'x-device-id');
+      const sessionId =
+        (payload?.sessionId as string | undefined) ?? getHeaderString(request, 'x-session-id');
       const app = (payload?.app as string | undefined) ?? getHeaderString(request, 'x-app-name');
       const incident = payload?.incident as
         | { incidentId?: string; reason?: string; startedAt?: string | number }
         | undefined;
 
-      const spansArray: TelemetrySpanInput[] = Array.isArray(spans) ? (spans as TelemetrySpanInput[]) : [];
+      const spansArray: TelemetrySpanInput[] = Array.isArray(spans)
+        ? (spans as TelemetrySpanInput[])
+        : [];
       if (spansArray.length > 0) {
         await storeTelemetrySpans({
           traceId: traceId ?? undefined,
@@ -264,4 +271,3 @@ export async function setupTelemetry(fastify: FastifyInstance): Promise<void> {
     });
   }
 }
-

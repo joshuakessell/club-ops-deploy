@@ -297,7 +297,9 @@ export function AdminView({ session }: AdminViewProps) {
           className={[
             'cs-liquid-button',
             'cs-liquid-button--pill',
-            activeTab === 'operations' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+            activeTab === 'operations'
+              ? 'cs-liquid-button--selected'
+              : 'cs-liquid-button--secondary',
           ].join(' ')}
         >
           Operations

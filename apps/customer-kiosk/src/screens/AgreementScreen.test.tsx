@@ -64,5 +64,3 @@ describe('AgreementScreen', () => {
     expect(clear2).toHaveBeenCalledTimes(0);
   });
 });
-
-

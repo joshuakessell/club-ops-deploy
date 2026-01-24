@@ -108,22 +108,22 @@ pnpm build
 
 ### Commands
 
-| Command           | Description                                                     |
-| ----------------- | --------------------------------------------------------------- |
-| `pnpm install`    | Install all dependencies                                        |
-| `pnpm dev`        | Start all services in development mode                          |
-| `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check)          |
-| `pnpm doctor`     | Repo health scan (installs, builds shared/ui, runs checks)      |
-| `pnpm db:start`   | Start Postgres via `services/api/docker-compose.yml`            |
-| `pnpm db:stop`    | Stop Postgres                                                   |
-| `pnpm db:reset`   | Recreate Postgres volume and restart                            |
-| `pnpm db:migrate` | Run DB migrations                                               |
-| `pnpm db:seed`    | Seed DB with sample data                                        |
-| `pnpm build`      | Build all packages and apps (Turbo-orchestrated)                |
-| `pnpm test`       | Run all tests (Turbo-orchestrated)                              |
-| `pnpm lint`       | Lint all packages (Turbo-orchestrated)                          |
-| `pnpm typecheck`  | TypeScript type checking (Turbo-orchestrated)                   |
-| `pnpm format`     | Format code with Prettier                                       |
+| Command           | Description                                                |
+| ----------------- | ---------------------------------------------------------- |
+| `pnpm install`    | Install all dependencies                                   |
+| `pnpm dev`        | Start all services in development mode                     |
+| `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check)     |
+| `pnpm doctor`     | Repo health scan (installs, builds shared/ui, runs checks) |
+| `pnpm db:start`   | Start Postgres via `services/api/docker-compose.yml`       |
+| `pnpm db:stop`    | Stop Postgres                                              |
+| `pnpm db:reset`   | Recreate Postgres volume and restart                       |
+| `pnpm db:migrate` | Run DB migrations                                          |
+| `pnpm db:seed`    | Seed DB with sample data                                   |
+| `pnpm build`      | Build all packages and apps (Turbo-orchestrated)           |
+| `pnpm test`       | Run all tests (Turbo-orchestrated)                         |
+| `pnpm lint`       | Lint all packages (Turbo-orchestrated)                     |
+| `pnpm typecheck`  | TypeScript type checking (Turbo-orchestrated)              |
+| `pnpm format`     | Format code with Prettier                                  |
 
 ### Database Setup
 

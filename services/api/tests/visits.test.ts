@@ -98,7 +98,6 @@ describe('Visit and Renewal Flows', () => {
        ON CONFLICT (number) DO UPDATE SET id = EXCLUDED.id, type = EXCLUDED.type, status = EXCLUDED.status, floor = EXCLUDED.floor`,
       [testRoomId]
     );
-
   });
 
   const runIfDbAvailable = (testFn: () => Promise<void>) => async () => {
@@ -236,7 +235,6 @@ describe('Visit and Renewal Flows', () => {
       expect(error.error).toContain('14-hour maximum');
     })
   );
-
 
   it(
     'should search active visits by membership number',

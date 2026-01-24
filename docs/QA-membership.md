@@ -1,6 +1,7 @@
 ## QA Checklist: i18n + Membership Purchase/Renewal Flows
 
 This checklist validates:
+
 - Spanish translation coverage on the Customer Kiosk
 - Membership status rules (Active vs Expired vs None)
 - Purchase + renewal flows (pending → quote → paid → membership activation)
@@ -11,10 +12,12 @@ This checklist validates:
 ## i18n (Customer Kiosk)
 
 ### Preconditions
+
 - A lane session exists for the kiosk (customer shown).
 - Customer language is Spanish (`ES`) **or** language selection screen is shown and you pick Spanish.
 
 ### Steps
+
 - **Language selection**
   - If prompted, choose **Español**.
   - Verify the kiosk does **not** keep prompting again for the same session once language is known.
@@ -33,12 +36,14 @@ This checklist validates:
 ## Membership Status Rules
 
 ### Rules (expected behavior)
+
 - **Stored fields**: customer record has `membership_number` and `membership_valid_until` (date).
 - **Validity is inclusive**: membership is active **through** the `membership_valid_until` date.
 - **Expired the day after**: it becomes expired starting the next day.
 - **Expired membershipId remains**: the system keeps `membership_number` for lookup/identity, but treats pricing/UI as non-member.
 
 ### Cases to validate on Customer Kiosk
+
 - **Active member**
   - membership number present
   - valid-until is today or in the future
@@ -56,10 +61,12 @@ This checklist validates:
 ## Purchase Flow (Non‑Member → Member Pending → Active Member)
 
 ### Preconditions
+
 - Customer has **no** `membership_number` (Non‑Member).
 - Customer is in an active lane session.
 
 ### Steps
+
 1. On kiosk, tap **Purchase 6 Month Membership**.
 2. Verify modal explains: save on daily fees; 6‑month membership costs **$43**.
 3. Tap **Cancel** → modal closes, status unchanged.
@@ -81,11 +88,13 @@ This checklist validates:
 ## Renewal Flow (Expired → Renew Pending → Active Member)
 
 ### Preconditions
+
 - Customer has `membership_number` present
 - `membership_valid_until` is expired (in the past)
 - Customer is in an active lane session
 
 ### Steps
+
 1. On kiosk, tap **Renew Membership**.
 2. Verify modal explains: 6‑month membership costs **$43**.
 3. Tap **Continue** →
@@ -108,8 +117,7 @@ This checklist validates:
 ---
 
 ## Regression Checks
+
 - Membership quote item remains attached until cleared/paid; no duplicates from repeated updates.
 - After membership activation, kiosk no longer shows **Pending** and no longer offers Purchase/Renew for active members.
 - Membership lookup continues to work for expired members (membership number still present).
-
-

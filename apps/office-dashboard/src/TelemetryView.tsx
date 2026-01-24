@@ -279,7 +279,9 @@ export function TelemetryView({ session }: { session: StaffSession }) {
     if (!traceDetail?.spans) return [];
     return traceDetail.spans.filter((span) => {
       const meta = span.meta as Record<string, unknown> | null;
-      return meta && typeof meta === 'object' && (meta as { breadcrumb?: boolean }).breadcrumb === true;
+      return (
+        meta && typeof meta === 'object' && (meta as { breadcrumb?: boolean }).breadcrumb === true
+      );
     });
   }, [traceDetail?.spans]);
 
@@ -474,7 +476,10 @@ export function TelemetryView({ session }: { session: StaffSession }) {
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               {incidentIds.length > 0 && (
                 <>
-                  <select value={selectedIncidentId} onChange={(e) => setSelectedIncidentId(e.target.value)}>
+                  <select
+                    value={selectedIncidentId}
+                    onChange={(e) => setSelectedIncidentId(e.target.value)}
+                  >
                     <option value="">Select incident</option>
                     {incidentIds.map((id) => (
                       <option key={id} value={id}>
@@ -524,7 +529,8 @@ export function TelemetryView({ session }: { session: StaffSession }) {
               {breadcrumbs.length === 0 && <div className="telemetry-value">None</div>}
               {breadcrumbs.map((span) => (
                 <div key={span.id} className="telemetry-value" style={{ marginBottom: '4px' }}>
-                  {formatTimestamp(span.started_at)} — {span.span_type} — {span.name || span.message || '—'}
+                  {formatTimestamp(span.started_at)} — {span.span_type} —{' '}
+                  {span.name || span.message || '—'}
                 </div>
               ))}
             </div>
@@ -543,8 +549,10 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                             {(() => {
                               const meta = span.meta as Record<string, unknown> | null;
-                              const severity = typeof meta?.severity === 'string' ? meta.severity : 'info';
-                              const screen = typeof meta?.screen === 'string' ? meta.screen : 'unknown';
+                              const severity =
+                                typeof meta?.severity === 'string' ? meta.severity : 'info';
+                              const screen =
+                                typeof meta?.screen === 'string' ? meta.screen : 'unknown';
                               const levelClass =
                                 severity === 'error'
                                   ? 'telemetry-level-error'
@@ -553,7 +561,9 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                                     : 'telemetry-level-info';
                               return (
                                 <>
-                                  <span className={`telemetry-level ${levelClass}`}>{severity}</span>
+                                  <span className={`telemetry-level ${levelClass}`}>
+                                    {severity}
+                                  </span>
                                   <span className="telemetry-value">Screen: {screen}</span>
                                 </>
                               );
@@ -561,7 +571,8 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                           </div>
                         )}
                         <div className="telemetry-value">
-                          {formatTimestamp(span.started_at)} — {span.span_type} — {span.name || span.message || '—'}
+                          {formatTimestamp(span.started_at)} — {span.span_type} —{' '}
+                          {span.name || span.message || '—'}
                         </div>
                         <div className="telemetry-details-grid" style={{ marginTop: '0.5rem' }}>
                           <div>
@@ -590,13 +601,23 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                         {(Boolean(span.request_headers) || Boolean(span.response_headers)) && (
                           <div className="telemetry-meta">
                             <div className="telemetry-label">Headers</div>
-                            <pre>{formatMeta({ request: span.request_headers, response: span.response_headers })}</pre>
+                            <pre>
+                              {formatMeta({
+                                request: span.request_headers,
+                                response: span.response_headers,
+                              })}
+                            </pre>
                           </div>
                         )}
                         {(Boolean(span.request_body) || Boolean(span.response_body)) && (
                           <div className="telemetry-meta">
                             <div className="telemetry-label">Bodies</div>
-                            <pre>{formatMeta({ request: span.request_body, response: span.response_body })}</pre>
+                            <pre>
+                              {formatMeta({
+                                request: span.request_body,
+                                response: span.response_body,
+                              })}
+                            </pre>
                           </div>
                         )}
                         {span.stack && (

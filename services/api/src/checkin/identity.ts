@@ -175,10 +175,7 @@ export function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity
     lastName: fieldMap['DCS'] || undefined,
     firstName: fieldMap['DAC'] || undefined,
     fullName: fieldMap['DAA'] || undefined,
-    dob:
-      parseAamvaDateToISO(fieldMap['DBB']) ||
-      parseAamvaDateToISO(fieldMap['DBD']) ||
-      undefined,
+    dob: parseAamvaDateToISO(fieldMap['DBB']) || parseAamvaDateToISO(fieldMap['DBD']) || undefined,
     idNumber: fieldMap['DAQ'] || undefined,
     jurisdiction: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
     issuer: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
@@ -207,14 +204,18 @@ export function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity
           : undefined;
 
     const out: ExtractedIdIdentity = { ...fromMap };
-    if (!out.firstName && isCleanParsedAamvaValue(parsed?.firstName)) out.firstName = parsed.firstName!.trim();
-    if (!out.lastName && isCleanParsedAamvaValue(parsed?.lastName)) out.lastName = parsed.lastName!.trim();
+    if (!out.firstName && isCleanParsedAamvaValue(parsed?.firstName))
+      out.firstName = parsed.firstName!.trim();
+    if (!out.lastName && isCleanParsedAamvaValue(parsed?.lastName))
+      out.lastName = parsed.lastName!.trim();
     if (!out.idNumber && isCleanParsedAamvaValue(parsed?.driversLicenseId))
       out.idNumber = parsed.driversLicenseId!.trim();
-    if (!out.jurisdiction && isCleanParsedAamvaValue(parsed?.state)) out.jurisdiction = parsed.state!.trim();
+    if (!out.jurisdiction && isCleanParsedAamvaValue(parsed?.state))
+      out.jurisdiction = parsed.state!.trim();
     if (!out.issuer && isCleanParsedAamvaValue(parsed?.state)) out.issuer = parsed.state!.trim();
     if (!out.dob && parsedDob) out.dob = parsedDob;
-    if (!out.fullName && out.firstName && out.lastName) out.fullName = `${out.firstName} ${out.lastName}`.trim();
+    if (!out.fullName && out.firstName && out.lastName)
+      out.fullName = `${out.firstName} ${out.lastName}`.trim();
     return out;
   } catch {
     return fromMap;
@@ -288,8 +289,7 @@ function jaroWinklerSimilarity(aRaw: string, bRaw: string): number {
   }
   const transpositions = t / 2;
 
-  const jaro =
-    (matches / aLen + matches / bLen + (matches - transpositions) / matches) / 3;
+  const jaro = (matches / aLen + matches / bLen + (matches - transpositions) / matches) / 3;
 
   // Winkler adjustment
   const prefixMax = 4;
@@ -331,7 +331,11 @@ export function scoreNameMatch(params: {
   return { score, firstMax, lastMax };
 }
 
-export function passesFuzzyThresholds(score: { score: number; firstMax: number; lastMax: number }): boolean {
+export function passesFuzzyThresholds(score: {
+  score: number;
+  firstMax: number;
+  lastMax: number;
+}): boolean {
   return (
     score.score >= FUZZY_MIN_OVERALL &&
     score.lastMax >= FUZZY_MIN_LAST &&

@@ -50,8 +50,12 @@ export function RequiredTenderOutcomeModal({
       const active = document.activeElement as HTMLElement | null;
       const idx = active ? focusables.indexOf(active) : -1;
       const nextIdx = e.shiftKey
-        ? (idx <= 0 ? focusables.length - 1 : idx - 1)
-        : (idx === -1 || idx === focusables.length - 1 ? 0 : idx + 1);
+        ? idx <= 0
+          ? focusables.length - 1
+          : idx - 1
+        : idx === -1 || idx === focusables.length - 1
+          ? 0
+          : idx + 1;
       e.preventDefault();
       focusables[nextIdx]?.focus();
     };
@@ -121,4 +125,3 @@ export function RequiredTenderOutcomeModal({
     </div>
   );
 }
-

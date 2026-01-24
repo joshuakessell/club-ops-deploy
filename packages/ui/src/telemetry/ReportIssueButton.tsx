@@ -67,7 +67,9 @@ const actionButtonStyle: CSSProperties = {
   color: '#fff',
 };
 
-export function ReportIssueButton({ flushBreadcrumbsOnInfo = false }: ReportIssueButtonProps): JSX.Element | null {
+export function ReportIssueButton({
+  flushBreadcrumbsOnInfo = false,
+}: ReportIssueButtonProps): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [severity, setSeverity] = useState<Severity>('info');
@@ -93,7 +95,9 @@ export function ReportIssueButton({ flushBreadcrumbsOnInfo = false }: ReportIssu
     const route = getCurrentRoute();
     const resolvedScreen = (screen || route || 'unknown').trim() || 'unknown';
     const shouldDeep = severity === 'warning' || severity === 'error';
-    const incidentId = shouldDeep ? telemetry.startIncident('manual_report', { forceNew: true }) : undefined;
+    const incidentId = shouldDeep
+      ? telemetry.startIncident('manual_report', { forceNew: true })
+      : undefined;
     if (shouldDeep || flushBreadcrumbsOnInfo) {
       telemetry.flushBreadcrumbs();
     }

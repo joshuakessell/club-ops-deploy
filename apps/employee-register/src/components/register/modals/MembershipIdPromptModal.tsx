@@ -107,7 +107,7 @@ export function MembershipIdPromptModal({
               e.preventDefault();
               onConfirm(
                 membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
-                  ? membershipNumber ?? undefined
+                  ? (membershipNumber ?? undefined)
                   : undefined
               );
             }
@@ -132,7 +132,7 @@ export function MembershipIdPromptModal({
           onClick={() =>
             onConfirm(
               membershipIdMode === 'KEEP_EXISTING' && membershipPurchaseIntent === 'RENEW'
-                ? membershipNumber ?? undefined
+                ? (membershipNumber ?? undefined)
                 : undefined
             )
           }
@@ -169,4 +169,3 @@ export function MembershipIdPromptModal({
     </ModalFrame>
   );
 }
-

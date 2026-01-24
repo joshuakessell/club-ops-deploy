@@ -4,7 +4,10 @@ import { ensureDir, tsSlug, getArg, defaultArtifactsDir } from './_util';
 
 function normalizeMessage(msg: string) {
   return msg
-    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '<uuid>')
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+      '<uuid>'
+    )
     .replace(/\b\d{3,}\b/g, '<n>')
     .trim();
 }
@@ -17,7 +20,8 @@ function preview(s?: string, n = 600) {
 
 async function main() {
   const input = getArg('--in');
-  if (!input) throw new Error(`Missing --in <exported.json>. Run: pnpm telemetry:export --format json`);
+  if (!input)
+    throw new Error(`Missing --in <exported.json>. Run: pnpm telemetry:export --format json`);
 
   const raw = JSON.parse(fs.readFileSync(path.resolve(input), 'utf8')) as any;
   const events: any[] = (raw?.events as any[]) ?? raw ?? [];
@@ -42,10 +46,16 @@ async function main() {
         message,
         occurrences: arr.length,
         lastSeen,
-        examples: arr.sort((a, b) => String(b?.ts ?? '').localeCompare(String(a?.ts ?? ''))).slice(0, 10),
+        examples: arr
+          .sort((a, b) => String(b?.ts ?? '').localeCompare(String(a?.ts ?? '')))
+          .slice(0, 10),
       };
     })
-    .sort((a, b) => (b.occurrences !== a.occurrences ? b.occurrences - a.occurrences : String(b.lastSeen).localeCompare(String(a.lastSeen))));
+    .sort((a, b) =>
+      b.occurrences !== a.occurrences
+        ? b.occurrences - a.occurrences
+        : String(b.lastSeen).localeCompare(String(a.lastSeen))
+    );
 
   const dir = defaultArtifactsDir();
   ensureDir(dir);
@@ -88,12 +98,18 @@ async function main() {
     out.push(``);
     out.push(`Tasks:`);
     out.push(`1) Find the code path that triggers this error and identify the root cause.`);
-    out.push(`2) Fix it with minimal changes and add defensive handling so it cannot recur silently.`);
-    out.push(`3) Ensure telemetry logging remains useful: include requestId, status, and relevant identifiers in payload.`);
+    out.push(
+      `2) Fix it with minimal changes and add defensive handling so it cannot recur silently.`
+    );
+    out.push(
+      `3) Ensure telemetry logging remains useful: include requestId, status, and relevant identifiers in payload.`
+    );
     out.push(`4) Add a reproducible note or small test to prevent regression.`);
     out.push(``);
     out.push(`Acceptance criteria:`);
-    out.push(`- After reproducing this flow 10 times, this exact cluster does not appear again in telemetry for the last 30 minutes.`);
+    out.push(
+      `- After reproducing this flow 10 times, this exact cluster does not appear again in telemetry for the last 30 minutes.`
+    );
     out.push(`- No new higher-severity errors are introduced.`);
     out.push('```');
     out.push(``);
@@ -107,4 +123,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-

@@ -1,10 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import {
-  installTelemetry,
-  setCurrentRouteProvider,
-  TelemetryErrorBoundary,
-} from '@club-ops/ui';
+import { installTelemetry, setCurrentRouteProvider, TelemetryErrorBoundary } from '@club-ops/ui';
 import App from './App';
 import '@club-ops/ui/styles/index.css';
 import './styles.css';

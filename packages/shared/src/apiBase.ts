@@ -14,7 +14,7 @@ function warnIfApiBaseUrlEndsWithApi(raw: string) {
 
   didWarnApiBaseUrlSuffix = true;
   console.warn(
-    `[apiBase] VITE_API_BASE_URL should be "https://host" not "https://host/api" (remove the trailing "/api"). Got: ${trimmed}`,
+    `[apiBase] VITE_API_BASE_URL should be "https://host" not "https://host/api" (remove the trailing "/api"). Got: ${trimmed}`
   );
 }
 
@@ -56,6 +56,8 @@ export const getApiUrl = (path: string) => {
 export const getWebSocketUrl = (path: string) => {
   if (!API_BASE_URL) return path;
   const base = normalizeApiBaseUrl(API_BASE_URL);
-  const wsBase = base.startsWith('https') ? base.replace('https', 'wss') : base.replace('http', 'ws');
+  const wsBase = base.startsWith('https')
+    ? base.replace('https', 'wss')
+    : base.replace('http', 'ws');
   return `${wsBase}${path.startsWith('/') ? path : `/${path}`}`;
 };

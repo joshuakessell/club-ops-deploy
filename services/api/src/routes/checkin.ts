@@ -23,7 +23,11 @@ import type {
   CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
 import { calculatePriceQuote, type PricingInput } from '../pricing/engine';
-import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG, IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
+import {
+  AGREEMENT_LEGAL_BODY_HTML_BY_LANG,
+  IdScanPayloadSchema,
+  type IdScanPayload,
+} from '@club-ops/shared';
 import {
   calculateAge,
   computeSha256Hex,
@@ -155,7 +159,9 @@ async function assertAssignedResourcePersistedAndUnavailable(params: {
     const qualifiesForAvailable = row?.status === 'CLEAN' && row?.assigned_to_customer_id === null;
     if (!assignedOk || qualifiesForAvailable) {
       const detail = `Check-in persistence assertion failed (room): sessionId=${sessionId} customerId=${customerId} resourceId=${resourceId} resourceNumber=${number} status=${row?.status ?? '(missing)'} assigned_to_customer_id=${row?.assigned_to_customer_id ?? '(null)'}`;
-      throw new HttpError(500, 'Check-in persistence assertion failed', { cause: new Error(detail) });
+      throw new HttpError(500, 'Check-in persistence assertion failed', {
+        cause: new Error(detail),
+      });
     }
     return;
   }
@@ -267,7 +273,6 @@ function toDate(value: unknown): Date | undefined {
   return Number.isFinite(d.getTime()) ? d : undefined;
 }
 
-
 async function maybeAttachScanIdentifiers(params: {
   client: PoolClient;
   customerId: string;
@@ -303,8 +308,6 @@ function getHttpError(
     code: typeof code === 'string' ? code : undefined,
   };
 }
-
-
 
 /**
  * Check-in flow routes.
@@ -408,7 +411,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             customerId = customer.id;
             customerName = customer.name;
             membershipNumber = customer.membership_number || null;
-            customerHasEncryptedLookupMarker = Boolean((customer as unknown as { id_scan_hash?: unknown }).id_scan_hash);
+            customerHasEncryptedLookupMarker = Boolean(
+              (customer as unknown as { id_scan_hash?: unknown }).id_scan_hash
+            );
 
             const bannedUntil = toDate(customer.banned_until);
             if (bannedUntil && new Date() < bannedUntil) {
@@ -708,7 +713,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           return reply.status(statusCode).send({
             error: message ?? 'Failed to start session',
             code: typeof code === 'string' ? code : undefined,
-            activeCheckin: activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
+            activeCheckin:
+              activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
           });
         }
         return reply.status(500).send({
@@ -1052,8 +1058,13 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                     });
                     return { row, score: s };
                   })
-                  .filter((x): x is { row: CustomerIdentityRow; score: { score: number; firstMax: number; lastMax: number } } =>
-                    Boolean(x && passesFuzzyThresholds(x.score))
+                  .filter(
+                    (
+                      x
+                    ): x is {
+                      row: CustomerIdentityRow;
+                      score: { score: number; firstMax: number; lastMax: number };
+                    } => Boolean(x && passesFuzzyThresholds(x.score))
                   )
                   .sort((a, b) => b.score.score - a.score.score);
 
@@ -1493,7 +1504,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           return reply.status(statusCode).send({
             error: message ?? 'Failed to scan ID',
             code: typeof code === 'string' ? code : undefined,
-            activeCheckin: activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
+            activeCheckin:
+              activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
           });
         }
         return reply.status(500).send({ error: 'Internal server error' });
@@ -1740,7 +1752,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { laneId } = request.params;
       const { waitlistDesiredType, sessionId } = request.body || {};
-      const hasDesiredType = request.body && Object.prototype.hasOwnProperty.call(request.body, 'waitlistDesiredType');
+      const hasDesiredType =
+        request.body && Object.prototype.hasOwnProperty.call(request.body, 'waitlistDesiredType');
       if (!hasDesiredType) {
         return reply.status(400).send({ error: 'waitlistDesiredType is required' });
       }
@@ -1768,7 +1781,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           const session = sessionResult.rows[0]!;
 
           const desired =
-            waitlistDesiredType === null || (typeof waitlistDesiredType === 'string' && !waitlistDesiredType.trim())
+            waitlistDesiredType === null ||
+            (typeof waitlistDesiredType === 'string' && !waitlistDesiredType.trim())
               ? null
               : waitlistDesiredType;
 
@@ -2815,14 +2829,24 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 dob: Date | string | null;
                 membership_number: string | null;
                 primary_language: string | null;
-              }>(`SELECT name, dob, membership_number, primary_language FROM customers WHERE id = $1`, [
-                session.customer_id,
-              ])
-            : { rows: [] as Array<{ name: string; dob: Date | string | null; membership_number: string | null; primary_language: string | null }> };
+              }>(
+                `SELECT name, dob, membership_number, primary_language FROM customers WHERE id = $1`,
+                [session.customer_id]
+              )
+            : {
+                rows: [] as Array<{
+                  name: string;
+                  dob: Date | string | null;
+                  membership_number: string | null;
+                  primary_language: string | null;
+                }>,
+              };
 
-          const customerName = customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
+          const customerName =
+            customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
           const customerDob = customerResult.rows[0]?.dob ?? null;
-          const membershipNumber = customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const membershipNumber =
+            customerResult.rows[0]?.membership_number || session.membership_number || undefined;
           const customerLang = customerResult.rows[0]?.primary_language === 'ES' ? 'ES' : 'EN';
 
           // Get active agreement text
@@ -3185,10 +3209,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             const existing = notesRes.rows[0]?.notes ?? null;
             const cleaned = stripSystemLateFeeNotes(existing);
             if (cleaned !== existing) {
-              await client.query(`UPDATE customers SET notes = $1, updated_at = NOW() WHERE id = $2`, [
-                cleaned,
-                session.customer_id,
-              ]);
+              await client.query(
+                `UPDATE customers SET notes = $1, updated_at = NOW() WHERE id = $2`,
+                [cleaned, session.customer_id]
+              );
             }
           }
 
@@ -3322,14 +3346,24 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 dob: Date | string | null;
                 membership_number: string | null;
                 primary_language: string | null;
-              }>(`SELECT name, dob, membership_number, primary_language FROM customers WHERE id = $1`, [
-                session.customer_id,
-              ])
-            : { rows: [] as Array<{ name: string; dob: Date | string | null; membership_number: string | null; primary_language: string | null }> };
+              }>(
+                `SELECT name, dob, membership_number, primary_language FROM customers WHERE id = $1`,
+                [session.customer_id]
+              )
+            : {
+                rows: [] as Array<{
+                  name: string;
+                  dob: Date | string | null;
+                  membership_number: string | null;
+                  primary_language: string | null;
+                }>,
+              };
 
-          const customerName = customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
+          const customerName =
+            customerResult.rows[0]?.name || session.customer_display_name || 'Customer';
           const customerDob = customerResult.rows[0]?.dob ?? null;
-          const membershipNumber = customerResult.rows[0]?.membership_number || session.membership_number || undefined;
+          const membershipNumber =
+            customerResult.rows[0]?.membership_number || session.membership_number || undefined;
           const customerLang = customerResult.rows[0]?.primary_language === 'ES' ? 'ES' : 'EN';
 
           // Get active agreement text
@@ -3576,7 +3610,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             blockType = 'INITIAL';
           }
 
-          const checkoutAt = roundUpToQuarterHour(new Date(signedAt.getTime() + 6 * 60 * 60 * 1000));
+          const checkoutAt = roundUpToQuarterHour(
+            new Date(signedAt.getTime() + 6 * 60 * 60 * 1000)
+          );
 
           const blockResult = await client.query<{ id: string }>(
             `INSERT INTO checkin_blocks
@@ -3755,11 +3791,17 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           if (!session.selection_confirmed) {
-            throw { statusCode: 400, message: 'Selection must be confirmed before bypassing agreement' };
+            throw {
+              statusCode: 400,
+              message: 'Selection must be confirmed before bypassing agreement',
+            };
           }
 
           if (!session.payment_intent_id) {
-            throw { statusCode: 400, message: 'Payment intent must be created before bypassing agreement' };
+            throw {
+              statusCode: 400,
+              message: 'Payment intent must be created before bypassing agreement',
+            };
           }
 
           const intentResult = await client.query<PaymentIntentRow>(
@@ -3767,7 +3809,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             [session.payment_intent_id]
           );
           if (intentResult.rows.length === 0 || intentResult.rows[0]!.status !== 'PAID') {
-            throw { statusCode: 400, message: 'Payment must be marked as paid before bypassing agreement' };
+            throw {
+              statusCode: 400,
+              message: 'Payment must be marked as paid before bypassing agreement',
+            };
           }
 
           await client.query(
@@ -3816,110 +3861,110 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     '/v1/checkin/lane/:laneId/customer-confirm',
     { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
     async (request, reply) => {
-    const { laneId } = request.params;
-    const { sessionId, confirmed } = request.body;
+      const { laneId } = request.params;
+      const { sessionId, confirmed } = request.body;
 
-    try {
-      const result = await transaction(async (client) => {
-        const sessionResult = await client.query<LaneSessionRow>(
-          `SELECT * FROM lane_sessions WHERE id = $1 AND lane_id = $2`,
-          [sessionId, laneId]
-        );
+      try {
+        const result = await transaction(async (client) => {
+          const sessionResult = await client.query<LaneSessionRow>(
+            `SELECT * FROM lane_sessions WHERE id = $1 AND lane_id = $2`,
+            [sessionId, laneId]
+          );
 
-        if (sessionResult.rows.length === 0) {
-          throw { statusCode: 404, message: 'Session not found' };
-        }
-
-        const session = sessionResult.rows[0]!;
-
-        if (confirmed) {
-          // Customer confirmed - broadcast confirmation.
-          //
-          // IMPORTANT: assigned_resource_id is a UUID. The customer-confirm event payload expects
-          // a human-facing type+number (room tier + room number, or locker number). Do NOT derive
-          // tier/number from the UUID.
-          if (!session.assigned_resource_type || !session.assigned_resource_id) {
-            throw { statusCode: 400, message: 'No assigned resource to confirm' };
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'Session not found' };
           }
 
-          let confirmedType: string;
-          let confirmedNumber: string;
+          const session = sessionResult.rows[0]!;
 
-          if (session.assigned_resource_type === 'room') {
-            const roomRes = await client.query<{ number: string }>(
-              `SELECT number FROM rooms WHERE id = $1 LIMIT 1`,
-              [session.assigned_resource_id]
-            );
-            if (roomRes.rows.length === 0) {
-              throw { statusCode: 404, message: 'Assigned room not found' };
+          if (confirmed) {
+            // Customer confirmed - broadcast confirmation.
+            //
+            // IMPORTANT: assigned_resource_id is a UUID. The customer-confirm event payload expects
+            // a human-facing type+number (room tier + room number, or locker number). Do NOT derive
+            // tier/number from the UUID.
+            if (!session.assigned_resource_type || !session.assigned_resource_id) {
+              throw { statusCode: 400, message: 'No assigned resource to confirm' };
             }
-            confirmedNumber = roomRes.rows[0]!.number;
-            confirmedType = getRoomTier(confirmedNumber);
-          } else if (session.assigned_resource_type === 'locker') {
-            const lockerRes = await client.query<{ number: string }>(
-              `SELECT number FROM lockers WHERE id = $1 LIMIT 1`,
-              [session.assigned_resource_id]
-            );
-            if (lockerRes.rows.length === 0) {
-              throw { statusCode: 404, message: 'Assigned locker not found' };
-            }
-            confirmedNumber = lockerRes.rows[0]!.number;
-            confirmedType = 'LOCKER';
-          } else {
-            throw { statusCode: 400, message: 'Invalid assigned resource type' };
-          }
 
-          const confirmedPayload: CustomerConfirmedPayload = {
-            sessionId: session.id,
-            confirmedType,
-            confirmedNumber,
-          };
-          fastify.broadcaster.broadcastCustomerConfirmed(confirmedPayload, laneId);
-        } else {
-          // Customer declined - unassign resource and broadcast decline
-          if (session.assigned_resource_id) {
+            let confirmedType: string;
+            let confirmedNumber: string;
+
             if (session.assigned_resource_type === 'room') {
-              await client.query(
-                `UPDATE rooms SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
+              const roomRes = await client.query<{ number: string }>(
+                `SELECT number FROM rooms WHERE id = $1 LIMIT 1`,
                 [session.assigned_resource_id]
               );
+              if (roomRes.rows.length === 0) {
+                throw { statusCode: 404, message: 'Assigned room not found' };
+              }
+              confirmedNumber = roomRes.rows[0]!.number;
+              confirmedType = getRoomTier(confirmedNumber);
             } else if (session.assigned_resource_type === 'locker') {
-              await client.query(
-                `UPDATE lockers SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
+              const lockerRes = await client.query<{ number: string }>(
+                `SELECT number FROM lockers WHERE id = $1 LIMIT 1`,
                 [session.assigned_resource_id]
+              );
+              if (lockerRes.rows.length === 0) {
+                throw { statusCode: 404, message: 'Assigned locker not found' };
+              }
+              confirmedNumber = lockerRes.rows[0]!.number;
+              confirmedType = 'LOCKER';
+            } else {
+              throw { statusCode: 400, message: 'Invalid assigned resource type' };
+            }
+
+            const confirmedPayload: CustomerConfirmedPayload = {
+              sessionId: session.id,
+              confirmedType,
+              confirmedNumber,
+            };
+            fastify.broadcaster.broadcastCustomerConfirmed(confirmedPayload, laneId);
+          } else {
+            // Customer declined - unassign resource and broadcast decline
+            if (session.assigned_resource_id) {
+              if (session.assigned_resource_type === 'room') {
+                await client.query(
+                  `UPDATE rooms SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
+                  [session.assigned_resource_id]
+                );
+              } else if (session.assigned_resource_type === 'locker') {
+                await client.query(
+                  `UPDATE lockers SET assigned_to_customer_id = NULL, updated_at = NOW() WHERE id = $1`,
+                  [session.assigned_resource_id]
+                );
+              }
+
+              await client.query(
+                `UPDATE lane_sessions SET assigned_resource_id = NULL, assigned_resource_type = NULL, updated_at = NOW() WHERE id = $1`,
+                [session.id]
               );
             }
 
-            await client.query(
-              `UPDATE lane_sessions SET assigned_resource_id = NULL, assigned_resource_type = NULL, updated_at = NOW() WHERE id = $1`,
-              [session.id]
-            );
+            const declinedPayload: CustomerDeclinedPayload = {
+              sessionId: session.id,
+              requestedType: session.desired_rental_type || '',
+            };
+            fastify.broadcaster.broadcastCustomerDeclined(declinedPayload, laneId);
           }
 
-          const declinedPayload: CustomerDeclinedPayload = {
-            sessionId: session.id,
-            requestedType: session.desired_rental_type || '',
-          };
-          fastify.broadcaster.broadcastCustomerDeclined(declinedPayload, laneId);
+          return { success: true, confirmed };
+        });
+
+        return reply.send(result);
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to process customer confirmation');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to process confirmation',
+          });
         }
-
-        return { success: true, confirmed };
-      });
-
-      return reply.send(result);
-    } catch (error: unknown) {
-      request.log.error(error, 'Failed to process customer confirmation');
-      const httpErr = getHttpError(error);
-      if (httpErr) {
-        return reply.status(httpErr.statusCode).send({
-          error: httpErr.message ?? 'Failed to process confirmation',
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to process customer confirmation',
         });
       }
-      return reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to process customer confirmation',
-      });
-    }
     }
   );
 
@@ -4106,14 +4151,16 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       ) {
         let assignedResourceNumber: string | null = null;
         if (session.assigned_resource_type === 'room') {
-          const r = await client.query<{ number: string }>(`SELECT number FROM rooms WHERE id = $1`, [
-            session.assigned_resource_id,
-          ]);
+          const r = await client.query<{ number: string }>(
+            `SELECT number FROM rooms WHERE id = $1`,
+            [session.assigned_resource_id]
+          );
           assignedResourceNumber = r.rows[0]?.number ?? null;
         } else if (session.assigned_resource_type === 'locker') {
-          const l = await client.query<{ number: string }>(`SELECT number FROM lockers WHERE id = $1`, [
-            session.assigned_resource_id,
-          ]);
+          const l = await client.query<{ number: string }>(
+            `SELECT number FROM lockers WHERE id = $1`,
+            [session.assigned_resource_id]
+          );
           assignedResourceNumber = l.rows[0]?.number ?? null;
         }
 
@@ -4523,26 +4570,31 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     '/v1/checkin/lane/:laneId/set-language',
     { preHandler: [optionalAuth, requireKioskTokenOrStaff] },
     async (request, reply) => {
-    const { laneId } = request.params;
-    const { language, sessionId, customerName } = request.body;
+      const { laneId } = request.params;
+      const { language, sessionId, customerName } = request.body;
 
-    try {
-      const result = await setLanguageForLaneSession({ laneId, language, sessionId, customerName });
+      try {
+        const result = await setLanguageForLaneSession({
+          laneId,
+          language,
+          sessionId,
+          customerName,
+        });
 
-      return reply.send(result);
-    } catch (error: unknown) {
-      request.log.error(error, 'Failed to set language');
-      if (error && typeof error === 'object' && 'statusCode' in error) {
-        const err = error as { statusCode: number; message?: string };
-        return reply.status(err.statusCode).send({
-          error: err.message || 'Failed to set language',
+        return reply.send(result);
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to set language');
+        if (error && typeof error === 'object' && 'statusCode' in error) {
+          const err = error as { statusCode: number; message?: string };
+          return reply.status(err.statusCode).send({
+            error: err.message || 'Failed to set language',
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to set language',
         });
       }
-      return reply.status(500).send({
-        error: 'Internal Server Error',
-        message: 'Failed to set language',
-      });
-    }
     }
   );
 
@@ -4581,9 +4633,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         const result = await transaction(async (client) => {
           // Prefer explicit sessionId, else latest active session for lane.
           const sessionResult = sessionId
-            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
-                sessionId,
-              ])
+            ? await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`,
+                [sessionId]
+              )
             : await client.query<LaneSessionRow>(
                 `SELECT * FROM lane_sessions
                  WHERE lane_id = $1
@@ -4636,10 +4689,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               );
               const customer = customerResult.rows[0];
               const customerAge = customer ? calculateAge(customer.dob) : undefined;
-              const membershipCardType =
-                customer?.membership_card_type
-                  ? ((customer.membership_card_type as 'NONE' | 'SIX_MONTH') || undefined)
-                  : undefined;
+              const membershipCardType = customer?.membership_card_type
+                ? (customer.membership_card_type as 'NONE' | 'SIX_MONTH') || undefined
+                : undefined;
               const membershipValidUntil = toDate(customer?.membership_valid_until) || undefined;
 
               const rentalType = (updatedSession.desired_rental_type ||
@@ -4712,7 +4764,11 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{
     Params: { laneId: string };
-    Body: { step: 'LANGUAGE' | 'MEMBERSHIP' | 'WAITLIST_BACKUP'; option: string | null; sessionId?: string };
+    Body: {
+      step: 'LANGUAGE' | 'MEMBERSHIP' | 'WAITLIST_BACKUP';
+      option: string | null;
+      sessionId?: string;
+    };
   }>(
     '/v1/checkin/lane/:laneId/highlight-option',
     { preHandler: [requireAuth] },
@@ -4734,9 +4790,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       try {
         const resolved = await transaction(async (client) => {
           const sessionResult = sessionId
-            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
-                sessionId,
-              ])
+            ? await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`,
+                [sessionId]
+              )
             : await client.query<LaneSessionRow>(
                 `SELECT * FROM lane_sessions
                  WHERE lane_id = $1
@@ -4816,9 +4873,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       try {
         const result = await transaction(async (client) => {
           const sessionResult = sessionId
-            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
-                sessionId,
-              ])
+            ? await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`,
+                [sessionId]
+              )
             : await client.query<LaneSessionRow>(
                 `SELECT * FROM lane_sessions
                  WHERE lane_id = $1
@@ -4913,9 +4971,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         const result = await transaction(async (client) => {
           // Prefer explicit sessionId, else latest active session for lane.
           const sessionResult = sessionId
-            ? await client.query<LaneSessionRow>(`SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`, [
-                sessionId,
-              ])
+            ? await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions WHERE id = $1 LIMIT 1`,
+                [sessionId]
+              )
             : await client.query<LaneSessionRow>(
                 `SELECT * FROM lane_sessions
                  WHERE lane_id = $1
@@ -4936,7 +4995,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 400, message: 'Session has no customer' };
           }
           if (!session.membership_purchase_intent) {
-            throw { statusCode: 400, message: 'No membership purchase intent set for this session' };
+            throw {
+              statusCode: 400,
+              message: 'No membership purchase intent set for this session',
+            };
           }
           if (!session.payment_intent_id) {
             throw { statusCode: 400, message: 'No payment intent found for this session' };
@@ -4951,7 +5013,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           }
           const pi = intentResult.rows[0]!;
           if (pi.status !== 'PAID') {
-            throw { statusCode: 400, message: 'Payment intent must be PAID before completing membership' };
+            throw {
+              statusCode: 400,
+              message: 'Payment intent must be PAID before completing membership',
+            };
           }
 
           // Persist membership to customer record.

@@ -155,7 +155,9 @@ async function main() {
       // Seed demo data if DEMO_MODE is enabled
       if (process.env.DEMO_MODE === 'true') {
         if (SEED_ON_STARTUP) {
-          fastify.log.info('DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...');
+          fastify.log.info(
+            'DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...'
+          );
           await seedDemoData();
         } else {
           fastify.log.info(

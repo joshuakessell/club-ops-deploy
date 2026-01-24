@@ -42,4 +42,3 @@ export function formatCheckoutDelta(delta: CheckoutDelta): string {
 
   return `${delta.hours}h ${delta.minutes}m ${suffix}`;
 }
-

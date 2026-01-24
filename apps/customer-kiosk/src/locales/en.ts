@@ -36,7 +36,8 @@ export const en = {
   'common.you': 'You',
   'common.staff': 'Staff',
   'kiosk.locked.title': 'Please see attendant',
-  'kiosk.locked.body': 'This lane is still being completed. Please see attendant to finish checkout.',
+  'kiosk.locked.body':
+    'This lane is still being completed. Please see attendant to finish checkout.',
 
   // Past due
   pastDueBlocked: 'Please see the front desk to resolve your balance.',
@@ -53,7 +54,8 @@ export const en = {
   scrollRequired: 'Please scroll to the bottom of the agreement to continue.',
   iAgree: 'I agree',
   signatureRequired: 'Signature required to continue',
-  'agreement.readAndScrollToContinue': 'Read the agreement, and scroll to the bottom to continue...',
+  'agreement.readAndScrollToContinue':
+    'Read the agreement, and scroll to the bottom to continue...',
   'agreement.pleaseCheckToContinue': 'Please check to continue',
   'agreement.tapToSign': 'Tap to Sign',
   'agreement.signed': 'Signed',
@@ -146,7 +148,8 @@ export const en = {
   'upgrade.title': 'Upgrade Disclaimer',
   'upgrade.bullet.feesApplyToRemaining':
     'Upgrade fees apply only to remaining time in your current stay.',
-  'upgrade.bullet.noExtension': 'Upgrades do not extend your stay. Your checkout time remains the same.',
+  'upgrade.bullet.noExtension':
+    'Upgrades do not extend your stay. Your checkout time remains the same.',
   'upgrade.bullet.noRefunds': 'No refunds under any circumstances.',
   'upgrade.bullet.chargedWhenAccepted':
     'Upgrade fees are charged only when an upgrade becomes available and you choose to accept it.',
@@ -174,7 +177,8 @@ export const en = {
   'error.noActiveSession': 'No active session. Please wait for staff to start a session.',
   'error.processSelection': 'Failed to process selection. Please try again.',
   'error.process': 'Failed to process. Please try again.',
-  'error.rentalNotAvailable': 'This rental type is not available. Please select an available option.',
+  'error.rentalNotAvailable':
+    'This rental type is not available. Please select an available option.',
   'error.signAgreement': 'Failed to sign agreement. Please try again.',
   'error.setLanguage': 'Failed to set language. Please try again.',
   'error.confirmSelection': 'Failed to confirm selection. Please try again.',
@@ -193,5 +197,3 @@ export const en = {
   membership: 'Membership',
   noOptionsAvailable: 'No options available',
 } as const;
-
-

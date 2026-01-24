@@ -28,14 +28,13 @@ export function CustomerConfirmationModal({
         <div className="disclaimer-text">
           <p>
             {t(customerPrimaryLanguage, 'confirmDifferent.youRequested')}{' '}
-            <strong>
-              {getRentalDisplayName(data.requestedType, customerPrimaryLanguage)}
-            </strong>
+            <strong>{getRentalDisplayName(data.requestedType, customerPrimaryLanguage)}</strong>
           </p>
           <p>
             {t(customerPrimaryLanguage, 'confirmDifferent.staffSelected')}{' '}
             <strong>
-              {getRentalDisplayName(data.selectedType, customerPrimaryLanguage)} {data.selectedNumber}
+              {getRentalDisplayName(data.selectedType, customerPrimaryLanguage)}{' '}
+              {data.selectedNumber}
             </strong>
           </p>
           <p>{t(customerPrimaryLanguage, 'confirmDifferent.question')}</p>
@@ -60,4 +59,3 @@ export function CustomerConfirmationModal({
     </div>
   );
 }
-

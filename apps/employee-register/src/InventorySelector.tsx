@@ -239,8 +239,12 @@ function sortGroupedRooms(grouped: GroupedRoom[]): GroupedRoom[] {
       if (aLevel === 'warning' && bLevel === 'warning') return (aMs ?? 0) - (bMs ?? 0);
 
       // Otherwise: closest checkout first; missing checkoutAt last.
-      const aTime = a.room.checkoutAt ? new Date(a.room.checkoutAt).getTime() : Number.POSITIVE_INFINITY;
-      const bTime = b.room.checkoutAt ? new Date(b.room.checkoutAt).getTime() : Number.POSITIVE_INFINITY;
+      const aTime = a.room.checkoutAt
+        ? new Date(a.room.checkoutAt).getTime()
+        : Number.POSITIVE_INFINITY;
+      const bTime = b.room.checkoutAt
+        ? new Date(b.room.checkoutAt).getTime()
+        : Number.POSITIVE_INFINITY;
       return aTime - bTime;
     }
 
@@ -289,9 +293,10 @@ export function InventorySelector({
     checkinAt?: string;
     checkoutAt?: string;
   } | null>(null);
-  const [searchHighlight, setSearchHighlight] = useState<null | { type: 'room' | 'locker'; id: string }>(
-    null
-  );
+  const [searchHighlight, setSearchHighlight] = useState<null | {
+    type: 'room' | 'locker';
+    id: string;
+  }>(null);
   const waitlistEntries: Array<{ desiredTier: string; status: string }> = useMemo(() => [], []);
 
   const API_BASE = getApiUrl('/api');
@@ -322,7 +327,12 @@ export function InventorySelector({
     const parsed = safeJsonParse<unknown>(String(lastMessage.data));
     if (!isRecord(parsed) || typeof parsed.type !== 'string') return;
     const t = parsed.type;
-    if (t === 'ROOM_STATUS_CHANGED' || t === 'INVENTORY_UPDATED' || t === 'ROOM_ASSIGNED' || t === 'ROOM_RELEASED') {
+    if (
+      t === 'ROOM_STATUS_CHANGED' ||
+      t === 'INVENTORY_UPDATED' ||
+      t === 'ROOM_ASSIGNED' ||
+      t === 'ROOM_RELEASED'
+    ) {
       setRefreshTrigger((prev) => prev + 1);
     }
   }, [lastMessage]);
@@ -752,7 +762,8 @@ export function InventorySelector({
             onClick={onClearSelection}
             style={{ width: '100%', marginBottom: '0.75rem', padding: '0.6rem', fontWeight: 800 }}
           >
-            Clear selection (currently {selectedItem.type === 'room' ? 'Room' : 'Locker'} {selectedItem.number})
+            Clear selection (currently {selectedItem.type === 'room' ? 'Room' : 'Locker'}{' '}
+            {selectedItem.number})
           </button>
         )}
 
@@ -783,7 +794,9 @@ export function InventorySelector({
                   type="button"
                   className={[
                     'cs-liquid-button',
-                    activeSection === tier ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    activeSection === tier
+                      ? 'cs-liquid-button--selected'
+                      : 'cs-liquid-button--secondary',
                   ].join(' ')}
                   onClick={() => setActiveSection(tier)}
                   style={{
@@ -795,7 +808,15 @@ export function InventorySelector({
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
-                    <div style={{ minWidth: 0, textAlign: 'left', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <div
+                      style={{
+                        minWidth: 0,
+                        textAlign: 'left',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
                       {label}
                     </div>
                     <div
@@ -806,7 +827,10 @@ export function InventorySelector({
                         lineHeight: 1.15,
                         fontVariantNumeric: 'tabular-nums',
                         whiteSpace: 'nowrap',
-                        color: activeSection === tier ? 'rgba(255,255,255,0.92)' : 'rgba(148,163,184,0.95)',
+                        color:
+                          activeSection === tier
+                            ? 'rgba(255,255,255,0.92)'
+                            : 'rgba(148,163,184,0.95)',
                       }}
                     >
                       <div>Avail {counts.available}</div>
@@ -820,7 +844,10 @@ export function InventorySelector({
 
             {/* Search directly beneath the Special button */}
             <div style={{ marginTop: '0.5rem' }}>
-              <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900, marginBottom: '0.35rem' }}>
+              <div
+                className="er-text-sm"
+                style={{ color: '#94a3b8', fontWeight: 900, marginBottom: '0.35rem' }}
+              >
                 Search
               </div>
               <div className="cs-liquid-search">
@@ -834,7 +861,13 @@ export function InventorySelector({
                   disabled={filterQuery !== undefined}
                 />
                 <div className="cs-liquid-search__icon">
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
                     <path
                       d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
                       stroke="currentColor"
@@ -879,7 +912,13 @@ export function InventorySelector({
                 />
               ) : (
                 <InventorySection
-                  title={activeSection === 'STANDARD' ? 'Standard' : activeSection === 'DOUBLE' ? 'Double' : 'Special'}
+                  title={
+                    activeSection === 'STANDARD'
+                      ? 'Standard'
+                      : activeSection === 'DOUBLE'
+                        ? 'Double'
+                        : 'Special'
+                  }
                   rooms={
                     activeSection === 'STANDARD'
                       ? roomsByTier.STANDARD
@@ -927,7 +966,12 @@ export function InventorySelector({
                   type="button"
                   className="cs-liquid-button cs-liquid-button--secondary"
                   style={{ padding: '0.35rem 0.7rem', minHeight: 'unset', fontWeight: 900 }}
-                  onClick={() => onOpenCustomerAccount(occupancyDetails.customerId!, occupancyDetails.customerName)}
+                  onClick={() =>
+                    onOpenCustomerAccount(
+                      occupancyDetails.customerId!,
+                      occupancyDetails.customerName
+                    )
+                  }
                 >
                   {occupancyDetails.customerName || 'Customer'}
                 </button>
@@ -941,7 +985,9 @@ export function InventorySelector({
                 Check-in
               </div>
               <div style={{ fontWeight: 800 }}>
-                {occupancyDetails.checkinAt ? new Date(occupancyDetails.checkinAt).toLocaleString() : '—'}
+                {occupancyDetails.checkinAt
+                  ? new Date(occupancyDetails.checkinAt).toLocaleString()
+                  : '—'}
               </div>
             </div>
 
@@ -950,7 +996,9 @@ export function InventorySelector({
                 Checkout
               </div>
               <div style={{ fontWeight: 800 }}>
-                {occupancyDetails.checkoutAt ? new Date(occupancyDetails.checkoutAt).toLocaleString() : '—'}
+                {occupancyDetails.checkoutAt
+                  ? new Date(occupancyDetails.checkoutAt).toLocaleString()
+                  : '—'}
               </div>
             </div>
 
@@ -1014,7 +1062,9 @@ function InventorySection({
   const allowAvailableSelection = !disableSelection && !occupancyLookupMode;
 
   const sectionCounts = useMemo(() => {
-    const availableCount = rooms.filter((r) => r.status === RoomStatus.CLEAN && !r.assignedTo).length;
+    const availableCount = rooms.filter(
+      (r) => r.status === RoomStatus.CLEAN && !r.assignedTo
+    ).length;
     let nearing = 0;
     let late = 0;
     for (const r of rooms) {
@@ -1041,7 +1091,10 @@ function InventorySection({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {/* Occupied */}
         <div style={{ minWidth: 0 }}>
-          <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+          <div
+            className="er-text-sm"
+            style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}
+          >
             🔒 Occupied
           </div>
           {occupied.length > 0 ? (
@@ -1064,7 +1117,10 @@ function InventorySection({
 
         {/* Dirty / Cleaning */}
         <div style={{ minWidth: 0 }}>
-          <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+          <div
+            className="er-text-sm"
+            style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}
+          >
             🧹 Dirty / Cleaning
           </div>
           {cleaning.map(({ room }) => (
@@ -1094,7 +1150,10 @@ function InventorySection({
 
         {/* Available */}
         <div style={{ minWidth: 0 }}>
-          <div className="er-text-sm" style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+          <div
+            className="er-text-sm"
+            style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}
+          >
             ✓ Available
           </div>
           {availableForDisplay.length > 0 ? (
@@ -1163,7 +1222,11 @@ function RoomItem({
         isWaitlistMatch ? 'er-inv-item--waitlist' : '',
         isSelected ? 'er-inv-item--selected' : '',
         isHighlighted ? 'er-inv-item--highlight' : '',
-        dueLevel === 'danger' ? 'er-inv-item--danger' : dueLevel === 'warning' ? 'er-inv-item--warning' : '',
+        dueLevel === 'danger'
+          ? 'er-inv-item--danger'
+          : dueLevel === 'warning'
+            ? 'er-inv-item--warning'
+            : '',
       ]
         .filter(Boolean)
         .join(' ')}
@@ -1173,14 +1236,25 @@ function RoomItem({
     >
       {isOccupied ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.25rem 0.75rem' }}>
-          <div className="er-text-lg" style={{ fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div
+            className="er-text-lg"
+            style={{
+              fontWeight: 900,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
             Room {room.number}
           </div>
           <div className="er-text-md er-inv-meta" style={{ fontWeight: 900, whiteSpace: 'nowrap' }}>
             Checkout: {checkoutTime ?? '—'}
           </div>
 
-          <div className="er-text-md er-inv-meta" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div
+            className="er-text-md er-inv-meta"
+            style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+          >
             {customerId && onOpenCustomerAccount ? (
               <button
                 type="button"
@@ -1202,7 +1276,11 @@ function RoomItem({
             className="er-text-md"
             style={{
               fontWeight: 900,
-              color: duration?.isOverdue ? '#ef4444' : duration ? 'rgba(148, 163, 184, 0.95)' : 'rgba(148, 163, 184, 0.95)',
+              color: duration?.isOverdue
+                ? '#ef4444'
+                : duration
+                  ? 'rgba(148, 163, 184, 0.95)'
+                  : 'rgba(148, 163, 184, 0.95)',
               fontVariantNumeric: 'tabular-nums',
               whiteSpace: 'nowrap',
             }}
@@ -1211,7 +1289,14 @@ function RoomItem({
           </div>
         </div>
       ) : (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '0.75rem',
+          }}
+        >
           <div style={{ minWidth: 0, overflow: 'hidden' }}>
             <div
               className="er-text-lg"
@@ -1225,17 +1310,26 @@ function RoomItem({
               Room {room.number}
             </div>
             {!isCleaning && !isDirty && isWaitlistMatch && (
-              <div className="er-text-sm" style={{ color: '#f59e0b', marginTop: '0.25rem', fontWeight: 800 }}>
+              <div
+                className="er-text-sm"
+                style={{ color: '#f59e0b', marginTop: '0.25rem', fontWeight: 800 }}
+              >
                 Upgrade Request
               </div>
             )}
             {isCleaning && (
-              <div className="er-text-sm" style={{ color: '#94a3b8', marginTop: '0.25rem', fontWeight: 800 }}>
+              <div
+                className="er-text-sm"
+                style={{ color: '#94a3b8', marginTop: '0.25rem', fontWeight: 800 }}
+              >
                 Cleaning
               </div>
             )}
             {!isCleaning && isDirty && (
-              <div className="er-text-sm" style={{ color: '#ef4444', marginTop: '0.25rem', fontWeight: 900 }}>
+              <div
+                className="er-text-sm"
+                style={{ color: '#ef4444', marginTop: '0.25rem', fontWeight: 900 }}
+              >
                 Dirty
               </div>
             )}
@@ -1324,7 +1418,10 @@ function LockerSection({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <div style={{ minWidth: 0 }}>
-          <div className="er-text-sm" style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+          <div
+            className="er-text-sm"
+            style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}
+          >
             🔒 Occupied
           </div>
           {occupiedLockers.length > 0 ? (
@@ -1333,7 +1430,7 @@ function LockerSection({
               const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
               const checkoutTime = formatTimeOfDay(locker.checkoutAt);
               const customerLabel = locker.assignedMemberName || locker.assignedTo || null;
-                const customerId = isUuid(locker.assignedTo) ? locker.assignedTo : null;
+              const customerId = isUuid(locker.assignedTo) ? locker.assignedTo : null;
               const dueLevel = alertLevelFromMsUntil(msUntil);
               return (
                 <button
@@ -1344,12 +1441,22 @@ function LockerSection({
                     'cs-liquid-card',
                     'er-inv-item',
                     highlightId === locker.id ? 'er-inv-item--highlight' : '',
-                    dueLevel === 'danger' ? 'er-inv-item--danger' : dueLevel === 'warning' ? 'er-inv-item--warning' : '',
+                    dueLevel === 'danger'
+                      ? 'er-inv-item--danger'
+                      : dueLevel === 'warning'
+                        ? 'er-inv-item--warning'
+                        : '',
                   ]
                     .filter(Boolean)
                     .join(' ')}
                 >
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.25rem 0.75rem' }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr auto',
+                      gap: '0.25rem 0.75rem',
+                    }}
+                  >
                     <div
                       className="er-text-lg"
                       style={{
@@ -1361,7 +1468,10 @@ function LockerSection({
                     >
                       Locker {locker.number}
                     </div>
-                    <div className="er-text-md er-inv-meta" style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>
+                    <div
+                      className="er-text-md er-inv-meta"
+                      style={{ fontWeight: 800, whiteSpace: 'nowrap' }}
+                    >
                       Checkout: {checkoutTime ?? '—'}
                     </div>
 
@@ -1395,7 +1505,13 @@ function LockerSection({
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      ({duration ? (duration.isOverdue ? `Overdue ${duration.label}` : duration.label) : '—'})
+                      (
+                      {duration
+                        ? duration.isOverdue
+                          ? `Overdue ${duration.label}`
+                          : duration.label
+                        : '—'}
+                      )
                     </div>
                   </div>
                 </button>
@@ -1407,7 +1523,10 @@ function LockerSection({
         </div>
 
         <div style={{ minWidth: 0 }}>
-          <div className="er-text-sm" style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}>
+          <div
+            className="er-text-sm"
+            style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}
+          >
             ✓ Available
           </div>
           {availableLockers.length > 0 ? (

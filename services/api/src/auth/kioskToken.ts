@@ -4,9 +4,13 @@ import crypto from 'crypto';
 function getHeader(request: FastifyRequest, name: string): string | undefined {
   const direct = (request.headers as Record<string, unknown>)[name] as string | undefined;
   if (typeof direct === 'string') return direct;
-  const lower = (request.headers as Record<string, unknown>)[name.toLowerCase()] as string | undefined;
+  const lower = (request.headers as Record<string, unknown>)[name.toLowerCase()] as
+    | string
+    | undefined;
   if (typeof lower === 'string') return lower;
-  const upper = (request.headers as Record<string, unknown>)[name.toUpperCase()] as string | undefined;
+  const upper = (request.headers as Record<string, unknown>)[name.toUpperCase()] as
+    | string
+    | undefined;
   if (typeof upper === 'string') return upper;
   return undefined;
 }
@@ -72,7 +76,8 @@ export async function requireKioskTokenOrStaff(
     return;
   }
 
-  const provided = getHeader(request, 'x-kiosk-token') ?? getKioskTokenFromWebSocketProtocol(request);
+  const provided =
+    getHeader(request, 'x-kiosk-token') ?? getKioskTokenFromWebSocketProtocol(request);
   if (!provided || !timingSafeEquals(provided, expected)) {
     reply.status(401).send({
       error: 'Unauthorized',
@@ -81,4 +86,3 @@ export async function requireKioskTokenOrStaff(
     return;
   }
 }
-

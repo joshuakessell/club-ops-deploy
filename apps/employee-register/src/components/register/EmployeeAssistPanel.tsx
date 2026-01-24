@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getCustomerMembershipStatus } from '@club-ops/shared';
 
-export type EmployeeAssistStep = 'LANGUAGE' | 'MEMBERSHIP' | 'UPGRADE' | 'RENTAL' | 'APPROVAL' | 'DONE';
+export type EmployeeAssistStep =
+  | 'LANGUAGE'
+  | 'MEMBERSHIP'
+  | 'UPGRADE'
+  | 'RENTAL'
+  | 'APPROVAL'
+  | 'DONE';
 
 type Pending =
   | { step: 'LANGUAGE'; option: 'EN' | 'ES' }
@@ -44,9 +50,13 @@ export interface EmployeeAssistPanelProps {
   onConfirmMembershipSixMonth: () => Promise<void> | void;
 
   onHighlightRental: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => Promise<void> | void;
-  onSelectRentalAsCustomer: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => Promise<void> | void;
+  onSelectRentalAsCustomer: (
+    rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => Promise<void> | void;
   onHighlightWaitlistBackup: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null) => void;
-  onSelectWaitlistBackupAsCustomer: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => Promise<void> | void;
+  onSelectWaitlistBackupAsCustomer: (
+    rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => Promise<void> | void;
   onApproveRental: () => Promise<void> | void;
 }
 
@@ -110,7 +120,10 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
   const membershipStatus = useMemo(() => {
     if (membershipPurchaseIntent) return 'PENDING' as const;
     const base = getCustomerMembershipStatus(
-      { membershipNumber: membershipNumber || null, membershipValidUntil: customerMembershipValidUntil || null },
+      {
+        membershipNumber: membershipNumber || null,
+        membershipValidUntil: customerMembershipValidUntil || null,
+      },
       new Date()
     );
     if (base === 'ACTIVE') return 'ACTIVE' as const;
@@ -129,7 +142,17 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     if (selectionConfirmed) return 'DONE';
     if (proposedBy === 'CUSTOMER' && proposedRentalType) return 'APPROVAL';
     return 'RENTAL';
-  }, [customerName, isLanguageNeeded, isMembershipNeeded, proposedBy, proposedRentalType, selectionConfirmed, sessionId, waitlistBackupType, waitlistDesiredTier]);
+  }, [
+    customerName,
+    isLanguageNeeded,
+    isMembershipNeeded,
+    proposedBy,
+    proposedRentalType,
+    selectionConfirmed,
+    sessionId,
+    waitlistBackupType,
+    waitlistDesiredTier,
+  ]);
 
   // Clear pending state when the session or step changes.
   useEffect(() => {
@@ -147,13 +170,35 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     const deluxe = Number(inventoryAvailable?.rooms?.DOUBLE ?? 0);
     const special = Number(inventoryAvailable?.rooms?.SPECIAL ?? 0);
 
-    const allowed = new Set(Array.isArray(allowedRentals) ? allowedRentals : ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL']);
+    const allowed = new Set(
+      Array.isArray(allowedRentals) ? allowedRentals : ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL']
+    );
 
     return [
-      { id: 'LOCKER' as const, label: 'Propose Locker', count: lockers, allowed: allowed.has('LOCKER') },
-      { id: 'STANDARD' as const, label: 'Propose Standard', count: standard, allowed: allowed.has('STANDARD') },
-      { id: 'DOUBLE' as const, label: 'Propose Double', count: deluxe, allowed: allowed.has('DOUBLE') },
-      { id: 'SPECIAL' as const, label: 'Propose Special', count: special, allowed: allowed.has('SPECIAL') },
+      {
+        id: 'LOCKER' as const,
+        label: 'Propose Locker',
+        count: lockers,
+        allowed: allowed.has('LOCKER'),
+      },
+      {
+        id: 'STANDARD' as const,
+        label: 'Propose Standard',
+        count: standard,
+        allowed: allowed.has('STANDARD'),
+      },
+      {
+        id: 'DOUBLE' as const,
+        label: 'Propose Double',
+        count: deluxe,
+        allowed: allowed.has('DOUBLE'),
+      },
+      {
+        id: 'SPECIAL' as const,
+        label: 'Propose Special',
+        count: special,
+        allowed: allowed.has('SPECIAL'),
+      },
     ];
   }, [allowedRentals, inventoryAvailable]);
 
@@ -164,12 +209,34 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     const deluxe = Number(inventoryAvailable?.rooms?.DOUBLE ?? 0);
     const special = Number(inventoryAvailable?.rooms?.SPECIAL ?? 0);
 
-    const allowed = new Set(Array.isArray(allowedRentals) ? allowedRentals : ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL']);
+    const allowed = new Set(
+      Array.isArray(allowedRentals) ? allowedRentals : ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL']
+    );
     const candidates = [
-      { id: 'LOCKER' as const, label: 'Backup Locker', count: lockers, allowed: allowed.has('LOCKER') },
-      { id: 'STANDARD' as const, label: 'Backup Standard', count: standard, allowed: allowed.has('STANDARD') },
-      { id: 'DOUBLE' as const, label: 'Backup Double', count: deluxe, allowed: allowed.has('DOUBLE') },
-      { id: 'SPECIAL' as const, label: 'Backup Special', count: special, allowed: allowed.has('SPECIAL') },
+      {
+        id: 'LOCKER' as const,
+        label: 'Backup Locker',
+        count: lockers,
+        allowed: allowed.has('LOCKER'),
+      },
+      {
+        id: 'STANDARD' as const,
+        label: 'Backup Standard',
+        count: standard,
+        allowed: allowed.has('STANDARD'),
+      },
+      {
+        id: 'DOUBLE' as const,
+        label: 'Backup Double',
+        count: deluxe,
+        allowed: allowed.has('DOUBLE'),
+      },
+      {
+        id: 'SPECIAL' as const,
+        label: 'Backup Special',
+        count: special,
+        allowed: allowed.has('SPECIAL'),
+      },
     ];
 
     return candidates.filter((c) => c.id !== waitlistDesiredTier);
@@ -187,23 +254,40 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         overflow: 'hidden',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'baseline' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          alignItems: 'baseline',
+        }}
+      >
         <div style={{ fontWeight: 950, fontSize: '1rem' }}>Employee Assist</div>
         <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
           Step: {step}
         </div>
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, marginTop: '0.75rem', overflowY: 'auto', paddingRight: '0.25rem' }}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          marginTop: '0.75rem',
+          overflowY: 'auto',
+          paddingRight: '0.25rem',
+        }}
+      >
         {step === 'LANGUAGE' && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
               Tap once to set the language (it will also highlight on the kiosk).
             </div>
-            {([
-              { id: 'EN' as const, label: 'English' },
-              { id: 'ES' as const, label: 'Español' },
-            ] as const).map((opt) => {
+            {(
+              [
+                { id: 'EN' as const, label: 'English' },
+                { id: 'ES' as const, label: 'Español' },
+              ] as const
+            ).map((opt) => {
               const isPending = pending?.step === 'LANGUAGE' && pending.option === opt.id;
               return (
                 <button
@@ -234,10 +318,12 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
               Tap once to highlight on kiosk, tap again to confirm.
             </div>
-            {([
-              { id: 'ONE_TIME' as const, label: 'One-time Membership' },
-              { id: 'SIX_MONTH' as const, label: '6-Month Membership' },
-            ] as const).map((opt) => {
+            {(
+              [
+                { id: 'ONE_TIME' as const, label: 'One-time Membership' },
+                { id: 'SIX_MONTH' as const, label: '6-Month Membership' },
+              ] as const
+            ).map((opt) => {
               const isPending = pending?.step === 'MEMBERSHIP' && pending.option === opt.id;
               return (
                 <button

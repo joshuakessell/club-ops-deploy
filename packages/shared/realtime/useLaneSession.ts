@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { closeLaneSessionClient, getLaneSessionClient, type LaneRole } from './laneSessionClient.js';
+import {
+  closeLaneSessionClient,
+  getLaneSessionClient,
+  type LaneRole,
+} from './laneSessionClient.js';
 
 export function useLaneSession({
   laneId,
@@ -115,4 +119,3 @@ export function useLaneSession({
 
   return { connected, lastMessage, lastError };
 }
-
