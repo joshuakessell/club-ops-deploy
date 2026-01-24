@@ -728,6 +728,9 @@ paths:
                 dob:
                   type: string
                   description: Date of birth YYYY-MM-DD
+                idNumber:
+                  type: string
+                  description: License or ID number
       responses:
         '200':
           description: Match result

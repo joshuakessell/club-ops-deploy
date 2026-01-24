@@ -240,7 +240,7 @@ export function ManualCheckoutPanel({
           gap: '0.75rem',
         }}
       >
-        <div style={{ fontWeight: 900, fontSize: '1.3rem' }}>{title}</div>
+        <div className="er-card-title">{title}</div>
         <div />
       </div>
 
@@ -339,10 +339,7 @@ export function ManualCheckoutPanel({
                 </div>
 
                 <div style={{ marginTop: '0.75rem' }}>
-                  <div
-                    className="er-text-sm"
-                    style={{ color: '#94a3b8', fontWeight: 900, marginBottom: '0.5rem' }}
-                  >
+                  <div className="er-card-subtitle" style={{ marginBottom: '0.5rem' }}>
                     Or select from occupied units
                   </div>
                   {loadingCandidates ? (
@@ -363,11 +360,12 @@ export function ManualCheckoutPanel({
                             key={c.occupancyId}
                             type="button"
                             className={[
-                              'cs-liquid-button',
-                              selected
-                                ? 'cs-liquid-button--selected'
-                                : 'cs-liquid-button--secondary',
-                            ].join(' ')}
+                              'cs-liquid-card',
+                              'er-inv-item',
+                              selected ? 'er-inv-item--selected' : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' ')}
                             aria-pressed={selected}
                             onClick={() => {
                               setTypedNumber('');
@@ -377,35 +375,24 @@ export function ManualCheckoutPanel({
                                 return [...prev, c.occupancyId];
                               });
                             }}
-                            style={{ justifyContent: 'space-between', padding: '0.75rem' }}
                           >
-                            <div
-                              style={{
-                                display: 'flex',
-                                width: '100%',
-                                justifyContent: 'space-between',
-                                gap: '1rem',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  fontWeight: 900,
-                                  minWidth: 0,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {label} - {c.customerName} - {formatClockTime(scheduled)}
+                            <div className="er-inv-occupied-row">
+                              <div className="er-inv-occupied-number">{label}</div>
+                              <div className="er-inv-occupied-customer">
+                                <span className="er-inv-occupied-customer-text">
+                                  {c.customerName || '—'}
+                                </span>
                               </div>
-                              <div
-                                style={{
-                                  fontWeight: 900,
-                                  whiteSpace: 'nowrap',
-                                  color: delta.color,
-                                }}
-                              >
-                                {delta.label}
+                              <div className="er-inv-occupied-checkout">
+                                <div className="er-inv-occupied-time">
+                                  Checkout Time: {formatClockTime(scheduled)}
+                                </div>
+                                <div
+                                  className="er-inv-occupied-duration"
+                                  style={{ color: delta.color }}
+                                >
+                                  {delta.label}
+                                </div>
                               </div>
                             </div>
                           </button>

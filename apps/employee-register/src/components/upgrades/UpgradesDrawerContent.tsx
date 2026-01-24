@@ -67,7 +67,7 @@ export function UpgradesDrawerContent({
         }}
       >
         <div>
-          <h2 style={{ margin: 0, marginBottom: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
+          <h2 className="er-card-title" style={{ margin: 0, marginBottom: '0.35rem' }}>
             Upgrade Waitlist
           </h2>
         </div>

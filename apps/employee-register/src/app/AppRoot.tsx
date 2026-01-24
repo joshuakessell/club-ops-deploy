@@ -185,11 +185,13 @@ export function AppRoot() {
   const [manualFirstName, setManualFirstName] = useState('');
   const [manualLastName, setManualLastName] = useState('');
   const [manualDobDigits, setManualDobDigits] = useState('');
+  const [manualIdNumber, setManualIdNumber] = useState('');
   const [manualEntrySubmitting, setManualEntrySubmitting] = useState(false);
   const [manualExistingPrompt, setManualExistingPrompt] = useState<null | {
     firstName: string;
     lastName: string;
     dobIso: string;
+    idNumber?: string | null;
     matchCount: number;
     bestMatch: { id: string; name: string; membershipNumber?: string | null; dob?: string | null };
   }>(null);
@@ -912,6 +914,7 @@ export function AppRoot() {
     const firstName = manualFirstName.trim();
     const lastName = manualLastName.trim();
     const dobIso = parseDobDigitsToIso(manualDobDigits);
+    const idNumber = manualIdNumber.trim();
     if (!firstName || !lastName || !dobIso) {
       alert('Please enter First Name, Last Name, and a valid Date of Birth (MM/DD/YYYY).');
       return;
@@ -958,6 +961,7 @@ export function AppRoot() {
           firstName,
           lastName,
           dobIso,
+          idNumber: idNumber || null,
           matchCount,
           bestMatch: {
             id: best.id,
@@ -976,7 +980,12 @@ export function AppRoot() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.sessionToken}`,
         },
-        body: JSON.stringify({ firstName, lastName, dob: dobIso }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          dob: dobIso,
+          idNumber: idNumber || undefined,
+        }),
       });
       const createPayload: unknown = await createRes.json().catch(() => null);
       if (!createRes.ok) {
@@ -997,6 +1006,7 @@ export function AppRoot() {
         setManualFirstName('');
         setManualLastName('');
         setManualDobDigits('');
+        setManualIdNumber('');
       }
     } finally {
       setManualEntrySubmitting(false);
@@ -3090,13 +3100,10 @@ export function AppRoot() {
                       <div style={{ fontSize: '4rem', lineHeight: 1 }} aria-hidden="true">
                         📷
                       </div>
-                      <div style={{ marginTop: '0.75rem', fontWeight: 950, fontSize: '1.6rem' }}>
+                      <div className="er-card-title" style={{ marginTop: '0.75rem' }}>
                         Scan Now
                       </div>
-                      <div
-                        className="er-text-sm"
-                        style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}
-                      >
+                      <div className="er-card-subtitle" style={{ marginTop: '0.5rem' }}>
                         Scan a membership ID or driver license.
                       </div>
                       {currentSessionId && customerName ? (
@@ -3209,9 +3216,7 @@ export function AppRoot() {
                             minHeight: 0,
                           }}
                         >
-                          <div style={{ fontWeight: 950, fontSize: '1.05rem' }}>
-                            Customer Account
-                          </div>
+                          <div className="er-card-title">Customer Account</div>
                           <CustomerProfileCard
                             name={customerName}
                             preferredLanguage={customerPrimaryLanguage || null}
@@ -3295,11 +3300,8 @@ export function AppRoot() {
                       </div>
                     ) : (
                       <div className="er-home-panel er-home-panel--center cs-liquid-card er-main-panel-card">
-                        <div style={{ fontWeight: 950, fontSize: '1.35rem' }}>Customer Account</div>
-                        <div
-                          className="er-text-sm"
-                          style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}
-                        >
+                        <div className="er-card-title">Customer Account</div>
+                        <div className="er-card-subtitle" style={{ marginTop: '0.5rem' }}>
                           Select a customer (scan, search, or first-time) to view their account.
                         </div>
                       </div>
@@ -3319,10 +3321,10 @@ export function AppRoot() {
                           flexWrap: 'wrap',
                         }}
                       >
-                        <label htmlFor="customer-search" style={{ fontWeight: 600 }}>
+                        <label htmlFor="customer-search" className="er-card-title">
                           Search Customer
                         </label>
-                        <span className="er-search-help">(type at least 3 letters)</span>
+                        <span className="er-card-subtitle">(type at least 3 letters)</span>
                       </div>
                       <input
                         id="customer-search"
@@ -3422,7 +3424,7 @@ export function AppRoot() {
                   )}
 
                   {homeTab === 'upgrades' && (
-                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
+                    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll">
                       <UpgradesDrawerContent
                         waitlistEntries={waitlistEntries}
                         hasEligibleEntries={hasEligibleEntries}
@@ -3486,13 +3488,10 @@ export function AppRoot() {
                       className="er-home-panel er-home-panel--top manual-entry-form cs-liquid-card er-main-panel-card"
                       onSubmit={(e) => void handleManualSubmit(e)}
                     >
-                      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>
+                      <div className="er-card-title" style={{ marginBottom: '0.75rem' }}>
                         First Time Customer
                       </div>
-                      <div
-                        className="er-text-sm"
-                        style={{ color: '#94a3b8', marginBottom: '0.75rem', fontWeight: 700 }}
-                      >
+                      <div className="er-card-subtitle" style={{ marginBottom: '0.75rem' }}>
                         Enter customer details from alternate ID.
                       </div>
                       <div className="form-group">
@@ -3535,6 +3534,18 @@ export function AppRoot() {
                           required
                         />
                       </div>
+                      <div className="form-group">
+                        <label htmlFor="manualIdNumber">License / ID Number</label>
+                        <input
+                          id="manualIdNumber"
+                          type="text"
+                          className="cs-liquid-input"
+                          value={manualIdNumber}
+                          onChange={(e) => setManualIdNumber(e.target.value)}
+                          placeholder="Enter license or ID number"
+                          disabled={isSubmitting}
+                        />
+                      </div>
                       <div className="form-actions">
                         <button
                           type="submit"
@@ -3557,6 +3568,7 @@ export function AppRoot() {
                             setManualFirstName('');
                             setManualLastName('');
                             setManualDobDigits('');
+                            setManualIdNumber('');
                             selectHomeTab('scan');
                           }}
                           disabled={isSubmitting || manualEntrySubmitting}
@@ -3736,6 +3748,7 @@ export function AppRoot() {
                           setManualFirstName('');
                           setManualLastName('');
                           setManualDobDigits('');
+                          setManualIdNumber('');
                         }
                       } catch (err) {
                         setManualExistingPromptError(
@@ -3765,14 +3778,19 @@ export function AppRoot() {
                       setManualExistingPromptSubmitting(true);
                       setManualExistingPromptError(null);
                       try {
-                        const { firstName, lastName, dobIso } = manualExistingPrompt;
+                        const { firstName, lastName, dobIso, idNumber } = manualExistingPrompt;
                         const createRes = await fetch(`${API_BASE}/v1/customers/create-manual`, {
                           method: 'POST',
                           headers: {
                             'Content-Type': 'application/json',
                             Authorization: `Bearer ${session.sessionToken}`,
                           },
-                          body: JSON.stringify({ firstName, lastName, dob: dobIso }),
+                          body: JSON.stringify({
+                            firstName,
+                            lastName,
+                            dob: dobIso,
+                            idNumber: idNumber || undefined,
+                          }),
                         });
                         const createPayload: unknown = await createRes.json().catch(() => null);
                         if (!createRes.ok) {
@@ -3795,6 +3813,7 @@ export function AppRoot() {
                           setManualFirstName('');
                           setManualLastName('');
                           setManualDobDigits('');
+                          setManualIdNumber('');
                         }
                       } finally {
                         setManualExistingPromptSubmitting(false);

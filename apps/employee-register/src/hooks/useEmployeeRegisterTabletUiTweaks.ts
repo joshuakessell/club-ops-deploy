@@ -41,7 +41,9 @@ export function useEmployeeRegisterTabletUiTweaks() {
       const secondaryBtn = document.querySelector<HTMLElement>(
         '.cs-liquid-button.cs-liquid-button--secondary'
       );
-      const labelEl = document.querySelector<HTMLElement>('label');
+      const labelEl =
+        document.querySelector<HTMLElement>('label') ??
+        document.querySelector<HTMLElement>('.er-home-tab-btn');
       const searchEl = document.getElementById('customer-search');
       const iconEl = document.querySelector<HTMLElement>('.btn-icon');
 
@@ -63,8 +65,8 @@ export function useEmployeeRegisterTabletUiTweaks() {
 
       setVars(root, collected);
 
-      // We can safely enable the CSS bump once we have button + label sizing.
-      if (collected.primaryBtn && collected.secondaryBtn && collected.label) {
+      // We can safely enable the CSS bump once we have button sizing.
+      if (collected.primaryBtn && collected.secondaryBtn) {
         root.classList.add('er-ui-tweaks');
         return true;
       }

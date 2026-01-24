@@ -84,7 +84,7 @@ export function CustomerAccountPanel(props: {
           alignItems: 'baseline',
         }}
       >
-        <div style={{ fontWeight: 950, fontSize: '1.05rem' }}>Customer Account</div>
+        <div className="er-card-title">Customer Account</div>
         {props.customerLabel ? (
           <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
             {props.customerLabel}
