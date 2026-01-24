@@ -47,7 +47,7 @@ import { InventoryDrawer, type InventoryDrawerSection } from '../components/inve
 import { usePassiveScannerInput } from '../usePassiveScannerInput';
 import { useRegisterLaneSessionState } from './useRegisterLaneSessionState';
 import { useRegisterWebSocketEvents } from './useRegisterWebSocketEvents';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 interface HealthStatus {
   status: string;
@@ -2021,7 +2021,11 @@ export function AppRoot() {
   // ---------------------------------------------------------------------------
   // Polling fallback (mirrors customer-kiosk): keeps UI in sync if WS is flaky.
   // ---------------------------------------------------------------------------
-  const kioskToken = (import.meta.env as any).VITE_KIOSK_TOKEN ?? null;
+  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
+  const kioskToken =
+    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
+      ? rawEnv.VITE_KIOSK_TOKEN.trim()
+      : null;
 
   const pollOnce = useCallback(async () => {
     try {

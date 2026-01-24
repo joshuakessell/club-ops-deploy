@@ -46,7 +46,7 @@ export async function seedDemoData(): Promise<void> {
     // Busy Saturday Night demo seeding (stress-test-friendly dataset)
     // -----------------------------------------------------------------------
     {
-      console.log('🌱 Seeding busy Saturday demo dataset (resetting member/customer data)...');
+      console.log('🌱 Seeding busy Saturday demo dataset (resetting customer data)...');
 
       // Keep employees unchanged
       const staffCountBefore = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM staff');
@@ -222,16 +222,15 @@ export async function seedDemoData(): Promise<void> {
         // Wipe member/customer-related data (keep staff/employees)
         await client.query('DELETE FROM checkout_requests');
         await client.query('DELETE FROM late_checkout_events');
+        await client.query('DELETE FROM inventory_reservations');
         await client.query('DELETE FROM waitlist');
         await client.query('DELETE FROM agreement_signatures');
         await client.query('DELETE FROM charges');
         await client.query('DELETE FROM checkin_blocks');
-        await client.query('DELETE FROM sessions');
         await client.query('DELETE FROM payment_intents');
         await client.query('DELETE FROM lane_sessions');
         await client.query('DELETE FROM visits');
         await client.query('DELETE FROM customers');
-        await client.query('DELETE FROM members');
 
         // Inventory maps (after any deletes)
         const roomsRes = await client.query<{ id: string; number: string; type: string }>(
@@ -247,7 +246,7 @@ export async function seedDemoData(): Promise<void> {
         for (const l of lockersRes.rows) lockerIdByNumber.set(l.number, l.id);
 
         // -------------------------------------------------------------------
-        // Customers: seed 100 members + extra guests for active occupancy + historical churn
+        // Customers: seed 100 membership customers + extra guests for active occupancy + historical churn
         // -------------------------------------------------------------------
         const MEMBER_COUNT = 100;
         // Needs to cover:
@@ -255,14 +254,12 @@ export async function seedDemoData(): Promise<void> {
         // - 142+ completed stays for churn/checkout-quality assertions
         const EXTRA_GUEST_COUNT = 200; // total customers = 300 (stable stress-test dataset)
 
-        // Create exactly 100 members (also mirrored into legacy members table)
+        // Create exactly 100 membership customers
         for (let i = 1; i <= 100; i++) {
           const idx = i - 1;
           const id = randomUUID();
           const membershipNumber = String(i).padStart(6, '0');
           const name = `${firstNames[idx % firstNames.length]} ${lastNames[(idx * 7) % lastNames.length]}`;
-          const email = `member${membershipNumber}@demo.local`;
-          const phone = `555${String(i).padStart(7, '0')}`; // 10-digit-ish, deterministic
           const dob = new Date(1980 + (idx % 25), (idx * 3) % 12, ((idx * 5) % 27) + 1);
 
           await client.query(
@@ -270,12 +267,6 @@ export async function seedDemoData(): Promise<void> {
              (id, name, dob, membership_number, membership_card_type, membership_valid_until, primary_language, past_due_balance, created_at, updated_at)
              VALUES ($1, $2, $3, $4, NULL, NULL, 'EN', 0, NOW(), NOW())`,
             [id, name, dob, membershipNumber]
-          );
-
-          await client.query(
-            `INSERT INTO members (id, membership_number, name, email, phone, dob, is_active, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), NOW())`,
-            [randomUUID(), membershipNumber, name, email, phone, dob]
           );
 
           customerIds.push(id);
@@ -355,39 +346,12 @@ export async function seedDemoData(): Promise<void> {
           roomId: string | null;
           lockerId: string | null;
           rentalType: RentalType;
-        }): Promise<{ visitId: string; sessionId: string }> {
+        }): Promise<void> {
           const visitId = randomUUID();
           await client.query(
             `INSERT INTO visits (id, started_at, ended_at, created_at, updated_at, customer_id)
              VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
             [visitId, params.checkInAt, params.checkedOutAt, params.customerId]
-          );
-
-          const customerRow = await client.query<{ name: string; membership_number: string | null }>(
-            `SELECT name, membership_number FROM customers WHERE id = $1`,
-            [params.customerId]
-          );
-          const memberName = customerRow.rows[0]!.name;
-          const membershipNumber = customerRow.rows[0]!.membership_number;
-
-          const sessionId = randomUUID();
-          await client.query(
-            `INSERT INTO sessions
-             (id, customer_id, member_name, membership_number, room_id, locker_id, check_in_time, checkout_at, check_out_time, expected_duration, status, lane, checkin_type, visit_id, agreement_signed, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 360, $10, 'DEMO', 'INITIAL', $11, false, NOW(), NOW())`,
-            [
-              sessionId,
-              params.customerId,
-              memberName,
-              membershipNumber,
-              params.roomId,
-              params.lockerId,
-              params.checkInAt,
-              params.scheduledCheckoutAt,
-              params.checkedOutAt,
-              params.checkedOutAt ? 'COMPLETED' : 'ACTIVE',
-              visitId,
-            ]
           );
 
           const blockId = randomUUID();
@@ -397,8 +361,6 @@ export async function seedDemoData(): Promise<void> {
              VALUES ($1, $2, 'INITIAL', $3, $4, $5, $6, $7, NULL, false, NULL, NOW(), NOW(), false, NULL)`,
             [blockId, visitId, params.checkInAt, params.scheduledCheckoutAt, params.rentalType, params.roomId, params.lockerId]
           );
-
-          return { visitId, sessionId };
         }
 
         // 1) Create ACTIVE room stays at NOW (all with future checkout times)
@@ -647,7 +609,9 @@ export async function seedDemoData(): Promise<void> {
       }
 
       const customerCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM customers');
-      const memberCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM members');
+      const membershipCustomerCount = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count FROM customers WHERE membership_number IS NOT NULL`
+      );
       const roomCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM rooms');
       const lockerCount = await query<{ count: string }>('SELECT COUNT(*)::text as count FROM lockers');
 
@@ -657,9 +621,6 @@ export async function seedDemoData(): Promise<void> {
       );
 
       // XOR violations (must be zero)
-      const bothInSessions = await query<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM sessions WHERE room_id IS NOT NULL AND locker_id IS NOT NULL`
-      );
       const bothInBlocks = await query<{ count: string }>(
         `SELECT COUNT(*)::text as count FROM checkin_blocks WHERE room_id IS NOT NULL AND locker_id IS NOT NULL`
       );
@@ -684,64 +645,73 @@ export async function seedDemoData(): Promise<void> {
       );
 
       // Active stays at NOW
-      const activeSessionsNow = await query<{ count: string }>(
-        `SELECT COUNT(*)::text as count FROM sessions WHERE status = 'ACTIVE' AND check_out_time IS NULL`
+      const activeBlocksNow = await query<{ count: string }>(
+        `SELECT COUNT(*)::text as count
+         FROM checkin_blocks cb
+         JOIN visits v ON v.id = cb.visit_id
+         WHERE v.ended_at IS NULL`
       );
       const activeVisitsNow = await query<{ count: string }>(
         `SELECT COUNT(*)::text as count FROM visits WHERE ended_at IS NULL`
       );
 
       // Find the overdue active session (exactly one)
-      const overdueActiveSessions = await query<{
+      const overdueActiveBlocks = await query<{
         id: string;
-        checkout_at: Date | null;
+        ends_at: Date;
         room_id: string | null;
         locker_id: string | null;
         customer_id: string;
       }>(
-        `SELECT id, checkout_at, room_id, locker_id, customer_id
-         FROM sessions
-         WHERE status = 'ACTIVE'
-           AND check_out_time IS NULL
-           AND checkout_at < NOW()
-         ORDER BY checkout_at`
+        `SELECT cb.id, cb.ends_at, cb.room_id, cb.locker_id, v.customer_id
+         FROM checkin_blocks cb
+         JOIN visits v ON v.id = cb.visit_id
+         WHERE v.ended_at IS NULL
+           AND cb.ends_at < NOW()
+         ORDER BY cb.ends_at`
       );
 
-      // All other active sessions should have future checkout
-      const futureActiveSessions = await query<{ count: string }>(
+      // All other active blocks should have future checkout
+      const futureActiveBlocks = await query<{ count: string }>(
         `SELECT COUNT(*)::text as count
-         FROM sessions
-         WHERE status = 'ACTIVE'
-           AND check_out_time IS NULL
-           AND checkout_at > NOW()`
+         FROM checkin_blocks cb
+         JOIN visits v ON v.id = cb.visit_id
+         WHERE v.ended_at IS NULL
+           AND cb.ends_at > NOW()`
       );
 
-      // Checkout quality: >= 85% of completed stays have (checkout_at - check_out_time) in [0, 15m]
+      // Checkout quality: >= 85% of completed stays have (checkout_at - check_out_time) in [-15m, +15m]
       const checkoutQuality = await query<{ total: string; good: string }>(
         `SELECT
            COUNT(*)::text as total,
            COUNT(*) FILTER (
-             WHERE EXTRACT(EPOCH FROM (checkout_at - check_out_time)) BETWEEN 0 AND (15 * 60)
+             WHERE EXTRACT(EPOCH FROM (v.ended_at - cb.ends_at)) BETWEEN (-15 * 60) AND (15 * 60)
            )::text as good
-         FROM sessions
-         WHERE status = 'COMPLETED'
-           AND checkout_at IS NOT NULL
-           AND check_out_time IS NOT NULL`
+         FROM visits v
+         JOIN LATERAL (
+           SELECT ends_at
+           FROM checkin_blocks
+           WHERE visit_id = v.id
+           ORDER BY ends_at DESC
+           LIMIT 1
+         ) cb ON TRUE
+         WHERE v.ended_at IS NOT NULL`
       );
 
       function asInt(row: { count: string }): number {
         return parseInt(row.count, 10);
       }
 
-      if (asInt(memberCount.rows[0]!) !== 100) throw new Error(`Expected 100 members, got ${memberCount.rows[0]!.count}`);
+      if (asInt(membershipCustomerCount.rows[0]!) !== 100)
+        throw new Error(
+          `Expected 100 membership customers, got ${membershipCustomerCount.rows[0]!.count}`
+        );
       if (asInt(customerCount.rows[0]!) < 142)
         throw new Error(`Expected at least 142 customers, got ${customerCount.rows[0]!.count}`);
       if (asInt(roomCount.rows[0]!) !== 55) throw new Error(`Expected 55 rooms, got ${roomCount.rows[0]!.count}`);
       if (asInt(nonExistentRoomsPresent.rows[0]!) !== 0)
         throw new Error(`Non-existent rooms present in DB (${nonExistentRoomsPresent.rows[0]!.count})`);
       if (asInt(lockerCount.rows[0]!) !== 108) throw new Error(`Expected 108 lockers, got ${lockerCount.rows[0]!.count}`);
-      if (asInt(bothInSessions.rows[0]!) !== 0)
-        throw new Error(`Exclusive assignment violated in sessions (${bothInSessions.rows[0]!.count})`);
       if (asInt(bothInBlocks.rows[0]!) !== 0)
         throw new Error(`Exclusive assignment violated in checkin_blocks (${bothInBlocks.rows[0]!.count})`);
 
@@ -787,34 +757,36 @@ export async function seedDemoData(): Promise<void> {
 
       // Active stays at NOW
       const expectedActiveNow = 54 + ACTIVE_LOCKERS_TARGET;
-      if (asInt(activeSessionsNow.rows[0]!) !== expectedActiveNow)
-        throw new Error(`Expected ${expectedActiveNow} active sessions at now, got ${activeSessionsNow.rows[0]!.count}`);
+      if (asInt(activeBlocksNow.rows[0]!) !== expectedActiveNow)
+        throw new Error(
+          `Expected ${expectedActiveNow} active check-in blocks at now, got ${activeBlocksNow.rows[0]!.count}`
+        );
       if (asInt(activeVisitsNow.rows[0]!) !== expectedActiveNow)
         throw new Error(`Expected ${expectedActiveNow} active visits at now, got ${activeVisitsNow.rows[0]!.count}`);
 
-      // Exactly one overdue active session
-      if (overdueActiveSessions.rows.length !== 1)
-        throw new Error(`Expected exactly 1 overdue active session, got ${overdueActiveSessions.rows.length}`);
-      const overdue = overdueActiveSessions.rows[0]!;
+      // Exactly one overdue active block
+      if (overdueActiveBlocks.rows.length !== 1)
+        throw new Error(`Expected exactly 1 overdue active block, got ${overdueActiveBlocks.rows.length}`);
+      const overdue = overdueActiveBlocks.rows[0]!;
       // Overdue session checkout is seeded on a 15-minute boundary and set to the prior 15-minute tick.
       const expectedLateMs = floorTo15Min(now).getTime() - 15 * 60 * 1000;
-      if (!overdue.checkout_at) throw new Error('Overdue active session missing checkout_at');
-      const lateDiffMs = Math.abs(new Date(overdue.checkout_at).getTime() - expectedLateMs);
+      if (!overdue.ends_at) throw new Error('Overdue active block missing ends_at');
+      const lateDiffMs = Math.abs(new Date(overdue.ends_at).getTime() - expectedLateMs);
       // Allow slack because seeding + verification takes time.
       if (lateDiffMs > 2 * 60 * 1000) {
         throw new Error(
-          `Overdue active session checkout mismatch: got ${new Date(overdue.checkout_at).toISOString()} expected ~${new Date(expectedLateMs).toISOString()} (diff: ${lateDiffMs}ms)`
+          `Overdue active block checkout mismatch: got ${new Date(overdue.ends_at).toISOString()} expected ~${new Date(expectedLateMs).toISOString()} (diff: ${lateDiffMs}ms)`
         );
       }
       if (overdue.room_id && overdue.locker_id)
-        throw new Error('Overdue active session has both room and locker set');
+        throw new Error('Overdue active block has both room and locker set');
       if (!overdue.room_id && !overdue.locker_id)
-        throw new Error('Overdue active session must have either room or locker');
+        throw new Error('Overdue active block must have either room or locker');
 
-      // All other active sessions have future checkout
-      if (asInt(futureActiveSessions.rows[0]!) !== expectedActiveNow - 1)
+      // All other active blocks have future checkout
+      if (asInt(futureActiveBlocks.rows[0]!) !== expectedActiveNow - 1)
         throw new Error(
-          `Expected ${expectedActiveNow - 1} active sessions with future checkout, got ${futureActiveSessions.rows[0]!.count}`
+          `Expected ${expectedActiveNow - 1} active blocks with future checkout, got ${futureActiveBlocks.rows[0]!.count}`
         );
 
       // Relaxed checkout realism checks (warn unless wildly off)
@@ -824,18 +796,23 @@ export async function seedDemoData(): Promise<void> {
 
       const earlyCountRes = await query<{ early: string }>(
         `SELECT COUNT(*) FILTER (
-           WHERE EXTRACT(EPOCH FROM (checkout_at - check_out_time)) > (15 * 60)
+           WHERE EXTRACT(EPOCH FROM (v.ended_at - cb.ends_at)) < (-15 * 60)
          )::text as early
-         FROM sessions
-         WHERE status = 'COMPLETED'
-           AND checkout_at IS NOT NULL
-           AND check_out_time IS NOT NULL`
+         FROM visits v
+         JOIN LATERAL (
+           SELECT ends_at
+           FROM checkin_blocks
+           WHERE visit_id = v.id
+           ORDER BY ends_at DESC
+           LIMIT 1
+         ) cb ON TRUE
+         WHERE v.ended_at IS NOT NULL`
       );
       const earlyCompleted = parseInt(earlyCountRes.rows[0]!.early, 10);
       const earlyRatio = totalCompleted === 0 ? 0 : earlyCompleted / totalCompleted;
 
       if (totalCompleted < 200) {
-        throw new Error(`Expected at least 200 completed sessions, got ${totalCompleted}`);
+        throw new Error(`Expected at least 200 completed visits, got ${totalCompleted}`);
       }
 
       // Target: within15 >= 0.85 and early <= 0.15, but don't fail on small natural variance.
@@ -858,10 +835,10 @@ export async function seedDemoData(): Promise<void> {
         locker_number: string | null;
       }>(
         `SELECT r.number as room_number, l.number as locker_number
-         FROM sessions s
-         LEFT JOIN rooms r ON s.room_id = r.id
-         LEFT JOIN lockers l ON s.locker_id = l.id
-         WHERE s.id = $1`,
+         FROM checkin_blocks cb
+         LEFT JOIN rooms r ON cb.room_id = r.id
+         LEFT JOIN lockers l ON cb.locker_id = l.id
+         WHERE cb.id = $1`,
         [overdue.id]
       );
       const resourceRow = overdueResourceDetails.rows[0]!;
@@ -869,7 +846,7 @@ export async function seedDemoData(): Promise<void> {
       const overdueResource = resourceRow.locker_number || resourceRow.room_number || 'unknown';
 
       console.log(
-        `✅ Busy Saturday seed complete (now=${now.toISOString()}): members=100, customers=${customerCount.rows[0]!.count}, active sessions=${54 + ACTIVE_LOCKERS_TARGET} (54 rooms + ${ACTIVE_LOCKERS_TARGET} lockers), completed stays=${totalCompleted}, open STANDARD room=${openRooms.rows[0]!.number}, overdue session=${overdue.id} (${assignmentType} ${overdueResource})`
+        `✅ Busy Saturday seed complete (now=${now.toISOString()}): membership_customers=${membershipCustomerCount.rows[0]!.count}, customers=${customerCount.rows[0]!.count}, active blocks=${54 + ACTIVE_LOCKERS_TARGET} (54 rooms + ${ACTIVE_LOCKERS_TARGET} lockers), completed visits=${totalCompleted}, open STANDARD room=${openRooms.rows[0]!.number}, overdue block=${overdue.id} (${assignmentType} ${overdueResource})`
       );
     }
 

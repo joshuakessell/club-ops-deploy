@@ -74,7 +74,7 @@ This checklist is the implementation plan derived from:
 ## Kiosk Agreement Sync (Customer Kiosk ↔ Employee Register)
 
 - [ ] **P0 — Agreement required only for INITIAL and RENEWAL checkin_blocks**
-  - Done when: Customer kiosk shows the agreement/signature step only when the server indicates the session mode is INITIAL or RENEWAL; upgrades do not require agreement signing.
+  - Done when: Customer kiosk shows the agreement/signature step only when the server indicates the session mode is CHECKIN or RENEWAL; upgrades do not require agreement signing.
 
 - [ ] **P0 — Agreement signing gates assignment**
   - Done when: The backend prevents assignment until the agreement is signed when required, and both UIs clearly show “agreement required” vs “agreement signed” states (no optimistic client-side bypass).
@@ -96,7 +96,7 @@ This checklist is the implementation plan derived from:
   - Done when: `services/api/tests` includes coverage for `POST /v1/checkin/lane/:laneId/scan-id` and `POST /v1/checkin/lane/:laneId/start` (idScanValue/membershipScanValue) verifying consistent customer resolution and lane session updates.
 
 - [ ] **P0 — API tests for agreement gating**
-  - Done when: Tests prove that assignment is rejected when agreement is required but not signed, and succeeds once the kiosk signs; tests validate correct mode handling (INITIAL/RENEWAL vs upgrade paths).
+  - Done when: Tests prove that assignment is rejected when agreement is required but not signed, and succeeds once the kiosk signs; tests validate correct mode handling (CHECKIN/RENEWAL vs upgrade paths).
 
 - [ ] **P1 — UI tests for employee register inventory ordering + indicators**
   - Done when: `apps/employee-register` vitest tests cover ordering rules and at least one visual indicator state (available/near-expiration/overdue/waitlist highlight) using deterministic fixture data.

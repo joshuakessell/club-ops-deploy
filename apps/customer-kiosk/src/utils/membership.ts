@@ -11,7 +11,7 @@ export interface SessionState {
   kioskAcknowledgedAt?: string | null;
   allowedRentals: string[];
   visitId?: string;
-  mode?: 'INITIAL' | 'RENEWAL';
+  mode?: 'CHECKIN' | 'RENEWAL';
   blockEndsAt?: string; // ISO timestamp of when current block ends
   customerPrimaryLanguage?: Language | null;
   pastDueBlocked?: boolean;

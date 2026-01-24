@@ -133,9 +133,6 @@ describe('Check-in Flow', () => {
       `DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`
     );
     await query(
-      `DELETE FROM sessions WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345') OR visit_id IN (SELECT id FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345'))`
-    );
-    await query(
       `DELETE FROM visits WHERE customer_id IN (SELECT id FROM customers WHERE membership_number = '12345')`
     );
     await query(
@@ -182,10 +179,6 @@ describe('Check-in Flow', () => {
     );
     await query(
       `DELETE FROM charges WHERE visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`,
-      [customerId]
-    );
-    await query(
-      `DELETE FROM sessions WHERE customer_id = $1 OR visit_id IN (SELECT id FROM visits WHERE customer_id = $1)`,
       [customerId]
     );
     await query(`DELETE FROM visits WHERE customer_id = $1`, [customerId]);
@@ -1319,7 +1312,7 @@ describe('Check-in Flow', () => {
         // Create a minimal active lane session with display fields set.
         const sessionResult = await query<{ id: string }>(
           `INSERT INTO lane_sessions (lane_id, status, customer_display_name, checkin_mode)
-         VALUES ($1, 'ACTIVE', 'Done Customer', 'INITIAL')
+         VALUES ($1, 'ACTIVE', 'Done Customer', 'CHECKIN')
          RETURNING id`,
           [laneId]
         );
@@ -1751,9 +1744,9 @@ describe('Check-in Flow', () => {
 
   describe('POST /v1/checkin/lane/:laneId/sign-agreement', () => {
     it(
-      'should require INITIAL or RENEWAL mode for agreement signing',
+      'should require CHECKIN or RENEWAL mode for agreement signing',
       runIfDbAvailable(async () => {
-        // Start a lane session in INITIAL mode
+        // Start a lane session in CHECKIN mode
         const startResponse = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/start`,
@@ -1763,13 +1756,13 @@ describe('Check-in Flow', () => {
           payload: {
             idScanValue: 'ID123456',
             membershipScanValue: '12345',
-            checkinMode: 'INITIAL',
+            checkinMode: 'CHECKIN',
           },
         });
         expect(startResponse.statusCode).toBe(200);
         const session = JSON.parse(startResponse.body);
 
-        // Sign agreement should work for INITIAL
+        // Sign agreement should work for CHECKIN
         const signResponse = await app.inject({
           method: 'POST',
           url: `/v1/checkin/lane/${laneId}/sign-agreement`,

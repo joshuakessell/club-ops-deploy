@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 type DetailedRoom = {
   id: string;

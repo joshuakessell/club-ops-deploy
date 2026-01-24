@@ -11,7 +11,7 @@ import './styles.css';
 import { OrientationGuard } from './ui/orientation/OrientationGuard';
 import './ui/orientation/orientation.css';
 import { FatalEnvScreen } from './components/FatalEnvScreen';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');

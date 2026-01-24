@@ -14,6 +14,7 @@ import type {
 import { RoomStatus } from '@club-ops/shared';
 import { buildSystemLateFeeNote } from '../utils/lateFeeNotes';
 import { insertAuditLog } from '../audit/auditLog';
+import { broadcastInventoryUpdate } from '../inventory/broadcast';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -560,14 +561,6 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
             row.visit_id,
           ]);
 
-          // Update session status if exists (legacy sessions table; mirrors existing checkout flow)
-          if (row.session_id) {
-            await client.query(
-              `UPDATE sessions SET status = 'COMPLETED', check_out_time = NOW(), updated_at = NOW() WHERE id = $1`,
-              [row.session_id]
-            );
-          }
-
           // Apply ban if needed
           if (banApplied) {
             const banUntil = new Date();
@@ -659,7 +652,6 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
 
         // Broadcast inventory updates (same event types as existing checkout completion)
         if (fastify.broadcaster && !alreadyCheckedOut) {
-          const { broadcastInventoryUpdate } = await import('./sessions.js');
           await broadcastInventoryUpdate(fastify.broadcaster);
 
           if (row.room_id) {
@@ -1490,14 +1482,6 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
             [block.visit_id]
           );
 
-          // 5. Update session status if exists
-          if (block.session_id) {
-            await client.query(
-              `UPDATE sessions SET status = 'COMPLETED', check_out_time = NOW(), updated_at = NOW() WHERE id = $1`,
-              [block.session_id]
-            );
-          }
-
           // 6. Apply ban if needed
           if (checkoutRequest.ban_applied) {
             const banUntil = new Date();
@@ -1603,7 +1587,6 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         // 9. Broadcast inventory updates
         if (fastify.broadcaster) {
           // Import inventory broadcast function
-          const { broadcastInventoryUpdate } = await import('./sessions.js');
           await broadcastInventoryUpdate(fastify.broadcaster);
 
           // Broadcast room status changes if applicable

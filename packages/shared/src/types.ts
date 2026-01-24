@@ -149,7 +149,7 @@ export interface SessionUpdatedPayload {
    */
   kioskAcknowledgedAt?: string;
   allowedRentals: string[];
-  mode?: 'INITIAL' | 'RENEWAL';
+  mode?: 'CHECKIN' | 'RENEWAL';
   blockEndsAt?: string;
   visitId?: string;
   /**
@@ -334,7 +334,7 @@ export interface Visit {
 export interface CheckinBlock {
   id: string;
   visitId: string;
-  blockType: 'INITIAL' | 'RENEWAL' | 'FINAL_EXTENSION';
+  blockType: 'INITIAL' | 'RENEWAL' | 'FINAL2H';
   startsAt: Date;
   endsAt: Date;
   rentalType: string;

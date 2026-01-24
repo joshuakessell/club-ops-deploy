@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ModalFrame } from './ModalFrame';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 type DetailedRoom = {
   id: string;

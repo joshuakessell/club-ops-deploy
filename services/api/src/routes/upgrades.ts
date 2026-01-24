@@ -1,10 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { z } from 'zod';
-import { transaction, serializableTransaction } from '../db';
+import { serializableTransaction } from '../db';
 import { requireAuth } from '../auth/middleware';
 import type { Broadcaster } from '../websocket/broadcaster';
 import { getRoomTierFromNumber } from '@club-ops/shared';
-import { broadcastInventoryUpdate } from './sessions';
+import { broadcastInventoryUpdate } from '../inventory/broadcast';
 import { insertAuditLog } from '../audit/auditLog';
 
 declare module 'fastify' {
@@ -12,28 +11,6 @@ declare module 'fastify' {
     broadcaster: Broadcaster;
   }
 }
-
-/**
- * Schema for joining waitlist.
- */
-const JoinWaitlistSchema = z.object({
-  sessionId: z.string().uuid(),
-  desiredRoomType: z.enum(['STANDARD', 'DOUBLE', 'SPECIAL']),
-  acknowledgedDisclaimer: z.boolean().refine((val) => val === true, {
-    message: 'Upgrade disclaimer must be acknowledged',
-  }),
-});
-
-/**
- * Schema for accepting upgrade.
- */
-const AcceptUpgradeSchema = z.object({
-  sessionId: z.string().uuid(),
-  newRoomId: z.string().uuid(),
-  acknowledgedDisclaimer: z.boolean().refine((val) => val === true, {
-    message: 'Upgrade disclaimer must be acknowledged',
-  }),
-});
 
 function toNumber(value: unknown): number | undefined {
   if (value === null || value === undefined) return undefined;
@@ -74,14 +51,6 @@ function extractPaymentLineItems(
     normalized.push({ description, amount });
   }
   return normalized.length > 0 ? normalized : undefined;
-}
-
-interface SessionRow {
-  id: string;
-  customer_id: string;
-  checkin_type: string | null;
-  checkout_at: Date | null;
-  room_id: string | null;
 }
 
 interface RoomRow {
@@ -137,235 +106,6 @@ function calculateUpgradeFee(fromTier: string, toTier: 'STANDARD' | 'DOUBLE' | '
  * Upgrade routes for waitlist and upgrade management.
  */
 export async function upgradeRoutes(fastify: FastifyInstance): Promise<void> {
-  /**
-   * POST /v1/upgrades/waitlist - Join waitlist for upgrade
-   *
-   * Adds customer to waitlist for a higher tier room.
-   * Requires disclaimer acknowledgment.
-   */
-  fastify.post<{ Body: z.infer<typeof JoinWaitlistSchema> }>(
-    '/v1/upgrades/waitlist',
-    {
-      preHandler: [requireAuth],
-    },
-    async (request, reply) => {
-      const staff = request.staff;
-      if (!staff) {
-        return reply.status(401).send({
-          error: 'Unauthorized',
-        });
-      }
-
-      let body: z.infer<typeof JoinWaitlistSchema>;
-
-      try {
-        body = JoinWaitlistSchema.parse(request.body);
-      } catch (error) {
-        return reply.status(400).send({
-          error: 'Validation failed',
-          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
-        });
-      }
-
-      try {
-        await transaction(async (client) => {
-          // 1. Verify session exists
-          const sessionResult = await client.query<SessionRow>(
-            `SELECT id, customer_id, checkin_type, checkout_at, room_id
-           FROM sessions
-           WHERE id = $1 AND status = 'ACTIVE'
-           FOR UPDATE`,
-            [body.sessionId]
-          );
-
-          if (sessionResult.rows.length === 0) {
-            throw { statusCode: 404, message: 'Active session not found' };
-          }
-
-          const session = sessionResult.rows[0]!;
-
-          // 2. Log disclaimer acknowledgment to audit_log
-          await insertAuditLog(client, {
-            staffId: staff.staffId,
-            action: 'UPGRADE_DISCLAIMER',
-            entityType: 'session',
-            entityId: session.id,
-            newValue: {
-              action: 'JOIN_WAITLIST',
-              desiredRoomType: body.desiredRoomType,
-              disclaimerText: UPGRADE_DISCLAIMER_TEXT,
-              acknowledgedAt: new Date().toISOString(),
-            },
-          });
-
-          // NOTE: Waitlist persistence is not implemented; we only record the disclaimer acknowledgment.
-        });
-
-        return reply.status(200).send({
-          message: 'Added to waitlist',
-          disclaimerAcknowledged: true,
-        });
-      } catch (error) {
-        if (error && typeof error === 'object' && 'statusCode' in error) {
-          const err = error as { statusCode: number; message: string };
-          return reply.status(err.statusCode).send({ error: err.message });
-        }
-        fastify.log.error(error, 'Failed to join waitlist');
-        return reply.status(500).send({ error: 'Internal server error' });
-      }
-    }
-  );
-
-  /**
-   * POST /v1/upgrades/accept - Accept an upgrade
-   *
-   * Upgrades customer to a higher tier room.
-   * Requires disclaimer acknowledgment.
-   * Does NOT extend checkout_at (remains original check-in + 6 hours).
-   */
-  fastify.post(
-    '/v1/upgrades/accept',
-    {
-      preHandler: [requireAuth],
-    },
-    async (request, reply) => {
-      const staff = request.staff;
-      if (!staff) {
-        return reply.status(401).send({
-          error: 'Unauthorized',
-        });
-      }
-
-      let body: z.infer<typeof AcceptUpgradeSchema>;
-
-      try {
-        body = AcceptUpgradeSchema.parse(request.body);
-      } catch (error) {
-        return reply.status(400).send({
-          error: 'Validation failed',
-          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
-        });
-      }
-
-      try {
-        const result = await transaction(async (client) => {
-          // 1. Get session and verify it exists
-          const sessionResult = await client.query<SessionRow>(
-            `SELECT id, customer_id, checkin_type, checkout_at, room_id
-           FROM sessions
-           WHERE id = $1 AND status = 'ACTIVE'
-           FOR UPDATE`,
-            [body.sessionId]
-          );
-
-          if (sessionResult.rows.length === 0) {
-            throw { statusCode: 404, message: 'Active session not found' };
-          }
-
-          const session = sessionResult.rows[0]!;
-          const originalCheckoutAt = session.checkout_at;
-
-          // 2. Get new room and verify it's available
-          const roomResult = await client.query<RoomRow>(
-            `SELECT id, number, type, status, assigned_to_customer_id
-           FROM rooms
-           WHERE id = $1
-           FOR UPDATE`,
-            [body.newRoomId]
-          );
-
-          if (roomResult.rows.length === 0) {
-            throw { statusCode: 404, message: 'Room not found' };
-          }
-
-          const newRoom = roomResult.rows[0]!;
-
-          if (newRoom.status !== 'CLEAN') {
-            throw {
-              statusCode: 400,
-              message: `Room ${newRoom.number} is not available (status: ${newRoom.status})`,
-            };
-          }
-
-          if (newRoom.assigned_to_customer_id) {
-            throw { statusCode: 409, message: `Room ${newRoom.number} is already assigned` };
-          }
-
-          // 3. Release old room if exists
-          if (session.room_id) {
-            await client.query(
-              `UPDATE rooms 
-             SET assigned_to_customer_id = NULL, updated_at = NOW()
-             WHERE id = $1`,
-              [session.room_id]
-            );
-          }
-
-          // 4. Assign new room
-          // Get customer_id from session
-          const customerIdResult = await client.query<{ customer_id: string }>(
-            `SELECT customer_id FROM sessions WHERE id = $1`,
-            [session.id]
-          );
-          const customerId = customerIdResult.rows[0]?.customer_id;
-          if (!customerId) {
-            throw { statusCode: 400, message: 'Session has no customer_id' };
-          }
-
-          await client.query(
-            `UPDATE rooms 
-           SET assigned_to_customer_id = $1, updated_at = NOW()
-           WHERE id = $2`,
-            [customerId, body.newRoomId]
-          );
-
-          // 5. Update session - mark as upgrade, but DO NOT change checkout_at
-          await client.query(
-            `UPDATE sessions 
-           SET room_id = $1, checkin_type = 'UPGRADE', updated_at = NOW()
-           WHERE id = $2`,
-            [body.newRoomId, session.id]
-          );
-
-          // 6. Log disclaimer acknowledgment to audit_log
-          await insertAuditLog(client, {
-            staffId: staff.staffId,
-            action: 'UPGRADE_DISCLAIMER',
-            entityType: 'session',
-            entityId: session.id,
-            oldValue: { previousRoomId: session.room_id },
-            newValue: {
-              action: 'ACCEPT_UPGRADE',
-              newRoomId: body.newRoomId,
-              newRoomNumber: newRoom.number,
-              newRoomType: newRoom.type,
-              checkoutAt: originalCheckoutAt?.toISOString(),
-              disclaimerText: UPGRADE_DISCLAIMER_TEXT,
-              acknowledgedAt: new Date().toISOString(),
-            },
-          });
-
-          return {
-            sessionId: session.id,
-            newRoomId: body.newRoomId,
-            newRoomNumber: newRoom.number,
-            newRoomType: newRoom.type,
-            checkoutAt: originalCheckoutAt,
-          };
-        });
-
-        return reply.status(200).send(result);
-      } catch (error) {
-        if (error && typeof error === 'object' && 'statusCode' in error) {
-          const err = error as { statusCode: number; message: string };
-          return reply.status(err.statusCode).send({ error: err.message });
-        }
-        fastify.log.error(error, 'Failed to accept upgrade');
-        return reply.status(500).send({ error: 'Internal server error' });
-      }
-    }
-  );
-
   /**
    * GET /v1/upgrades/disclaimer - Get upgrade disclaimer text
    *

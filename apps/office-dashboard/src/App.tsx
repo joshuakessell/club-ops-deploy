@@ -13,7 +13,7 @@ import { TelemetryView } from './TelemetryView';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import CssBaseline from '@mui/material/CssBaseline';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 // Material Design Dark Theme - Matching Dashboard Aesthetic
 const theme = createTheme({

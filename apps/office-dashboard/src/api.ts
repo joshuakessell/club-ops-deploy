@@ -1,4 +1,4 @@
-import { getApiUrl, getWebSocketUrl } from '@/lib/apiBase';
+import { getApiUrl, getWebSocketUrl } from '@club-ops/shared';
 
 export class ApiError extends Error {
   status: number;

@@ -10,7 +10,7 @@ import {
 } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
 import type { BottomToastTone } from '../components/register/toasts/BottomToastStack';
-import { getWebSocketUrl } from '@/lib/apiBase';
+import { getWebSocketUrl } from '@club-ops/shared';
 
 export function useRegisterWebSocketEvents(params: {
   lane: string;

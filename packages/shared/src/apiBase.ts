@@ -1,9 +1,12 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
 
+export const API_BASE_URL = typeof env?.VITE_API_BASE_URL === 'string' ? env.VITE_API_BASE_URL : '';
+
+const isDev = env?.DEV === true || env?.DEV === 'true';
 let didWarnApiBaseUrlSuffix = false;
 
 function warnIfApiBaseUrlEndsWithApi(raw: string) {
-  if (!import.meta.env.DEV) return;
+  if (!isDev) return;
   if (didWarnApiBaseUrlSuffix) return;
   const trimmed = (raw ?? '').trim();
   if (!trimmed) return;
@@ -56,4 +59,3 @@ export const getWebSocketUrl = (path: string) => {
   const wsBase = base.startsWith('https') ? base.replace('https', 'wss') : base.replace('http', 'ws');
   return `${wsBase}${path.startsWith('/') ? path : `/${path}`}`;
 };
-

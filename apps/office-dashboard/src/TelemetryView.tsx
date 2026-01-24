@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { StaffSession } from './LockScreen';
 import { ApiError, apiJson } from './api';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 type TelemetryTrace = {
   trace_id: string;

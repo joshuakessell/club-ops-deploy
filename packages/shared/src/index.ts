@@ -105,3 +105,5 @@ export { AGREEMENT_LEGAL_BODY_HTML_BY_LANG, type AgreementLanguage } from './agr
 export * from '../realtime/laneSessionClient.js';
 export { useLaneSession } from '../realtime/useLaneSession.js';
 
+// API base helpers for frontend apps
+export { API_BASE_URL, getApiUrl, getWebSocketUrl } from './apiBase.js';

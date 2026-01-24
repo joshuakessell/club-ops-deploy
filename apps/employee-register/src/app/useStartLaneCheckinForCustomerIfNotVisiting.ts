@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getErrorMessage, isRecord } from '@club-ops/ui';
 import type { ActiveCheckinDetails } from '../components/register/modals/AlreadyCheckedInModal';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 
@@ -9,7 +9,7 @@ type StartLaneResponse = {
   sessionId?: string;
   customerName?: string;
   membershipNumber?: string;
-  mode?: 'INITIAL' | 'RENEWAL';
+  mode?: 'CHECKIN' | 'RENEWAL';
   blockEndsAt?: string;
   activeAssignedResourceType?: 'room' | 'locker';
   activeAssignedResourceNumber?: string;
@@ -132,4 +132,3 @@ export function useStartLaneCheckinForCustomerIfNotVisiting(params: {
 
   return { state, retry };
 }
-

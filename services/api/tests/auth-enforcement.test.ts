@@ -4,9 +4,8 @@ import websocket from '@fastify/websocket';
 
 import { createBroadcaster } from '../src/websocket/broadcaster.js';
 import { registerWsRoute } from '../src/websocket/wsRoute.js';
-import { sessionRoutes } from '../src/routes/sessions.js';
 import { cleaningRoutes } from '../src/routes/cleaning.js';
-import { agreementRoutes } from '../src/routes/agreements.js';
+import { checkinRoutes } from '../src/routes/checkin.js';
 
 function randomUuid(): string {
   // Good enough for tests that only need a syntactically-valid UUID.
@@ -34,9 +33,8 @@ describe('Auth enforcement (unauthenticated mutations)', () => {
     app.decorate('broadcaster', broadcaster);
     await registerWsRoute(app, broadcaster);
 
-    await app.register(sessionRoutes);
     await app.register(cleaningRoutes);
-    await app.register(agreementRoutes);
+    await app.register(checkinRoutes);
 
     await app.ready();
   });
@@ -45,29 +43,20 @@ describe('Auth enforcement (unauthenticated mutations)', () => {
     await app.close();
   });
 
-  it('rejects POST /v1/sessions without staff auth', async () => {
+  it('rejects POST /v1/checkin/lane/:laneId/start without staff auth', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/sessions',
-      payload: { customerId: randomUuid(), roomId: randomUuid() },
+      url: '/v1/checkin/lane/lane-1/start',
+      payload: { idScanValue: 'TEST' },
     });
     expect(res.statusCode).toBe(401);
   });
 
-  it('rejects POST /v1/sessions/scan-id without staff auth', async () => {
+  it('rejects POST /v1/checkin/scan without staff auth', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: '/v1/sessions/scan-id',
-      payload: { idNumber: '123', lane: 'lane-1' },
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('rejects POST /v1/sessions/scan-membership without staff auth', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/v1/sessions/scan-membership',
-      payload: { membershipNumber: '123', lane: 'lane-1' },
+      url: '/v1/checkin/scan',
+      payload: { scanValue: '123' },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -81,11 +70,11 @@ describe('Auth enforcement (unauthenticated mutations)', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('rejects POST /v1/checkins/:checkinId/agreement-sign without kiosk token or staff auth', async () => {
+  it('rejects POST /v1/checkin/lane/:laneId/sign-agreement without kiosk token or staff auth', async () => {
     const res = await app.inject({
       method: 'POST',
-      url: `/v1/checkins/${randomUuid()}/agreement-sign`,
-      payload: { agreed: true },
+      url: `/v1/checkin/lane/lane-1/sign-agreement`,
+      payload: { signaturePayload: 'data:image/png;base64,TEST' },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -129,4 +118,3 @@ describe('Auth enforcement (unauthenticated mutations)', () => {
     expect(res.statusCode).not.toBe(400);
   });
 });
-

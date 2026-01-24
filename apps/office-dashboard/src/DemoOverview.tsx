@@ -5,7 +5,7 @@ import { safeJsonParse } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
 import { useNavigate } from 'react-router-dom';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 type InventorySummaryResponse = {
   byType: Record<string, { clean: number; cleaning: number; dirty: number; total: number }>;

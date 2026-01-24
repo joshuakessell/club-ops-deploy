@@ -19,7 +19,7 @@ import { CustomerConfirmationModal } from '../components/modals/CustomerConfirma
 import { WaitlistModal } from '../components/modals/WaitlistModal';
 import { RenewalDisclaimerModal } from '../components/modals/RenewalDisclaimerModal';
 import { MembershipModal } from '../components/modals/MembershipModal';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 interface HealthStatus {
   status: string;
@@ -50,7 +50,7 @@ export function AppRoot() {
   const [showUpgradeDisclaimer, setShowUpgradeDisclaimer] = useState(false);
   const [upgradeAction, setUpgradeAction] = useState<'waitlist' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [checkinMode, setCheckinMode] = useState<'INITIAL' | 'RENEWAL' | null>(null);
+  const [checkinMode, setCheckinMode] = useState<'CHECKIN' | 'RENEWAL' | null>(null);
   const [showRenewalDisclaimer, setShowRenewalDisclaimer] = useState(false);
   const [showCustomerConfirmation, setShowCustomerConfirmation] = useState(false);
   const [customerConfirmationData, setCustomerConfirmationData] =
@@ -364,7 +364,7 @@ export function AppRoot() {
       if (
         payload.paymentStatus === 'PAID' &&
         !payload.agreementSigned &&
-        (payload.mode === 'INITIAL' || payload.mode === 'RENEWAL')
+        (payload.mode === 'CHECKIN' || payload.mode === 'RENEWAL')
       ) {
         setView('agreement');
         return;
@@ -621,9 +621,9 @@ export function AppRoot() {
     };
   }, []);
 
-  // Ensure agreement view redirects for non-INITIAL/RENEWAL modes
+  // Ensure agreement view redirects for non-CHECKIN/RENEWAL modes
   useEffect(() => {
-    if (view === 'agreement' && checkinMode !== 'INITIAL' && checkinMode !== 'RENEWAL') {
+    if (view === 'agreement' && checkinMode !== 'CHECKIN' && checkinMode !== 'RENEWAL') {
       setView('complete');
     }
   }, [view, checkinMode]);
@@ -838,7 +838,7 @@ export function AppRoot() {
       setSelectionAcknowledged(true);
 
       // After acknowledging upgrade disclaimer, customer should confirm the backup selection
-      // Then proceed to agreement if INITIAL/RENEWAL
+      // Then proceed to agreement if CHECKIN/RENEWAL
     } catch (error) {
       console.error('Failed to acknowledge upgrade disclaimer:', error);
       alert(t(session.customerPrimaryLanguage, 'error.process'));
@@ -1295,8 +1295,8 @@ export function AppRoot() {
       );
 
     case 'agreement':
-      // Only show agreement for INITIAL/RENEWAL
-      if (checkinMode !== 'INITIAL' && checkinMode !== 'RENEWAL') {
+      // Only show agreement for CHECKIN/RENEWAL
+      if (checkinMode !== 'CHECKIN' && checkinMode !== 'RENEWAL') {
         // For upgrades, skip agreement and go to complete (will be handled by useEffect above)
         return null;
       }

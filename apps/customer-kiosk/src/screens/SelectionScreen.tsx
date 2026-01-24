@@ -71,7 +71,7 @@ export function SelectionScreen({
     return proposedBy === 'CUSTOMER' && proposedRentalType ? null : 'RENTAL';
   })();
 
-  const rentalOrder = ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'] as const;
+  const rentalOrder = ['LOCKER', 'GYM_LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'] as const;
   const allowedSet = new Set(session.allowedRentals);
   const rentalsToShow = rentalOrder.filter((r) => allowedSet.has(r));
 
@@ -282,7 +282,7 @@ export function SelectionScreen({
 
                         const displayName = getRentalDisplayName(rental, lang);
 
-                        const span2 = rental === 'LOCKER' || rental === 'STANDARD';
+                        const span2 = rental === 'LOCKER' || rental === 'GYM_LOCKER' || rental === 'STANDARD';
 
                         return (
                           <button

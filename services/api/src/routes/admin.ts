@@ -308,7 +308,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/admin/rooms/expirations - Get rooms nearing or past expiration
    *
-   * Returns active sessions with rooms, sorted by expiration time.
+   * Returns active room stays (check-in blocks), sorted by expiration time.
    * Past expiration rows are flagged and pinned to top.
    */
   fastify.get(
@@ -322,31 +322,33 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
           room_id: string;
           room_number: string;
           room_type: string;
-          session_id: string;
+          occupancy_id: string;
           customer_name: string;
           membership_number: string | null;
           check_in_time: Date;
-          expected_duration: number;
           checkout_at: Date;
         }>(
-          `SELECT 
+          `SELECT
           r.id as room_id,
           r.number as room_number,
           r.type as room_type,
-          s.id as session_id,
-          COALESCE(s.member_name, c.name) as customer_name,
+          cb.id as occupancy_id,
+          c.name as customer_name,
           c.membership_number,
-          COALESCE(s.check_in_time, s.checkin_at) as check_in_time,
-          COALESCE(s.expected_duration, 360) as expected_duration,
-          COALESCE(
-            s.checkout_at,
-            COALESCE(s.check_in_time, s.checkin_at) + (COALESCE(s.expected_duration, 360) * INTERVAL '1 minute')
-          ) as checkout_at
-         FROM sessions s
-         JOIN rooms r ON s.room_id = r.id
-         LEFT JOIN customers c ON s.customer_id = c.id
-         WHERE s.status = 'ACTIVE'
-           AND s.room_id IS NOT NULL
+          cb.starts_at as check_in_time,
+          cb.ends_at as checkout_at
+         FROM rooms r
+         JOIN LATERAL (
+           SELECT cb.id, cb.starts_at, cb.ends_at, v.customer_id
+           FROM checkin_blocks cb
+           JOIN visits v ON v.id = cb.visit_id
+           WHERE cb.room_id = r.id
+             AND v.ended_at IS NULL
+           ORDER BY cb.ends_at DESC
+           LIMIT 1
+         ) cb ON TRUE
+         JOIN customers c ON c.id = cb.customer_id
+         WHERE r.type != 'LOCKER'
          ORDER BY checkout_at ASC`
         );
 
@@ -364,7 +366,7 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
             roomId: row.room_id,
             roomNumber: row.room_number,
             roomTier: row.room_type,
-            sessionId: row.session_id,
+            sessionId: row.occupancy_id,
             customerName: row.customer_name,
             membershipNumber: row.membership_number || null,
             checkoutAt: checkoutAt.toISOString(),
@@ -417,21 +419,19 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
          GROUP BY status`
         );
 
-        // Get occupied rooms (assigned to sessions)
+        // Get occupied rooms (assigned to customers)
         const occupiedResult = await query<{ count: string }>(
-          `SELECT COUNT(DISTINCT r.id) as count
-         FROM rooms r
-         JOIN sessions s ON r.id = s.room_id
-         WHERE s.status = 'ACTIVE'
-           AND r.type != 'LOCKER'`
+          `SELECT COUNT(*) as count
+         FROM rooms
+         WHERE type != 'LOCKER'
+           AND assigned_to_customer_id IS NOT NULL`
         );
 
         // Get lockers in use
         const lockersInUseResult = await query<{ count: string }>(
-          `SELECT COUNT(DISTINCT l.id) as count
-         FROM lockers l
-         JOIN sessions s ON l.id = s.locker_id
-         WHERE s.status = 'ACTIVE'`
+          `SELECT COUNT(*) as count
+         FROM lockers
+         WHERE assigned_to_customer_id IS NOT NULL`
         );
 
         // Get total lockers and available lockers
