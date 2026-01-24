@@ -743,16 +743,14 @@ export function InventorySelector({
   return (
     <>
       <div
-        className="cs-liquid-card"
         style={{
-          padding: '1rem',
           height: '100%',
           minHeight: 0,
           display: 'flex',
           flexDirection: 'column',
         }}
       >
-        <h2 style={{ margin: 0, marginBottom: '0.75rem', fontSize: '1.25rem', fontWeight: 800 }}>
+        <h2 className="er-card-title" style={{ margin: 0, marginBottom: '0.75rem' }}>
           Inventory
         </h2>
 
@@ -781,10 +779,10 @@ export function InventorySelector({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', minWidth: 0 }}>
             {(
               [
-                ['LOCKER', ROOM_TYPE_LABELS.LOCKER],
-                ['STANDARD', 'Standard'],
-                ['DOUBLE', 'Double'],
-                ['SPECIAL', 'Special'],
+                ['LOCKER', 'Lockers'],
+                ['STANDARD', 'Standard Rooms'],
+                ['DOUBLE', 'Double Rooms'],
+                ['SPECIAL', 'Special Rooms'],
               ] as const
             ).map(([tier, label]) => {
               const counts = navCounts[tier];
@@ -807,35 +805,20 @@ export function InventorySelector({
                     minHeight: '74px',
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <div className="er-inv-nav">
+                    <div className="er-inv-nav-label">{label}</div>
                     <div
+                      className="er-inv-nav-stats er-inv-meta"
                       style={{
-                        minWidth: 0,
-                        textAlign: 'left',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {label}
-                    </div>
-                    <div
-                      className="er-text-sm"
-                      style={{
-                        textAlign: 'right',
-                        fontWeight: 900,
-                        lineHeight: 1.15,
-                        fontVariantNumeric: 'tabular-nums',
-                        whiteSpace: 'nowrap',
                         color:
                           activeSection === tier
                             ? 'rgba(255,255,255,0.92)'
                             : 'rgba(148,163,184,0.95)',
                       }}
                     >
-                      <div>Avail {counts.available}</div>
-                      <div>Nearing {counts.nearing}</div>
-                      <div>Past {counts.late}</div>
+                      <div>Available {counts.available}</div>
+                      <div>Nearing Checkout {counts.nearing}</div>
+                      <div>Past Checkout {counts.late}</div>
                     </div>
                   </div>
                 </button>
@@ -845,8 +828,8 @@ export function InventorySelector({
             {/* Search directly beneath the Special button */}
             <div style={{ marginTop: '0.5rem' }}>
               <div
-                className="er-text-sm"
-                style={{ color: '#94a3b8', fontWeight: 900, marginBottom: '0.35rem' }}
+                className="er-inv-search-label"
+                style={{ marginBottom: '0.35rem' }}
               >
                 Search
               </div>
@@ -914,10 +897,10 @@ export function InventorySelector({
                 <InventorySection
                   title={
                     activeSection === 'STANDARD'
-                      ? 'Standard'
+                      ? 'Standard Rooms'
                       : activeSection === 'DOUBLE'
-                        ? 'Double'
-                        : 'Special'
+                        ? 'Double Rooms'
+                        : 'Special Rooms'
                   }
                   rooms={
                     activeSection === 'STANDARD'
@@ -1079,9 +1062,9 @@ function InventorySection({
 
   return (
     <div>
-      <div style={{ marginBottom: '0.75rem' }}>
-        <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>{title}</div>
-        <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800, marginTop: '0.25rem' }}>
+      <div className="er-inv-section-header">
+        <div className="er-inv-section-title">{title}</div>
+        <div className="er-inv-section-meta er-inv-meta">
           Available: {sectionCounts.availableCount}
           {sectionCounts.nearing > 0 ? ` • Nearing: ${sectionCounts.nearing}` : ''}
           {sectionCounts.late > 0 ? ` • Late: ${sectionCounts.late}` : ''}
@@ -1092,8 +1075,8 @@ function InventorySection({
         {/* Occupied */}
         <div style={{ minWidth: 0 }}>
           <div
-            className="er-text-sm"
-            style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}
+            className="er-inv-column-title er-inv-column-title--occupied"
+            style={{ ...INVENTORY_COLUMN_HEADER_STYLE }}
           >
             🔒 Occupied
           </div>
@@ -1117,10 +1100,7 @@ function InventorySection({
 
         {/* Dirty / Cleaning */}
         <div style={{ minWidth: 0 }}>
-          <div
-            className="er-text-sm"
-            style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}
-          >
+          <div className="er-inv-column-title" style={{ ...INVENTORY_COLUMN_HEADER_STYLE }}>
             🧹 Dirty / Cleaning
           </div>
           {cleaning.map(({ room }) => (
@@ -1150,10 +1130,7 @@ function InventorySection({
 
         {/* Available */}
         <div style={{ minWidth: 0 }}>
-          <div
-            className="er-text-sm"
-            style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}
-          >
+          <div className="er-inv-column-title er-inv-column-title--available">
             ✓ Available
           </div>
           {availableForDisplay.length > 0 ? (
@@ -1201,7 +1178,7 @@ function RoomItem({
   onClick,
   isWaitlistMatch,
   nowMs,
-  onOpenCustomerAccount,
+  onOpenCustomerAccount: _onOpenCustomerAccount,
 }: RoomItemProps) {
   const isOccupied = !!room.assignedTo || room.status === RoomStatus.OCCUPIED;
   const isCleaning = room.status === RoomStatus.CLEANING;
@@ -1235,57 +1212,27 @@ function RoomItem({
       aria-disabled={!isSelectable}
     >
       {isOccupied ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.25rem 0.75rem' }}>
-          <div
-            className="er-text-lg"
-            style={{
-              fontWeight: 900,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            Room {room.number}
+        <div className="er-inv-occupied-row">
+          <div className="er-inv-occupied-number">Room {room.number}</div>
+          <div className="er-inv-occupied-customer">
+            <span className="er-inv-occupied-customer-text">{customerLabel ?? '—'}</span>
           </div>
-          <div className="er-text-md er-inv-meta" style={{ fontWeight: 900, whiteSpace: 'nowrap' }}>
-            Checkout: {checkoutTime ?? '—'}
-          </div>
-
-          <div
-            className="er-text-md er-inv-meta"
-            style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-          >
-            {customerId && onOpenCustomerAccount ? (
-              <button
-                type="button"
-                className="cs-liquid-button cs-liquid-button--secondary"
-                style={{ padding: '0.2rem 0.5rem', minHeight: 'unset', fontWeight: 900 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenCustomerAccount(customerId, customerLabel ?? undefined);
-                }}
-                title="Open Customer Account"
-              >
-                {customerLabel ?? 'Customer'}
-              </button>
-            ) : (
-              <span>{customerLabel ?? '—'}</span>
-            )}
-          </div>
-          <div
-            className="er-text-md"
-            style={{
-              fontWeight: 900,
-              color: duration?.isOverdue
-                ? '#ef4444'
-                : duration
-                  ? 'rgba(148, 163, 184, 0.95)'
-                  : 'rgba(148, 163, 184, 0.95)',
-              fontVariantNumeric: 'tabular-nums',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            ({duration ? (duration.isOverdue ? `Overdue ${duration.label}` : duration.label) : '—'})
+          <div className="er-inv-occupied-checkout">
+            <div className="er-inv-occupied-time">
+              Checkout Time: {checkoutTime ?? '—'}
+            </div>
+            <div
+              className="er-inv-occupied-duration"
+              style={{
+                color: duration?.isOverdue ? '#ef4444' : 'rgba(148, 163, 184, 0.95)',
+              }}
+            >
+              {duration
+                ? duration.isOverdue
+                  ? `Late ${duration.label}`
+                  : `${duration.label} remaining`
+                : '—'}
+            </div>
           </div>
         </div>
       ) : (
@@ -1362,7 +1309,7 @@ function LockerSection({
   disableSelection = false,
   occupancyLookupMode = false,
   highlightId = null,
-  onOpenCustomerAccount,
+  onOpenCustomerAccount: _onOpenCustomerAccount,
 }: LockerSectionProps) {
   const availableCount = lockers.filter(
     (l) => l.status === RoomStatus.CLEAN && !l.assignedTo
@@ -1407,9 +1354,9 @@ function LockerSection({
 
   return (
     <div>
-      <div style={{ marginBottom: '0.75rem' }}>
-        <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>{ROOM_TYPE_LABELS.LOCKER}</div>
-        <div className="er-text-sm er-inv-meta" style={{ fontWeight: 800, marginTop: '0.25rem' }}>
+      <div className="er-inv-section-header">
+        <div className="er-inv-section-title">{ROOM_TYPE_LABELS.LOCKER}</div>
+        <div className="er-inv-section-meta er-inv-meta">
           Available: {sectionCounts.availableCount}
           {sectionCounts.nearing > 0 ? ` • Nearing: ${sectionCounts.nearing}` : ''}
           {sectionCounts.late > 0 ? ` • Late: ${sectionCounts.late}` : ''}
@@ -1419,8 +1366,8 @@ function LockerSection({
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <div style={{ minWidth: 0 }}>
           <div
-            className="er-text-sm"
-            style={{ color: '#94a3b8', ...INVENTORY_COLUMN_HEADER_STYLE }}
+            className="er-inv-column-title er-inv-column-title--occupied"
+            style={{ ...INVENTORY_COLUMN_HEADER_STYLE }}
           >
             🔒 Occupied
           </div>
@@ -1450,68 +1397,29 @@ function LockerSection({
                     .filter(Boolean)
                     .join(' ')}
                 >
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr auto',
-                      gap: '0.25rem 0.75rem',
-                    }}
-                  >
-                    <div
-                      className="er-text-lg"
-                      style={{
-                        fontWeight: 800,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      Locker {locker.number}
+                  <div className="er-inv-occupied-row">
+                    <div className="er-inv-occupied-number">Locker {locker.number}</div>
+                    <div className="er-inv-occupied-customer">
+                      <span className="er-inv-occupied-customer-text">
+                        {customerLabel ?? '—'}
+                      </span>
                     </div>
-                    <div
-                      className="er-text-md er-inv-meta"
-                      style={{ fontWeight: 800, whiteSpace: 'nowrap' }}
-                    >
-                      Checkout: {checkoutTime ?? '—'}
-                    </div>
-
-                    <div
-                      className="er-text-md er-inv-meta"
-                      style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    >
-                      {customerId && onOpenCustomerAccount ? (
-                        <button
-                          type="button"
-                          className="cs-liquid-button cs-liquid-button--secondary"
-                          style={{ padding: '0.2rem 0.5rem', minHeight: 'unset', fontWeight: 900 }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenCustomerAccount(customerId, customerLabel ?? undefined);
-                          }}
-                          title="Open Customer Account"
-                        >
-                          {customerLabel ?? 'Customer'}
-                        </button>
-                      ) : (
-                        <span>{customerLabel ?? '—'}</span>
-                      )}
-                    </div>
-                    <div
-                      className="er-text-md"
-                      style={{
-                        fontWeight: 800,
-                        color: duration?.isOverdue ? '#ef4444' : 'rgba(148, 163, 184, 0.95)',
-                        fontVariantNumeric: 'tabular-nums',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      (
-                      {duration
-                        ? duration.isOverdue
-                          ? `Overdue ${duration.label}`
-                          : duration.label
-                        : '—'}
-                      )
+                    <div className="er-inv-occupied-checkout">
+                      <div className="er-inv-occupied-time">
+                        Checkout Time: {checkoutTime ?? '—'}
+                      </div>
+                      <div
+                        className="er-inv-occupied-duration"
+                        style={{
+                          color: duration?.isOverdue ? '#ef4444' : 'rgba(148, 163, 184, 0.95)',
+                        }}
+                      >
+                        {duration
+                          ? duration.isOverdue
+                            ? `Late ${duration.label}`
+                            : `${duration.label} remaining`
+                          : '—'}
+                      </div>
                     </div>
                   </div>
                 </button>
@@ -1523,10 +1431,7 @@ function LockerSection({
         </div>
 
         <div style={{ minWidth: 0 }}>
-          <div
-            className="er-text-sm"
-            style={{ color: '#10b981', ...INVENTORY_COLUMN_HEADER_STYLE }}
-          >
+          <div className="er-inv-column-title er-inv-column-title--available">
             ✓ Available
           </div>
           {availableLockers.length > 0 ? (

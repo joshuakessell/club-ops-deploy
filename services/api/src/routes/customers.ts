@@ -426,6 +426,7 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
     firstName: z.string().min(1),
     lastName: z.string().min(1),
     dob: z.string().min(1), // YYYY-MM-DD
+    idNumber: z.string().trim().min(1).optional(),
   });
 
   fastify.post(
@@ -449,6 +450,7 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
 
       const name = `${body.firstName} ${body.lastName}`.trim().slice(0, 255);
       if (!name) return reply.status(400).send({ error: 'Invalid name' });
+      const idScanValue = body.idNumber?.trim() || null;
 
       try {
         const inserted = await query<{
@@ -457,10 +459,10 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
           dob: Date | null;
           membership_number: string | null;
         }>(
-          `INSERT INTO customers (name, dob, created_at, updated_at)
-           VALUES ($1, $2::date, NOW(), NOW())
+          `INSERT INTO customers (name, dob, id_scan_value, created_at, updated_at)
+           VALUES ($1, $2::date, $3, NOW(), NOW())
            RETURNING id, name, dob, membership_number`,
-          [name, dob]
+          [name, dob, idScanValue]
         );
 
         const row = inserted.rows[0]!;

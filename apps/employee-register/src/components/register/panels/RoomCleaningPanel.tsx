@@ -127,7 +127,7 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
 
   return (
     <div className="cs-liquid-card er-main-panel-card">
-      <div style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: '0.75rem' }}>
+      <div className="er-card-title" style={{ marginBottom: '0.75rem' }}>
         Room Cleaning
       </div>
 
@@ -147,7 +147,7 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
         </div>
       )}
 
-      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>
+      <div className="er-card-subtitle" style={{ marginBottom: '0.75rem' }}>
         Select rooms to begin or finish cleaning
       </div>
 
@@ -164,11 +164,8 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
           }}
         >
           <div>
-            <div
-              className="er-text-sm"
-              style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}
-            >
-              DIRTY (ready to begin cleaning)
+            <div className="er-card-subtitle" style={{ marginBottom: '0.5rem' }}>
+              Dirty (ready to begin cleaning)
             </div>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               {dirtyRooms.length === 0 ? (
@@ -202,11 +199,8 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
           </div>
 
           <div>
-            <div
-              className="er-text-sm"
-              style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}
-            >
-              CLEANING (ready to finish cleaning)
+            <div className="er-card-subtitle" style={{ marginBottom: '0.5rem' }}>
+              Cleaning (ready to finish cleaning)
             </div>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               {cleaningRooms.length === 0 ? (
