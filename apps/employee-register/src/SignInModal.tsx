@@ -271,9 +271,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
 
   const formatSignedInLabel = (employee: Employee) => {
     if (!employee.signedIn) return '';
-    const registers = employee.registerNumbers
-      .map((num) => `Register ${num}`)
-      .join(', ');
+    const registers = employee.registerNumbers.map((num) => `Register ${num}`).join(', ');
     return registers ? ` (Signed in: ${registers})` : ' (Signed in)';
   };
 
@@ -416,7 +414,11 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
               >
                 Back
               </button>
-              <button className="cs-liquid-button" onClick={() => void handleConfirm()} disabled={isLoading}>
+              <button
+                className="cs-liquid-button"
+                onClick={() => void handleConfirm()}
+                disabled={isLoading}
+              >
                 {isLoading ? 'Confirming...' : 'Confirm'}
               </button>
             </div>

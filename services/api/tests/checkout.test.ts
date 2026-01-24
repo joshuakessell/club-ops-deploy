@@ -527,10 +527,10 @@ describe('Checkout Flow', () => {
 
       // Clean up
       await pool.query('DELETE FROM checkout_requests WHERE id = $1', [requestId]);
-      await pool.query('DELETE FROM audit_log WHERE entity_type = $1 AND entity_id = ANY($2::uuid[])', [
-        'waitlist',
-        waitlistIds,
-      ]);
+      await pool.query(
+        'DELETE FROM audit_log WHERE entity_type = $1 AND entity_id = ANY($2::uuid[])',
+        ['waitlist', waitlistIds]
+      );
       await pool.query('DELETE FROM waitlist WHERE id = ANY($1::uuid[])', [waitlistIds]);
       await pool.query(
         'UPDATE rooms SET status = $1, assigned_to_customer_id = NULL WHERE id = $2',
@@ -541,9 +541,10 @@ describe('Checkout Flow', () => {
 
     it('GET /v1/waitlist should auto-expire stale entries before returning ACTIVE results', async () => {
       // Make the block end in the past so the waitlist entry should expire
-      await pool.query(`UPDATE checkin_blocks SET ends_at = NOW() - INTERVAL '1 minute' WHERE id = $1`, [
-        testBlockId,
-      ]);
+      await pool.query(
+        `UPDATE checkin_blocks SET ends_at = NOW() - INTERVAL '1 minute' WHERE id = $1`,
+        [testBlockId]
+      );
 
       const waitlistRes = await pool.query(
         `INSERT INTO waitlist (visit_id, checkin_block_id, desired_tier, backup_tier, status)
@@ -578,16 +579,18 @@ describe('Checkout Flow', () => {
 
       // Clean up and restore block end time
       await pool.query('DELETE FROM waitlist WHERE id = $1', [waitlistId]);
-      await pool.query(`UPDATE checkin_blocks SET ends_at = NOW() + INTERVAL '1 hour' WHERE id = $1`, [
-        testBlockId,
-      ]);
+      await pool.query(
+        `UPDATE checkin_blocks SET ends_at = NOW() + INTERVAL '1 hour' WHERE id = $1`,
+        [testBlockId]
+      );
     });
 
     it('should post late fee as itemized charge + system note (without changing amounts)', async () => {
       // Make the block overdue by 74 minutes (for display rounding validation in note)
-      await pool.query(`UPDATE checkin_blocks SET ends_at = NOW() - INTERVAL '74 minutes' WHERE id = $1`, [
-        testBlockId,
-      ]);
+      await pool.query(
+        `UPDATE checkin_blocks SET ends_at = NOW() - INTERVAL '74 minutes' WHERE id = $1`,
+        [testBlockId]
+      );
 
       // Reset customer bookkeeping
       await pool.query(`UPDATE customers SET past_due_balance = 0, notes = '' WHERE id = $1`, [
@@ -630,11 +633,14 @@ describe('Checkout Flow', () => {
       const visitDate = visitRow.rows[0]!.started_at.toISOString().slice(0, 10);
       expect(notes).toContain(`on last visit on ${visitDate}.`);
 
-      const chargesRes = await pool.query<{ type: string; amount: string; checkin_block_id: string }>(
-        `SELECT type, amount, checkin_block_id FROM charges WHERE visit_id = $1`,
-        [testVisitId]
-      );
-      expect(chargesRes.rows.some((r) => r.type === 'LATE_FEE' && r.checkin_block_id === testBlockId)).toBe(true);
+      const chargesRes = await pool.query<{
+        type: string;
+        amount: string;
+        checkin_block_id: string;
+      }>(`SELECT type, amount, checkin_block_id FROM charges WHERE visit_id = $1`, [testVisitId]);
+      expect(
+        chargesRes.rows.some((r) => r.type === 'LATE_FEE' && r.checkin_block_id === testBlockId)
+      ).toBe(true);
 
       // Clean up
       await pool.query('DELETE FROM checkout_requests WHERE id = $1', [requestId]);

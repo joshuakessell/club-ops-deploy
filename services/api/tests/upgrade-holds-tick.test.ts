@@ -45,7 +45,9 @@ describe('processUpgradeHoldsTick (locking + expiry)', () => {
        VALUES ('200', 'STANDARD', 'CLEAN', 1)
        RETURNING id`
     );
-    const customer = await pool.query<{ id: string }>(`INSERT INTO customers (name) VALUES ('Tick Customer') RETURNING id`);
+    const customer = await pool.query<{ id: string }>(
+      `INSERT INTO customers (name) VALUES ('Tick Customer') RETURNING id`
+    );
     const visit = await pool.query<{ id: string }>(
       `INSERT INTO visits (customer_id, started_at, ended_at)
        VALUES ($1, NOW() - INTERVAL '30 minutes', NULL)
@@ -74,10 +76,13 @@ describe('processUpgradeHoldsTick (locking + expiry)', () => {
     const res = await processUpgradeHoldsTick(app, { expireBatchSize: 10, holdBatchSize: 0 });
     expect(res).toEqual({ expired: 1, held: 0 });
 
-    const wl = await pool.query<{ status: string; room_id: string | null; offer_expires_at: Date | null }>(
-      `SELECT status, room_id, offer_expires_at FROM waitlist WHERE id = $1`,
-      [waitlist.rows[0]!.id]
-    );
+    const wl = await pool.query<{
+      status: string;
+      room_id: string | null;
+      offer_expires_at: Date | null;
+    }>(`SELECT status, room_id, offer_expires_at FROM waitlist WHERE id = $1`, [
+      waitlist.rows[0]!.id,
+    ]);
     expect(wl.rows[0]!.status).toBe('ACTIVE');
     expect(wl.rows[0]!.room_id).toBeNull();
     expect(wl.rows[0]!.offer_expires_at).toBeNull();
@@ -95,4 +100,3 @@ describe('processUpgradeHoldsTick (locking + expiry)', () => {
     expect(ir.rows[0]!.release_reason).toBe('EXPIRED');
   });
 });
-

@@ -6,7 +6,11 @@ export interface CheckoutRequestsBannerProps {
   onOpenCustomerAccount?: (customerId: string, customerLabel?: string) => void;
 }
 
-export function CheckoutRequestsBanner({ requests, onClaim, onOpenCustomerAccount }: CheckoutRequestsBannerProps) {
+export function CheckoutRequestsBanner({
+  requests,
+  onClaim,
+  onOpenCustomerAccount,
+}: CheckoutRequestsBannerProps) {
   return (
     <div
       style={{
@@ -56,9 +60,7 @@ export function CheckoutRequestsBanner({ requests, onClaim, onOpenCustomerAccoun
               }}
             >
               <div>
-                <div
-                  style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}
-                >
+                <div style={{ fontWeight: 600, fontSize: '1.125rem', marginBottom: '0.25rem' }}>
                   {canOpenCustomer ? (
                     <button
                       type="button"
@@ -85,14 +87,11 @@ export function CheckoutRequestsBanner({ requests, onClaim, onOpenCustomerAccoun
                   )}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                  {request.rentalType} •{' '}
-                  {request.roomNumber || request.lockerNumber || 'N/A'}
+                  {request.rentalType} • {request.roomNumber || request.lockerNumber || 'N/A'}
                 </div>
-                <div
-                  style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}
-                >
-                  Scheduled: {new Date(request.scheduledCheckoutAt).toLocaleString()} •
-                  Current: {new Date(request.currentTime).toLocaleString()} •
+                <div style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                  Scheduled: {new Date(request.scheduledCheckoutAt).toLocaleString()} • Current:{' '}
+                  {new Date(request.currentTime).toLocaleString()} •
                   {lateMinutes > 0 ? (
                     <span style={{ color: '#f59e0b' }}>{lateMinutes} min late</span>
                   ) : (
@@ -137,4 +136,3 @@ export function CheckoutRequestsBanner({ requests, onClaim, onOpenCustomerAccoun
     </div>
   );
 }
-

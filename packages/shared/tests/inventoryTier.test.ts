@@ -38,4 +38,3 @@ describe('inventory room tier classification', () => {
     expect(() => getRoomTierFromNumber(101)).toThrow(/Invalid\/non-existent room number/);
   });
 });
-

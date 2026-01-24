@@ -88,5 +88,3 @@ export async function roomsRoutes(fastify: FastifyInstance): Promise<void> {
     }
   );
 }
-
-

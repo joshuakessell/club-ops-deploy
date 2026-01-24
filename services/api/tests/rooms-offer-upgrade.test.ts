@@ -9,12 +9,20 @@ import { truncateAllTables } from './testDb.js';
 // Mock auth middleware to allow test requests and ensure a real staff row exists (for audit_log FK constraints).
 vi.mock('../src/auth/middleware.js', async () => {
   const { query } = await import('../src/db/index.js');
-  async function ensureDefaultStaff(): Promise<{ staffId: string; name: string; role: 'STAFF' | 'ADMIN' }> {
+  async function ensureDefaultStaff(): Promise<{
+    staffId: string;
+    name: string;
+    role: 'STAFF' | 'ADMIN';
+  }> {
     const existing = await query<{ id: string; name: string; role: 'STAFF' | 'ADMIN' }>(
       `SELECT id, name, role FROM staff WHERE active = true ORDER BY created_at ASC LIMIT 1`
     );
     if (existing.rows.length > 0) {
-      return { staffId: existing.rows[0]!.id, name: existing.rows[0]!.name, role: existing.rows[0]!.role };
+      return {
+        staffId: existing.rows[0]!.id,
+        name: existing.rows[0]!.name,
+        role: existing.rows[0]!.role,
+      };
     }
     const created = await query<{ id: string; name: string; role: 'STAFF' | 'ADMIN' }>(
       `INSERT INTO staff (name, role, pin_hash, active)
@@ -189,7 +197,9 @@ describe('Offer Upgrade API flow', () => {
     expect(offerBody.roomNumber).toBe('218');
 
     // Verify broadcast
-    expect(events.some((e) => e.type === 'WAITLIST_UPDATED' && e.payload?.status === 'OFFERED')).toBe(true);
+    expect(
+      events.some((e) => e.type === 'WAITLIST_UPDATED' && e.payload?.status === 'OFFERED')
+    ).toBe(true);
 
     // Offering same room to waitlist 2 should fail
     const offer2 = await app.inject({
@@ -210,5 +220,3 @@ describe('Offer Upgrade API flow', () => {
     expect(offer3Body.roomNumber).toBe('216');
   });
 });
-
-

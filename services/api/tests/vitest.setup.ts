@@ -6,4 +6,3 @@ import { closeDatabase } from '../src/db/index.js';
 afterAll(async () => {
   await closeDatabase();
 });
-

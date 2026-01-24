@@ -63,7 +63,9 @@ export function CompleteScreen({
                       <div className="assignment-value assignment-value--time">
                         {checkoutTimeText ?? new Date(checkoutAt).toLocaleString(locale)}
                       </div>
-                      {checkoutDateText && <div className="assignment-subvalue">{checkoutDateText}</div>}
+                      {checkoutDateText && (
+                        <div className="assignment-subvalue">{checkoutDateText}</div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -77,4 +79,3 @@ export function CompleteScreen({
     </I18nProvider>
   );
 }
-

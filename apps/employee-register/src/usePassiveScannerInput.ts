@@ -182,9 +182,9 @@ export function usePassiveScannerInput({
 
       // If the user is typing in an editable element, do not intercept unless we already started
       // capturing a scan sequence OR the inter-key timing looks like scanner-speed.
-      const looksLikeScannerSpeed =
-        delta !== null && delta >= 0 && delta <= scannerInterKeyMaxMs;
-      if (!capturingRef.current && editable && captureWhenEditable && !looksLikeScannerSpeed) return;
+      const looksLikeScannerSpeed = delta !== null && delta >= 0 && delta <= scannerInterKeyMaxMs;
+      if (!capturingRef.current && editable && captureWhenEditable && !looksLikeScannerSpeed)
+        return;
 
       // If we're not currently capturing, ignore modifier shortcuts and non-printable keys.
       if (!capturingRef.current && (e.metaKey || e.ctrlKey || e.altKey)) {

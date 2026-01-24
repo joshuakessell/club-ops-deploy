@@ -101,12 +101,23 @@ const initialState: RegisterLaneSessionState = {
 type Action =
   | {
       type: 'start_or_replace';
-      payload: { sessionId?: string | null; customerId?: string | null; customerName?: string; membershipNumber?: string };
+      payload: {
+        sessionId?: string | null;
+        customerId?: string | null;
+        customerName?: string;
+        membershipNumber?: string;
+      };
     }
   | { type: 'patch'; payload: Partial<RegisterLaneSessionState> }
   | { type: 'apply_session_updated'; payload: SessionUpdatedPayload }
-  | { type: 'apply_selection_proposed'; payload: { rentalType: string; proposedBy: 'CUSTOMER' | 'EMPLOYEE' } }
-  | { type: 'apply_selection_locked'; payload: { rentalType: string; confirmedBy: 'CUSTOMER' | 'EMPLOYEE' } }
+  | {
+      type: 'apply_selection_proposed';
+      payload: { rentalType: string; proposedBy: 'CUSTOMER' | 'EMPLOYEE' };
+    }
+  | {
+      type: 'apply_selection_locked';
+      payload: { rentalType: string; confirmedBy: 'CUSTOMER' | 'EMPLOYEE' };
+    }
   | { type: 'apply_selection_forced'; payload: { rentalType: string } }
   | { type: 'selection_acknowledged' }
   | { type: 'reset_cleared' }
@@ -116,10 +127,14 @@ function reducer(state: RegisterLaneSessionState, action: Action): RegisterLaneS
   switch (action.type) {
     case 'start_or_replace': {
       const next = { ...state };
-      if (action.payload.sessionId !== undefined) next.currentSessionId = action.payload.sessionId || null;
-      if (action.payload.customerId !== undefined) next.customerId = action.payload.customerId || null;
-      if (action.payload.customerName !== undefined) next.customerName = action.payload.customerName || '';
-      if (action.payload.membershipNumber !== undefined) next.membershipNumber = action.payload.membershipNumber || '';
+      if (action.payload.sessionId !== undefined)
+        next.currentSessionId = action.payload.sessionId || null;
+      if (action.payload.customerId !== undefined)
+        next.customerId = action.payload.customerId || null;
+      if (action.payload.customerName !== undefined)
+        next.customerName = action.payload.customerName || '';
+      if (action.payload.membershipNumber !== undefined)
+        next.membershipNumber = action.payload.membershipNumber || '';
       return next;
     }
     case 'patch':
@@ -161,12 +176,14 @@ function reducer(state: RegisterLaneSessionState, action: Action): RegisterLaneS
       next.proposedRentalType = nextProposedRentalType;
       next.proposedBy = (p.proposedBy ?? null) as RegisterLaneSessionState['proposedBy'];
       next.selectionConfirmed = nextSelectionConfirmed;
-      next.selectionConfirmedBy = (p.selectionConfirmedBy ?? null) as RegisterLaneSessionState['selectionConfirmedBy'];
+      next.selectionConfirmedBy = (p.selectionConfirmedBy ??
+        null) as RegisterLaneSessionState['selectionConfirmedBy'];
 
       next.paymentIntentId = p.paymentIntentId ?? null;
       next.paymentStatus = p.paymentStatus ?? null;
 
-      next.assignedResourceType = (p.assignedResourceType ?? null) as RegisterLaneSessionState['assignedResourceType'];
+      next.assignedResourceType = (p.assignedResourceType ??
+        null) as RegisterLaneSessionState['assignedResourceType'];
       next.assignedResourceNumber = p.assignedResourceNumber ?? null;
       next.checkoutAt = p.checkoutAt ?? null;
 
@@ -219,7 +236,11 @@ function reducer(state: RegisterLaneSessionState, action: Action): RegisterLaneS
       return next;
     }
     case 'apply_selection_proposed':
-      return { ...state, proposedRentalType: action.payload.rentalType, proposedBy: action.payload.proposedBy };
+      return {
+        ...state,
+        proposedRentalType: action.payload.rentalType,
+        proposedBy: action.payload.proposedBy,
+      };
     case 'apply_selection_locked':
       return {
         ...state,

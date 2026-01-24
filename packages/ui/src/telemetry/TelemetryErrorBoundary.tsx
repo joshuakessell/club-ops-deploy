@@ -23,4 +23,3 @@ export class TelemetryErrorBoundary extends React.Component<{ children: ReactNod
     return this.props.children;
   }
 }
-

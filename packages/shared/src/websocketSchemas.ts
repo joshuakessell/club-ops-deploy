@@ -36,60 +36,73 @@ const WebSocketEventBaseSchema = z.object({
 // Payload schemas (runtime validation)
 // ---------------------------------------------------------------------------
 
-export const SessionUpdatedPayloadSchema: z.ZodType<SessionUpdatedPayload, z.ZodTypeDef, unknown> = z
-  .object({
-    sessionId: z.string(),
-    customerName: z.string(),
-    // Some producers may send null for "missing" optional fields; normalize null -> undefined.
-    membershipNumber: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    customerMembershipValidUntil: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    membershipChoice: z.enum(['ONE_TIME', 'SIX_MONTH']).nullable().optional(),
-    membershipPurchaseIntent: z.preprocess(
-      (v) => (v === null ? undefined : v),
-      z.enum(['PURCHASE', 'RENEW']).optional()
-    ),
-    kioskAcknowledgedAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    // Server normally includes this, but keep tolerant so older servers/tests don't drop WS events.
-    allowedRentals: z.array(z.string()).default([]),
-    mode: z.enum(['CHECKIN', 'RENEWAL']).optional(),
-    blockEndsAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    visitId: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    waitlistDesiredType: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    backupRentalType: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    status: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    proposedRentalType: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    proposedBy: z.enum(['CUSTOMER', 'EMPLOYEE']).optional(),
-    selectionConfirmed: z.boolean().optional(),
-    selectionConfirmedBy: z.enum(['CUSTOMER', 'EMPLOYEE']).optional(),
-    customerPrimaryLanguage: z.preprocess((v) => (v === null ? undefined : v), z.enum(['EN', 'ES']).optional()),
-    customerDobMonthDay: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    customerLastVisitAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    customerNotes: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    customerHasEncryptedLookupMarker: z.boolean().optional(),
-    pastDueBalance: z.number().optional(),
-    pastDueBlocked: z.boolean().optional(),
-    pastDueBypassed: z.boolean().optional(),
-    paymentIntentId: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    paymentStatus: z.enum(['DUE', 'PAID']).optional(),
-    paymentMethod: z.enum(['CASH', 'CREDIT']).optional(),
-    paymentTotal: z.number().optional(),
-    paymentLineItems: z
-      .array(
-        z.object({
-          description: z.string(),
-          amount: z.number(),
-        })
-      )
-      .optional(),
-    paymentFailureReason: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    agreementSigned: z.boolean().optional(),
-    agreementBypassPending: z.boolean().optional(),
-    agreementSignedMethod: z.enum(['DIGITAL', 'MANUAL']).optional(),
-    assignedResourceType: z.enum(['room', 'locker']).optional(),
-    assignedResourceNumber: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-    checkoutAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
-  })
-  .passthrough();
+export const SessionUpdatedPayloadSchema: z.ZodType<SessionUpdatedPayload, z.ZodTypeDef, unknown> =
+  z
+    .object({
+      sessionId: z.string(),
+      customerName: z.string(),
+      // Some producers may send null for "missing" optional fields; normalize null -> undefined.
+      membershipNumber: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      customerMembershipValidUntil: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().optional()
+      ),
+      membershipChoice: z.enum(['ONE_TIME', 'SIX_MONTH']).nullable().optional(),
+      membershipPurchaseIntent: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.enum(['PURCHASE', 'RENEW']).optional()
+      ),
+      kioskAcknowledgedAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      // Server normally includes this, but keep tolerant so older servers/tests don't drop WS events.
+      allowedRentals: z.array(z.string()).default([]),
+      mode: z.enum(['CHECKIN', 'RENEWAL']).optional(),
+      blockEndsAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      visitId: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      waitlistDesiredType: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      backupRentalType: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      status: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      proposedRentalType: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      proposedBy: z.enum(['CUSTOMER', 'EMPLOYEE']).optional(),
+      selectionConfirmed: z.boolean().optional(),
+      selectionConfirmedBy: z.enum(['CUSTOMER', 'EMPLOYEE']).optional(),
+      customerPrimaryLanguage: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.enum(['EN', 'ES']).optional()
+      ),
+      customerDobMonthDay: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      customerLastVisitAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      customerNotes: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      customerHasEncryptedLookupMarker: z.boolean().optional(),
+      pastDueBalance: z.number().optional(),
+      pastDueBlocked: z.boolean().optional(),
+      pastDueBypassed: z.boolean().optional(),
+      paymentIntentId: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+      paymentStatus: z.enum(['DUE', 'PAID']).optional(),
+      paymentMethod: z.enum(['CASH', 'CREDIT']).optional(),
+      paymentTotal: z.number().optional(),
+      paymentLineItems: z
+        .array(
+          z.object({
+            description: z.string(),
+            amount: z.number(),
+          })
+        )
+        .optional(),
+      paymentFailureReason: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().optional()
+      ),
+      agreementSigned: z.boolean().optional(),
+      agreementBypassPending: z.boolean().optional(),
+      agreementSignedMethod: z.enum(['DIGITAL', 'MANUAL']).optional(),
+      assignedResourceType: z.enum(['room', 'locker']).optional(),
+      assignedResourceNumber: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.string().optional()
+      ),
+      checkoutAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
+    })
+    .passthrough();
 
 export const CheckinOptionHighlightedPayloadSchema: z.ZodType<CheckinOptionHighlightedPayload> = z
   .object({
@@ -132,14 +145,15 @@ export const SelectionAcknowledgedPayloadSchema: z.ZodType<SelectionAcknowledged
   })
   .passthrough();
 
-export const CustomerConfirmationRequiredPayloadSchema: z.ZodType<CustomerConfirmationRequiredPayload> = z
-  .object({
-    sessionId: z.string(),
-    requestedType: z.string(),
-    selectedType: z.string(),
-    selectedNumber: z.string(),
-  })
-  .passthrough();
+export const CustomerConfirmationRequiredPayloadSchema: z.ZodType<CustomerConfirmationRequiredPayload> =
+  z
+    .object({
+      sessionId: z.string(),
+      requestedType: z.string(),
+      selectedType: z.string(),
+      selectedNumber: z.string(),
+    })
+    .passthrough();
 
 export const CustomerConfirmedPayloadSchema: z.ZodType<CustomerConfirmedPayload> = z
   .object({
@@ -325,40 +339,90 @@ export const WaitlistUpdatedPayloadSchema = z
 // ---------------------------------------------------------------------------
 
 export type ParsedWebSocketEvent =
-  | ({ type: 'SESSION_UPDATED'; payload: SessionUpdatedPayload } & Pick<WebSocketEvent, 'timestamp'>)
+  | ({ type: 'SESSION_UPDATED'; payload: SessionUpdatedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
   | ({ type: 'CHECKIN_OPTION_HIGHLIGHTED'; payload: CheckinOptionHighlightedPayload } & Pick<
       WebSocketEvent,
       'timestamp'
     >)
-  | ({ type: 'SELECTION_PROPOSED'; payload: SelectionProposedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'SELECTION_LOCKED'; payload: SelectionLockedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'SELECTION_FORCED'; payload: SelectionForcedPayload } & Pick<WebSocketEvent, 'timestamp'>)
+  | ({ type: 'SELECTION_PROPOSED'; payload: SelectionProposedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'SELECTION_LOCKED'; payload: SelectionLockedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'SELECTION_FORCED'; payload: SelectionForcedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
   | ({ type: 'SELECTION_ACKNOWLEDGED'; payload: SelectionAcknowledgedPayload } & Pick<
       WebSocketEvent,
       'timestamp'
     >)
-  | ({ type: 'CUSTOMER_CONFIRMATION_REQUIRED'; payload: CustomerConfirmationRequiredPayload } & Pick<
+  | ({
+      type: 'CUSTOMER_CONFIRMATION_REQUIRED';
+      payload: CustomerConfirmationRequiredPayload;
+    } & Pick<WebSocketEvent, 'timestamp'>)
+  | ({ type: 'CUSTOMER_CONFIRMED'; payload: CustomerConfirmedPayload } & Pick<
       WebSocketEvent,
       'timestamp'
     >)
-  | ({ type: 'CUSTOMER_CONFIRMED'; payload: CustomerConfirmedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'CUSTOMER_DECLINED'; payload: CustomerDeclinedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'ASSIGNMENT_CREATED'; payload: AssignmentCreatedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'ASSIGNMENT_FAILED'; payload: AssignmentFailedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'INVENTORY_UPDATED'; payload: InventoryUpdatedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'WAITLIST_CREATED'; payload: WaitlistCreatedPayload } & Pick<WebSocketEvent, 'timestamp'>)
+  | ({ type: 'CUSTOMER_DECLINED'; payload: CustomerDeclinedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'ASSIGNMENT_CREATED'; payload: AssignmentCreatedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'ASSIGNMENT_FAILED'; payload: AssignmentFailedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'INVENTORY_UPDATED'; payload: InventoryUpdatedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'WAITLIST_CREATED'; payload: WaitlistCreatedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
   | ({ type: 'WAITLIST_UPDATED'; payload: z.infer<typeof WaitlistUpdatedPayloadSchema> } & Pick<
       WebSocketEvent,
       'timestamp'
     >)
-  | ({ type: 'UPGRADE_HOLD_AVAILABLE'; payload: UpgradeHoldAvailablePayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'UPGRADE_OFFER_EXPIRED'; payload: UpgradeOfferExpiredPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'ROOM_STATUS_CHANGED'; payload: RoomStatusChangedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'CHECKOUT_REQUESTED'; payload: CheckoutRequestedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'CHECKOUT_CLAIMED'; payload: CheckoutClaimedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'CHECKOUT_UPDATED'; payload: CheckoutUpdatedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  | ({ type: 'CHECKOUT_COMPLETED'; payload: CheckoutCompletedPayload } & Pick<WebSocketEvent, 'timestamp'>)
-  ;
+  | ({ type: 'UPGRADE_HOLD_AVAILABLE'; payload: UpgradeHoldAvailablePayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'UPGRADE_OFFER_EXPIRED'; payload: UpgradeOfferExpiredPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'ROOM_STATUS_CHANGED'; payload: RoomStatusChangedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'CHECKOUT_REQUESTED'; payload: CheckoutRequestedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'CHECKOUT_CLAIMED'; payload: CheckoutClaimedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'CHECKOUT_UPDATED'; payload: CheckoutUpdatedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >)
+  | ({ type: 'CHECKOUT_COMPLETED'; payload: CheckoutCompletedPayload } & Pick<
+      WebSocketEvent,
+      'timestamp'
+    >);
 
 export function safeParseWebSocketEvent(input: unknown): ParsedWebSocketEvent | null {
   const base = WebSocketEventBaseSchema.safeParse(input);

@@ -8,9 +8,7 @@ export const EXPECTED_LOCKER_COUNT = 108 as const;
 export const EXPECTED_ROOM_COUNT = 55 as const;
 
 // Nominal room range is 200..262 inclusive, but some rooms do NOT exist at all.
-export const NONEXISTENT_ROOM_NUMBERS = [
-  247, 249, 251, 253, 255, 257, 259, 261,
-] as const;
+export const NONEXISTENT_ROOM_NUMBERS = [247, 249, 251, 253, 255, 257, 259, 261] as const;
 
 export const DOUBLE_ROOM_NUMBERS = [216, 218, 225, 252, 262] as const;
 export const SPECIAL_ROOM_NUMBERS = [201, 232, 256] as const;
@@ -47,9 +45,10 @@ export function getRoomTierFromNumber(n: number): RoomTier {
   return 'STANDARD';
 }
 
-export const ROOM_NUMBERS: number[] = Array.from({ length: 262 - 200 + 1 }, (_, i) => 200 + i).filter(
-  isExistingRoomNumber
-);
+export const ROOM_NUMBERS: number[] = Array.from(
+  { length: 262 - 200 + 1 },
+  (_, i) => 200 + i
+).filter(isExistingRoomNumber);
 
 // Convenience set (fast membership checks without re-allocating in callers)
 export const ROOM_NUMBER_SET: ReadonlySet<number> = new Set(ROOM_NUMBERS);
@@ -63,18 +62,22 @@ export const ROOMS: Array<{ number: number; tier: RoomTier }> = ROOM_NUMBERS.map
 // Contract sanity checks (throws at module load time if a constant is wrong)
 // ---------------------------------------------------------------------------
 if (LOCKER_NUMBERS.length !== EXPECTED_LOCKER_COUNT) {
-  throw new Error(`LOCKER_NUMBERS contract mismatch: expected ${EXPECTED_LOCKER_COUNT}, got ${LOCKER_NUMBERS.length}`);
+  throw new Error(
+    `LOCKER_NUMBERS contract mismatch: expected ${EXPECTED_LOCKER_COUNT}, got ${LOCKER_NUMBERS.length}`
+  );
 }
 if (ROOM_NUMBERS.length !== EXPECTED_ROOM_COUNT) {
-  throw new Error(`ROOM_NUMBERS contract mismatch: expected ${EXPECTED_ROOM_COUNT}, got ${ROOM_NUMBERS.length}`);
+  throw new Error(
+    `ROOM_NUMBERS contract mismatch: expected ${EXPECTED_ROOM_COUNT}, got ${ROOM_NUMBERS.length}`
+  );
 }
 for (const n of DOUBLE_ROOM_NUMBERS) {
-  if (!ROOM_NUMBER_SET.has(n)) throw new Error(`DOUBLE_ROOM_NUMBERS contains non-existent room: ${n}`);
+  if (!ROOM_NUMBER_SET.has(n))
+    throw new Error(`DOUBLE_ROOM_NUMBERS contains non-existent room: ${n}`);
   if (SPECIAL_ROOM_SET.has(n)) throw new Error(`Room ${n} cannot be both DOUBLE and SPECIAL`);
 }
 for (const n of SPECIAL_ROOM_NUMBERS) {
-  if (!ROOM_NUMBER_SET.has(n)) throw new Error(`SPECIAL_ROOM_NUMBERS contains non-existent room: ${n}`);
+  if (!ROOM_NUMBER_SET.has(n))
+    throw new Error(`SPECIAL_ROOM_NUMBERS contains non-existent room: ${n}`);
   if (DOUBLE_ROOM_SET.has(n)) throw new Error(`Room ${n} cannot be both SPECIAL and DOUBLE`);
 }
-
-

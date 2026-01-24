@@ -43,8 +43,7 @@ export function OfferUpgradeModal(props: {
     heldRoom = null,
     disabled,
     onOffered,
-  } =
-    props;
+  } = props;
 
   const [rooms, setRooms] = useState<OfferableRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -67,9 +66,12 @@ export function OfferUpgradeModal(props: {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/v1/rooms/offerable?tier=${encodeURIComponent(desiredTier)}`, {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      const res = await fetch(
+        `${API_BASE}/v1/rooms/offerable?tier=${encodeURIComponent(desiredTier)}`,
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }
+      );
       if (!res.ok) {
         const payload: unknown = await res.json().catch(() => null);
         throw new Error(getErrorMessage(payload) || 'Failed to load offerable rooms');
@@ -78,7 +80,10 @@ export function OfferUpgradeModal(props: {
       const list = isRecord(data) && Array.isArray(data.rooms) ? data.rooms : [];
       const rooms = list
         .filter(isRecord)
-        .filter((r) => typeof r.id === 'string' && typeof r.number === 'string' && typeof r.type === 'string')
+        .filter(
+          (r) =>
+            typeof r.id === 'string' && typeof r.number === 'string' && typeof r.type === 'string'
+        )
         .map((r) => ({ id: r.id as string, number: r.number as string, type: r.type as string }));
       setRooms(rooms);
       setSelectedRoomId(rooms[0]?.id ?? null);
@@ -148,13 +153,17 @@ export function OfferUpgradeModal(props: {
         </div>
 
         {disabled && (
-          <div className="offer-upgrade-modal-note">Active session present — offering is disabled</div>
+          <div className="offer-upgrade-modal-note">
+            Active session present — offering is disabled
+          </div>
         )}
 
         {error && <div className="offer-upgrade-modal-error">{error}</div>}
 
         <div className="offer-upgrade-modal-body">
-          <div className="offer-upgrade-modal-subtitle">Select a room to reserve for this offer:</div>
+          <div className="offer-upgrade-modal-subtitle">
+            Select a room to reserve for this offer:
+          </div>
 
           {isLoading ? (
             <div className="offer-upgrade-modal-loading">Loading…</div>
@@ -196,5 +205,3 @@ export function OfferUpgradeModal(props: {
     </div>
   );
 }
-
-

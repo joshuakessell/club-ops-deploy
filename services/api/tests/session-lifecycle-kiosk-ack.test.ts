@@ -140,5 +140,3 @@ describe('Lane session lifecycle: kiosk-ack must not end session', () => {
     })
   );
 });
-
-

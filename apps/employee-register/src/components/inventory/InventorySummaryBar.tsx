@@ -34,11 +34,7 @@ export function InventorySummaryBar({ counts, onOpenInventorySection }: Inventor
 
   const disabled = !counts;
 
-  const Button = (props: {
-    label: string;
-    ratio: string;
-    section: InventorySummarySection;
-  }) => (
+  const Button = (props: { label: string; ratio: string; section: InventorySummarySection }) => (
     <button
       type="button"
       className="cs-liquid-button cs-liquid-button--secondary cs-liquid-button--pill"
@@ -81,5 +77,3 @@ export function InventorySummaryBar({ counts, onOpenInventorySection }: Inventor
     </div>
   );
 }
-
-

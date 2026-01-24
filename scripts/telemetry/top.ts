@@ -4,14 +4,19 @@ import { ensureDir, tsSlug, getArg, defaultArtifactsDir } from './_util';
 
 function normalizeMessage(msg: string) {
   return msg
-    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '<uuid>')
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+      '<uuid>'
+    )
     .replace(/\b\d{3,}\b/g, '<n>')
     .trim();
 }
 
 function stackHint(stack?: string) {
   if (!stack) return '';
-  const line = stack.split('\n').find((l) => l.includes('.ts') || l.includes('.tsx') || l.includes('.js'));
+  const line = stack
+    .split('\n')
+    .find((l) => l.includes('.ts') || l.includes('.tsx') || l.includes('.js'));
   return line ? line.trim() : '';
 }
 
@@ -133,4 +138,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-

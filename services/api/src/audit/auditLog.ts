@@ -29,7 +29,10 @@ export type AuditLogQueryFn = (text: string, params?: unknown[]) => Promise<unkn
  * Canonical audit log writer for `public.audit_log`.
  * Centralizing this prevents drift (table/column name mismatches, inconsistent column sets, etc.).
  */
-export async function insertAuditLogQuery(queryFn: AuditLogQueryFn, input: InsertAuditLogInput): Promise<void> {
+export async function insertAuditLogQuery(
+  queryFn: AuditLogQueryFn,
+  input: InsertAuditLogInput
+): Promise<void> {
   await queryFn(
     `
     INSERT INTO audit_log
@@ -54,7 +57,9 @@ export async function insertAuditLogQuery(queryFn: AuditLogQueryFn, input: Inser
   );
 }
 
-export async function insertAuditLog(client: pg.PoolClient, input: InsertAuditLogInput): Promise<void> {
+export async function insertAuditLog(
+  client: pg.PoolClient,
+  input: InsertAuditLogInput
+): Promise<void> {
   return insertAuditLogQuery(client.query.bind(client), input);
 }
-

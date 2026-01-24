@@ -170,9 +170,7 @@ type VisitDateRow = { started_at: Date };
 
 function looksLikeUuid(value: string): boolean {
   // Good enough for deciding whether to write staff_id; DB will still enforce UUID shape.
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    value
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 /**
@@ -382,9 +380,10 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
           row = await loadByOccupancyId(body.occupancyId);
         } else if (body.number) {
           // Try locker first, then room.
-          const lockerRes = await query<{ id: string }>(`SELECT id FROM lockers WHERE number = $1`, [
-            body.number,
-          ]);
+          const lockerRes = await query<{ id: string }>(
+            `SELECT id FROM lockers WHERE number = $1`,
+            [body.number]
+          );
           if (lockerRes.rows[0]?.id) {
             row = await loadLatestByLockerId(lockerRes.rows[0].id);
           } else {
@@ -404,7 +403,10 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
           row.scheduled_checkout_at instanceof Date
             ? row.scheduled_checkout_at
             : new Date(row.scheduled_checkout_at);
-        const lateMinutes = Math.max(0, Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60)));
+        const lateMinutes = Math.max(
+          0,
+          Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60))
+        );
         const { feeAmount, banApplied } = calculateLateFee(lateMinutes);
 
         const resourceType: ManualCheckoutResourceType = row.locker_id ? 'LOCKER' : 'ROOM';
@@ -557,18 +559,19 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           // End the visit
-          await client.query(`UPDATE visits SET ended_at = NOW(), updated_at = NOW() WHERE id = $1`, [
-            row.visit_id,
-          ]);
+          await client.query(
+            `UPDATE visits SET ended_at = NOW(), updated_at = NOW() WHERE id = $1`,
+            [row.visit_id]
+          );
 
           // Apply ban if needed
           if (banApplied) {
             const banUntil = new Date();
             banUntil.setDate(banUntil.getDate() + 30);
-            await client.query(`UPDATE customers SET banned_until = $1, updated_at = NOW() WHERE id = $2`, [
-              banUntil,
-              row.customer_id,
-            ]);
+            await client.query(
+              `UPDATE customers SET banned_until = $1, updated_at = NOW() WHERE id = $2`,
+              [banUntil, row.customer_id]
+            );
           }
 
           // Update past due balance + itemized charge + system note if fee > 0
@@ -689,7 +692,11 @@ export async function checkoutRoutes(fastify: FastifyInstance): Promise<void> {
         const lateMinutes =
           alreadyCheckedOut && typeof (result as any).lateMinutes !== 'number'
             ? Math.max(0, Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60)))
-            : (result as any).lateMinutes ?? Math.max(0, Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60)));
+            : ((result as any).lateMinutes ??
+              Math.max(
+                0,
+                Math.floor((now.getTime() - scheduledCheckoutAt.getTime()) / (1000 * 60))
+              ));
         const fee = (result as any).feeAmount ?? calculateLateFee(lateMinutes).feeAmount;
         const banApplied = (result as any).banApplied ?? calculateLateFee(lateMinutes).banApplied;
 

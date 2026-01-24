@@ -27,7 +27,14 @@ interface HealthStatus {
   uptime: number;
 }
 
-type AppView = 'idle' | 'language' | 'selection' | 'payment' | 'agreement' | 'agreement-bypass' | 'complete';
+type AppView =
+  | 'idle'
+  | 'language'
+  | 'selection'
+  | 'payment'
+  | 'agreement'
+  | 'agreement-bypass'
+  | 'complete';
 
 export function AppRoot() {
   const [, setHealth] = useState<HealthStatus | null>(null);
@@ -149,7 +156,12 @@ export function AppRoot() {
       setMembershipChoice('SIX_MONTH');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.sessionId, session.membershipPurchaseIntent, session.membershipValidUntil, session.membershipNumber]);
+  }, [
+    session.sessionId,
+    session.membershipPurchaseIntent,
+    session.membershipValidUntil,
+    session.membershipNumber,
+  ]);
 
   // Get lane from URL pathname pattern, query param, or sessionStorage fallback
   // Priority: /register-1 => lane-1, /register-2 => lane-2, etc.
@@ -325,7 +337,10 @@ export function AppRoot() {
 
       // Handle view transitions based on session state
       // First check: Reset to idle if session is completed and cleared
-      if (payload.status === 'COMPLETED' && (!payload.customerName || payload.customerName === '')) {
+      if (
+        payload.status === 'COMPLETED' &&
+        (!payload.customerName || payload.customerName === '')
+      ) {
         resetToIdle();
         return;
       }
@@ -355,7 +370,11 @@ export function AppRoot() {
       }
 
       // Agreement bypass screen (physical signature path)
-      if (payload.paymentStatus === 'PAID' && payload.agreementBypassPending && !payload.agreementSigned) {
+      if (
+        payload.paymentStatus === 'PAID' &&
+        payload.agreementBypassPending &&
+        !payload.agreementSigned
+      ) {
         setView('agreement-bypass');
         return;
       }
@@ -400,76 +419,81 @@ export function AppRoot() {
     [resetToIdle]
   );
 
-  const onWsMessage = useCallback((event: MessageEvent) => {
-    try {
-      const parsed: unknown = safeJsonParse(String(event.data));
-      const message = safeParseWebSocketEvent(parsed);
-      if (!message) return;
-      console.log('WebSocket message:', message);
+  const onWsMessage = useCallback(
+    (event: MessageEvent) => {
+      try {
+        const parsed: unknown = safeJsonParse(String(event.data));
+        const message = safeParseWebSocketEvent(parsed);
+        if (!message) return;
+        console.log('WebSocket message:', message);
 
-      if (message.type === 'SESSION_UPDATED') {
-        const payload = message.payload;
-        if (payload && typeof payload === 'object') {
-          applySessionUpdatedPayload(payload as Record<string, any>);
-        }
-      } else if (message.type === 'SELECTION_PROPOSED') {
-        const payload = message.payload;
-        if (payload.sessionId === sessionIdRef.current) {
-          setProposedRentalType(payload.rentalType);
-          setProposedBy(payload.proposedBy);
-        }
-      } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
-        const payload = message.payload;
-        if (payload.sessionId === sessionIdRef.current) {
-          setSelectionConfirmed(true);
-          setSelectionConfirmedBy('EMPLOYEE');
-          setSelectedRental(payload.rentalType);
+        if (message.type === 'SESSION_UPDATED') {
+          const payload = message.payload;
+          if (payload && typeof payload === 'object') {
+            applySessionUpdatedPayload(payload as Record<string, any>);
+          }
+        } else if (message.type === 'SELECTION_PROPOSED') {
+          const payload = message.payload;
+          if (payload.sessionId === sessionIdRef.current) {
+            setProposedRentalType(payload.rentalType);
+            setProposedBy(payload.proposedBy);
+          }
+        } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
+          const payload = message.payload;
+          if (payload.sessionId === sessionIdRef.current) {
+            setSelectionConfirmed(true);
+            setSelectionConfirmedBy('EMPLOYEE');
+            setSelectedRental(payload.rentalType);
+            setSelectionAcknowledged(true);
+            setView('payment');
+          }
+        } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
           setSelectionAcknowledged(true);
-          setView('payment');
-        }
-      } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
-        setSelectionAcknowledged(true);
-      } else if (message.type === 'CHECKIN_OPTION_HIGHLIGHTED') {
-        const payload = message.payload;
-        if (payload.sessionId !== sessionIdRef.current) return;
-        if (payload.step === 'LANGUAGE') {
-          const opt = payload.option === 'EN' || payload.option === 'ES' ? payload.option : null;
-          setHighlightedLanguage(opt);
-        } else if (payload.step === 'MEMBERSHIP') {
-          const opt =
-            payload.option === 'ONE_TIME' || payload.option === 'SIX_MONTH' ? payload.option : null;
-          setHighlightedMembershipChoice(opt);
-        } else if (payload.step === 'WAITLIST_BACKUP') {
-          setHighlightedWaitlistBackup(payload.option);
-        }
-      } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
-        const payload = message.payload;
-        setCustomerConfirmationData(payload);
-        setShowCustomerConfirmation(true);
-      } else if (message.type === 'ASSIGNMENT_CREATED') {
-        const payload = message.payload;
-        // Assignment successful - could show confirmation message
-        console.log('Assignment created:', payload);
-      } else if (message.type === 'INVENTORY_UPDATED') {
-        const payload = message.payload;
-        // Update inventory counts for availability warnings
-        if (payload.inventory) {
-          const rooms: Record<string, number> = {};
-          if (payload.inventory.byType) {
-            Object.entries(payload.inventory.byType).forEach(([type, summary]) => {
-              rooms[type] = summary.clean;
+        } else if (message.type === 'CHECKIN_OPTION_HIGHLIGHTED') {
+          const payload = message.payload;
+          if (payload.sessionId !== sessionIdRef.current) return;
+          if (payload.step === 'LANGUAGE') {
+            const opt = payload.option === 'EN' || payload.option === 'ES' ? payload.option : null;
+            setHighlightedLanguage(opt);
+          } else if (payload.step === 'MEMBERSHIP') {
+            const opt =
+              payload.option === 'ONE_TIME' || payload.option === 'SIX_MONTH'
+                ? payload.option
+                : null;
+            setHighlightedMembershipChoice(opt);
+          } else if (payload.step === 'WAITLIST_BACKUP') {
+            setHighlightedWaitlistBackup(payload.option);
+          }
+        } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
+          const payload = message.payload;
+          setCustomerConfirmationData(payload);
+          setShowCustomerConfirmation(true);
+        } else if (message.type === 'ASSIGNMENT_CREATED') {
+          const payload = message.payload;
+          // Assignment successful - could show confirmation message
+          console.log('Assignment created:', payload);
+        } else if (message.type === 'INVENTORY_UPDATED') {
+          const payload = message.payload;
+          // Update inventory counts for availability warnings
+          if (payload.inventory) {
+            const rooms: Record<string, number> = {};
+            if (payload.inventory.byType) {
+              Object.entries(payload.inventory.byType).forEach(([type, summary]) => {
+                rooms[type] = summary.clean;
+              });
+            }
+            setInventory({
+              rooms,
+              lockers: payload.inventory.lockers?.clean || 0,
             });
           }
-          setInventory({
-            rooms,
-            lockers: payload.inventory.lockers?.clean || 0,
-          });
         }
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error);
       }
-    } catch (error) {
-      console.error('Failed to parse WebSocket message:', error);
-    }
-  }, [applySessionUpdatedPayload]);
+    },
+    [applySessionUpdatedPayload]
+  );
 
   const { connected: wsConnected, lastMessage } = useLaneSession({
     laneId: lane,
@@ -897,7 +921,12 @@ export function AppRoot() {
     if (showUpgradeDisclaimer) return;
     setUpgradeAction('waitlist');
     setShowUpgradeDisclaimer(true);
-  }, [showUpgradeDisclaimer, upgradeDisclaimerAcknowledged, waitlistBackupType, waitlistDesiredType]);
+  }, [
+    showUpgradeDisclaimer,
+    upgradeDisclaimerAcknowledged,
+    waitlistBackupType,
+    waitlistDesiredType,
+  ]);
 
   useEffect(() => {
     if (view !== 'selection') return;
@@ -914,7 +943,9 @@ export function AppRoot() {
           const data: unknown = await response.json();
           if (isRecord(data)) {
             setWaitlistPosition(typeof data.position === 'number' ? data.position : null);
-            setWaitlistETA(typeof data.estimatedReadyAt === 'string' ? data.estimatedReadyAt : null);
+            setWaitlistETA(
+              typeof data.estimatedReadyAt === 'string' ? data.estimatedReadyAt : null
+            );
             setWaitlistUpgradeFee(typeof data.upgradeFee === 'number' ? data.upgradeFee : null);
           }
         }
@@ -1222,11 +1253,7 @@ export function AppRoot() {
       setMembershipModalIntent(null);
     } catch (error) {
       console.error('Failed to set membership purchase intent:', error);
-      alert(
-        error instanceof Error
-          ? error.message
-          : t(lang, 'error.process')
-      );
+      alert(error instanceof Error ? error.message : t(lang, 'error.process'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1376,11 +1403,10 @@ export function AppRoot() {
         />
       );
 
-    case 'selection':
-      {
-        const membershipStatus = getMembershipStatus(session, Date.now());
-        const isMember = membershipStatus === 'ACTIVE' || membershipStatus === 'PENDING';
-        const isExpired = membershipStatus === 'EXPIRED';
+    case 'selection': {
+      const membershipStatus = getMembershipStatus(session, Date.now());
+      const isMember = membershipStatus === 'ACTIVE' || membershipStatus === 'PENDING';
+      const isExpired = membershipStatus === 'EXPIRED';
       return (
         <>
           <SelectionScreen
@@ -1397,10 +1423,8 @@ export function AppRoot() {
             onSelectRental={(rental) => void handleRentalSelection(rental)}
             membershipChoice={isMember ? null : membershipChoice}
             onSelectOneTimeMembership={() => void handleSelectOneTimeMembership()}
-            onSelectSixMonthMembership={() =>
-              openMembershipModal(isExpired ? 'RENEW' : 'PURCHASE')
-            }
-              highlightedMembershipChoice={highlightedMembershipChoice}
+            onSelectSixMonthMembership={() => openMembershipModal(isExpired ? 'RENEW' : 'PURCHASE')}
+            highlightedMembershipChoice={highlightedMembershipChoice}
           />
           <UpgradeDisclaimerModal
             isOpen={showUpgradeDisclaimer}
@@ -1460,7 +1484,8 @@ export function AppRoot() {
             />
           )}
         </>
-      );}
+      );
+    }
 
     default:
       return null;

@@ -41,5 +41,3 @@ describe('RegisterSideDrawers', () => {
     expect(upgrades.getAttribute('aria-expanded')).toBe('false');
   });
 });
-
-

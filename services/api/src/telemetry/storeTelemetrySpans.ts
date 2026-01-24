@@ -1,7 +1,12 @@
 import crypto from 'node:crypto';
 import { query } from '../db';
 import { redactHeaders, sanitizeJsonBody } from './redact';
-import type { TelemetryIngestPayload, TelemetrySpanInput, TelemetrySpanLevel, TelemetrySpanRow } from './spanTypes';
+import type {
+  TelemetryIngestPayload,
+  TelemetrySpanInput,
+  TelemetrySpanLevel,
+  TelemetrySpanRow,
+} from './spanTypes';
 
 const ALLOWED_DEEP_APPS = new Set(['customer-kiosk', 'employee-register']);
 const MAX_SPANS_PER_BATCH = 200;
@@ -130,7 +135,9 @@ function sanitizeSpanInput(
 
   const { url, queryKeys } = normalizeUrl(input.url);
   const meta: Record<string, unknown> = {
-    ...(input.meta && typeof input.meta === 'object' ? (scrubMeta(input.meta) as Record<string, unknown>) : {}),
+    ...(input.meta && typeof input.meta === 'object'
+      ? (scrubMeta(input.meta) as Record<string, unknown>)
+      : {}),
   };
   if (queryKeys.length > 0) meta.queryKeys = queryKeys;
 
@@ -147,12 +154,20 @@ function sanitizeSpanInput(
       responseHeaders = redactHeaders(input.responseHeaders);
     }
     if (input.requestBody !== undefined) {
-      const sanitized = sanitizeJsonBody(coerceJson(input.requestBody), input.route ?? url, 'request');
+      const sanitized = sanitizeJsonBody(
+        coerceJson(input.requestBody),
+        input.route ?? url,
+        'request'
+      );
       requestBody = sanitized.body;
       Object.assign(meta, sanitized.meta);
     }
     if (input.responseBody !== undefined) {
-      const sanitized = sanitizeJsonBody(coerceJson(input.responseBody), input.route ?? url, 'response');
+      const sanitized = sanitizeJsonBody(
+        coerceJson(input.responseBody),
+        input.route ?? url,
+        'response'
+      );
       responseBody = sanitized.body;
       Object.assign(meta, sanitized.meta);
     }
@@ -171,7 +186,10 @@ function sanitizeSpanInput(
     durationMs,
     route: cleanText(input.route, 512),
     method: cleanText(input.method, 16),
-    status: typeof input.status === 'number' && Number.isFinite(input.status) ? Math.trunc(input.status) : null,
+    status:
+      typeof input.status === 'number' && Number.isFinite(input.status)
+        ? Math.trunc(input.status)
+        : null,
     url,
     message: cleanText(input.message, 4000),
     stack: cleanText(input.stack, 12_000),
@@ -249,8 +267,7 @@ export async function storeTelemetrySpans(payload: TelemetryIngestPayload): Prom
   if (cleaned.length === 0) return;
 
   const hasIncidentSpan =
-    cleaned.some((s) => s.incidentId) ||
-    cleaned.some((s) => s.spanType.startsWith('incident.'));
+    cleaned.some((s) => s.incidentId) || cleaned.some((s) => s.spanType.startsWith('incident.'));
   const hasIncidentEnd = cleaned.some((s) => s.spanType === 'incident.end');
   const hasIncidentPayload = payload.incident?.incidentId || payload.incident?.reason;
 

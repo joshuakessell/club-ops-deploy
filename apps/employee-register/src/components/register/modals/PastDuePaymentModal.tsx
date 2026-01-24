@@ -7,7 +7,10 @@ export interface PastDuePaymentModalProps {
     lineItems: Array<{ description: string; amount: number }>;
     messages: string[];
   };
-  onPayInSquare: (outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE', declineReason?: string) => void;
+  onPayInSquare: (
+    outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE',
+    declineReason?: string
+  ) => void;
   onManagerBypass: () => void;
   onClose: () => void;
   isSubmitting: boolean;
@@ -22,7 +25,11 @@ export function PastDuePaymentModal({
   isSubmitting,
 }: PastDuePaymentModalProps) {
   return (
-    <ModalFrame isOpen={isOpen} title={`Past Due Balance: $${quote.total.toFixed(2)}`} onClose={onClose}>
+    <ModalFrame
+      isOpen={isOpen}
+      title={`Past Due Balance: $${quote.total.toFixed(2)}`}
+      onClose={onClose}
+    >
       <p style={{ marginBottom: '1.5rem', color: '#94a3b8' }}>
         Customer has a past due balance. Please process payment or bypass.
       </p>
@@ -139,4 +146,3 @@ export function PastDuePaymentModal({
     </ModalFrame>
   );
 }
-

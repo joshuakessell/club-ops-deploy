@@ -147,5 +147,3 @@ describe('GET /v1/inventory/available (effective availability subtracts waitlist
     expect(body.rooms).toEqual({ SPECIAL: 1, DOUBLE: 3, STANDARD: 2 });
   });
 });
-
-

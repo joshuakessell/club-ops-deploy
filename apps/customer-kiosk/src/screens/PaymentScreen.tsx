@@ -30,14 +30,15 @@ export function PaymentScreen({
             <div className="payment-pending-screen">
               {paymentLineItems && paymentLineItems.length > 0 && (
                 <div className="payment-breakdown cs-liquid-card">
-                  <p className="breakdown-title">
-                    {t(customerPrimaryLanguage, 'payment.charges')}
-                  </p>
+                  <p className="breakdown-title">{t(customerPrimaryLanguage, 'payment.charges')}</p>
                   <div className="breakdown-items">
                     {paymentLineItems.map((li, idx) => (
                       <div key={`${li.description}-${idx}`} className="breakdown-row">
                         <span className="breakdown-desc">
-                          {getPaymentLineItemDisplayDescription(li.description, customerPrimaryLanguage)}
+                          {getPaymentLineItemDisplayDescription(
+                            li.description,
+                            customerPrimaryLanguage
+                          )}
                         </span>
                         <span className="breakdown-amt">${li.amount.toFixed(2)}</span>
                       </div>

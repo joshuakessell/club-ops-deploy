@@ -38,7 +38,9 @@ export function IdleScreen({
               <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
                 {t(lang, 'kiosk.locked.title')}
               </div>
-              <div style={{ fontSize: '1.05rem', opacity: 0.9 }}>{t(lang, 'kiosk.locked.body')}</div>
+              <div style={{ fontSize: '1.05rem', opacity: 0.9 }}>
+                {t(lang, 'kiosk.locked.body')}
+              </div>
             </div>
           )}
         </div>
@@ -46,4 +48,3 @@ export function IdleScreen({
     </I18nProvider>
   );
 }
-

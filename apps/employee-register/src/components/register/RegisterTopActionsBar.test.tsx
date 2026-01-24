@@ -21,5 +21,3 @@ describe('RegisterTopActionsBar', () => {
     expect(onRoomCleaning).toHaveBeenCalledTimes(1);
   });
 });
-
-

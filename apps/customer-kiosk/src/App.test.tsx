@@ -10,8 +10,14 @@ type MockWebSocket = {
   onopen: ((ev: Event) => unknown) | null;
   onclose: ((ev: CloseEvent) => unknown) | null;
   onmessage: ((ev: { data: string }) => unknown) | null;
-  addEventListener: (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => void;
-  removeEventListener: (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => void;
+  addEventListener: (
+    type: 'open' | 'close' | 'message' | 'error',
+    handler: (ev: unknown) => void
+  ) => void;
+  removeEventListener: (
+    type: 'open' | 'close' | 'message' | 'error',
+    handler: (ev: unknown) => void
+  ) => void;
   close: ReturnType<typeof vi.fn>;
   send: ReturnType<typeof vi.fn>;
 };
@@ -40,8 +46,8 @@ const WebSocketMock = vi.fn((url?: string) => {
     onmessage: null,
     addEventListener: vi.fn(
       (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => {
-      listeners[type].push(handler);
-    }
+        listeners[type].push(handler);
+      }
     ),
     removeEventListener: vi.fn(
       (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => {
@@ -69,10 +75,18 @@ const WebSocketMock = vi.fn((url?: string) => {
   createdWs.push(ws);
   return ws;
 }) as unknown as typeof WebSocket;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).OPEN = 1;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CONNECTING = 0;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CLOSING = 2;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CLOSED = 3;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).OPEN = 1;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CONNECTING = 0;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CLOSING = 2;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CLOSED = 3;
 Object.defineProperty(globalThis, 'WebSocket', { value: WebSocketMock, configurable: true });
 Object.defineProperty(window, 'WebSocket', { value: WebSocketMock, configurable: true });
 Object.defineProperty(global, 'WebSocket', { value: WebSocketMock, configurable: true });
@@ -571,7 +585,8 @@ describe('App', () => {
               : '';
       if (u.includes('/health')) {
         return Promise.resolve({
-          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+          json: () =>
+            Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
         } as unknown as Response);
       }
       if (u.includes('/v1/inventory/available')) {
@@ -587,10 +602,16 @@ describe('App', () => {
         } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/propose-selection')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) } as unknown as Response);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/membership-purchase-intent')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) } as unknown as Response);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });

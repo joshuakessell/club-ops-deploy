@@ -34,7 +34,8 @@ describe('RoomCleaningModal', () => {
 
     const cleaningHeading = await screen.findByRole('heading', { name: 'Room Cleaning' });
     const cleaningModalEl = cleaningHeading.closest('.cs-liquid-card');
-    if (!(cleaningModalEl instanceof HTMLElement)) throw new Error('Expected room cleaning modal container');
+    if (!(cleaningModalEl instanceof HTMLElement))
+      throw new Error('Expected room cleaning modal container');
     const m = within(cleaningModalEl);
 
     expect(await m.findByText(/Select rooms to begin or finish cleaning/i)).toBeDefined();
@@ -59,7 +60,12 @@ describe('RoomCleaningModal', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ batchId: 'b1', summary: { total: 2, success: 2, failed: 0 }, rooms: [] }),
+        json: () =>
+          Promise.resolve({
+            batchId: 'b1',
+            summary: { total: 2, success: 2, failed: 0 },
+            rooms: [],
+          }),
       });
 
     const onClose = vi.fn();
@@ -77,7 +83,8 @@ describe('RoomCleaningModal', () => {
 
     const cleaningHeading = await screen.findByRole('heading', { name: 'Room Cleaning' });
     const cleaningModalEl = cleaningHeading.closest('.cs-liquid-card');
-    if (!(cleaningModalEl instanceof HTMLElement)) throw new Error('Expected room cleaning modal container');
+    if (!(cleaningModalEl instanceof HTMLElement))
+      throw new Error('Expected room cleaning modal container');
     const m = within(cleaningModalEl);
 
     const primaryBtn = await m.findByRole('button', { name: 'Continue' });
@@ -109,5 +116,3 @@ describe('RoomCleaningModal', () => {
     expect(onSuccess).toHaveBeenCalledWith('Rooms marked CLEAN');
   });
 });
-
-

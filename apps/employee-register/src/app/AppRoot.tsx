@@ -33,17 +33,17 @@ import {
 } from '../components/register/modals/MultipleMatchesModal';
 import { PaymentDeclineToast } from '../components/register/toasts/PaymentDeclineToast';
 import { SuccessToast } from '../components/register/toasts/SuccessToast';
-import {
-  BottomToastStack,
-  type BottomToast,
-} from '../components/register/toasts/BottomToastStack';
+import { BottomToastStack, type BottomToast } from '../components/register/toasts/BottomToastStack';
 import { ManualCheckoutPanel } from '../components/register/panels/ManualCheckoutPanel';
 import { RoomCleaningPanel } from '../components/register/panels/RoomCleaningPanel';
 import { CustomerProfileCard, type CheckinStage } from '../components/register/CustomerProfileCard';
 import { EmployeeAssistPanel } from '../components/register/EmployeeAssistPanel';
 import { CustomerAccountPanel } from '../components/register/panels/CustomerAccountPanel';
 import { UpgradesDrawerContent } from '../components/upgrades/UpgradesDrawerContent';
-import { InventoryDrawer, type InventoryDrawerSection } from '../components/inventory/InventoryDrawer';
+import {
+  InventoryDrawer,
+  type InventoryDrawerSection,
+} from '../components/inventory/InventoryDrawer';
 import { usePassiveScannerInput } from '../usePassiveScannerInput';
 import { useRegisterLaneSessionState } from './useRegisterLaneSessionState';
 import { useRegisterWebSocketEvents } from './useRegisterWebSocketEvents';
@@ -163,7 +163,9 @@ export function AppRoot() {
   const pushBottomToast = useCallback(
     (toast: Omit<BottomToast, 'id'> & { id?: string }, ttlMs = 12_000) => {
       const id = toast.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      setBottomToasts((prev) => [{ id, message: toast.message, tone: toast.tone }, ...prev].slice(0, 4));
+      setBottomToasts((prev) =>
+        [{ id, message: toast.message, tone: toast.tone }, ...prev].slice(0, 4)
+      );
       if (bottomToastTimersRef.current[id]) window.clearTimeout(bottomToastTimersRef.current[id]);
       bottomToastTimersRef.current[id] = window.setTimeout(() => dismissBottomToast(id), ttlMs);
     },
@@ -171,8 +173,13 @@ export function AppRoot() {
   );
 
   const [inventoryRefreshNonce, setInventoryRefreshNonce] = useState(0);
-  const [checkoutPrefill, setCheckoutPrefill] = useState<null | { occupancyId?: string; number?: string }>(null);
-  const [checkoutEntryMode, setCheckoutEntryMode] = useState<'default' | 'direct-confirm'>('default');
+  const [checkoutPrefill, setCheckoutPrefill] = useState<null | {
+    occupancyId?: string;
+    number?: string;
+  }>(null);
+  const [checkoutEntryMode, setCheckoutEntryMode] = useState<'default' | 'direct-confirm'>(
+    'default'
+  );
   const checkoutReturnToTabRef = useRef<HomeTab | null>(null);
   const [manualEntry, setManualEntry] = useState(false);
   const [manualFirstName, setManualFirstName] = useState('');
@@ -188,7 +195,8 @@ export function AppRoot() {
   }>(null);
   const [manualExistingPromptError, setManualExistingPromptError] = useState<string | null>(null);
   const [manualExistingPromptSubmitting, setManualExistingPromptSubmitting] = useState(false);
-  const [inventoryForcedSection, setInventoryForcedSection] = useState<InventoryDrawerSection>(null);
+  const [inventoryForcedSection, setInventoryForcedSection] =
+    useState<InventoryDrawerSection>(null);
 
   useEffect(() => {
     if (!successToastMessage) return;
@@ -355,7 +363,8 @@ export function AppRoot() {
     [laneSessionActions]
   );
   const setCustomerPrimaryLanguage = useCallback(
-    (value: 'EN' | 'ES' | undefined) => laneSessionActions.patch({ customerPrimaryLanguage: value }),
+    (value: 'EN' | 'ES' | undefined) =>
+      laneSessionActions.patch({ customerPrimaryLanguage: value }),
     [laneSessionActions]
   );
   const setCustomerDobMonthDay = useCallback(
@@ -416,7 +425,10 @@ export function AppRoot() {
 
     // 2 - Membership options (only when needed)
     const membershipStatus = getCustomerMembershipStatus(
-      { membershipNumber: membershipNumber || null, membershipValidUntil: customerMembershipValidUntil || null },
+      {
+        membershipNumber: membershipNumber || null,
+        membershipValidUntil: customerMembershipValidUntil || null,
+      },
       new Date()
     );
     const isMember = membershipPurchaseIntent ? true : membershipStatus === 'ACTIVE';
@@ -549,12 +561,14 @@ export function AppRoot() {
 
   const [showMembershipIdPrompt, setShowMembershipIdPrompt] = useState(false);
   const [membershipIdInput, setMembershipIdInput] = useState('');
-  const [membershipIdMode, setMembershipIdMode] = useState<'KEEP_EXISTING' | 'ENTER_NEW'>('ENTER_NEW');
+  const [membershipIdMode, setMembershipIdMode] = useState<'KEEP_EXISTING' | 'ENTER_NEW'>(
+    'ENTER_NEW'
+  );
   const [membershipIdSubmitting, setMembershipIdSubmitting] = useState(false);
   const [membershipIdError, setMembershipIdError] = useState<string | null>(null);
-  const [membershipIdPromptedForSessionId, setMembershipIdPromptedForSessionId] = useState<string | null>(
-    null
-  );
+  const [membershipIdPromptedForSessionId, setMembershipIdPromptedForSessionId] = useState<
+    string | null
+  >(null);
   // past-due state lives in laneSession reducer
   const [waitlistEntries, setWaitlistEntries] = useState<
     Array<{
@@ -779,42 +793,42 @@ export function AppRoot() {
   const runCustomerSearch = useMemo(
     () =>
       debounce(async (query: string) => {
-      if (!session?.sessionToken || query.trim().length < 3) {
-        setCustomerSuggestions([]);
-        setCustomerSearchLoading(false);
-        return;
-      }
-
-      if (searchAbortRef.current) {
-        searchAbortRef.current.abort();
-      }
-      const controller = new AbortController();
-      searchAbortRef.current = controller;
-
-      setCustomerSearchLoading(true);
-      try {
-        const response = await fetch(
-          getApiUrl(`/api/v1/customers/search?q=${encodeURIComponent(query)}&limit=10`),
-          {
-            headers: {
-              Authorization: `Bearer ${session.sessionToken}`,
-            },
-            signal: controller.signal,
-          }
-        );
-        if (!response.ok) {
-          throw new Error('Search failed');
-        }
-        const data = (await response.json()) as { suggestions?: typeof customerSuggestions };
-        setCustomerSuggestions(data.suggestions || []);
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) {
-          console.error('Customer search failed:', error);
+        if (!session?.sessionToken || query.trim().length < 3) {
           setCustomerSuggestions([]);
+          setCustomerSearchLoading(false);
+          return;
         }
-      } finally {
-        setCustomerSearchLoading(false);
-      }
+
+        if (searchAbortRef.current) {
+          searchAbortRef.current.abort();
+        }
+        const controller = new AbortController();
+        searchAbortRef.current = controller;
+
+        setCustomerSearchLoading(true);
+        try {
+          const response = await fetch(
+            getApiUrl(`/api/v1/customers/search?q=${encodeURIComponent(query)}&limit=10`),
+            {
+              headers: {
+                Authorization: `Bearer ${session.sessionToken}`,
+              },
+              signal: controller.signal,
+            }
+          );
+          if (!response.ok) {
+            throw new Error('Search failed');
+          }
+          const data = (await response.json()) as { suggestions?: typeof customerSuggestions };
+          setCustomerSuggestions(data.suggestions || []);
+        } catch (error) {
+          if (!(error instanceof DOMException && error.name === 'AbortError')) {
+            console.error('Customer search failed:', error);
+            setCustomerSuggestions([]);
+          }
+        } finally {
+          setCustomerSearchLoading(false);
+        }
       }, 200),
     [session?.sessionToken]
   );
@@ -867,29 +881,29 @@ export function AppRoot() {
 
   const startLaneSessionByCustomerId = useCallback(
     (
-    customerId: string,
-    opts?: { suppressAlerts?: boolean; customerLabel?: string | null }
-  ): Promise<ScanResult> => {
-    if (!session?.sessionToken) {
-      const msg = 'Not authenticated';
-      if (!opts?.suppressAlerts) alert(msg);
-      return Promise.resolve({ outcome: 'error', message: msg });
-    }
+      customerId: string,
+      opts?: { suppressAlerts?: boolean; customerLabel?: string | null }
+    ): Promise<ScanResult> => {
+      if (!session?.sessionToken) {
+        const msg = 'Not authenticated';
+        if (!opts?.suppressAlerts) alert(msg);
+        return Promise.resolve({ outcome: 'error', message: msg });
+      }
 
-    setIsSubmitting(true);
-    try {
-      openCustomerAccount(customerId, opts?.customerLabel ?? null);
-      if (manualEntry) setManualEntry(false);
-      return Promise.resolve({ outcome: 'matched' });
-    } catch (error) {
-      console.error('Failed to open customer account:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to open customer account';
-      if (!opts?.suppressAlerts) alert(msg);
-      return Promise.resolve({ outcome: 'error', message: msg });
-    } finally {
-      setIsSubmitting(false);
-    }
-  },
+      setIsSubmitting(true);
+      try {
+        openCustomerAccount(customerId, opts?.customerLabel ?? null);
+        if (manualEntry) setManualEntry(false);
+        return Promise.resolve({ outcome: 'matched' });
+      } catch (error) {
+        console.error('Failed to open customer account:', error);
+        const msg = error instanceof Error ? error.message : 'Failed to open customer account';
+        if (!opts?.suppressAlerts) alert(msg);
+        return Promise.resolve({ outcome: 'error', message: msg });
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
     [manualEntry, openCustomerAccount, session?.sessionToken]
   );
 
@@ -929,7 +943,12 @@ export function AppRoot() {
 
       const data = matchPayload as {
         matchCount?: number;
-        bestMatch?: { id?: string; name?: string; membershipNumber?: string | null; dob?: string | null } | null;
+        bestMatch?: {
+          id?: string;
+          name?: string;
+          membershipNumber?: string | null;
+          dob?: string | null;
+        } | null;
       };
       const best = data.bestMatch;
       const matchCount = typeof data.matchCount === 'number' ? data.matchCount : 0;
@@ -940,7 +959,12 @@ export function AppRoot() {
           lastName,
           dobIso,
           matchCount,
-          bestMatch: { id: best.id, name: best.name, membershipNumber: best.membershipNumber, dob: best.dob },
+          bestMatch: {
+            id: best.id,
+            name: best.name,
+            membershipNumber: best.membershipNumber,
+            dob: best.dob,
+          },
         });
         return;
       }
@@ -979,129 +1003,135 @@ export function AppRoot() {
     }
   };
 
-  const onBarcodeCaptured = useCallback(async (rawScanText: string): Promise<ScanResult> => {
-    if (!session?.sessionToken) {
-      return { outcome: 'error', message: 'Not authenticated' };
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/scan`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          laneId: lane,
-          rawScanText,
-        }),
-      });
-
-      const payload: unknown = await response.json().catch(() => null);
-      if (!response.ok) {
-        const msg = getErrorMessage(payload) || 'Failed to process scan';
-        return { outcome: 'error', message: msg };
+  const onBarcodeCaptured = useCallback(
+    async (rawScanText: string): Promise<ScanResult> => {
+      if (!session?.sessionToken) {
+        return { outcome: 'error', message: 'Not authenticated' };
       }
 
-      const data = payload as {
-        result: 'MATCHED' | 'NO_MATCH' | 'MULTIPLE_MATCHES' | 'ERROR';
-        scanType?: 'STATE_ID' | 'MEMBERSHIP';
-        customer?: { id: string; name: string; membershipNumber: string | null };
-        extracted?: {
-          firstName?: string;
-          lastName?: string;
-          fullName?: string;
-          dob?: string;
-          idNumber?: string;
-          issuer?: string;
-          jurisdiction?: string;
+      try {
+        const response = await fetch(`${API_BASE}/v1/checkin/scan`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({
+            laneId: lane,
+            rawScanText,
+          }),
+        });
+
+        const payload: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const msg = getErrorMessage(payload) || 'Failed to process scan';
+          return { outcome: 'error', message: msg };
+        }
+
+        const data = payload as {
+          result: 'MATCHED' | 'NO_MATCH' | 'MULTIPLE_MATCHES' | 'ERROR';
+          scanType?: 'STATE_ID' | 'MEMBERSHIP';
+          customer?: { id: string; name: string; membershipNumber: string | null };
+          extracted?: {
+            firstName?: string;
+            lastName?: string;
+            fullName?: string;
+            dob?: string;
+            idNumber?: string;
+            issuer?: string;
+            jurisdiction?: string;
+          };
+          candidates?: Array<{
+            id: string;
+            name: string;
+            dob: string | null;
+            membershipNumber: string | null;
+            matchScore: number;
+          }>;
+          normalizedRawScanText?: string;
+          idScanHash?: string;
+          membershipCandidate?: string;
+          error?: { code?: string; message?: string };
         };
-        candidates?: Array<{
-          id: string;
-          name: string;
-          dob: string | null;
-          membershipNumber: string | null;
-          matchScore: number;
-        }>;
-        normalizedRawScanText?: string;
-        idScanHash?: string;
-        membershipCandidate?: string;
-        error?: { code?: string; message?: string };
-      };
 
-      if (data.result === 'ERROR') {
-        return { outcome: 'error', message: data.error?.message || 'Scan failed' };
-      }
+        if (data.result === 'ERROR') {
+          return { outcome: 'error', message: data.error?.message || 'Scan failed' };
+        }
 
-      if (data.result === 'MATCHED' && data.customer?.id) {
+        if (data.result === 'MATCHED' && data.customer?.id) {
+          setPendingCreateFromScan(null);
+          setShowCreateFromScanPrompt(false);
+          setCreateFromScanError(null);
+          setPendingScanResolution(null);
+          setScanResolutionError(null);
+          // Open customer record (start lane session) using the resolved customerId.
+          return await startLaneSessionByCustomerId(data.customer.id, { suppressAlerts: true });
+        }
+
+        if (data.result === 'MULTIPLE_MATCHES' && data.scanType === 'STATE_ID') {
+          const extracted = data.extracted || {};
+          setPendingCreateFromScan(null);
+          setShowCreateFromScanPrompt(false);
+          setCreateFromScanError(null);
+          setScanResolutionError(null);
+          setPendingScanResolution({
+            rawScanText,
+            extracted: {
+              firstName: extracted.firstName,
+              lastName: extracted.lastName,
+              fullName: extracted.fullName,
+              dob: extracted.dob,
+              idNumber: extracted.idNumber,
+              issuer: extracted.issuer,
+              jurisdiction: extracted.jurisdiction,
+            },
+            candidates: (data.candidates || []).slice(0, 10),
+          });
+          // Let the employee select the correct customer.
+          return { outcome: 'matched' };
+        }
+
+        // NO_MATCH
+        if (data.scanType === 'STATE_ID') {
+          const extracted = data.extracted || {};
+          setPendingCreateFromScan({
+            idScanValue: data.normalizedRawScanText || rawScanText,
+            idScanHash: data.idScanHash || null,
+            extracted: {
+              firstName: extracted.firstName,
+              lastName: extracted.lastName,
+              fullName: extracted.fullName,
+              dob: extracted.dob,
+              idNumber: extracted.idNumber,
+              issuer: extracted.issuer,
+              jurisdiction: extracted.jurisdiction,
+            },
+          });
+          return {
+            outcome: 'no_match',
+            message: 'No match found. Create new account?',
+            canCreate: true,
+          };
+        }
+
+        // Membership/general barcode no-match: do not create implicitly.
         setPendingCreateFromScan(null);
-        setShowCreateFromScanPrompt(false);
-        setCreateFromScanError(null);
-        setPendingScanResolution(null);
-        setScanResolutionError(null);
-        // Open customer record (start lane session) using the resolved customerId.
-        return await startLaneSessionByCustomerId(data.customer.id, { suppressAlerts: true });
-      }
-
-      if (data.result === 'MULTIPLE_MATCHES' && data.scanType === 'STATE_ID') {
-        const extracted = data.extracted || {};
-        setPendingCreateFromScan(null);
-        setShowCreateFromScanPrompt(false);
-        setCreateFromScanError(null);
-        setScanResolutionError(null);
-        setPendingScanResolution({
-          rawScanText,
-          extracted: {
-            firstName: extracted.firstName,
-            lastName: extracted.lastName,
-            fullName: extracted.fullName,
-            dob: extracted.dob,
-            idNumber: extracted.idNumber,
-            issuer: extracted.issuer,
-            jurisdiction: extracted.jurisdiction,
-          },
-          candidates: (data.candidates || []).slice(0, 10),
-        });
-        // Let the employee select the correct customer.
-        return { outcome: 'matched' };
-      }
-
-      // NO_MATCH
-      if (data.scanType === 'STATE_ID') {
-        const extracted = data.extracted || {};
-        setPendingCreateFromScan({
-          idScanValue: data.normalizedRawScanText || rawScanText,
-          idScanHash: data.idScanHash || null,
-          extracted: {
-            firstName: extracted.firstName,
-            lastName: extracted.lastName,
-            fullName: extracted.fullName,
-            dob: extracted.dob,
-            idNumber: extracted.idNumber,
-            issuer: extracted.issuer,
-            jurisdiction: extracted.jurisdiction,
-          },
-        });
+        const label = data.membershipCandidate ? ` (${data.membershipCandidate})` : '';
         return {
           outcome: 'no_match',
-          message: 'No match found. Create new account?',
-          canCreate: true,
+          message: `No match found${label}. Scan ID or use Manual Entry.`,
+          canCreate: false,
+        };
+      } catch (error) {
+        console.error('Scan failed:', error);
+        return {
+          outcome: 'error',
+          message: error instanceof Error ? error.message : 'Scan failed',
         };
       }
-
-      // Membership/general barcode no-match: do not create implicitly.
-      setPendingCreateFromScan(null);
-      const label = data.membershipCandidate ? ` (${data.membershipCandidate})` : '';
-      return {
-        outcome: 'no_match',
-        message: `No match found${label}. Scan ID or use Manual Entry.`,
-        canCreate: false,
-      };
-    } catch (error) {
-      console.error('Scan failed:', error);
-      return { outcome: 'error', message: error instanceof Error ? error.message : 'Scan failed' };
-    }
-  }, [lane, session?.sessionToken, startLaneSessionByCustomerId]);
+    },
+    [lane, session?.sessionToken, startLaneSessionByCustomerId]
+  );
 
   const blockingModalOpen =
     !!pendingScanResolution ||
@@ -1749,7 +1779,11 @@ export function AppRoot() {
   };
 
   const openOfferUpgradeModal = (entry: (typeof waitlistEntries)[number]) => {
-    if (entry.desiredTier !== 'STANDARD' && entry.desiredTier !== 'DOUBLE' && entry.desiredTier !== 'SPECIAL') {
+    if (
+      entry.desiredTier !== 'STANDARD' &&
+      entry.desiredTier !== 'DOUBLE' &&
+      entry.desiredTier !== 'SPECIAL'
+    ) {
       alert('Only STANDARD/DOUBLE/SPECIAL upgrades can be offered.');
       return;
     }
@@ -1865,16 +1899,19 @@ export function AppRoot() {
 
     setIsSubmitting(true);
     try {
-      const markPaidResponse = await fetch(`${API_BASE}/v1/payments/${upgradePaymentIntentId}/mark-paid`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({
-          squareTransactionId: method === 'CASH' ? 'demo-cash-success' : 'demo-credit-success',
-        }),
-      });
+      const markPaidResponse = await fetch(
+        `${API_BASE}/v1/payments/${upgradePaymentIntentId}/mark-paid`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({
+            squareTransactionId: method === 'CASH' ? 'demo-cash-success' : 'demo-credit-success',
+          }),
+        }
+      );
 
       if (!markPaidResponse.ok) {
         const errorPayload: unknown = await markPaidResponse.json().catch(() => null);
@@ -1968,7 +2005,8 @@ export function AppRoot() {
         laneSessionActions.applySelectionProposed({ rentalType, proposedBy }),
       applySelectionLocked: ({ rentalType, confirmedBy }) =>
         laneSessionActions.applySelectionLocked({ rentalType, confirmedBy }),
-      applySelectionForced: ({ rentalType }) => laneSessionActions.applySelectionForced({ rentalType }),
+      applySelectionForced: ({ rentalType }) =>
+        laneSessionActions.applySelectionForced({ rentalType }),
       selectionAcknowledged: laneSessionActions.selectionAcknowledged,
     },
     setCheckoutRequests,
@@ -2198,17 +2236,22 @@ export function AppRoot() {
     const intent: 'PURCHASE' | 'RENEW' = base === 'EXPIRED' ? 'RENEW' : 'PURCHASE';
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({ intent, sessionId: currentSessionId }),
-      });
+      const response = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({ intent, sessionId: currentSessionId }),
+        }
+      );
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to set membership purchase intent');
+        throw new Error(
+          getErrorMessage(errorPayload) || 'Failed to set membership purchase intent'
+        );
       }
       await pollOnce();
     } catch (error) {
@@ -2218,7 +2261,9 @@ export function AppRoot() {
     }
   };
 
-  const handleProposeSelection = async (rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+  const handleProposeSelection = async (
+    rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => {
     if (!currentSessionId || !session?.sessionToken) return;
     setIsSubmitting(true);
     try {
@@ -2247,7 +2292,9 @@ export function AppRoot() {
     }
   };
 
-  const handleCustomerSelectRental = async (rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => {
+  const handleCustomerSelectRental = async (
+    rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => {
     if (!currentSessionId) return;
     setIsSubmitting(true);
     try {
@@ -2259,7 +2306,9 @@ export function AppRoot() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(typeof kioskToken === 'string' && kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
+            ...(typeof kioskToken === 'string' && kioskToken
+              ? { 'x-kiosk-token': kioskToken }
+              : {}),
           },
           body: JSON.stringify({ waitlistDesiredType: rentalType }),
         });
@@ -2397,14 +2446,17 @@ export function AppRoot() {
     if (!currentSessionId || !session?.sessionToken) return;
     setIsSubmitting(true);
     try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/manual-signature-override`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.sessionToken}`,
-        },
-        body: JSON.stringify({ sessionId: currentSessionId }),
-      });
+      const response = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/manual-signature-override`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({ sessionId: currentSessionId }),
+        }
+      );
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm physical agreement');
@@ -2452,7 +2504,14 @@ export function AppRoot() {
       console.error('Failed to create payment intent:', error);
       alert(error instanceof Error ? error.message : 'Failed to create payment intent');
     }
-  }, [currentSessionId, lane, session?.sessionToken, setPaymentIntentId, setPaymentQuote, setPaymentStatus]);
+  }, [
+    currentSessionId,
+    lane,
+    session?.sessionToken,
+    setPaymentIntentId,
+    setPaymentQuote,
+    setPaymentStatus,
+  ]);
 
   // Corrected demo flow: once selection is confirmed/locked, create payment intent (no assignment required).
   useEffect(() => {
@@ -2515,7 +2574,9 @@ export function AppRoot() {
       setMembershipIdPromptedForSessionId(null);
     } catch (error) {
       console.error('Failed to complete membership purchase:', error);
-      setMembershipIdError(error instanceof Error ? error.message : 'Failed to save membership number');
+      setMembershipIdError(
+        error instanceof Error ? error.message : 'Failed to save membership number'
+      );
     } finally {
       setMembershipIdSubmitting(false);
     }
@@ -2878,7 +2939,9 @@ export function AppRoot() {
                   isSubmitting={isSubmitting}
                   checkoutItemsConfirmed={checkoutItemsConfirmed}
                   checkoutFeePaid={checkoutFeePaid}
-                  onOpenCustomerAccount={(customerId, label) => openCustomerAccount(customerId, label)}
+                  onOpenCustomerAccount={(customerId, label) =>
+                    openCustomerAccount(customerId, label)
+                  }
                   onConfirmItems={() => void handleConfirmItems(selectedCheckoutRequest)}
                   onMarkFeePaid={() => void handleMarkFeePaid(selectedCheckoutRequest)}
                   onComplete={() => void handleCompleteCheckout(selectedCheckoutRequest)}
@@ -2903,7 +2966,9 @@ export function AppRoot() {
                     className={[
                       'er-home-tab-btn',
                       'cs-liquid-button',
-                      homeTab === 'scan' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                      homeTab === 'scan'
+                        ? 'cs-liquid-button--selected'
+                        : 'cs-liquid-button--secondary',
                     ].join(' ')}
                     onClick={() => selectHomeTab('scan')}
                   >
@@ -2914,7 +2979,9 @@ export function AppRoot() {
                     className={[
                       'er-home-tab-btn',
                       'cs-liquid-button',
-                      homeTab === 'search' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                      homeTab === 'search'
+                        ? 'cs-liquid-button--selected'
+                        : 'cs-liquid-button--secondary',
                     ].join(' ')}
                     onClick={() => selectHomeTab('search')}
                   >
@@ -2926,11 +2993,19 @@ export function AppRoot() {
                     className={[
                       'er-home-tab-btn',
                       'cs-liquid-button',
-                      homeTab === 'account' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                      homeTab === 'account'
+                        ? 'cs-liquid-button--selected'
+                        : 'cs-liquid-button--secondary',
                     ].join(' ')}
                     onClick={() => selectHomeTab('account')}
-                    style={{ opacity: !accountCustomerId && !(currentSessionId && customerName) ? 0.6 : 1 }}
-                    title={!accountCustomerId && !(currentSessionId && customerName) ? 'Select a customer first' : undefined}
+                    style={{
+                      opacity: !accountCustomerId && !(currentSessionId && customerName) ? 0.6 : 1,
+                    }}
+                    title={
+                      !accountCustomerId && !(currentSessionId && customerName)
+                        ? 'Select a customer first'
+                        : undefined
+                    }
                   >
                     Customer Account
                   </button>
@@ -2973,7 +3048,9 @@ export function AppRoot() {
                       'er-home-tab-btn',
                       'cs-liquid-button',
                       'er-home-tab-btn--checkout',
-                      homeTab === 'checkout' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                      homeTab === 'checkout'
+                        ? 'cs-liquid-button--selected'
+                        : 'cs-liquid-button--secondary',
                     ].join(' ')}
                     onClick={() => startCheckoutFromHome()}
                   >
@@ -2984,7 +3061,9 @@ export function AppRoot() {
                     className={[
                       'er-home-tab-btn',
                       'cs-liquid-button',
-                      homeTab === 'roomCleaning' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                      homeTab === 'roomCleaning'
+                        ? 'cs-liquid-button--selected'
+                        : 'cs-liquid-button--secondary',
                     ].join(' ')}
                     onClick={() => selectHomeTab('roomCleaning')}
                   >
@@ -2995,7 +3074,9 @@ export function AppRoot() {
                     className={[
                       'er-home-tab-btn',
                       'cs-liquid-button',
-                      homeTab === 'firstTime' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                      homeTab === 'firstTime'
+                        ? 'cs-liquid-button--selected'
+                        : 'cs-liquid-button--secondary',
                     ].join(' ')}
                     onClick={() => selectHomeTab('firstTime')}
                   >
@@ -3009,14 +3090,20 @@ export function AppRoot() {
                       <div style={{ fontSize: '4rem', lineHeight: 1 }} aria-hidden="true">
                         📷
                       </div>
-                      <div style={{ marginTop: '0.75rem', fontWeight: 950, fontSize: '1.6rem' }}>Scan Now</div>
-                      <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
+                      <div style={{ marginTop: '0.75rem', fontWeight: 950, fontSize: '1.6rem' }}>
+                        Scan Now
+                      </div>
+                      <div
+                        className="er-text-sm"
+                        style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}
+                      >
                         Scan a membership ID or driver license.
                       </div>
                       {currentSessionId && customerName ? (
                         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.5rem' }}>
                           <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-                            Active lane session: <span style={{ color: '#e2e8f0' }}>{customerName}</span>
+                            Active lane session:{' '}
+                            <span style={{ color: '#e2e8f0' }}>{customerName}</span>
                           </div>
                           <button
                             type="button"
@@ -3031,15 +3118,17 @@ export function AppRoot() {
                     </div>
                   )}
 
-                  {homeTab === 'account' && (
-                    accountCustomerId ? (
+                  {homeTab === 'account' &&
+                    (accountCustomerId ? (
                       <CustomerAccountPanel
                         lane={lane}
                         sessionToken={session?.sessionToken}
                         customerId={accountCustomerId}
                         customerLabel={accountCustomerLabel}
                         onStartCheckout={startCheckoutFromCustomerAccount}
-                        onClearSession={() => void handleClearSession().then(() => selectHomeTab('scan'))}
+                        onClearSession={() =>
+                          void handleClearSession().then(() => selectHomeTab('scan'))
+                        }
                         currentSessionId={currentSessionId}
                         currentSessionCustomerId={laneSession.customerId}
                         customerName={customerName}
@@ -3054,11 +3143,18 @@ export function AppRoot() {
                         customerPrimaryLanguage={customerPrimaryLanguage}
                         customerDobMonthDay={customerDobMonthDay}
                         customerLastVisitAt={customerLastVisitAt}
-                        hasEncryptedLookupMarker={Boolean(laneSession.customerHasEncryptedLookupMarker)}
+                        hasEncryptedLookupMarker={Boolean(
+                          laneSession.customerHasEncryptedLookupMarker
+                        )}
                         waitlistDesiredTier={waitlistDesiredTier}
                         waitlistBackupType={waitlistBackupType}
                         inventoryAvailable={
-                          inventoryAvailable ? { rooms: inventoryAvailable.rooms, lockers: inventoryAvailable.lockers } : null
+                          inventoryAvailable
+                            ? {
+                                rooms: inventoryAvailable.rooms,
+                                lockers: inventoryAvailable.lockers,
+                              }
+                            : null
                         }
                         isSubmitting={isSubmitting}
                         checkinStage={checkinStage}
@@ -3069,22 +3165,32 @@ export function AppRoot() {
                           if (data.sessionId) setCurrentSessionId(data.sessionId);
                           if (data.customerHasEncryptedLookupMarker !== undefined) {
                             laneSessionActions.patch({
-                              customerHasEncryptedLookupMarker: Boolean(data.customerHasEncryptedLookupMarker),
+                              customerHasEncryptedLookupMarker: Boolean(
+                                data.customerHasEncryptedLookupMarker
+                              ),
                             });
                           }
                           if (data.mode === 'RENEWAL' && typeof data.blockEndsAt === 'string') {
-                            if (data.activeAssignedResourceType) setAssignedResourceType(data.activeAssignedResourceType);
-                            if (data.activeAssignedResourceNumber) setAssignedResourceNumber(data.activeAssignedResourceNumber);
+                            if (data.activeAssignedResourceType)
+                              setAssignedResourceType(data.activeAssignedResourceType);
+                            if (data.activeAssignedResourceNumber)
+                              setAssignedResourceNumber(data.activeAssignedResourceNumber);
                             setCheckoutAt(data.blockEndsAt);
                           }
                         }}
-                        onHighlightLanguage={(lang) => void highlightKioskOption({ step: 'LANGUAGE', option: lang })}
+                        onHighlightLanguage={(lang) =>
+                          void highlightKioskOption({ step: 'LANGUAGE', option: lang })
+                        }
                         onConfirmLanguage={(lang) => void handleConfirmLanguage(lang)}
-                        onHighlightMembership={(choice) => void highlightKioskOption({ step: 'MEMBERSHIP', option: choice })}
+                        onHighlightMembership={(choice) =>
+                          void highlightKioskOption({ step: 'MEMBERSHIP', option: choice })
+                        }
                         onConfirmMembershipOneTime={() => void handleConfirmMembershipOneTime()}
                         onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
                         onHighlightRental={(rental) => void handleProposeSelection(rental)}
-                        onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+                        onSelectRentalAsCustomer={(rental) =>
+                          void handleCustomerSelectRental(rental)
+                        }
                         onHighlightWaitlistBackup={(rental) =>
                           void highlightKioskOption({ step: 'WAITLIST_BACKUP', option: rental })
                         }
@@ -3094,11 +3200,18 @@ export function AppRoot() {
                         onApproveRental={() => void handleConfirmSelection()}
                       />
                     ) : currentSessionId && customerName ? (
-                      <div
-                        className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card"
-                      >
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', minHeight: 0 }}>
-                          <div style={{ fontWeight: 950, fontSize: '1.05rem' }}>Customer Account</div>
+                      <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.75rem',
+                            minHeight: 0,
+                          }}
+                        >
+                          <div style={{ fontWeight: 950, fontSize: '1.05rem' }}>
+                            Customer Account
+                          </div>
                           <CustomerProfileCard
                             name={customerName}
                             preferredLanguage={customerPrimaryLanguage || null}
@@ -3106,7 +3219,9 @@ export function AppRoot() {
                             membershipNumber={membershipNumber || null}
                             membershipValidUntil={customerMembershipValidUntil || null}
                             lastVisitAt={customerLastVisitAt || null}
-                            hasEncryptedLookupMarker={Boolean(laneSession.customerHasEncryptedLookupMarker)}
+                            hasEncryptedLookupMarker={Boolean(
+                              laneSession.customerHasEncryptedLookupMarker
+                            )}
                             checkinStage={checkinStage}
                             waitlistDesiredTier={waitlistDesiredTier}
                             waitlistBackupType={waitlistBackupType}
@@ -3115,8 +3230,15 @@ export function AppRoot() {
                                 <button
                                   type="button"
                                   className="cs-liquid-button cs-liquid-button--danger"
-                                  onClick={() => void handleClearSession().then(() => selectHomeTab('scan'))}
-                                  style={{ width: '100%', maxWidth: 320, padding: '0.7rem', fontWeight: 900 }}
+                                  onClick={() =>
+                                    void handleClearSession().then(() => selectHomeTab('scan'))
+                                  }
+                                  style={{
+                                    width: '100%',
+                                    maxWidth: 320,
+                                    padding: '0.7rem',
+                                    fontWeight: 900,
+                                  }}
                                 >
                                   Clear Session
                                 </button>
@@ -3138,16 +3260,29 @@ export function AppRoot() {
                             waitlistDesiredTier={waitlistDesiredTier}
                             waitlistBackupType={waitlistBackupType}
                             inventoryAvailable={
-                              inventoryAvailable ? { rooms: inventoryAvailable.rooms, lockers: inventoryAvailable.lockers } : null
+                              inventoryAvailable
+                                ? {
+                                    rooms: inventoryAvailable.rooms,
+                                    lockers: inventoryAvailable.lockers,
+                                  }
+                                : null
                             }
                             isSubmitting={isSubmitting}
-                            onHighlightLanguage={(lang) => void highlightKioskOption({ step: 'LANGUAGE', option: lang })}
+                            onHighlightLanguage={(lang) =>
+                              void highlightKioskOption({ step: 'LANGUAGE', option: lang })
+                            }
                             onConfirmLanguage={(lang) => void handleConfirmLanguage(lang)}
-                            onHighlightMembership={(choice) => void highlightKioskOption({ step: 'MEMBERSHIP', option: choice })}
+                            onHighlightMembership={(choice) =>
+                              void highlightKioskOption({ step: 'MEMBERSHIP', option: choice })
+                            }
                             onConfirmMembershipOneTime={() => void handleConfirmMembershipOneTime()}
-                            onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
+                            onConfirmMembershipSixMonth={() =>
+                              void handleConfirmMembershipSixMonth()
+                            }
                             onHighlightRental={(rental) => void handleProposeSelection(rental)}
-                            onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+                            onSelectRentalAsCustomer={(rental) =>
+                              void handleCustomerSelectRental(rental)
+                            }
                             onHighlightWaitlistBackup={(rental) =>
                               void highlightKioskOption({ step: 'WAITLIST_BACKUP', option: rental })
                             }
@@ -3161,12 +3296,14 @@ export function AppRoot() {
                     ) : (
                       <div className="er-home-panel er-home-panel--center cs-liquid-card er-main-panel-card">
                         <div style={{ fontWeight: 950, fontSize: '1.35rem' }}>Customer Account</div>
-                        <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}>
+                        <div
+                          className="er-text-sm"
+                          style={{ marginTop: '0.5rem', color: '#94a3b8', fontWeight: 700 }}
+                        >
                           Select a customer (scan, search, or first-time) to view their account.
                         </div>
                       </div>
-                    )
-                  )}
+                    ))}
 
                   {homeTab === 'search' && (
                     <div
@@ -3197,7 +3334,10 @@ export function AppRoot() {
                         disabled={isSubmitting}
                       />
                       {customerSearchLoading && (
-                        <div className="er-text-sm" style={{ marginTop: '0.25rem', color: '#94a3b8' }}>
+                        <div
+                          className="er-text-sm"
+                          style={{ marginTop: '0.25rem', color: '#94a3b8' }}
+                        >
                           Searching...
                         </div>
                       )}
@@ -3244,7 +3384,9 @@ export function AppRoot() {
                                   }}
                                 >
                                   {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
-                                  {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
+                                  {s.membershipNumber && (
+                                    <span>Membership: {s.membershipNumber}</span>
+                                  )}
                                 </div>
                               </button>
                             );
@@ -3344,8 +3486,13 @@ export function AppRoot() {
                       className="er-home-panel er-home-panel--top manual-entry-form cs-liquid-card er-main-panel-card"
                       onSubmit={(e) => void handleManualSubmit(e)}
                     >
-                      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>First Time Customer</div>
-                      <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.75rem', fontWeight: 700 }}>
+                      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>
+                        First Time Customer
+                      </div>
+                      <div
+                        className="er-text-sm"
+                        style={{ color: '#94a3b8', marginBottom: '0.75rem', fontWeight: 700 }}
+                      >
                         Enter customer details from alternate ID.
                       </div>
                       <div className="form-group">
@@ -3419,7 +3566,6 @@ export function AppRoot() {
                       </div>
                     </form>
                   )}
-
                 </div>
               </div>
             </section>
@@ -3491,7 +3637,8 @@ export function AppRoot() {
           >
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               <div style={{ color: '#94a3b8' }}>
-                An existing customer already matches this First Name, Last Name, and Date of Birth. Do you want to continue?
+                An existing customer already matches this First Name, Last Name, and Date of Birth.
+                Do you want to continue?
               </div>
 
               {manualExistingPrompt?.matchCount && manualExistingPrompt.matchCount > 1 ? (
@@ -3502,8 +3649,18 @@ export function AppRoot() {
 
               {manualExistingPrompt ? (
                 <div className="cs-liquid-card" style={{ padding: '1rem' }}>
-                  <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>{manualExistingPrompt.bestMatch.name}</div>
-                  <div style={{ marginTop: '0.25rem', color: '#94a3b8', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>
+                    {manualExistingPrompt.bestMatch.name}
+                  </div>
+                  <div
+                    style={{
+                      marginTop: '0.25rem',
+                      color: '#94a3b8',
+                      display: 'flex',
+                      gap: '0.75rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     <span>
                       DOB:{' '}
                       <strong style={{ color: 'white' }}>
@@ -3513,7 +3670,9 @@ export function AppRoot() {
                     {manualExistingPrompt.bestMatch.membershipNumber ? (
                       <span>
                         Membership:{' '}
-                        <strong style={{ color: 'white' }}>{manualExistingPrompt.bestMatch.membershipNumber}</strong>
+                        <strong style={{ color: 'white' }}>
+                          {manualExistingPrompt.bestMatch.membershipNumber}
+                        </strong>
                       </span>
                     ) : null}
                   </div>
@@ -3535,7 +3694,14 @@ export function AppRoot() {
                 </div>
               ) : null}
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: '0.5rem',
+                  flexWrap: 'wrap',
+                }}
+              >
                 <button
                   type="button"
                   className="cs-liquid-button cs-liquid-button--secondary"
@@ -3558,9 +3724,12 @@ export function AppRoot() {
                       setManualExistingPromptSubmitting(true);
                       setManualExistingPromptError(null);
                       try {
-                        const result = await startLaneSessionByCustomerId(manualExistingPrompt.bestMatch.id, {
-                          suppressAlerts: true,
-                        });
+                        const result = await startLaneSessionByCustomerId(
+                          manualExistingPrompt.bestMatch.id,
+                          {
+                            suppressAlerts: true,
+                          }
+                        );
                         if (result.outcome === 'matched') {
                           setManualExistingPrompt(null);
                           setManualEntry(false);
@@ -3569,7 +3738,9 @@ export function AppRoot() {
                           setManualDobDigits('');
                         }
                       } catch (err) {
-                        setManualExistingPromptError(err instanceof Error ? err.message : 'Failed to load existing customer');
+                        setManualExistingPromptError(
+                          err instanceof Error ? err.message : 'Failed to load existing customer'
+                        );
                       } finally {
                         setManualExistingPromptSubmitting(false);
                       }
@@ -3582,7 +3753,12 @@ export function AppRoot() {
                 <button
                   type="button"
                   className="cs-liquid-button"
-                  disabled={manualExistingPromptSubmitting || isSubmitting || !manualExistingPrompt || !session?.sessionToken}
+                  disabled={
+                    manualExistingPromptSubmitting ||
+                    isSubmitting ||
+                    !manualExistingPrompt ||
+                    !session?.sessionToken
+                  }
                   onClick={() => {
                     if (!manualExistingPrompt || !session?.sessionToken) return;
                     void (async () => {
@@ -3610,7 +3786,9 @@ export function AppRoot() {
                           setManualExistingPromptError('Create returned no customer id');
                           return;
                         }
-                        const result = await startLaneSessionByCustomerId(newId, { suppressAlerts: true });
+                        const result = await startLaneSessionByCustomerId(newId, {
+                          suppressAlerts: true,
+                        });
                         if (result.outcome === 'matched') {
                           setManualExistingPrompt(null);
                           setManualEntry(false);
@@ -3663,15 +3841,26 @@ export function AppRoot() {
               ) : null}
 
               <div className="cs-liquid-card" style={{ padding: '1rem' }}>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', color: '#94a3b8' }}>
+                <div
+                  style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', color: '#94a3b8' }}
+                >
                   <span>
-                    First: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.firstName || '—'}</strong>
+                    First:{' '}
+                    <strong style={{ color: 'white' }}>
+                      {pendingCreateFromScan?.extracted.firstName || '—'}
+                    </strong>
                   </span>
                   <span>
-                    Last: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.lastName || '—'}</strong>
+                    Last:{' '}
+                    <strong style={{ color: 'white' }}>
+                      {pendingCreateFromScan?.extracted.lastName || '—'}
+                    </strong>
                   </span>
                   <span>
-                    DOB: <strong style={{ color: 'white' }}>{pendingCreateFromScan?.extracted.dob || '—'}</strong>
+                    DOB:{' '}
+                    <strong style={{ color: 'white' }}>
+                      {pendingCreateFromScan?.extracted.dob || '—'}
+                    </strong>
                   </span>
                 </div>
               </div>
@@ -3807,8 +3996,14 @@ export function AppRoot() {
             isSubmitting={isSubmitting}
           />
 
-          <SuccessToast message={successToastMessage} onDismiss={() => setSuccessToastMessage(null)} />
-          <PaymentDeclineToast message={paymentDeclineError} onDismiss={() => setPaymentDeclineError(null)} />
+          <SuccessToast
+            message={successToastMessage}
+            onDismiss={() => setSuccessToastMessage(null)}
+          />
+          <PaymentDeclineToast
+            message={paymentDeclineError}
+            onDismiss={() => setPaymentDeclineError(null)}
+          />
           <BottomToastStack toasts={bottomToasts} onDismiss={dismissBottomToast} />
           {scanToastMessage && (
             <div
@@ -3858,43 +4053,50 @@ export function AppRoot() {
           )}
           {/* Agreement + Assignment Display */}
           {(() => {
-            const agreementPending = !agreementSigned && selectionConfirmed && paymentStatus === 'PAID';
+            const agreementPending =
+              !agreementSigned && selectionConfirmed && paymentStatus === 'PAID';
             const canShowModal = Boolean(
               currentSessionId &&
-                customerName &&
-                (agreementPending || (assignedResourceType && assignedResourceNumber))
+              customerName &&
+              (agreementPending || (assignedResourceType && assignedResourceNumber))
             );
             return (
-          <TransactionCompleteModal
-            isOpen={canShowModal}
-            agreementPending={agreementPending}
-            agreementBypassPending={agreementBypassPending}
-            agreementSignedMethod={agreementSignedMethod}
-            selectionSummary={{
-              membershipChoice: membershipChoice || null,
-              rentalType: proposedRentalType || customerSelectedType || null,
-              waitlistDesiredType: waitlistDesiredTier || null,
-              waitlistBackupType: waitlistBackupType || null,
-            }}
-            assignedLabel={assignedResourceType === 'room' ? 'Room' : assignedResourceType === 'locker' ? 'Locker' : 'Resource'}
-            assignedNumber={assignedResourceNumber || '—'}
-            checkoutAt={checkoutAt}
-            verifyDisabled={!session?.sessionToken || !currentSessionIdRef.current}
-            showComplete={Boolean(agreementSigned && assignedResourceType)}
-            completeLabel={isSubmitting ? 'Processing...' : 'Complete Transaction'}
-            completeDisabled={isSubmitting}
-            showBypassAction={agreementPending && !agreementBypassPending}
-            showPhysicalConfirmAction={agreementPending && agreementBypassPending}
-            onVerifyAgreementArtifacts={() => {
-              const sid = currentSessionIdRef.current;
-              if (!sid) return;
-              setDocumentsModalOpen(true);
-              void fetchDocumentsBySession(sid);
-            }}
-            onStartAgreementBypass={() => void handleStartAgreementBypass()}
-            onConfirmPhysicalAgreement={() => void handleConfirmPhysicalAgreement()}
-            onCompleteTransaction={() => void handleCompleteTransaction()}
-          />
+              <TransactionCompleteModal
+                isOpen={canShowModal}
+                agreementPending={agreementPending}
+                agreementBypassPending={agreementBypassPending}
+                agreementSignedMethod={agreementSignedMethod}
+                selectionSummary={{
+                  membershipChoice: membershipChoice || null,
+                  rentalType: proposedRentalType || customerSelectedType || null,
+                  waitlistDesiredType: waitlistDesiredTier || null,
+                  waitlistBackupType: waitlistBackupType || null,
+                }}
+                assignedLabel={
+                  assignedResourceType === 'room'
+                    ? 'Room'
+                    : assignedResourceType === 'locker'
+                      ? 'Locker'
+                      : 'Resource'
+                }
+                assignedNumber={assignedResourceNumber || '—'}
+                checkoutAt={checkoutAt}
+                verifyDisabled={!session?.sessionToken || !currentSessionIdRef.current}
+                showComplete={Boolean(agreementSigned && assignedResourceType)}
+                completeLabel={isSubmitting ? 'Processing...' : 'Complete Transaction'}
+                completeDisabled={isSubmitting}
+                showBypassAction={agreementPending && !agreementBypassPending}
+                showPhysicalConfirmAction={agreementPending && agreementBypassPending}
+                onVerifyAgreementArtifacts={() => {
+                  const sid = currentSessionIdRef.current;
+                  if (!sid) return;
+                  setDocumentsModalOpen(true);
+                  void fetchDocumentsBySession(sid);
+                }}
+                onStartAgreementBypass={() => void handleStartAgreementBypass()}
+                onConfirmPhysicalAgreement={() => void handleConfirmPhysicalAgreement()}
+                onCompleteTransaction={() => void handleCompleteTransaction()}
+              />
             );
           })()}
 
@@ -3912,7 +4114,8 @@ export function AppRoot() {
                 onConfirm={(choice) => {
                   if (choice === 'CREDIT_SUCCESS') void handleDemoPayment('CREDIT_SUCCESS');
                   if (choice === 'CASH_SUCCESS') void handleDemoPayment('CASH_SUCCESS');
-                  if (choice === 'CREDIT_DECLINE') void handleDemoPayment('CREDIT_DECLINE', 'Card declined');
+                  if (choice === 'CREDIT_DECLINE')
+                    void handleDemoPayment('CREDIT_DECLINE', 'Card declined');
                 }}
               />
             )}
@@ -3927,7 +4130,8 @@ export function AppRoot() {
       >
         <div style={{ display: 'grid', gap: '0.75rem' }}>
           <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-            Session: <span style={{ fontFamily: 'monospace' }}>{currentSessionIdRef.current || '—'}</span>
+            Session:{' '}
+            <span style={{ fontFamily: 'monospace' }}>{currentSessionIdRef.current || '—'}</span>
           </div>
 
           {documentsError && (
@@ -3971,17 +4175,27 @@ export function AppRoot() {
                   className="er-surface"
                   style={{ padding: '0.75rem', borderRadius: 12, display: 'grid', gap: '0.35rem' }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: '0.75rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     <div style={{ fontWeight: 900 }}>
                       {doc.doc_type}{' '}
                       <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#94a3b8' }}>
                         {doc.id}
                       </span>
                     </div>
-                    <div style={{ color: '#94a3b8' }}>{new Date(doc.created_at).toLocaleString()}</div>
+                    <div style={{ color: '#94a3b8' }}>
+                      {new Date(doc.created_at).toLocaleString()}
+                    </div>
                   </div>
                   <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-                    PDF stored: {doc.has_pdf ? 'yes' : 'no'} • Signature stored: {doc.has_signature ? 'yes' : 'no'}
+                    PDF stored: {doc.has_pdf ? 'yes' : 'no'} • Signature stored:{' '}
+                    {doc.has_signature ? 'yes' : 'no'}
                     {doc.signature_hash_prefix ? ` • sig hash: ${doc.signature_hash_prefix}…` : ''}
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -3990,7 +4204,9 @@ export function AppRoot() {
                       disabled={!doc.has_pdf}
                       onClick={() => {
                         void downloadAgreementPdf(doc.id).catch((e) => {
-                          setDocumentsError(e instanceof Error ? e.message : 'Failed to download PDF');
+                          setDocumentsError(
+                            e instanceof Error ? e.message : 'Failed to download PDF'
+                          );
                         });
                       }}
                     >

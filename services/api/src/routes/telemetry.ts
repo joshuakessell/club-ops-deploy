@@ -97,4 +97,3 @@ export async function telemetryRoutes(fastify: FastifyInstance): Promise<void> {
     return reply.status(200).send({ events: res.rows });
   });
 }
-

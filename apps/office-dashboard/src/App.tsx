@@ -102,16 +102,19 @@ const theme = createTheme({
           border: '1px solid rgba(255, 255, 255, 0.5)',
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.75), 0 0 9px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.15)',
+          boxShadow:
+            'inset 0 1px 0 rgba(255,255,255,0.75), 0 0 9px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.15)',
           color: '#fff',
-          transition: 'background-color 300ms, border-color 300ms, box-shadow 300ms, transform 150ms',
+          transition:
+            'background-color 300ms, border-color 300ms, box-shadow 300ms, transform 150ms',
           '&::before': {
             content: '""',
             position: 'absolute',
             inset: 0,
             borderRadius: 'inherit',
             pointerEvents: 'none',
-            background: 'linear-gradient(to bottom right, rgba(255,255,255,0.6), rgba(255,255,255,0), rgba(255,255,255,0))',
+            background:
+              'linear-gradient(to bottom right, rgba(255,255,255,0.6), rgba(255,255,255,0), rgba(255,255,255,0))',
             opacity: 0.7,
           },
           '&::after': {
@@ -120,7 +123,8 @@ const theme = createTheme({
             inset: 0,
             borderRadius: 'inherit',
             pointerEvents: 'none',
-            background: 'linear-gradient(to top left, rgba(255,255,255,0.3), rgba(255,255,255,0), rgba(255,255,255,0))',
+            background:
+              'linear-gradient(to top left, rgba(255,255,255,0.3), rgba(255,255,255,0), rgba(255,255,255,0))',
             opacity: 0.5,
           },
           '&:hover': {
@@ -148,7 +152,8 @@ const theme = createTheme({
           border: '1px solid rgba(255,255,255,0.5)',
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.75), 0 0 9px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.15)',
+          boxShadow:
+            'inset 0 1px 0 rgba(255,255,255,0.75), 0 0 9px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.15)',
           color: '#fff',
           overflow: 'hidden',
           transition: 'all 200ms cubic-bezier(0.4, 0, 0.2, 1)',
@@ -159,7 +164,8 @@ const theme = createTheme({
             borderRadius: 'inherit',
             pointerEvents: 'none',
             zIndex: 0,
-            background: 'linear-gradient(to bottom right, rgba(255,255,255,0.6), rgba(255,255,255,0), rgba(255,255,255,0))',
+            background:
+              'linear-gradient(to bottom right, rgba(255,255,255,0.6), rgba(255,255,255,0), rgba(255,255,255,0))',
             opacity: 0.7,
           },
           '&::after': {
@@ -169,7 +175,8 @@ const theme = createTheme({
             borderRadius: 'inherit',
             pointerEvents: 'none',
             zIndex: 0,
-            background: 'linear-gradient(to top left, rgba(255,255,255,0.3), rgba(255,255,255,0), rgba(255,255,255,0))',
+            background:
+              'linear-gradient(to top left, rgba(255,255,255,0.3), rgba(255,255,255,0), rgba(255,255,255,0))',
             opacity: 0.5,
           },
           '& > *': {
@@ -187,7 +194,8 @@ const theme = createTheme({
           border: '1px solid rgba(255,255,255,0.5)',
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.75), 0 0 9px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.15)',
+          boxShadow:
+            'inset 0 1px 0 rgba(255,255,255,0.75), 0 0 9px rgba(0,0,0,0.2), 0 3px 8px rgba(0,0,0,0.15)',
           color: '#fff',
           overflow: 'hidden',
           '&::before': {
@@ -197,7 +205,8 @@ const theme = createTheme({
             borderRadius: 'inherit',
             pointerEvents: 'none',
             zIndex: 0,
-            background: 'linear-gradient(to bottom right, rgba(255,255,255,0.6), rgba(255,255,255,0), rgba(255,255,255,0))',
+            background:
+              'linear-gradient(to bottom right, rgba(255,255,255,0.6), rgba(255,255,255,0), rgba(255,255,255,0))',
             opacity: 0.7,
           },
           '&::after': {
@@ -207,7 +216,8 @@ const theme = createTheme({
             borderRadius: 'inherit',
             pointerEvents: 'none',
             zIndex: 0,
-            background: 'linear-gradient(to top left, rgba(255,255,255,0.3), rgba(255,255,255,0), rgba(255,255,255,0))',
+            background:
+              'linear-gradient(to top left, rgba(255,255,255,0.3), rgba(255,255,255,0), rgba(255,255,255,0))',
             opacity: 0.5,
           },
           '& > *': {
@@ -428,7 +438,11 @@ function App() {
         >
           <CircularProgress />
           <Typography variant="h6">Validating session…</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520, textAlign: 'center' }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ maxWidth: 520, textAlign: 'center' }}
+          >
             If you see this for more than a few seconds, the API may be down or your token may have
             expired.
           </Typography>
@@ -456,7 +470,11 @@ function App() {
           }}
         >
           <Typography variant="h6">Session check failed</Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 640, textAlign: 'center' }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ maxWidth: 640, textAlign: 'center' }}
+          >
             {sessionValidationError}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1 }}>
@@ -536,7 +554,9 @@ function App() {
           />
           <Route
             path="/telemetry"
-            element={isAdmin ? <TelemetryView session={session} /> : <Navigate to="/schedule" replace />}
+            element={
+              isAdmin ? <TelemetryView session={session} /> : <Navigate to="/schedule" replace />
+            }
           />
 
           <Route

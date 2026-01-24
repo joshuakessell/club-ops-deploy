@@ -83,7 +83,9 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
         sessionToken: session.sessionToken,
       })
         .then((sessions) => {
-          setLaneSession((sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null);
+          setLaneSession(
+            (sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null
+          );
         })
         .catch(console.error);
     }

@@ -247,7 +247,10 @@ export function IdScanner({ isOpen, onClose, onScan, onManualEntry }: IdScannerP
       }}
     >
       {showConfirm && scannedData ? (
-        <div className="cs-liquid-card" style={{ padding: '2rem', maxWidth: '500px', width: '90%' }}>
+        <div
+          className="cs-liquid-card"
+          style={{ padding: '2rem', maxWidth: '500px', width: '90%' }}
+        >
           <h2 className="er-text-lg" style={{ marginBottom: '1rem' }}>
             Confirm ID Details
           </h2>

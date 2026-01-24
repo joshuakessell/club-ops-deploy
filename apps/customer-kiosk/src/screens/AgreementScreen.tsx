@@ -21,8 +21,12 @@ export interface AgreementScreenProps {
   agreementScrollRef: RefObject<HTMLDivElement>;
   signatureCanvasRef: RefObject<HTMLCanvasElement>;
   onAgreeChange: (agreed: boolean) => void;
-  onSignatureStart: (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => void;
-  onSignatureMove: (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => void;
+  onSignatureStart: (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => void;
+  onSignatureMove: (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => void;
   onSignatureEnd: () => void;
   onClearSignature: () => void;
   onSubmit: () => void;
@@ -94,9 +98,7 @@ export function AgreementScreen({
               <div className="ck-agreement-scroll-shell">
                 <div className="ck-arrow-slot" aria-hidden="true">
                   {!hasScrolledAgreement && (
-                    <div className="ck-arrow ck-arrow--down ck-arrow--bounce-y">
-                      ↓
-                    </div>
+                    <div className="ck-arrow ck-arrow--down ck-arrow--bounce-y">↓</div>
                   )}
                 </div>
 
@@ -117,9 +119,7 @@ export function AgreementScreen({
 
                 <div className="ck-arrow-slot" aria-hidden="true">
                   {!hasScrolledAgreement && (
-                    <div className="ck-arrow ck-arrow--down ck-arrow--bounce-y">
-                      ↓
-                    </div>
+                    <div className="ck-arrow ck-arrow--down ck-arrow--bounce-y">↓</div>
                   )}
                 </div>
               </div>
@@ -226,7 +226,9 @@ export function AgreementScreen({
           >
             <div className="signature-modal cs-liquid-card" onClick={(e) => e.stopPropagation()}>
               <div className="signature-modal-header">
-                <div className="signature-modal-title">{t(customerPrimaryLanguage, 'signatureRequired')}</div>
+                <div className="signature-modal-title">
+                  {t(customerPrimaryLanguage, 'signatureRequired')}
+                </div>
               </div>
 
               <canvas
@@ -270,4 +272,3 @@ export function AgreementScreen({
     </I18nProvider>
   );
 }
-

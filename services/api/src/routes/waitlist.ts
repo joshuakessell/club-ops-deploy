@@ -155,7 +155,8 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
           roomId: row.offered_room_id,
           offeredRoomNumber: row.offered_room_number,
           // Anonymous display: prefer locker number, fallback to room number, then masked ID
-          displayIdentifier: row.locker_number || row.current_room_number || `***${row.id.substring(0, 8)}`,
+          displayIdentifier:
+            row.locker_number || row.current_room_number || `***${row.id.substring(0, 8)}`,
           currentRentalType: row.current_rental_type,
           customerName: row.customer_name || 'Customer',
         }));
@@ -233,7 +234,11 @@ export async function waitlistRoutes(fastify: FastifyInstance): Promise<void> {
 
           // If the entry is already OFFERED, it should already have a room hold. In that case,
           // staff may only "confirm/extend" that same room's hold (per timed offer rules).
-          if (waitlist.status === 'OFFERED' && waitlist.room_id && waitlist.room_id !== body.roomId) {
+          if (
+            waitlist.status === 'OFFERED' &&
+            waitlist.room_id &&
+            waitlist.room_id !== body.roomId
+          ) {
             throw {
               statusCode: 409,
               message: 'Waitlist entry already has an active hold for a different room',

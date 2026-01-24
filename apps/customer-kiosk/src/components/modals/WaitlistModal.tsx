@@ -79,9 +79,7 @@ export function WaitlistModal({
               )}
             </div>
           )}
-          <p style={{ marginTop: '1rem' }}>
-            {t(customerPrimaryLanguage, 'waitlist.instructions')}
-          </p>
+          <p style={{ marginTop: '1rem' }}>{t(customerPrimaryLanguage, 'waitlist.instructions')}</p>
           <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.5rem' }}>
             {t(customerPrimaryLanguage, 'waitlist.noteChargedBackup')}
           </p>
@@ -118,8 +116,7 @@ export function WaitlistModal({
                     }}
                   >
                     {getRentalDisplayName(rental, customerPrimaryLanguage)}
-                    {!isAvailable &&
-                      ` ${t(customerPrimaryLanguage, 'waitlist.unavailableSuffix')}`}
+                    {!isAvailable && ` ${t(customerPrimaryLanguage, 'waitlist.unavailableSuffix')}`}
                   </button>
                 );
               })}

@@ -128,5 +128,3 @@ describe('InventoryDrawer', () => {
     expect(screen.queryByText('Room 102')).toBeNull();
   });
 });
-
-

@@ -67,13 +67,23 @@ export function CustomerAccountPanel(props: {
     lane: props.lane,
     sessionToken: props.sessionToken,
     customerId: props.customerId,
-    currentLaneSession: { currentSessionId: props.currentSessionId, customerId: props.currentSessionCustomerId },
+    currentLaneSession: {
+      currentSessionId: props.currentSessionId,
+      customerId: props.currentSessionCustomerId,
+    },
     onStarted: props.onStartedSession,
   });
 
   return (
     <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'baseline' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          alignItems: 'baseline',
+        }}
+      >
         <div style={{ fontWeight: 950, fontSize: '1.05rem' }}>Customer Account</div>
         {props.customerLabel ? (
           <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
@@ -93,7 +103,10 @@ export function CustomerAccountPanel(props: {
             }}
           >
             <div style={{ fontWeight: 950, marginBottom: '0.35rem' }}>Currently Checked In</div>
-            <div className="er-text-sm" style={{ color: '#cbd5e1', fontWeight: 700, lineHeight: 1.45 }}>
+            <div
+              className="er-text-sm"
+              style={{ color: '#cbd5e1', fontWeight: 700, lineHeight: 1.45 }}
+            >
               This customer already has an active visit. No new check-in was started.
             </div>
           </div>
@@ -105,7 +118,8 @@ export function CustomerAccountPanel(props: {
                   Assigned
                 </div>
                 <div style={{ fontWeight: 900 }}>
-                  {state.activeCheckin.assignedResourceType && state.activeCheckin.assignedResourceNumber
+                  {state.activeCheckin.assignedResourceType &&
+                  state.activeCheckin.assignedResourceNumber
                     ? `${state.activeCheckin.assignedResourceType === 'room' ? 'Room' : 'Locker'} ${
                         state.activeCheckin.assignedResourceNumber
                       }`
@@ -122,12 +136,16 @@ export function CustomerAccountPanel(props: {
                   flexWrap: 'wrap',
                 }}
               >
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div
+                  style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}
+                >
                   <div>
                     <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
                       Check-in
                     </div>
-                    <div style={{ fontWeight: 800 }}>{formatLocal(state.activeCheckin.checkinAt)}</div>
+                    <div style={{ fontWeight: 800 }}>
+                      {formatLocal(state.activeCheckin.checkinAt)}
+                    </div>
                   </div>
                   <div>
                     <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
@@ -135,7 +153,9 @@ export function CustomerAccountPanel(props: {
                     </div>
                     <div style={{ fontWeight: 800 }}>
                       {formatLocal(state.activeCheckin.checkoutAt)}{' '}
-                      {state.activeCheckin.overdue ? <span style={{ color: '#f59e0b' }}>(overdue)</span> : null}
+                      {state.activeCheckin.overdue ? (
+                        <span style={{ color: '#f59e0b' }}>(overdue)</span>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -144,7 +164,9 @@ export function CustomerAccountPanel(props: {
                   <button
                     type="button"
                     className="cs-liquid-button"
-                    onClick={() => props.onStartCheckout({ number: state.activeCheckin.assignedResourceNumber })}
+                    onClick={() =>
+                      props.onStartCheckout({ number: state.activeCheckin.assignedResourceNumber })
+                    }
                     style={{ width: '100%', maxWidth: 260, padding: '0.7rem', fontWeight: 900 }}
                   >
                     Checkout
@@ -158,7 +180,8 @@ export function CustomerAccountPanel(props: {
                     Pending upgrade request
                   </div>
                   <div style={{ fontWeight: 900 }}>
-                    {state.activeCheckin.waitlist.desiredTier} (backup: {state.activeCheckin.waitlist.backupTier}) •{' '}
+                    {state.activeCheckin.waitlist.desiredTier} (backup:{' '}
+                    {state.activeCheckin.waitlist.backupTier}) •{' '}
                     {state.activeCheckin.waitlist.status}
                   </div>
                 </div>
@@ -190,7 +213,15 @@ export function CustomerAccountPanel(props: {
           </button>
         </div>
       ) : (
-        <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', minHeight: 0 }}>
+        <div
+          style={{
+            marginTop: '0.75rem',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem',
+            minHeight: 0,
+          }}
+        >
           {props.currentSessionId && props.customerName ? (
             <>
               <CustomerProfileCard

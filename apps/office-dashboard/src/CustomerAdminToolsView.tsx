@@ -125,9 +125,27 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                 placeholder="Search by name or membership #"
               />
               <div className="cs-liquid-search__icon">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M14 14L11.1 11.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 14L11.1 11.1"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </div>
             </div>
@@ -226,7 +244,10 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                   </tbody>
                 </table>
 
-                <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                <div
+                  className="csRaisedCard cs-liquid-card"
+                  style={{ padding: '1rem', marginBottom: '1rem' }}
+                >
                   <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>Notes</div>
                   <pre
                     style={{

@@ -46,7 +46,8 @@ function decodeHtmlEntities(input: string): string {
   return replaced.replace(/&#(x?[0-9a-fA-F]+);/g, (_m, raw) => {
     try {
       const s = String(raw);
-      const codePoint = s.startsWith('x') || s.startsWith('X') ? parseInt(s.slice(1), 16) : parseInt(s, 10);
+      const codePoint =
+        s.startsWith('x') || s.startsWith('X') ? parseInt(s.slice(1), 16) : parseInt(s, 10);
       if (!Number.isFinite(codePoint)) return '';
       return String.fromCodePoint(codePoint);
     } catch {
@@ -100,7 +101,8 @@ function parseAgreementHtmlToBlocks(inputHtml: string): Block[] {
     if (current.type !== type) {
       // Close the previous block and start a new one.
       const finalized = normalizeRuns(current.runs);
-      if (finalized.some((r) => r.text.replace(/\s+/g, '').length > 0)) blocks.push({ ...current, runs: finalized });
+      if (finalized.some((r) => r.text.replace(/\s+/g, '').length > 0))
+        blocks.push({ ...current, runs: finalized });
       current = { type, runs: [] };
     }
   };
@@ -108,7 +110,8 @@ function parseAgreementHtmlToBlocks(inputHtml: string): Block[] {
   const closeBlock = (): void => {
     if (!current) return;
     const finalized = normalizeRuns(current.runs);
-    if (finalized.some((r) => r.text.replace(/\s+/g, '').length > 0)) blocks.push({ ...current, runs: finalized });
+    if (finalized.some((r) => r.text.replace(/\s+/g, '').length > 0))
+      blocks.push({ ...current, runs: finalized });
     current = null;
   };
 
@@ -205,7 +208,10 @@ function parseAgreementHtmlToBlocks(inputHtml: string): Block[] {
     return raw
       .split('\n')
       .map((line) => line.trimEnd())
-      .map((line) => ({ type: 'p' as const, runs: [{ text: line || '', style: { bold: false, italic: false } }] }))
+      .map((line) => ({
+        type: 'p' as const,
+        runs: [{ text: line || '', style: { bold: false, italic: false } }],
+      }))
       .filter((b) => b.runs[0]!.text.length > 0);
   }
 
@@ -239,7 +245,9 @@ function formatZonedDateTime(dt: Date, timeZone: string): string {
   }).format(dt);
 }
 
-async function tryEmbedClubLogoPng(pdfDoc: PDFDocument): Promise<ReturnType<PDFDocument['embedPng']> | null> {
+async function tryEmbedClubLogoPng(
+  pdfDoc: PDFDocument
+): Promise<ReturnType<PDFDocument['embedPng']> | null> {
   const envPath = process.env.CLUB_DALLAS_LOGO_PATH?.trim();
 
   // Candidate locations (best-effort). If none exist, we fall back to text-only letterhead.
@@ -334,7 +342,11 @@ export async function generateAgreementPdf(params: {
     return out;
   };
 
-  const layoutRunsToLines = (runs: InlineRun[], fontSize: number, maxWidth: number): InlineRun[][] => {
+  const layoutRunsToLines = (
+    runs: InlineRun[],
+    fontSize: number,
+    maxWidth: number
+  ): InlineRun[][] => {
     // Collapse HTML-style whitespace: sequences of whitespace become a single space, but preserve explicit newlines.
     const tokens: InlineRun[] = [];
     for (const run of runs) {
@@ -505,7 +517,13 @@ export async function generateAgreementPdf(params: {
 
   const bottomY = marginBottom + footerHeight;
 
-  const drawTextLineRuns = (page: any, x: number, y: number, line: InlineRun[], fontSize: number) => {
+  const drawTextLineRuns = (
+    page: any,
+    x: number,
+    y: number,
+    line: InlineRun[],
+    fontSize: number
+  ) => {
     let cursorX = x;
     for (const run of line) {
       if (!run.text) continue;
@@ -553,8 +571,17 @@ export async function generateAgreementPdf(params: {
       const needed = lines.length * lineHeight + 10;
       ensureSpace(needed);
       for (const line of lines) {
-        const text = line.map((r) => r.text).join('').trim();
-        currentPage.drawText(text, { x: marginX, y, size: fontSize, font: timesBold, color: black });
+        const text = line
+          .map((r) => r.text)
+          .join('')
+          .trim();
+        currentPage.drawText(text, {
+          x: marginX,
+          y,
+          size: fontSize,
+          font: timesBold,
+          color: black,
+        });
         y -= lineHeight;
       }
       y -= 6;
@@ -618,7 +645,13 @@ export async function generateAgreementPdf(params: {
     const textWidth = helv.widthOfTextAtSize(params.signatureText, size);
     const textX = sigBoxX + (contentWidth - textWidth) / 2;
     const textY = sigBoxY + signatureBoxHeight / 2 - 6;
-    currentPage.drawText(params.signatureText, { x: textX, y: textY, size, font: helv, color: black });
+    currentPage.drawText(params.signatureText, {
+      x: textX,
+      y: textY,
+      size,
+      font: helv,
+      color: black,
+    });
   } else {
     currentPage.drawText('(no signature image provided)', {
       x: sigBoxX + 10,
@@ -630,7 +663,13 @@ export async function generateAgreementPdf(params: {
   }
 
   y = sigBoxY - 18;
-  currentPage.drawText(`Printed Name: ${params.customerName}`, { x: marginX, y, size: 10, font: helv, color: black });
+  currentPage.drawText(`Printed Name: ${params.customerName}`, {
+    x: marginX,
+    y,
+    size: 10,
+    font: helv,
+    color: black,
+  });
   y -= 14;
   currentPage.drawText(`Signed (${tz}): ${formatZonedDateTime(params.signedAt, tz)}`, {
     x: marginX,

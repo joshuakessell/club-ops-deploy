@@ -131,7 +131,10 @@ export function RegisterSignIn({
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
         // If 404 or DEVICE_DISABLED, session is invalid
-        if (response.status === 404 || (isRecord(errorPayload) && errorPayload.code === 'DEVICE_DISABLED')) {
+        if (
+          response.status === 404 ||
+          (isRecord(errorPayload) && errorPayload.code === 'DEVICE_DISABLED')
+        ) {
           handleSessionInvalidated();
           return;
         }
@@ -253,7 +256,9 @@ export function RegisterSignIn({
           {import.meta.env.DEV && (
             <span className="register-top-bar-dev">
               {lane ? <span className="cs-badge cs-badge--info">Lane: {lane}</span> : null}
-              <span className={`cs-badge ${apiStatus === 'ok' ? 'cs-badge--success' : 'cs-badge--error'}`}>
+              <span
+                className={`cs-badge ${apiStatus === 'ok' ? 'cs-badge--success' : 'cs-badge--error'}`}
+              >
                 API: {apiStatus ?? '...'}
               </span>
               <span className={`cs-badge ${wsConnected ? 'cs-badge--success' : 'cs-badge--error'}`}>

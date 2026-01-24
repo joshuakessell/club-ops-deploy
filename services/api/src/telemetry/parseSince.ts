@@ -15,4 +15,3 @@ export function parseSince(input?: string): Date | undefined {
   const ms = unit === 'm' ? n * 60_000 : unit === 'h' ? n * 3_600_000 : n * 86_400_000;
   return new Date(Date.now() - ms);
 }
-

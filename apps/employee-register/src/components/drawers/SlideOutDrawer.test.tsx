@@ -96,5 +96,3 @@ describe('SlideOutDrawer', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
-
-

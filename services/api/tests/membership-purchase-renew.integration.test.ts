@@ -127,10 +127,14 @@ describe('Membership purchase/renew integration', () => {
         paymentIntentId: string;
         quote: { total: number; lineItems: Array<{ description: string; amount: number }> };
       };
-      expect(createBody.quote.lineItems.some((li) => li.description === '6 Month Membership' && li.amount === 43)).toBe(
-        true
+      expect(
+        createBody.quote.lineItems.some(
+          (li) => li.description === '6 Month Membership' && li.amount === 43
+        )
+      ).toBe(true);
+      expect(createBody.quote.lineItems.some((li) => li.description === 'Membership Fee')).toBe(
+        false
       );
-      expect(createBody.quote.lineItems.some((li) => li.description === 'Membership Fee')).toBe(false);
 
       // Mark paid in Square
       const markPaidRes = await fastify.inject({
@@ -154,9 +158,10 @@ describe('Membership purchase/renew integration', () => {
         membership_number: string | null;
         membership_card_type: string | null;
         membership_valid_until: string | null;
-      }>(`SELECT membership_number, membership_card_type, membership_valid_until::text FROM customers WHERE id = $1`, [
-        customerId,
-      ]);
+      }>(
+        `SELECT membership_number, membership_card_type, membership_valid_until::text FROM customers WHERE id = $1`,
+        [customerId]
+      );
       expect(customer.rows[0]!.membership_number).toBe('NEW-123');
       expect(customer.rows[0]!.membership_card_type).toBe('SIX_MONTH');
       expect(customer.rows[0]!.membership_valid_until).toBe(await expectedValidUntil());
@@ -219,10 +224,12 @@ describe('Membership purchase/renew integration', () => {
       });
       expect(completeRes.statusCode).toBe(200);
 
-      const customer = await pool.query<{ membership_number: string; membership_valid_until: string }>(
-        `SELECT membership_number, membership_valid_until::text FROM customers WHERE id = $1`,
-        [customerId]
-      );
+      const customer = await pool.query<{
+        membership_number: string;
+        membership_valid_until: string;
+      }>(`SELECT membership_number, membership_valid_until::text FROM customers WHERE id = $1`, [
+        customerId,
+      ]);
       expect(customer.rows[0]!.membership_number).toBe('OLD-1');
       expect(customer.rows[0]!.membership_valid_until).toBe(await expectedValidUntil());
     })
@@ -278,14 +285,14 @@ describe('Membership purchase/renew integration', () => {
       });
       expect(completeRes.statusCode).toBe(200);
 
-      const customer = await pool.query<{ membership_number: string; membership_valid_until: string }>(
-        `SELECT membership_number, membership_valid_until::text FROM customers WHERE id = $1`,
-        [customerId]
-      );
+      const customer = await pool.query<{
+        membership_number: string;
+        membership_valid_until: string;
+      }>(`SELECT membership_number, membership_valid_until::text FROM customers WHERE id = $1`, [
+        customerId,
+      ]);
       expect(customer.rows[0]!.membership_number).toBe('NEW-2');
       expect(customer.rows[0]!.membership_valid_until).toBe(await expectedValidUntil());
     })
   );
 });
-
-

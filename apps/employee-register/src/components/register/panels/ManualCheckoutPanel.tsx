@@ -50,7 +50,10 @@ function formatLateDuration(minutesLate: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-function formatDeltaMinutesLabel(scheduledCheckoutAt: string | Date): { label: string; color: string } {
+function formatDeltaMinutesLabel(scheduledCheckoutAt: string | Date): {
+  label: string;
+  color: string;
+} {
   const scheduled = toDate(scheduledCheckoutAt);
   const diffMs = scheduled.getTime() - Date.now();
   const mins = Math.max(0, Math.ceil(Math.abs(diffMs) / 60000));
@@ -190,7 +193,13 @@ export function ManualCheckoutPanel({
         return;
       }
 
-      onSuccess(data.alreadyCheckedOut ? 'Already checked out' : total > 1 ? `Checkout completed (${total})` : 'Checkout completed');
+      onSuccess(
+        data.alreadyCheckedOut
+          ? 'Already checked out'
+          : total > 1
+            ? `Checkout completed (${total})`
+            : 'Checkout completed'
+      );
 
       if (entryMode === 'default') {
         setConfirmQueue([]);
@@ -223,7 +232,14 @@ export function ManualCheckoutPanel({
 
   return (
     <div className="cs-liquid-card er-main-panel-card">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+        }}
+      >
         <div style={{ fontWeight: 900, fontSize: '1.3rem' }}>{title}</div>
         <div />
       </div>
@@ -245,12 +261,22 @@ export function ManualCheckoutPanel({
       )}
 
       {showCancelWarning && (
-        <div className="er-surface" style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: 12 }}>
+        <div
+          className="er-surface"
+          style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: 12 }}
+        >
           <div style={{ fontWeight: 900, marginBottom: '0.5rem' }}>Cancel checkout?</div>
           <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.75rem' }}>
             You are on the confirm step. Canceling will discard the current checkout confirmation.
           </div>
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end',
+              flexWrap: 'wrap',
+            }}
+          >
             <button
               type="button"
               className="cs-liquid-button cs-liquid-button--secondary"
@@ -279,7 +305,14 @@ export function ManualCheckoutPanel({
               <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading checkout…</div>
             ) : (
               <>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.75rem',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <div className="cs-liquid-search" style={{ flex: 1, minWidth: 280 }}>
                     <input
                       className="cs-liquid-input cs-liquid-search__input"
@@ -306,13 +339,18 @@ export function ManualCheckoutPanel({
                 </div>
 
                 <div style={{ marginTop: '0.75rem' }}>
-                  <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900, marginBottom: '0.5rem' }}>
+                  <div
+                    className="er-text-sm"
+                    style={{ color: '#94a3b8', fontWeight: 900, marginBottom: '0.5rem' }}
+                  >
                     Or select from occupied units
                   </div>
                   {loadingCandidates ? (
                     <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading…</div>
                   ) : candidates.length === 0 ? (
-                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No occupied rooms/lockers</div>
+                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>
+                      No occupied rooms/lockers
+                    </div>
                   ) : (
                     <div style={{ display: 'grid', gap: '0.5rem' }}>
                       {candidates.map((c) => {
@@ -326,23 +364,47 @@ export function ManualCheckoutPanel({
                             type="button"
                             className={[
                               'cs-liquid-button',
-                              selected ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                              selected
+                                ? 'cs-liquid-button--selected'
+                                : 'cs-liquid-button--secondary',
                             ].join(' ')}
                             aria-pressed={selected}
                             onClick={() => {
                               setTypedNumber('');
                               setSelectedOccupancyIds((prev) => {
-                                if (prev.includes(c.occupancyId)) return prev.filter((id) => id !== c.occupancyId);
+                                if (prev.includes(c.occupancyId))
+                                  return prev.filter((id) => id !== c.occupancyId);
                                 return [...prev, c.occupancyId];
                               });
                             }}
                             style={{ justifyContent: 'space-between', padding: '0.75rem' }}
                           >
-                            <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', gap: '1rem' }}>
-                              <div style={{ fontWeight: 900, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                width: '100%',
+                                justifyContent: 'space-between',
+                                gap: '1rem',
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  minWidth: 0,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
                                 {label} - {c.customerName} - {formatClockTime(scheduled)}
                               </div>
-                              <div style={{ fontWeight: 900, whiteSpace: 'nowrap', color: delta.color }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  whiteSpace: 'nowrap',
+                                  color: delta.color,
+                                }}
+                              >
                                 {delta.label}
                               </div>
                             </div>
@@ -361,7 +423,10 @@ export function ManualCheckoutPanel({
               <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading…</div>
             ) : (
               <div style={{ display: 'grid', gap: '0.75rem' }}>
-                <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900, textAlign: 'center' }}>
+                <div
+                  className="er-text-sm"
+                  style={{ color: '#94a3b8', fontWeight: 900, textAlign: 'center' }}
+                >
                   {confirmIndex + 1} of {confirmQueue.length}
                 </div>
                 <div style={{ textAlign: 'center', fontSize: '1.5rem', fontWeight: 900 }}>
@@ -373,39 +438,72 @@ export function ManualCheckoutPanel({
                     Checkout
                   </div>
                   <div style={{ fontWeight: 900 }}>
-                    {confirmQueue[confirmIndex]?.resourceType === 'ROOM' ? 'Room' : 'Locker'} {confirmQueue[confirmIndex]?.number}
+                    {confirmQueue[confirmIndex]?.resourceType === 'ROOM' ? 'Room' : 'Locker'}{' '}
+                    {confirmQueue[confirmIndex]?.number}
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gap: '0.75rem',
+                  }}
+                >
                   <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.25rem' }}>
+                    <div
+                      className="er-text-sm"
+                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
+                    >
                       Check-in
                     </div>
-                    <div style={{ fontWeight: 900 }}>{formatClockTime(confirmQueue[confirmIndex]!.checkinAt)}</div>
+                    <div style={{ fontWeight: 900 }}>
+                      {formatClockTime(confirmQueue[confirmIndex]!.checkinAt)}
+                    </div>
                   </div>
                   <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.25rem' }}>
+                    <div
+                      className="er-text-sm"
+                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
+                    >
                       Scheduled checkout
                     </div>
-                    <div style={{ fontWeight: 900 }}>{formatClockTime(confirmQueue[confirmIndex]!.scheduledCheckoutAt)}</div>
+                    <div style={{ fontWeight: 900 }}>
+                      {formatClockTime(confirmQueue[confirmIndex]!.scheduledCheckoutAt)}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem' }}>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                    gap: '0.75rem',
+                  }}
+                >
                   <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.25rem' }}>
+                    <div
+                      className="er-text-sm"
+                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
+                    >
                       Late
                     </div>
                     <div style={{ fontWeight: 900 }}>
-                      {confirmQueue[confirmIndex]!.lateMinutes > 0 ? formatLateDuration(confirmQueue[confirmIndex]!.lateMinutes) : '—'}
+                      {confirmQueue[confirmIndex]!.lateMinutes > 0
+                        ? formatLateDuration(confirmQueue[confirmIndex]!.lateMinutes)
+                        : '—'}
                     </div>
                   </div>
                   <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.25rem' }}>
+                    <div
+                      className="er-text-sm"
+                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
+                    >
                       Fee
                     </div>
-                    <div style={{ fontWeight: 900 }}>${confirmQueue[confirmIndex]!.fee.toFixed(2)}</div>
+                    <div style={{ fontWeight: 900 }}>
+                      ${confirmQueue[confirmIndex]!.fee.toFixed(2)}
+                    </div>
                   </div>
                 </div>
 
@@ -418,7 +516,14 @@ export function ManualCheckoutPanel({
                   </div>
                 )}
 
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.75rem',
+                    justifyContent: 'flex-end',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <button
                     type="button"
                     className="cs-liquid-button"
@@ -436,4 +541,3 @@ export function ManualCheckoutPanel({
     </div>
   );
 }
-

@@ -167,20 +167,22 @@ describe('Manual Checkout APIs', () => {
   beforeEach(async () => {
     // Reset for each test
     await pool.query(`UPDATE visits SET ended_at = NULL WHERE id = $1`, [testVisitId]);
-    await pool.query(`UPDATE rooms SET status = 'OCCUPIED', assigned_to_customer_id = $1 WHERE id = $2`, [
-      testCustomerId,
-      testRoomId,
-    ]);
-    await pool.query(`UPDATE customers SET past_due_balance = 0, banned_until = NULL, notes = '' WHERE id = $1`, [
-      testCustomerId,
-    ]);
-    await pool.query(`UPDATE waitlist SET status = 'ACTIVE', cancelled_at = NULL, cancelled_by_staff_id = NULL WHERE id = $1`, [
-      testWaitlistId,
-    ]);
-    await pool.query(`DELETE FROM late_checkout_events WHERE customer_id = $1 AND occupancy_id = $2`, [
-      testCustomerId,
-      testBlockId,
-    ]);
+    await pool.query(
+      `UPDATE rooms SET status = 'OCCUPIED', assigned_to_customer_id = $1 WHERE id = $2`,
+      [testCustomerId, testRoomId]
+    );
+    await pool.query(
+      `UPDATE customers SET past_due_balance = 0, banned_until = NULL, notes = '' WHERE id = $1`,
+      [testCustomerId]
+    );
+    await pool.query(
+      `UPDATE waitlist SET status = 'ACTIVE', cancelled_at = NULL, cancelled_by_staff_id = NULL WHERE id = $1`,
+      [testWaitlistId]
+    );
+    await pool.query(
+      `DELETE FROM late_checkout_events WHERE customer_id = $1 AND occupancy_id = $2`,
+      [testCustomerId, testBlockId]
+    );
 
     fastify = Fastify();
     const broadcaster = createBroadcaster();
@@ -235,9 +237,10 @@ describe('Manual Checkout APIs', () => {
     const firstData = JSON.parse(first.body);
     expect(firstData.alreadyCheckedOut).toBe(false);
 
-    const visit = await pool.query<{ ended_at: Date | null }>(`SELECT ended_at FROM visits WHERE id = $1`, [
-      testVisitId,
-    ]);
+    const visit = await pool.query<{ ended_at: Date | null }>(
+      `SELECT ended_at FROM visits WHERE id = $1`,
+      [testVisitId]
+    );
     expect(visit.rows[0]!.ended_at).not.toBeNull();
 
     const room = await pool.query<{ status: string; assigned_to_customer_id: string | null }>(
@@ -247,17 +250,21 @@ describe('Manual Checkout APIs', () => {
     expect(room.rows[0]!.status).toBe('DIRTY');
     expect(room.rows[0]!.assigned_to_customer_id).toBeNull();
 
-    const customer = await pool.query<{ past_due_balance: string; banned_until: Date | null; notes: string | null }>(
-      `SELECT past_due_balance, banned_until, notes FROM customers WHERE id = $1`,
-      [testCustomerId]
-    );
+    const customer = await pool.query<{
+      past_due_balance: string;
+      banned_until: Date | null;
+      notes: string | null;
+    }>(`SELECT past_due_balance, banned_until, notes FROM customers WHERE id = $1`, [
+      testCustomerId,
+    ]);
     expect(parseFloat(String(customer.rows[0]!.past_due_balance))).toBe(35);
     expect(customer.rows[0]!.banned_until).not.toBeNull();
     expect(String(customer.rows[0]!.notes || '')).toContain('[SYSTEM_LATE_FEE_PENDING]');
 
-    const waitlist = await pool.query<{ status: string }>(`SELECT status FROM waitlist WHERE id = $1`, [
-      testWaitlistId,
-    ]);
+    const waitlist = await pool.query<{ status: string }>(
+      `SELECT status FROM waitlist WHERE id = $1`,
+      [testWaitlistId]
+    );
     expect(waitlist.rows[0]!.status).toBe('CANCELLED');
 
     const lateEvents = await pool.query<{ checkout_request_id: string | null; fee_amount: string }>(
@@ -294,5 +301,3 @@ describe('Manual Checkout APIs', () => {
     expect(lateEventsAfter.rows.length).toBe(1);
   });
 });
-
-

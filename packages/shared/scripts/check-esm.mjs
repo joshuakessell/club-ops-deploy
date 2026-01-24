@@ -61,16 +61,21 @@ async function main() {
   }
 
   if (failures.length > 0) {
-    console.error('[check:esm] Found extensionless relative import/export specifiers in dist output:');
+    console.error(
+      '[check:esm] Found extensionless relative import/export specifiers in dist output:'
+    );
     for (const { file, spec } of failures) {
       console.error(`- ${path.relative(process.cwd(), file)}: "${spec}"`);
     }
-    console.error('[check:esm] Fix by adding explicit ".js" extensions to the corresponding TS relative imports/exports.');
+    console.error(
+      '[check:esm] Fix by adding explicit ".js" extensions to the corresponding TS relative imports/exports.'
+    );
     process.exit(1);
   }
 
-  console.log('[check:esm] OK (all relative specifiers in dist/**/*.js include an explicit extension).');
+  console.log(
+    '[check:esm] OK (all relative specifiers in dist/**/*.js include an explicit extension).'
+  );
 }
 
 await main();
-

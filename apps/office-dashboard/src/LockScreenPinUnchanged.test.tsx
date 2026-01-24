@@ -44,4 +44,3 @@ describe('Office Dashboard PIN flow (unchanged)', () => {
     expect(container.querySelector('.cs-liquid-numpad')).toBeNull();
   });
 });
-

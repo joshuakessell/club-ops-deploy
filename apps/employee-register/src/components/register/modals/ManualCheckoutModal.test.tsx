@@ -39,7 +39,8 @@ describe('ManualCheckoutModal', () => {
 
     const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
     const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
-    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    if (!(checkoutModalEl instanceof HTMLElement))
+      throw new Error('Expected checkout modal container');
     const m = within(checkoutModalEl);
 
     expect(await m.findByText(/Suggested/i)).toBeDefined();
@@ -77,7 +78,8 @@ describe('ManualCheckoutModal', () => {
 
     const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
     const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
-    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    if (!(checkoutModalEl instanceof HTMLElement))
+      throw new Error('Expected checkout modal container');
     const m = within(checkoutModalEl);
 
     const continueBtn = await m.findByRole('button', { name: 'Continue' });
@@ -142,7 +144,8 @@ describe('ManualCheckoutModal', () => {
 
     const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
     const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
-    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    if (!(checkoutModalEl instanceof HTMLElement))
+      throw new Error('Expected checkout modal container');
     const m = within(checkoutModalEl);
 
     const candidateBtn = await m.findByRole('button', { name: /Room 101/i });
@@ -206,11 +209,19 @@ describe('ManualCheckoutModal', () => {
         json: () => Promise.resolve({ alreadyCheckedOut: false }),
       });
 
-    render(<ManualCheckoutModal isOpen={true} sessionToken="tok" onClose={onClose} onSuccess={onSuccess} />);
+    render(
+      <ManualCheckoutModal
+        isOpen={true}
+        sessionToken="tok"
+        onClose={onClose}
+        onSuccess={onSuccess}
+      />
+    );
 
     const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
     const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
-    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    if (!(checkoutModalEl instanceof HTMLElement))
+      throw new Error('Expected checkout modal container');
     const m = within(checkoutModalEl);
 
     fireEvent.click(await m.findByRole('button', { name: /Room 101/i }));
@@ -266,7 +277,8 @@ describe('ManualCheckoutModal', () => {
     // Should land on confirm step without clicking Continue.
     const checkoutHeading = await screen.findByRole('heading', { name: 'Checkout' });
     const checkoutModalEl = checkoutHeading.closest('.cs-liquid-card');
-    if (!(checkoutModalEl instanceof HTMLElement)) throw new Error('Expected checkout modal container');
+    if (!(checkoutModalEl instanceof HTMLElement))
+      throw new Error('Expected checkout modal container');
     const m = within(checkoutModalEl);
 
     expect(await m.findByText(/Confirm checkout/i)).toBeDefined();
@@ -280,5 +292,3 @@ describe('ManualCheckoutModal', () => {
     expect(urls.some((url) => url.includes('/api/v1/checkout/manual-resolve'))).toBe(true);
   });
 });
-
-

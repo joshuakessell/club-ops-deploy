@@ -159,205 +159,205 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
 
   return (
     <Box
-        sx={{
-          minHeight: '100vh',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 3,
-        }}
-      >
-        <Container maxWidth="sm">
-          <Fade in timeout={500}>
-            <Paper
-              elevation={24}
-              sx={{
-                borderRadius: 4,
-                overflow: 'hidden',
-                background: 'white',
-              }}
-            >
-              {!selectedEmployee ? (
-                <Box sx={{ p: 4 }}>
-                  {/* Header */}
-                  <Box sx={{ textAlign: 'center', mb: 4 }}>
-                    <Box
-                      sx={{
-                        width: 64,
-                        height: 64,
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 16px',
-                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
-                      }}
-                    >
-                      <BusinessCenter sx={{ fontSize: 32, color: 'white' }} />
-                    </Box>
-                    <Typography variant="h4" sx={{ mb: 1, color: '#1a1a1a', fontWeight: 700 }}>
-                      Club Operations
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      Select your account to continue
-                    </Typography>
-                  </Box>
-
-                  {/* Employee Selection */}
-                  {isLoadingEmployees ? (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                      <CircularProgress />
-                      <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-                        Loading staff...
-                      </Typography>
-                    </Box>
-                  ) : employees.length === 0 ? (
-                    <Alert severity="error">
-                      No active staff members found. Please contact an administrator.
-                    </Alert>
-                  ) : (
-                    <Stack spacing={2}>
-                      {employees.map((employee) => (
-                        <Card
-                          key={employee.id}
-                          sx={{
-                            cursor: 'pointer',
-                            border: '2px solid transparent',
-                            '&:hover': {
-                              borderColor: 'primary.main',
-                            },
-                          }}
-                          onClick={() => handleEmployeeSelect(employee)}
-                        >
-                          <CardContent>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Avatar
-                                sx={{
-                                  bgcolor:
-                                    employee.role === 'ADMIN' ? 'primary.main' : 'secondary.main',
-                                  width: 48,
-                                  height: 48,
-                                }}
-                              >
-                                {employee.icon}
-                              </Avatar>
-                              <Box sx={{ flex: 1 }}>
-                                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                  {employee.name}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                  {employee.description}
-                                </Typography>
-                              </Box>
-                              <LoginIcon sx={{ color: 'text.secondary' }} />
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </Stack>
-                  )}
-                </Box>
-              ) : (
-                <Box sx={{ p: 4 }}>
-                  {/* Back Button */}
-                  <Button
-                    startIcon={<Person />}
-                    onClick={handleBack}
-                    sx={{ mb: 3, color: 'text.secondary' }}
+      sx={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 3,
+      }}
+    >
+      <Container maxWidth="sm">
+        <Fade in timeout={500}>
+          <Paper
+            elevation={24}
+            sx={{
+              borderRadius: 4,
+              overflow: 'hidden',
+              background: 'white',
+            }}
+          >
+            {!selectedEmployee ? (
+              <Box sx={{ p: 4 }}>
+                {/* Header */}
+                <Box sx={{ textAlign: 'center', mb: 4 }}>
+                  <Box
+                    sx={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 16px',
+                      boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
+                    }}
                   >
-                    Back to Employee Selection
-                  </Button>
+                    <BusinessCenter sx={{ fontSize: 32, color: 'white' }} />
+                  </Box>
+                  <Typography variant="h4" sx={{ mb: 1, color: '#1a1a1a', fontWeight: 700 }}>
+                    Club Operations
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    Select your account to continue
+                  </Typography>
+                </Box>
 
-                  {/* Selected Employee Info */}
-                  <Box sx={{ textAlign: 'center', mb: 4 }}>
-                    <Avatar
-                      sx={{
-                        bgcolor:
-                          selectedEmployee.role === 'ADMIN' ? 'primary.main' : 'secondary.main',
-                        width: 80,
-                        height: 80,
-                        margin: '0 auto 16px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      }}
-                    >
-                      {selectedEmployee.icon}
-                    </Avatar>
-                    <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>
-                      {selectedEmployee.name}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {selectedEmployee.description}
+                {/* Employee Selection */}
+                {isLoadingEmployees ? (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <CircularProgress />
+                    <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                      Loading staff...
                     </Typography>
                   </Box>
-
-                  {/* PIN Entry Form */}
-                  <form onSubmit={handlePinSubmit}>
-                    <Stack spacing={3}>
-                      {error && (
-                        <Alert severity="error" onClose={() => setError(null)}>
-                          {error}
-                        </Alert>
-                      )}
-
-                      <TextField
-                        fullWidth
-                        type="password"
-                        label="Enter PIN"
-                        value={pin}
-                        onChange={(e) => {
-                          // Only allow numeric input
-                          const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                          setPin(value);
-                        }}
-                        disabled={isLoading}
-                        autoFocus
-                        inputProps={{
-                          maxLength: 6,
-                          inputMode: 'numeric',
-                          pattern: '[0-9]*',
-                        }}
-                        InputProps={{
-                          startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary' }} />,
-                        }}
+                ) : employees.length === 0 ? (
+                  <Alert severity="error">
+                    No active staff members found. Please contact an administrator.
+                  </Alert>
+                ) : (
+                  <Stack spacing={2}>
+                    {employees.map((employee) => (
+                      <Card
+                        key={employee.id}
                         sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 2,
-                          },
-                          '& input': {
-                            textAlign: 'center',
-                            fontSize: '1.5rem',
-                            letterSpacing: '0.5rem',
-                            fontFamily: 'monospace',
-                          },
-                        }}
-                      />
-
-                      <Button
-                        type="submit"
-                        fullWidth
-                        variant="contained"
-                        size="large"
-                        disabled={isLoading || pin.trim().length !== 6}
-                        startIcon={isLoading ? <CircularProgress size={20} /> : <LoginIcon />}
-                        sx={{
-                          py: 1.5,
-                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          cursor: 'pointer',
+                          border: '2px solid transparent',
                           '&:hover': {
-                            background: 'linear-gradient(135deg, #5568d3 0%, #6a4190 100%)',
+                            borderColor: 'primary.main',
                           },
                         }}
+                        onClick={() => handleEmployeeSelect(employee)}
                       >
-                        {isLoading ? 'Signing In...' : 'Sign In'}
-                      </Button>
-                    </Stack>
-                  </form>
+                        <CardContent>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            <Avatar
+                              sx={{
+                                bgcolor:
+                                  employee.role === 'ADMIN' ? 'primary.main' : 'secondary.main',
+                                width: 48,
+                                height: 48,
+                              }}
+                            >
+                              {employee.icon}
+                            </Avatar>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+                                {employee.name}
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                                {employee.description}
+                              </Typography>
+                            </Box>
+                            <LoginIcon sx={{ color: 'text.secondary' }} />
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+            ) : (
+              <Box sx={{ p: 4 }}>
+                {/* Back Button */}
+                <Button
+                  startIcon={<Person />}
+                  onClick={handleBack}
+                  sx={{ mb: 3, color: 'text.secondary' }}
+                >
+                  Back to Employee Selection
+                </Button>
+
+                {/* Selected Employee Info */}
+                <Box sx={{ textAlign: 'center', mb: 4 }}>
+                  <Avatar
+                    sx={{
+                      bgcolor:
+                        selectedEmployee.role === 'ADMIN' ? 'primary.main' : 'secondary.main',
+                      width: 80,
+                      height: 80,
+                      margin: '0 auto 16px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    }}
+                  >
+                    {selectedEmployee.icon}
+                  </Avatar>
+                  <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>
+                    {selectedEmployee.name}
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    {selectedEmployee.description}
+                  </Typography>
                 </Box>
-              )}
-            </Paper>
-          </Fade>
-        </Container>
-      </Box>
+
+                {/* PIN Entry Form */}
+                <form onSubmit={handlePinSubmit}>
+                  <Stack spacing={3}>
+                    {error && (
+                      <Alert severity="error" onClose={() => setError(null)}>
+                        {error}
+                      </Alert>
+                    )}
+
+                    <TextField
+                      fullWidth
+                      type="password"
+                      label="Enter PIN"
+                      value={pin}
+                      onChange={(e) => {
+                        // Only allow numeric input
+                        const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        setPin(value);
+                      }}
+                      disabled={isLoading}
+                      autoFocus
+                      inputProps={{
+                        maxLength: 6,
+                        inputMode: 'numeric',
+                        pattern: '[0-9]*',
+                      }}
+                      InputProps={{
+                        startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary' }} />,
+                      }}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          borderRadius: 2,
+                        },
+                        '& input': {
+                          textAlign: 'center',
+                          fontSize: '1.5rem',
+                          letterSpacing: '0.5rem',
+                          fontFamily: 'monospace',
+                        },
+                      }}
+                    />
+
+                    <Button
+                      type="submit"
+                      fullWidth
+                      variant="contained"
+                      size="large"
+                      disabled={isLoading || pin.trim().length !== 6}
+                      startIcon={isLoading ? <CircularProgress size={20} /> : <LoginIcon />}
+                      sx={{
+                        py: 1.5,
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #5568d3 0%, #6a4190 100%)',
+                        },
+                      }}
+                    >
+                      {isLoading ? 'Signing In...' : 'Sign In'}
+                    </Button>
+                  </Stack>
+                </form>
+              </Box>
+            )}
+          </Paper>
+        </Fade>
+      </Container>
+    </Box>
   );
 }

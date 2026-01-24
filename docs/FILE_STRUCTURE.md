@@ -3,6 +3,7 @@
 This file is the **canonical, human-maintained** map of the repository layout.
 
 ## Rules (for all contributors)
+
 - If you **add, remove, rename, or move** any top-level area (apps/packages/services/docs/db/scripts/tools/infra), you **must** update this file in the same change.
 - If you add a **new app/package/service** (or a new major sub-area under an existing one), you **must** add it here with a 1–2 line description.
 - Keep this doc **stable and skim-friendly**:
@@ -67,4 +68,3 @@ docs/
   specs/                   # Feature specs (long-form); link from SPEC.md as needed
   demo/                    # Demo/smoke-test notes and reports
 ```
-

@@ -296,7 +296,11 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
       pendingIncident = null;
     }
 
-    if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    if (
+      useBeacon &&
+      typeof navigator !== 'undefined' &&
+      typeof navigator.sendBeacon === 'function'
+    ) {
       try {
         const blob = new Blob([payload], { type: 'application/json' });
         navigator.sendBeacon(endpoint, blob);
@@ -446,8 +450,8 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
         startedAt: span.startedAt ?? nowIso(),
         route: span.route ?? ctx.route,
         meta: span.meta ?? {},
-        incidentId: incidentActive ? incidentId ?? undefined : span.incidentId,
-        incidentReason: incidentActive ? incidentReason ?? undefined : span.incidentReason,
+        incidentId: incidentActive ? (incidentId ?? undefined) : span.incidentId,
+        incidentReason: incidentActive ? (incidentReason ?? undefined) : span.incidentReason,
       };
 
       if (isBreadcrumb) {
@@ -588,10 +592,10 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     originalConsoleError(...args);
   };
 
-    console.warn = (...args: unknown[]) => {
+  console.warn = (...args: unknown[]) => {
     onWarn(...args);
-      originalConsoleWarn(...args);
-    };
+    originalConsoleWarn(...args);
+  };
 
   document.addEventListener('click', captureClick, true);
   window.addEventListener('popstate', handleRouteChange);
@@ -606,11 +610,7 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
     if (shouldSkipUrl(url, endpoint)) {
       return originalFetch(input, init);
@@ -619,10 +619,13 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     const requestKey = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
     const method =
       safeString(init?.method, 16) ??
-      (typeof input === 'string' || input instanceof URL ? 'GET' : safeString(input.method, 16) ?? 'GET');
+      (typeof input === 'string' || input instanceof URL
+        ? 'GET'
+        : (safeString(input.method, 16) ?? 'GET'));
     const { path, queryKeys } = stripQuery(url);
     const headers = new Headers(
-      init?.headers ?? (typeof input === 'string' || input instanceof URL ? undefined : input.headers)
+      init?.headers ??
+        (typeof input === 'string' || input instanceof URL ? undefined : input.headers)
     );
 
     headers.set('x-request-key', requestKey);
@@ -690,19 +693,25 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
 
       if (incidentActive) {
         responseHeaders = redactHeaders(res.headers);
-        if (shouldCaptureBody(path) && res.headers.get('content-type')?.includes('application/json')) {
-            const text = await res.clone().text().catch(() => '');
+        if (
+          shouldCaptureBody(path) &&
+          res.headers.get('content-type')?.includes('application/json')
+        ) {
+          const text = await res
+            .clone()
+            .text()
+            .catch(() => '');
           const serialized = serializeBody(text);
           responseBody = serialized.body ?? undefined;
           responseMetaExtra = serialized.meta;
         }
-        }
+      }
 
-        capture({
+      capture({
         spanType: 'net.response',
         level: res.status >= 500 ? 'error' : res.status >= 400 ? 'warn' : 'info',
-          method,
-          status: res.status,
+        method,
+        status: res.status,
         url: path,
         durationMs,
         responseHeaders,

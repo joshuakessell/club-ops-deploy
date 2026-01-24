@@ -109,11 +109,11 @@ export function getLaneSessionClient(options: LaneSessionClientOptions): WebSock
       existing.socket.readyState === WebSocket.OPEN ||
       existing.socket.readyState === WebSocket.CONNECTING
     ) {
-    if (!loggedReused.has(key)) {
-      loggedReused.add(key);
-      console.info('[realtime] LaneSessionClient reused', { key });
-    }
-    return existing.socket;
+      if (!loggedReused.has(key)) {
+        loggedReused.add(key);
+        console.info('[realtime] LaneSessionClient reused', { key });
+      }
+      return existing.socket;
     }
 
     // Stale socket: clear cache and create a new one below.

@@ -1,5 +1,7 @@
 export function extractDobDigits(input: string): string {
-  return String(input ?? '').replace(/\D/g, '').slice(0, 8);
+  return String(input ?? '')
+    .replace(/\D/g, '')
+    .slice(0, 8);
 }
 
 /**
@@ -35,7 +37,7 @@ export function parseDobDigitsToIso(digitsRaw: string): string | null {
   // Validate this is a real calendar date.
   const d = new Date(Date.UTC(year, month - 1, day));
   if (!Number.isFinite(d.getTime())) return null;
-  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day)
+    return null;
   return `${yyyy}-${mm}-${dd}`;
 }
-

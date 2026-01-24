@@ -44,7 +44,8 @@ export function InventoryDrawer({
 }: InventoryDrawerProps) {
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState<InventoryDrawerSection>(null);
 
-  const expandedSection = forcedExpandedSection !== undefined ? forcedExpandedSection : uncontrolledExpanded;
+  const expandedSection =
+    forcedExpandedSection !== undefined ? forcedExpandedSection : uncontrolledExpanded;
 
   return (
     <div
@@ -87,5 +88,3 @@ export function InventoryDrawer({
     </div>
   );
 }
-
-

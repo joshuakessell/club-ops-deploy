@@ -22,12 +22,14 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const dirtyRooms = useMemo(
-    () => rooms.filter((r) => r.status === 'DIRTY').sort((a, b) => a.number.localeCompare(b.number)),
+    () =>
+      rooms.filter((r) => r.status === 'DIRTY').sort((a, b) => a.number.localeCompare(b.number)),
     [rooms]
   );
 
   const cleaningRooms = useMemo(
-    () => rooms.filter((r) => r.status === 'CLEANING').sort((a, b) => a.number.localeCompare(b.number)),
+    () =>
+      rooms.filter((r) => r.status === 'CLEANING').sort((a, b) => a.number.localeCompare(b.number)),
     [rooms]
   );
 
@@ -58,7 +60,9 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
         const relevant: DetailedRoom[] = roomsRaw
           .filter(
             (r): r is { id: string; number: string; status: string } =>
-              typeof r?.id === 'string' && typeof r?.number === 'string' && typeof r?.status === 'string'
+              typeof r?.id === 'string' &&
+              typeof r?.number === 'string' &&
+              typeof r?.status === 'string'
           )
           .map((r) => ({ id: r.id, number: r.number, status: r.status }))
           .filter((r) => r.status === 'CLEANING' || r.status === 'DIRTY');
@@ -123,7 +127,9 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
 
   return (
     <div className="cs-liquid-card er-main-panel-card">
-      <div style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: '0.75rem' }}>Room Cleaning</div>
+      <div style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: '0.75rem' }}>
+        Room Cleaning
+      </div>
 
       {error && (
         <div
@@ -141,16 +147,27 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
         </div>
       )}
 
-      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>Select rooms to begin or finish cleaning</div>
+      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>
+        Select rooms to begin or finish cleaning
+      </div>
 
       {loading ? (
         <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading…</div>
       ) : dirtyRooms.length === 0 && cleaningRooms.length === 0 ? (
         <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No DIRTY or CLEANING rooms</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: '0.75rem',
+          }}
+        >
           <div>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}>
+            <div
+              className="er-text-sm"
+              style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}
+            >
               DIRTY (ready to begin cleaning)
             </div>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
@@ -174,7 +191,9 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
                       style={{ justifyContent: 'space-between', padding: '0.75rem' }}
                     >
                       <span style={{ fontWeight: 900 }}>Room {r.number}</span>
-                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>{selected ? 'Selected' : 'DIRTY'}</span>
+                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>
+                        {selected ? 'Selected' : 'DIRTY'}
+                      </span>
                     </button>
                   );
                 })
@@ -183,7 +202,10 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
           </div>
 
           <div>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}>
+            <div
+              className="er-text-sm"
+              style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}
+            >
               CLEANING (ready to finish cleaning)
             </div>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
@@ -207,7 +229,9 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
                       style={{ justifyContent: 'space-between', padding: '0.75rem' }}
                     >
                       <span style={{ fontWeight: 900 }}>Room {r.number}</span>
-                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>{selected ? 'Selected' : 'CLEANING'}</span>
+                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>
+                        {selected ? 'Selected' : 'CLEANING'}
+                      </span>
                     </button>
                   );
                 })
@@ -218,7 +242,10 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
       )}
 
       {selectedRooms.length > 0 && (
-        <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12, marginTop: '0.75rem' }}>
+        <div
+          className="er-surface"
+          style={{ padding: '0.75rem', borderRadius: 12, marginTop: '0.75rem' }}
+        >
           <div className="er-text-sm" style={{ fontWeight: 900, marginBottom: '0.25rem' }}>
             Selected:
           </div>
@@ -245,4 +272,3 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
     </div>
   );
 }
-

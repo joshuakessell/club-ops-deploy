@@ -135,7 +135,13 @@ describe('InventorySelector', () => {
       json: () =>
         Promise.resolve({
           rooms: [
-            { id: 'room-avail', number: '101', status: 'CLEAN', assignedTo: null, checkoutAt: null },
+            {
+              id: 'room-avail',
+              number: '101',
+              status: 'CLEAN',
+              assignedTo: null,
+              checkoutAt: null,
+            },
             {
               id: 'room-occ',
               number: '102',

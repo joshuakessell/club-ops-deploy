@@ -310,8 +310,11 @@ export async function buildFullSessionUpdatedPayload(
     membershipNumber,
     customerMembershipValidUntil,
     membershipChoice: (session.membership_choice as 'ONE_TIME' | 'SIX_MONTH' | null) ?? null,
-    membershipPurchaseIntent: (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
-    kioskAcknowledgedAt: session.kiosk_acknowledged_at ? session.kiosk_acknowledged_at.toISOString() : undefined,
+    membershipPurchaseIntent:
+      (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
+    kioskAcknowledgedAt: session.kiosk_acknowledged_at
+      ? session.kiosk_acknowledged_at.toISOString()
+      : undefined,
     allowedRentals,
     mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'CHECKIN',
     status: session.status,

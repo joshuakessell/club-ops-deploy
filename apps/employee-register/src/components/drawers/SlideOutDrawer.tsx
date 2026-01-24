@@ -229,5 +229,3 @@ export function SlideOutDrawer({
     </>
   );
 }
-
-

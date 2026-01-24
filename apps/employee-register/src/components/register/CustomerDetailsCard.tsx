@@ -13,7 +13,15 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
       <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.15rem' }}>
         {label}
       </div>
-      <div className="er-text-md" style={{ fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      <div
+        className="er-text-md"
+        style={{
+          fontWeight: 800,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+      >
         {value}
       </div>
     </div>
@@ -28,7 +36,9 @@ export function CustomerDetailsCard({
 }: CustomerDetailsCardProps) {
   return (
     <div className="cs-liquid-card" style={{ padding: '0.9rem' }}>
-      <div style={{ fontWeight: 950, fontSize: '1rem', marginBottom: '0.6rem' }}>Customer Details</div>
+      <div style={{ fontWeight: 950, fontSize: '1rem', marginBottom: '0.6rem' }}>
+        Customer Details
+      </div>
       <div
         style={{
           display: 'grid',
@@ -45,4 +55,3 @@ export function CustomerDetailsCard({
     </div>
   );
 }
-

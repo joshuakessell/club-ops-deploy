@@ -82,7 +82,9 @@ export function MultipleMatchesModal({
                   }}
                 >
                   <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>{c.name}</div>
-                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', color: '#94a3b8' }}>
+                  <div
+                    style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', color: '#94a3b8' }}
+                  >
                     {c.dob && <span>DOB: {c.dob}</span>}
                     {c.membershipNumber && <span>Membership: {c.membershipNumber}</span>}
                   </div>
@@ -105,4 +107,3 @@ export function MultipleMatchesModal({
     </ModalFrame>
   );
 }
-
