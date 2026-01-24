@@ -750,9 +750,24 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           )
         ).rows[0];
 
-        if (!row) return { session: null as null | unknown };
+        const completedRow =
+          row ??
+          (
+            await client.query<{ id: string }>(
+              `SELECT id
+               FROM lane_sessions
+               WHERE lane_id = $1
+                 AND status = 'COMPLETED'
+                 AND (customer_id IS NOT NULL OR customer_display_name IS NOT NULL)
+               ORDER BY updated_at DESC
+               LIMIT 1`,
+              [laneId]
+            )
+          ).rows[0];
 
-        const { payload } = await buildFullSessionUpdatedPayload(client, row.id);
+        if (!completedRow) return { session: null as null | unknown };
+
+        const { payload } = await buildFullSessionUpdatedPayload(client, completedRow.id);
         return { session: payload };
       });
 
@@ -1703,6 +1718,90 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(500).send({
           error: 'Internal Server Error',
           message: 'Failed to propose selection',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/checkin/lane/:laneId/waitlist-desired
+   *
+   * Record the desired (unavailable) rental type for waitlist flow without proposing a selection.
+   * Public endpoint (kiosk token required).
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { waitlistDesiredType: string | null; sessionId?: string };
+  }>(
+    '/v1/checkin/lane/:laneId/waitlist-desired',
+    {
+      preHandler: [optionalAuth, requireKioskTokenOrStaff],
+    },
+    async (request, reply) => {
+      const { laneId } = request.params;
+      const { waitlistDesiredType, sessionId } = request.body || {};
+      const hasDesiredType = request.body && Object.prototype.hasOwnProperty.call(request.body, 'waitlistDesiredType');
+      if (!hasDesiredType) {
+        return reply.status(400).send({ error: 'waitlistDesiredType is required' });
+      }
+
+      try {
+        const result = await transaction(async (client) => {
+          const sessionResult = sessionId
+            ? await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions WHERE id = $1 AND lane_id = $2 LIMIT 1`,
+                [sessionId, laneId]
+              )
+            : await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE lane_id = $1
+                   AND status IN ('ACTIVE', 'AWAITING_CUSTOMER', 'AWAITING_ASSIGNMENT', 'AWAITING_PAYMENT', 'AWAITING_SIGNATURE')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [laneId]
+              );
+
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'No active session found' };
+          }
+
+          const session = sessionResult.rows[0]!;
+
+          const desired =
+            waitlistDesiredType === null || (typeof waitlistDesiredType === 'string' && !waitlistDesiredType.trim())
+              ? null
+              : waitlistDesiredType;
+
+          await client.query(
+            `UPDATE lane_sessions
+             SET waitlist_desired_type = $1,
+                 backup_rental_type = NULL,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [desired, session.id]
+          );
+
+          return { sessionId: session.id, laneId: session.lane_id || laneId };
+        });
+
+        const { payload } = await transaction((client) =>
+          buildFullSessionUpdatedPayload(client, result.sessionId)
+        );
+        fastify.broadcaster.broadcastSessionUpdated(payload, result.laneId);
+
+        return reply.send({ success: true });
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to set waitlist desired type');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to set waitlist desired type',
+            code: httpErr.code,
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to set waitlist desired type',
         });
       }
     }
@@ -2954,6 +3053,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             `UPDATE lane_sessions
            SET assigned_resource_id = $1,
                assigned_resource_type = $2,
+               agreement_signed_method = 'DIGITAL',
+               agreement_bypass_pending = false,
                updated_at = NOW()
            WHERE id = $3`,
             [assignedResourceId, assignedResourceType, session.id]
@@ -3444,6 +3545,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             `UPDATE lane_sessions
            SET assigned_resource_id = $1,
                assigned_resource_type = $2,
+               agreement_signed_method = 'MANUAL',
+               agreement_bypass_pending = false,
                updated_at = NOW()
            WHERE id = $3`,
             [assignedResourceId, assignedResourceType, session.id]
@@ -3597,6 +3700,106 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(500).send({
           error: 'Internal Server Error',
           message: 'Failed to process manual signature override',
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/checkin/lane/:laneId/agreement-bypass
+   *
+   * Staff-only: request bypass of digital agreement so staff can collect a physical signature.
+   */
+  fastify.post<{
+    Params: { laneId: string };
+    Body: { sessionId?: string };
+  }>(
+    '/v1/checkin/lane/:laneId/agreement-bypass',
+    {
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!request.staff) return reply.status(401).send({ error: 'Unauthorized' });
+      const { laneId } = request.params;
+      const { sessionId } = request.body;
+
+      try {
+        const result = await transaction(async (client) => {
+          const sessionResult = sessionId
+            ? await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE id = $1 AND lane_id = $2
+                   AND status IN ('AWAITING_SIGNATURE', 'AWAITING_PAYMENT')
+                 LIMIT 1`,
+                [sessionId, laneId]
+              )
+            : await client.query<LaneSessionRow>(
+                `SELECT * FROM lane_sessions
+                 WHERE lane_id = $1
+                   AND status IN ('AWAITING_SIGNATURE', 'AWAITING_PAYMENT')
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [laneId]
+              );
+
+          if (sessionResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'No active session found' };
+          }
+
+          const session = sessionResult.rows[0]!;
+
+          if (session.checkin_mode !== 'INITIAL' && session.checkin_mode !== 'RENEWAL') {
+            throw {
+              statusCode: 400,
+              message: 'Agreement bypass is only required for INITIAL and RENEWAL check-ins',
+            };
+          }
+
+          if (!session.selection_confirmed) {
+            throw { statusCode: 400, message: 'Selection must be confirmed before bypassing agreement' };
+          }
+
+          if (!session.payment_intent_id) {
+            throw { statusCode: 400, message: 'Payment intent must be created before bypassing agreement' };
+          }
+
+          const intentResult = await client.query<PaymentIntentRow>(
+            `SELECT status FROM payment_intents WHERE id = $1`,
+            [session.payment_intent_id]
+          );
+          if (intentResult.rows.length === 0 || intentResult.rows[0]!.status !== 'PAID') {
+            throw { statusCode: 400, message: 'Payment must be marked as paid before bypassing agreement' };
+          }
+
+          await client.query(
+            `UPDATE lane_sessions
+             SET agreement_bypass_pending = true,
+                 updated_at = NOW()
+             WHERE id = $1`,
+            [session.id]
+          );
+
+          return { sessionId: session.id, laneId: session.lane_id || laneId };
+        });
+
+        const { payload } = await transaction((client) =>
+          buildFullSessionUpdatedPayload(client, result.sessionId)
+        );
+        fastify.broadcaster.broadcastSessionUpdated(payload, result.laneId);
+
+        return reply.send({ success: true });
+      } catch (error: unknown) {
+        request.log.error(error, 'Failed to bypass agreement');
+        const httpErr = getHttpError(error);
+        if (httpErr) {
+          return reply.status(httpErr.statusCode).send({
+            error: httpErr.message ?? 'Failed to bypass agreement',
+            code: httpErr.code,
+          });
+        }
+        return reply.status(500).send({
+          error: 'Internal Server Error',
+          message: 'Failed to bypass agreement',
         });
       }
     }
@@ -4510,7 +4713,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{
     Params: { laneId: string };
-    Body: { step: 'LANGUAGE' | 'MEMBERSHIP'; option: string | null; sessionId?: string };
+    Body: { step: 'LANGUAGE' | 'MEMBERSHIP' | 'WAITLIST_BACKUP'; option: string | null; sessionId?: string };
   }>(
     '/v1/checkin/lane/:laneId/highlight-option',
     { preHandler: [requireAuth] },
@@ -4519,7 +4722,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       const { laneId } = request.params;
 
       const bodySchema = z.object({
-        step: z.enum(['LANGUAGE', 'MEMBERSHIP']),
+        step: z.enum(['LANGUAGE', 'MEMBERSHIP', 'WAITLIST_BACKUP']),
         option: z.string().min(1).nullable(),
         sessionId: z.string().uuid().optional(),
       });

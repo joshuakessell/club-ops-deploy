@@ -1189,25 +1189,21 @@ body {
 
 .payment-total {
   padding: clamp(2rem, 3vw, 3rem);
-  background: var(--cs-bg-card);
-  border: 2px solid var(--border);
   border-radius: var(--cs-radius-xl);
   width: min(560px, 92vw);
-  font-size: 1.15rem;
+  font-size: 1.35rem;
 }
 
 .payment-breakdown {
   padding: clamp(1.75rem, 2.6vw, 2.5rem);
-  background: var(--cs-bg-card);
-  border: 1px solid var(--border);
   border-radius: var(--cs-radius-xl);
   width: min(560px, 92vw);
-  font-size: 1.15rem;
+  font-size: 1.35rem;
 }
 
 .breakdown-title {
-  font-size: 1.4rem;
-  font-weight: 700;
+  font-size: clamp(1.5rem, 3.2vw, 2.1rem);
+  font-weight: 800;
   margin-bottom: 0.75rem;
   color: var(--text);
 }
@@ -1227,25 +1223,25 @@ body {
 
 .breakdown-desc {
   color: var(--text-muted);
-  font-weight: 600;
-  font-size: 1.25rem;
+  font-weight: 700;
+  font-size: clamp(1.25rem, 2.8vw, 1.9rem);
 }
 
 .breakdown-amt {
   color: var(--text);
-  font-weight: 700;
-  font-size: 1.25rem;
+  font-weight: 800;
+  font-size: clamp(1.25rem, 2.8vw, 1.9rem);
 }
 
 .total-label {
-  font-size: clamp(1.3rem, 2.6vw, 1.6rem);
+  font-size: clamp(1.6rem, 3.6vw, 2.35rem);
   color: var(--text-muted);
   margin-bottom: 0.5rem;
 }
 
 .total-amount {
-  font-size: clamp(2.5rem, 5.2vw, 3.8rem);
-  font-weight: 600;
+  font-size: clamp(3rem, 9vw, 5.75rem);
+  font-weight: 900;
   color: var(--text);
 }
 
@@ -1262,6 +1258,32 @@ body {
   background: rgba(239, 68, 68, 0.12);
   color: #ffffff;
   font-weight: 600;
+}
+
+/* Agreement bypass screen (physical signature) */
+.agreement-bypass-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+.agreement-bypass-card {
+  width: min(720px, 92vw);
+  padding: clamp(2rem, 4vw, 3rem);
+  text-align: center;
+}
+
+.agreement-bypass-title {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 900;
+  margin-bottom: 1rem;
+}
+
+.agreement-bypass-body {
+  font-size: clamp(1.35rem, 3.2vw, 2.1rem);
+  color: var(--text-muted);
+  font-weight: 700;
 }
 
 /* Past Due Block Message */

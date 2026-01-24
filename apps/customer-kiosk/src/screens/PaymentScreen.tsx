@@ -29,7 +29,7 @@ export function PaymentScreen({
           <main className="main-content">
             <div className="payment-pending-screen">
               {paymentLineItems && paymentLineItems.length > 0 && (
-                <div className="payment-breakdown">
+                <div className="payment-breakdown cs-liquid-card">
                   <p className="breakdown-title">
                     {t(customerPrimaryLanguage, 'payment.charges')}
                   </p>
@@ -46,7 +46,7 @@ export function PaymentScreen({
                 </div>
               )}
               {paymentTotal !== undefined && (
-                <div className="payment-total">
+                <div className="payment-total cs-liquid-card">
                   <p className="total-label">{t(customerPrimaryLanguage, 'totalDue')}</p>
                   <p className="total-amount">${paymentTotal.toFixed(2)}</p>
                 </div>
@@ -64,4 +64,3 @@ export function PaymentScreen({
     </I18nProvider>
   );
 }
-

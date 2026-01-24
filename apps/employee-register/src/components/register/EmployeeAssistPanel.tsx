@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getCustomerMembershipStatus } from '@club-ops/shared';
 
-export type EmployeeAssistStep = 'LANGUAGE' | 'MEMBERSHIP' | 'RENTAL' | 'APPROVAL' | 'DONE';
+export type EmployeeAssistStep = 'LANGUAGE' | 'MEMBERSHIP' | 'UPGRADE' | 'RENTAL' | 'APPROVAL' | 'DONE';
 
 type Pending =
   | { step: 'LANGUAGE'; option: 'EN' | 'ES' }
   | { step: 'MEMBERSHIP'; option: 'ONE_TIME' | 'SIX_MONTH' }
+  | { step: 'WAITLIST_BACKUP'; option: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' }
   | { step: 'RENTAL'; option: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' }
   | null;
 
@@ -43,6 +44,8 @@ export interface EmployeeAssistPanelProps {
 
   onHighlightRental: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => Promise<void> | void;
   onSelectRentalAsCustomer: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => Promise<void> | void;
+  onHighlightWaitlistBackup: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null) => void;
+  onSelectWaitlistBackupAsCustomer: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => Promise<void> | void;
   onApproveRental: () => Promise<void> | void;
 }
 
@@ -65,6 +68,8 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     proposedRentalType,
     proposedBy,
     selectionConfirmed,
+    waitlistDesiredTier,
+    waitlistBackupType,
     inventoryAvailable,
     isSubmitting = false,
     onHighlightLanguage,
@@ -74,10 +79,31 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     onConfirmMembershipSixMonth,
     onHighlightRental,
     onSelectRentalAsCustomer,
+    onHighlightWaitlistBackup,
+    onSelectWaitlistBackupAsCustomer,
     onApproveRental,
   } = props;
 
   const [pending, setPending] = useState<Pending>(null);
+
+  const runTwoStep = (
+    step: Pending['step'],
+    option: Pending['option'],
+    isPending: boolean,
+    onFirst: () => void,
+    onSecond: () => void,
+    onCancel?: () => void
+  ) => {
+    if (isSubmitting) return;
+    if (isPending) {
+      setPending(null);
+      onCancel?.();
+      void onSecond();
+      return;
+    }
+    setPending({ step, option } as Pending);
+    void onFirst();
+  };
 
   const isLanguageNeeded = !customerPrimaryLanguage;
   const membershipStatus = useMemo(() => {
@@ -98,10 +124,11 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     if (!sessionId || !customerName) return 'DONE';
     if (isLanguageNeeded) return 'LANGUAGE';
     if (isMembershipNeeded) return 'MEMBERSHIP';
+    if (waitlistDesiredTier && !waitlistBackupType) return 'UPGRADE';
     if (selectionConfirmed) return 'DONE';
     if (proposedBy === 'CUSTOMER' && proposedRentalType) return 'APPROVAL';
     return 'RENTAL';
-  }, [customerName, isLanguageNeeded, isMembershipNeeded, proposedBy, proposedRentalType, selectionConfirmed, sessionId]);
+  }, [customerName, isLanguageNeeded, isMembershipNeeded, proposedBy, proposedRentalType, selectionConfirmed, sessionId, waitlistBackupType, waitlistDesiredTier]);
 
   // Clear pending state when the session or step changes.
   useEffect(() => {
@@ -109,6 +136,7 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     // Clear kiosk highlights for step-driven (language/membership) highlights.
     onHighlightLanguage(null);
     onHighlightMembership(null);
+    onHighlightWaitlistBackup(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, step]);
 
@@ -127,6 +155,24 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
       { id: 'SPECIAL' as const, label: 'Propose Special', count: special, allowed: allowed.has('SPECIAL') },
     ];
   }, [allowedRentals, inventoryAvailable]);
+
+  const waitlistBackupButtons = useMemo(() => {
+    if (!waitlistDesiredTier) return [];
+    const lockers = Number(inventoryAvailable?.lockers ?? 0);
+    const standard = Number(inventoryAvailable?.rooms?.STANDARD ?? 0);
+    const deluxe = Number(inventoryAvailable?.rooms?.DOUBLE ?? 0);
+    const special = Number(inventoryAvailable?.rooms?.SPECIAL ?? 0);
+
+    const allowed = new Set(Array.isArray(allowedRentals) ? allowedRentals : ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL']);
+    const candidates = [
+      { id: 'LOCKER' as const, label: 'Backup Locker', count: lockers, allowed: allowed.has('LOCKER') },
+      { id: 'STANDARD' as const, label: 'Backup Standard', count: standard, allowed: allowed.has('STANDARD') },
+      { id: 'DOUBLE' as const, label: 'Backup Double', count: deluxe, allowed: allowed.has('DOUBLE') },
+      { id: 'SPECIAL' as const, label: 'Backup Special', count: special, allowed: allowed.has('SPECIAL') },
+    ];
+
+    return candidates.filter((c) => c.id !== waitlistDesiredTier);
+  }, [allowedRentals, inventoryAvailable, waitlistDesiredTier]);
 
   return (
     <div
@@ -202,16 +248,17 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                   ].join(' ')}
                   disabled={isSubmitting}
                   onClick={() => {
-                    if (isSubmitting) return;
-                    if (isPending) {
-                      setPending(null);
-                      onHighlightMembership(null);
-                      if (opt.id === 'ONE_TIME') void onConfirmMembershipOneTime();
-                      else void onConfirmMembershipSixMonth();
-                      return;
-                    }
-                    setPending({ step: 'MEMBERSHIP', option: opt.id });
-                    onHighlightMembership(opt.id);
+                    runTwoStep(
+                      'MEMBERSHIP',
+                      opt.id,
+                      isPending,
+                      () => onHighlightMembership(opt.id),
+                      () => {
+                        if (opt.id === 'ONE_TIME') return onConfirmMembershipOneTime();
+                        return onConfirmMembershipSixMonth();
+                      },
+                      () => onHighlightMembership(null)
+                    );
                   }}
                   style={{ width: '100%', padding: '0.9rem 1rem', fontWeight: 900 }}
                 >
@@ -222,14 +269,14 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
           </div>
         )}
 
-        {step === 'RENTAL' && (
+        {step === 'UPGRADE' && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-              Tap once to highlight on kiosk, tap again to select (then you’ll approve).
+              Customer selected {waitlistDesiredTier}. Choose a backup rental.
             </div>
             <div style={{ display: 'grid', gap: '0.6rem' }}>
-              {rentalButtons.map((btn) => {
-                const isPending = pending?.step === 'RENTAL' && pending.option === btn.id;
+              {waitlistBackupButtons.map((btn) => {
+                const isPending = pending?.step === 'WAITLIST_BACKUP' && pending.option === btn.id;
                 const { label: countLabel, tone } = remainingCountLabel(btn.count);
                 const disabled = isSubmitting || !btn.allowed || btn.count <= 0;
                 const toneClass =
@@ -249,13 +296,78 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                     disabled={disabled}
                     onClick={() => {
                       if (disabled) return;
-                      if (isPending) {
-                        setPending(null);
-                        void onSelectRentalAsCustomer(btn.id);
-                        return;
-                      }
-                      setPending({ step: 'RENTAL', option: btn.id });
-                      void onHighlightRental(btn.id);
+                      runTwoStep(
+                        'WAITLIST_BACKUP',
+                        btn.id,
+                        isPending,
+                        () => onHighlightWaitlistBackup(btn.id),
+                        () => onSelectWaitlistBackupAsCustomer(btn.id),
+                        () => onHighlightWaitlistBackup(null)
+                      );
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.85rem 1rem',
+                      fontWeight: 950,
+                      textAlign: 'left',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
+                      gap: '0.75rem',
+                    }}
+                  >
+                    <span>{btn.label}</span>
+                    <span
+                      className="er-text-sm"
+                      style={{
+                        fontWeight: 900,
+                        color: tone === 'none' ? '#ef4444' : tone === 'low' ? '#f59e0b' : '#94a3b8',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {countLabel}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {step === 'RENTAL' && (
+          <div style={{ display: 'grid', gap: '0.75rem' }}>
+            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+              Tap once to propose on kiosk, tap again to confirm.
+            </div>
+            <div style={{ display: 'grid', gap: '0.6rem' }}>
+              {rentalButtons.map((btn) => {
+                const isPending = pending?.step === 'RENTAL' && pending.option === btn.id;
+                const { label: countLabel, tone } = remainingCountLabel(btn.count);
+                const disabled = isSubmitting || !btn.allowed;
+                const toneClass =
+                  tone === 'none'
+                    ? 'cs-liquid-button--secondary'
+                    : tone === 'low'
+                      ? 'cs-liquid-button--warning'
+                      : 'cs-liquid-button--secondary';
+                return (
+                  <button
+                    key={btn.id}
+                    type="button"
+                    className={[
+                      'cs-liquid-button',
+                      isPending ? 'cs-liquid-button--selected' : toneClass,
+                    ].join(' ')}
+                    disabled={disabled}
+                    onClick={() => {
+                      if (disabled) return;
+                      runTwoStep(
+                        'RENTAL',
+                        btn.id,
+                        isPending,
+                        () => onHighlightRental(btn.id),
+                        () => onApproveRental()
+                      );
                     }}
                     style={{
                       width: '100%',
@@ -312,4 +424,3 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     </div>
   );
 }
-

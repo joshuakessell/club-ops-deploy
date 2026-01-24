@@ -97,6 +97,7 @@ export function TelemetryView({ session }: { session: StaffSession }) {
   const [page, setPage] = useState<TelemetryTraceResponse['page'] | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [selectedIncidentId, setSelectedIncidentId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const [filters, setFilters] = useState({
     app: '',
@@ -174,6 +175,12 @@ export function TelemetryView({ session }: { session: StaffSession }) {
     return () => window.clearInterval(id);
   }, [autoRefresh, loadTraces]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(id);
+  }, [toast]);
+
   const loadTraceDetail = useCallback(
     async (traceId: string) => {
       if (!session.sessionToken) return;
@@ -230,6 +237,34 @@ export function TelemetryView({ session }: { session: StaffSession }) {
       setError(e instanceof Error ? e.message : 'Failed to export telemetry');
     }
   };
+
+  const handleCopyIncidentJson = useCallback(async () => {
+    if (!session.sessionToken || !selectedTraceId || !selectedIncidentId) return;
+    try {
+      setError(null);
+      const p = new URLSearchParams();
+      p.set('traceId', selectedTraceId);
+      p.set('incidentId', selectedIncidentId);
+      p.set('bundle', 'true');
+      p.set('format', 'json');
+      const url = getApiUrl(`/api/v1/admin/telemetry/export?${p.toString()}`);
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+      });
+      if (!res.ok) {
+        throw new ApiError(res.status, `Export failed (${res.status})`);
+      }
+      const jsonText = await res.text();
+      await navigator.clipboard.writeText(jsonText);
+      setToast({ message: 'Incident JSON copied to clipboard', type: 'success' });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to copy incident JSON';
+      setError(msg);
+      setToast({ message: msg, type: 'error' });
+    }
+  }, [selectedIncidentId, selectedTraceId, session.sessionToken]);
 
   const incidentIds = useMemo(() => {
     if (!traceDetail?.spans) return [];
@@ -450,9 +485,9 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                   <button
                     className="cs-liquid-button"
                     disabled={!selectedIncidentId}
-                    onClick={() => handleDownload('json', selectedIncidentId, true)}
+                    onClick={() => void handleCopyIncidentJson()}
                   >
-                    Export Incident JSON
+                    Copy Incident JSON
                   </button>
                   <button
                     className="cs-liquid-button"
@@ -585,7 +620,24 @@ export function TelemetryView({ session }: { session: StaffSession }) {
           </div>
         </section>
       )}
+
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            right: '2rem',
+            padding: '1rem 1.5rem',
+            background: toast.type === 'success' ? '#10b981' : '#ef4444',
+            color: '#f9fafb',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
+            zIndex: 1000,
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
-

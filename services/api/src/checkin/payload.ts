@@ -19,6 +19,8 @@ interface LaneSessionRow {
   price_quote_json: unknown;
   disclaimers_ack_json: unknown;
   payment_intent_id: string | null;
+  agreement_bypass_pending?: boolean;
+  agreement_signed_method?: string | null;
   membership_purchase_intent?: 'PURCHASE' | 'RENEW' | null;
   membership_purchase_requested_at?: Date | null;
   membership_choice?: 'ONE_TIME' | 'SIX_MONTH' | null;
@@ -333,6 +335,11 @@ export async function buildFullSessionUpdatedPayload(
     paymentLineItems,
     paymentFailureReason: paymentIntent?.failure_reason || undefined,
     agreementSigned: blockForSession ? !!blockForSession.agreement_signed : false,
+    agreementBypassPending: !!session.agreement_bypass_pending,
+    agreementSignedMethod:
+      session.agreement_signed_method === 'MANUAL' || session.agreement_signed_method === 'DIGITAL'
+        ? (session.agreement_signed_method as 'DIGITAL' | 'MANUAL')
+        : undefined,
     assignedResourceType: assignedResourceType || undefined,
     assignedResourceNumber,
     visitId: blockForSession?.visit_id || activeVisitId,

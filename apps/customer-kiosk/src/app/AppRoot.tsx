@@ -12,6 +12,7 @@ import { LanguageScreen } from '../screens/LanguageScreen';
 import { SelectionScreen } from '../screens/SelectionScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';
 import { AgreementScreen, type Agreement } from '../screens/AgreementScreen';
+import { AgreementBypassScreen } from '../screens/AgreementBypassScreen';
 import { CompleteScreen } from '../screens/CompleteScreen';
 import { UpgradeDisclaimerModal } from '../components/modals/UpgradeDisclaimerModal';
 import { CustomerConfirmationModal } from '../components/modals/CustomerConfirmationModal';
@@ -26,7 +27,7 @@ interface HealthStatus {
   uptime: number;
 }
 
-type AppView = 'idle' | 'language' | 'selection' | 'payment' | 'agreement' | 'complete';
+type AppView = 'idle' | 'language' | 'selection' | 'payment' | 'agreement' | 'agreement-bypass' | 'complete';
 
 export function AppRoot() {
   const [, setHealth] = useState<HealthStatus | null>(null);
@@ -72,7 +73,7 @@ export function AppRoot() {
   );
   // Selection acknowledgement is tracked for gating/coordination (currently no direct UI).
   const [, setSelectionAcknowledged] = useState(true);
-  const [, setUpgradeDisclaimerAcknowledged] = useState(false);
+  const [upgradeDisclaimerAcknowledged, setUpgradeDisclaimerAcknowledged] = useState(false);
   const [hasScrolledAgreement, setHasScrolledAgreement] = useState(false);
   const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
   const agreementScrollRef = useRef<HTMLDivElement>(null);
@@ -91,6 +92,8 @@ export function AppRoot() {
   const [highlightedMembershipChoice, setHighlightedMembershipChoice] = useState<
     'ONE_TIME' | 'SIX_MONTH' | null
   >(null);
+  const [highlightedWaitlistBackup, setHighlightedWaitlistBackup] = useState<string | null>(null);
+  const sessionRef = useRef<SessionState | null>(null);
 
   // Inject pulse animation for proposal highlight
   useEffect(() => {
@@ -114,7 +117,8 @@ export function AppRoot() {
 
   useEffect(() => {
     sessionIdRef.current = session.sessionId;
-  }, [session.sessionId]);
+    sessionRef.current = session;
+  }, [session]);
 
   // Explicit membership choice step (non-members only): reset when session changes.
   useEffect(() => {
@@ -225,6 +229,19 @@ export function AppRoot() {
     };
   };
 
+  const refreshInventory = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/v1/inventory/available`);
+      if (!res.ok) return;
+      const data: unknown = await res.json();
+      if (isRecord(data) && isRecord(data.rooms) && typeof data.lockers === 'number') {
+        setInventory({ rooms: data.rooms as Record<string, number>, lockers: data.lockers });
+      }
+    } catch {
+      // Best-effort; inventory will retry on interval.
+    }
+  }, [API_BASE]);
+
   const resetToIdle = useCallback(() => {
     setView('idle');
     setSession({
@@ -235,6 +252,8 @@ export function AppRoot() {
       membershipPurchaseIntent: null,
       allowedRentals: [],
       blockEndsAt: undefined,
+      agreementBypassPending: undefined,
+      agreementSignedMethod: undefined,
     });
     setSelectedRental(null);
     setAgreed(false);
@@ -255,10 +274,21 @@ export function AppRoot() {
     setHasScrolledAgreement(false);
     setHighlightedLanguage(null);
     setHighlightedMembershipChoice(null);
+    setHighlightedWaitlistBackup(null);
   }, []);
 
   const applySessionUpdatedPayload = useCallback(
     (payload: Record<string, any>) => {
+      const prevSession = sessionRef.current;
+      const hasKey = (key: string) => Object.prototype.hasOwnProperty.call(payload, key);
+      const assignedResourceType = hasKey('assignedResourceType')
+        ? payload.assignedResourceType
+        : prevSession?.assignedResourceType;
+      const assignedResourceNumber = hasKey('assignedResourceNumber')
+        ? payload.assignedResourceNumber
+        : prevSession?.assignedResourceNumber;
+      const checkoutAt = hasKey('checkoutAt') ? payload.checkoutAt : prevSession?.checkoutAt;
+
       // Update session state with all fields
       setSession((prev) => ({
         ...prev,
@@ -281,9 +311,11 @@ export function AppRoot() {
         paymentLineItems: payload.paymentLineItems,
         paymentFailureReason: payload.paymentFailureReason,
         agreementSigned: payload.agreementSigned,
-        assignedResourceType: payload.assignedResourceType,
-        assignedResourceNumber: payload.assignedResourceNumber,
-        checkoutAt: payload.checkoutAt,
+        agreementBypassPending: payload.agreementBypassPending,
+        agreementSignedMethod: payload.agreementSignedMethod,
+        assignedResourceType,
+        assignedResourceNumber,
+        checkoutAt,
       }));
 
       // Set check-in mode from payload
@@ -299,7 +331,7 @@ export function AppRoot() {
       }
 
       // If we have assignment, show complete view (highest priority after reset)
-      if (payload.assignedResourceType && payload.assignedResourceNumber) {
+      if (assignedResourceType && assignedResourceNumber) {
         setView('complete');
         return;
       }
@@ -319,6 +351,12 @@ export function AppRoot() {
       // Past-due block screen (shows selection but disabled)
       if (payload.pastDueBlocked) {
         setView('selection');
+        return;
+      }
+
+      // Agreement bypass screen (physical signature path)
+      if (payload.paymentStatus === 'PAID' && payload.agreementBypassPending && !payload.agreementSigned) {
+        setView('agreement-bypass');
         return;
       }
 
@@ -347,6 +385,12 @@ export function AppRoot() {
       if (payload.proposedRentalType) {
         setProposedRentalType(payload.proposedRentalType);
         setProposedBy(payload.proposedBy || null);
+      }
+      if (payload.waitlistDesiredType !== undefined) {
+        setWaitlistDesiredType(payload.waitlistDesiredType || null);
+      }
+      if (payload.backupRentalType !== undefined) {
+        setWaitlistBackupType(payload.backupRentalType || null);
       }
       if (payload.selectionConfirmed !== undefined) {
         setSelectionConfirmed(Boolean(payload.selectionConfirmed));
@@ -395,6 +439,8 @@ export function AppRoot() {
           const opt =
             payload.option === 'ONE_TIME' || payload.option === 'SIX_MONTH' ? payload.option : null;
           setHighlightedMembershipChoice(opt);
+        } else if (payload.step === 'WAITLIST_BACKUP') {
+          setHighlightedWaitlistBackup(payload.option);
         }
       } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
         const payload = message.payload;
@@ -529,19 +575,22 @@ export function AppRoot() {
     })();
 
     // Fetch initial inventory
-    fetch(`${API_BASE}/v1/inventory/available`)
-      .then((res) => res.json())
-      .then((data: unknown) => {
-        if (isRecord(data) && isRecord(data.rooms) && typeof data.lockers === 'number') {
-          setInventory({ rooms: data.rooms as Record<string, number>, lockers: data.lockers });
-        }
-      })
-      .catch(console.error);
+    void refreshInventory();
 
     return () => {
       cancelled = true;
     };
-  }, [lane]);
+  }, [lane, refreshInventory]);
+
+  // Keep inventory fresh if the initial fetch happened before the API was ready.
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refreshInventory();
+    }, 10000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [refreshInventory]);
 
   // Show a brief welcome overlay when a new session becomes active
   useEffect(() => {
@@ -627,13 +676,24 @@ export function AppRoot() {
     }
 
     const availableCount =
-      inventory?.rooms[rental] ||
-      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
-      0;
+      inventory?.rooms?.[rental] ??
+      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : undefined);
 
     // If unavailable, show waitlist modal
     if (availableCount === 0) {
       setWaitlistDesiredType(rental);
+      try {
+        await fetch(`${API_BASE}/v1/checkin/lane/${lane}/waitlist-desired`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...kioskAuthHeaders(),
+          },
+          body: JSON.stringify({ waitlistDesiredType: rental }),
+        });
+      } catch {
+        // Best-effort; UI can still proceed with local waitlist flow.
+      }
       // Fetch waitlist info (position, ETA, upgrade fee)
       try {
         const response = await fetch(
@@ -689,6 +749,24 @@ export function AppRoot() {
       await response.json().catch(() => null);
       setProposedRentalType(rental);
       setProposedBy('CUSTOMER');
+
+      // Auto-confirm selection (no employee approval required).
+      const confirmRes = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
+        },
+        body: JSON.stringify({ confirmedBy: 'CUSTOMER' }),
+      });
+      if (!confirmRes.ok) {
+        const errorPayload: unknown = await confirmRes.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
+      }
+
+      setSelectionConfirmed(true);
+      setSelectionConfirmedBy('CUSTOMER');
+      setSelectionAcknowledged(true);
       setIsSubmitting(false);
     } catch (error) {
       console.error('Failed to propose selection:', error);
@@ -741,6 +819,24 @@ export function AppRoot() {
       setProposedRentalType(backupType);
       setProposedBy('CUSTOMER');
 
+      // Auto-confirm backup selection (no employee approval required).
+      const confirmRes = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
+        },
+        body: JSON.stringify({ confirmedBy: 'CUSTOMER' }),
+      });
+      if (!confirmRes.ok) {
+        const errorPayload: unknown = await confirmRes.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
+      }
+
+      setSelectionConfirmed(true);
+      setSelectionConfirmedBy('CUSTOMER');
+      setSelectionAcknowledged(true);
+
       // After acknowledging upgrade disclaimer, customer should confirm the backup selection
       // Then proceed to agreement if INITIAL/RENEWAL
     } catch (error) {
@@ -755,9 +851,8 @@ export function AppRoot() {
     }
 
     const availableCount =
-      inventory?.rooms[rental] ||
-      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
-      0;
+      inventory?.rooms?.[rental] ??
+      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : undefined);
     if (availableCount === 0) {
       alert(t(session.customerPrimaryLanguage, 'error.rentalNotAvailable'));
       return;
@@ -770,6 +865,64 @@ export function AppRoot() {
     setUpgradeAction('waitlist');
     setShowUpgradeDisclaimer(true);
   };
+
+  const handleWaitlistCancel = async () => {
+    setShowWaitlistModal(false);
+    if (!session.sessionId) {
+      setWaitlistDesiredType(null);
+      setWaitlistBackupType(null);
+      return;
+    }
+    try {
+      await fetch(`${API_BASE}/v1/checkin/lane/${lane}/waitlist-desired`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof kioskToken === 'string' && kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
+        },
+        body: JSON.stringify({ waitlistDesiredType: null, sessionId: session.sessionId }),
+      });
+    } catch (error) {
+      console.error('Failed to clear waitlist selection:', error);
+    } finally {
+      setWaitlistDesiredType(null);
+      setWaitlistBackupType(null);
+      setHighlightedWaitlistBackup(null);
+    }
+  };
+
+  useEffect(() => {
+    if (!waitlistDesiredType || !waitlistBackupType) return;
+    if (upgradeDisclaimerAcknowledged) return;
+    if (showUpgradeDisclaimer) return;
+    setUpgradeAction('waitlist');
+    setShowUpgradeDisclaimer(true);
+  }, [showUpgradeDisclaimer, upgradeDisclaimerAcknowledged, waitlistBackupType, waitlistDesiredType]);
+
+  useEffect(() => {
+    if (view !== 'selection') return;
+    if (!waitlistDesiredType) return;
+    if (waitlistBackupType) return;
+    if (!session.sessionId) return;
+    setShowWaitlistModal(true);
+    void (async () => {
+      try {
+        const response = await fetch(
+          `${API_BASE}/v1/checkin/lane/${lane}/waitlist-info?desiredTier=${waitlistDesiredType}&currentTier=${selectedRental || 'LOCKER'}`
+        );
+        if (response.ok) {
+          const data: unknown = await response.json();
+          if (isRecord(data)) {
+            setWaitlistPosition(typeof data.position === 'number' ? data.position : null);
+            setWaitlistETA(typeof data.estimatedReadyAt === 'string' ? data.estimatedReadyAt : null);
+            setWaitlistUpgradeFee(typeof data.upgradeFee === 'number' ? data.upgradeFee : null);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch waitlist info:', error);
+      }
+    })();
+  }, [session.sessionId, view, waitlistBackupType, waitlistDesiredType]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -1132,6 +1285,15 @@ export function AppRoot() {
         />
       );
 
+    case 'agreement-bypass':
+      return (
+        <AgreementBypassScreen
+          customerPrimaryLanguage={session.customerPrimaryLanguage}
+          orientationOverlay={orientationOverlay}
+          welcomeOverlay={welcomeOverlayNode}
+        />
+      );
+
     case 'agreement':
       // Only show agreement for INITIAL/RENEWAL
       if (checkinMode !== 'INITIAL' && checkinMode !== 'RENEWAL') {
@@ -1268,8 +1430,9 @@ export function AppRoot() {
               eta={waitlistETA}
               upgradeFee={waitlistUpgradeFee}
               isSubmitting={isSubmitting}
+              highlightedBackupRental={highlightedWaitlistBackup}
               onBackupSelection={handleWaitlistBackupSelection}
-              onClose={() => setShowWaitlistModal(false)}
+              onClose={() => void handleWaitlistCancel()}
             />
           )}
           <RenewalDisclaimerModal
@@ -1303,4 +1466,3 @@ export function AppRoot() {
       return null;
   }
 }
-

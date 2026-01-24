@@ -21,6 +21,8 @@ export interface SessionState {
   paymentLineItems?: Array<{ description: string; amount: number }>;
   paymentFailureReason?: string;
   agreementSigned?: boolean;
+  agreementBypassPending?: boolean;
+  agreementSignedMethod?: 'DIGITAL' | 'MANUAL';
   assignedResourceType?: 'room' | 'locker';
   assignedResourceNumber?: string;
   checkoutAt?: string;
@@ -39,4 +41,3 @@ export function getMembershipStatus(
   if (base === 'EXPIRED') return 'EXPIRED';
   return 'NON_MEMBER';
 }
-
