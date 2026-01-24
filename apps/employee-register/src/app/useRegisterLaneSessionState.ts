@@ -23,6 +23,8 @@ export type RegisterLaneSessionState = {
   allowedRentals: string[];
 
   agreementSigned: boolean;
+  agreementBypassPending: boolean;
+  agreementSignedMethod: 'DIGITAL' | 'MANUAL' | null;
 
   proposedRentalType: string | null;
   proposedBy: 'CUSTOMER' | 'EMPLOYEE' | null;
@@ -64,6 +66,8 @@ const initialState: RegisterLaneSessionState = {
   allowedRentals: [],
 
   agreementSigned: false,
+  agreementBypassPending: false,
+  agreementSignedMethod: null,
 
   proposedRentalType: null,
   proposedBy: null,
@@ -143,6 +147,12 @@ function reducer(state: RegisterLaneSessionState, action: Action): RegisterLaneS
       if (Array.isArray(p.allowedRentals)) next.allowedRentals = p.allowedRentals;
 
       if (p.agreementSigned !== undefined) next.agreementSigned = Boolean(p.agreementSigned);
+      if (p.agreementBypassPending !== undefined) {
+        next.agreementBypassPending = Boolean(p.agreementBypassPending);
+      }
+      if (p.agreementSignedMethod !== undefined) {
+        next.agreementSignedMethod = p.agreementSignedMethod ?? null;
+      }
 
       // Treat SESSION_UPDATED as a "full snapshot" for these fields (clear stale values when omitted).
       const nextProposedRentalType = p.proposedRentalType ?? null;
@@ -312,4 +322,3 @@ export function useRegisterLaneSessionState() {
 
   return { state, actions };
 }
-

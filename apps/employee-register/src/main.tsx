@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   installTelemetry,
-  ReportIssueButton,
   setCurrentRouteProvider,
   TelemetryErrorBoundary,
 } from '@club-ops/ui';
@@ -53,14 +52,6 @@ if (!kioskToken) {
     return Number.isFinite(n) ? n : fallback;
   };
 
-  const reportEnabled =
-    import.meta.env.DEV ||
-    readBool((rawEnv.VITE_TELEMETRY_REPORT_BUTTON as string | undefined) ?? '', false);
-  const reportFlushBreadcrumbsOnInfo = readBool(
-    rawEnv.VITE_TELEMETRY_REPORT_FLUSH_BREADCRUMBS_ON_INFO,
-    false
-  );
-
   setCurrentRouteProvider(() => {
     if (typeof window === 'undefined') return 'unknown';
     return `${window.location.pathname || '/'}${window.location.search || ''}`;
@@ -87,9 +78,6 @@ if (!kioskToken) {
           message="This screen must be used in landscape mode."
         >
           <App />
-          {reportEnabled && (
-            <ReportIssueButton flushBreadcrumbsOnInfo={reportFlushBreadcrumbsOnInfo} />
-          )}
         </OrientationGuard>
       </TelemetryErrorBoundary>
     </StrictMode>

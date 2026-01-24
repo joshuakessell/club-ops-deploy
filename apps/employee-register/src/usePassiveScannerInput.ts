@@ -26,8 +26,26 @@ type Options = {
   /** Minimum trimmed length before emitting a capture. */
   minLength?: number;
   /**
+   * Allow scan capture to start while an editable element is focused.
+   * Default false so text inputs can receive scanner output without interference.
+   */
+  captureWhenEditable?: boolean;
+  /**
+   * Treat Enter as a terminator when true; when false, Enter is always treated as a newline.
+   */
+  enterTerminates?: boolean;
+  /**
+   * Treat Tab as a terminator when true; when false, Tab is preserved as a newline.
+   */
+  tabTerminates?: boolean;
+  /**
+   * Compute a dynamic idle timeout based on the current buffer.
+   * If provided, overrides idleTimeoutMs for scheduling finalize.
+   */
+  getIdleTimeoutMs?: (buffer: string) => number;
+  /**
    * If an editable element is focused, only begin capture if inter-key timing suggests
-   * scanner-speed input (in ms).
+   * scanner-speed input (in ms). Only applies when captureWhenEditable is true.
    */
   scannerInterKeyMaxMs?: number;
 };
@@ -59,6 +77,10 @@ export function usePassiveScannerInput({
   cooldownMs = 400,
   enterGraceMs = 35,
   minLength = 4,
+  captureWhenEditable = false,
+  enterTerminates = true,
+  tabTerminates = true,
+  getIdleTimeoutMs,
   scannerInterKeyMaxMs = 35,
 }: Options) {
   const capturingRef = useRef(false);
@@ -111,10 +133,18 @@ export function usePassiveScannerInput({
     onCaptureEnd?.();
   }, [clearTimer, cooldownMs, minLength, onCapture, onCaptureEnd]);
 
+  const resolveIdleTimeout = useCallback(() => {
+    if (getIdleTimeoutMs) {
+      return getIdleTimeoutMs(bufferRef.current);
+    }
+    return idleTimeoutMs;
+  }, [getIdleTimeoutMs, idleTimeoutMs]);
+
   const scheduleFinalize = useCallback(() => {
     clearTimer();
-    timerRef.current = window.setTimeout(() => finalize(), idleTimeoutMs);
-  }, [clearTimer, finalize, idleTimeoutMs]);
+    const timeout = resolveIdleTimeout();
+    timerRef.current = window.setTimeout(() => finalize(), timeout);
+  }, [clearTimer, finalize, resolveIdleTimeout]);
 
   const scheduleFinalizeAfterEnter = useCallback(() => {
     clearTimer();
@@ -122,9 +152,9 @@ export function usePassiveScannerInput({
       () => {
         if (lastWasEnterRef.current) finalize();
       },
-      Math.max(0, Math.min(idleTimeoutMs, enterGraceMs))
+      Math.max(0, Math.min(resolveIdleTimeout(), enterGraceMs))
     );
-  }, [clearTimer, enterGraceMs, finalize, idleTimeoutMs]);
+  }, [clearTimer, enterGraceMs, finalize, resolveIdleTimeout]);
 
   useEffect(() => {
     if (!enabled) {
@@ -146,11 +176,15 @@ export function usePassiveScannerInput({
       const delta = lastKeyAt === null ? null : now - lastKeyAt;
       lastKeyAtRef.current = now;
 
+      if (!capturingRef.current && editable && !captureWhenEditable) {
+        return;
+      }
+
       // If the user is typing in an editable element, do not intercept unless we already started
       // capturing a scan sequence OR the inter-key timing looks like scanner-speed.
       const looksLikeScannerSpeed =
         delta !== null && delta >= 0 && delta <= scannerInterKeyMaxMs;
-      if (!capturingRef.current && editable && !looksLikeScannerSpeed) return;
+      if (!capturingRef.current && editable && captureWhenEditable && !looksLikeScannerSpeed) return;
 
       // If we're not currently capturing, ignore modifier shortcuts and non-printable keys.
       if (!capturingRef.current && (e.metaKey || e.ctrlKey || e.altKey)) {
@@ -176,7 +210,15 @@ export function usePassiveScannerInput({
       if (key === 'Tab') {
         if (!capturingRef.current) return;
         e.preventDefault();
-        finalize();
+        if (tabTerminates) {
+          bufferRef.current += '\n';
+          lastWasEnterRef.current = true;
+          scheduleFinalizeAfterEnter();
+        } else {
+          bufferRef.current += '\n';
+          lastWasEnterRef.current = false;
+          scheduleFinalize();
+        }
         return;
       }
 
@@ -186,7 +228,11 @@ export function usePassiveScannerInput({
         e.preventDefault();
         bufferRef.current += '\n';
         lastWasEnterRef.current = true;
-        scheduleFinalizeAfterEnter();
+        if (enterTerminates) {
+          scheduleFinalizeAfterEnter();
+        } else {
+          scheduleFinalize();
+        }
         return;
       }
 
@@ -225,4 +271,3 @@ export function usePassiveScannerInput({
 
   return { reset };
 }
-

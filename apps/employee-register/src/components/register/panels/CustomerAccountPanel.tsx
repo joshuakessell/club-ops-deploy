@@ -59,6 +59,8 @@ export function CustomerAccountPanel(props: {
   onConfirmMembershipSixMonth: () => void;
   onHighlightRental: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => void;
   onSelectRentalAsCustomer: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => void;
+  onHighlightWaitlistBackup: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null) => void;
+  onSelectWaitlistBackupAsCustomer: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => void;
   onApproveRental: () => void;
 }) {
   const { state, retry } = useStartLaneCheckinForCustomerIfNotVisiting({
@@ -239,6 +241,8 @@ export function CustomerAccountPanel(props: {
                 onConfirmMembershipSixMonth={props.onConfirmMembershipSixMonth}
                 onHighlightRental={props.onHighlightRental}
                 onSelectRentalAsCustomer={props.onSelectRentalAsCustomer}
+                onHighlightWaitlistBackup={props.onHighlightWaitlistBackup}
+                onSelectWaitlistBackupAsCustomer={props.onSelectWaitlistBackupAsCustomer}
                 onApproveRental={props.onApproveRental}
               />
             </>
@@ -252,4 +256,3 @@ export function CustomerAccountPanel(props: {
     </div>
   );
 }
-

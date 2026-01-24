@@ -14,6 +14,7 @@ export interface WaitlistModalProps {
   eta: string | null;
   upgradeFee: number | null;
   isSubmitting: boolean;
+  highlightedBackupRental?: string | null;
   onBackupSelection: (rental: string) => void;
   onClose: () => void;
 }
@@ -28,6 +29,7 @@ export function WaitlistModal({
   eta,
   upgradeFee,
   isSubmitting,
+  highlightedBackupRental = null,
   onBackupSelection,
   onClose,
 }: WaitlistModalProps) {
@@ -101,7 +103,13 @@ export function WaitlistModal({
                 return (
                   <button
                     key={rental}
-                    className="cs-liquid-button modal-ok-btn"
+                    className={[
+                      'cs-liquid-button',
+                      'modal-ok-btn',
+                      highlightedBackupRental === rental ? 'ck-option-highlight' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                     onClick={() => onBackupSelection(rental)}
                     disabled={!isAvailable || isSubmitting}
                     style={{
@@ -129,4 +137,3 @@ export function WaitlistModal({
     </div>
   );
 }
-

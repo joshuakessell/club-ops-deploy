@@ -63,6 +63,32 @@ function splitNamePartsForMatch(input: string): NormalizedNameParts | null {
   return { normalizedFull, firstToken, lastToken };
 }
 
+function scoreNameSimilarity(input: NormalizedNameParts, stored: NormalizedNameParts): number {
+  let score = 0;
+  const inputFirst = input.firstToken;
+  const inputLast = input.lastToken;
+  const storedFirst = stored.firstToken;
+  const storedLast = stored.lastToken;
+
+  if (input.normalizedFull === stored.normalizedFull) score += 3;
+
+  const direct = inputFirst === storedFirst && inputLast === storedLast;
+  const swapped = inputFirst === storedLast && inputLast === storedFirst;
+  if (direct) score += 2;
+  else if (swapped) score += 1;
+
+  if (inputLast === storedLast) score += 1;
+  if (inputFirst === storedFirst) score += 1;
+
+  if (inputFirst[0] && storedFirst[0] && inputFirst[0] === storedFirst[0]) score += 0.5;
+  if (inputLast[0] && storedLast[0] && inputLast[0] === storedLast[0]) score += 0.5;
+
+  if (storedFirst.startsWith(inputFirst) || inputFirst.startsWith(storedFirst)) score += 0.5;
+  if (storedLast.startsWith(inputLast) || inputLast.startsWith(storedLast)) score += 0.5;
+
+  return score;
+}
+
 export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/customers/search - Prefix search by first or last name (case-insensitive).
@@ -348,13 +374,9 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
           .map((row) => {
             const parts = splitNamePartsForMatch(row.name);
             if (!parts) return null;
-            const direct =
-              parts.firstToken === inputParts.firstToken && parts.lastToken === inputParts.lastToken;
-            const swapped =
-              parts.firstToken === inputParts.lastToken && parts.lastToken === inputParts.firstToken;
-            if (!direct && !swapped) return null;
-            const fullExact = parts.normalizedFull === inputParts.normalizedFull;
-            const score = (fullExact ? 3 : 0) + (direct ? 2 : swapped ? 1 : 0) + (row.membership_number ? 0.5 : 0);
+            const score =
+              scoreNameSimilarity(inputParts, parts) + (row.membership_number ? 0.5 : 0);
+            if (score < 1.5) return null;
             return {
               id: row.id,
               name: row.name,

@@ -26,6 +26,8 @@ function baseProps() {
     onConfirmMembershipSixMonth: vi.fn(),
     onHighlightRental: vi.fn(),
     onSelectRentalAsCustomer: vi.fn(),
+    onHighlightWaitlistBackup: vi.fn(),
+    onSelectWaitlistBackupAsCustomer: vi.fn(),
     onApproveRental: vi.fn(),
   };
 }
@@ -101,7 +103,7 @@ describe('EmployeeAssistPanel', () => {
     expect(screen.getByText(/\b2 remaining\b/)).toBeTruthy();
   });
 
-  it('RENTAL step: first tap highlights rental, second tap selects as customer', () => {
+  it('RENTAL step: first tap proposes, second tap confirms', () => {
     const props = {
       ...baseProps(),
       customerPrimaryLanguage: 'EN' as const,
@@ -112,10 +114,10 @@ describe('EmployeeAssistPanel', () => {
     const locker = screen.getByRole('button', { name: /Propose Locker/i });
     fireEvent.click(locker);
     expect(props.onHighlightRental).toHaveBeenCalledWith('LOCKER');
-    expect(props.onSelectRentalAsCustomer).not.toHaveBeenCalled();
+    expect(props.onApproveRental).not.toHaveBeenCalled();
 
     fireEvent.click(locker);
-    expect(props.onSelectRentalAsCustomer).toHaveBeenCalledWith('LOCKER');
+    expect(props.onApproveRental).toHaveBeenCalled();
   });
 
   it('APPROVAL step: shows green OK and calls approve', () => {
@@ -135,4 +137,3 @@ describe('EmployeeAssistPanel', () => {
     expect(props.onApproveRental).toHaveBeenCalled();
   });
 });
-

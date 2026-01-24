@@ -106,6 +106,29 @@ export function SelectionScreen({
               </div>
             )}
 
+            {/* Staff suggestion: membership */}
+            {highlightedMembershipChoice && !membershipChoice && (
+              <div
+                style={{
+                  padding: '1rem',
+                  marginBottom: '1rem',
+                  background: '#2563eb',
+                  borderRadius: '8px',
+                  color: 'white',
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+                  {t(session.customerPrimaryLanguage, 'proposed')}: {t(
+                    session.customerPrimaryLanguage,
+                    highlightedMembershipChoice === 'ONE_TIME'
+                      ? 'membership.oneTimeOption'
+                      : 'membership.sixMonthOption'
+                  )}{' '}
+                  ({t(session.customerPrimaryLanguage, 'selection.staffSuggestionHint')})
+                </div>
+              </div>
+            )}
+
             {/* Selection State Display */}
             {proposedRentalType && (
               <div
@@ -233,8 +256,12 @@ export function SelectionScreen({
                     <div className="rental-grid">
                       {rentalsToShow.map((rental) => {
                         const availableCount =
-                          inventory?.rooms[rental] || (rental === 'LOCKER' ? inventory?.lockers : 0) || 0;
-                        const showWarning = availableCount > 0 && availableCount <= 5;
+                          inventory?.rooms?.[rental] ??
+                          (rental === 'LOCKER' || rental === 'GYM_LOCKER'
+                            ? inventory?.lockers
+                            : undefined);
+                        const showWarning =
+                          typeof availableCount === 'number' && availableCount > 0 && availableCount <= 5;
                         const isUnavailable = availableCount === 0;
                         const isDisabled =
                           !session.customerPrimaryLanguage ||
@@ -270,12 +297,12 @@ export function SelectionScreen({
                           >
                             <div className="kiosk-option-stack">
                               <span className="kiosk-option-title">{displayName}</span>
-                              {showWarning && !isUnavailable && (
+                              {showWarning && !isUnavailable && typeof availableCount === 'number' && (
                                 <span className="kiosk-option-subtext">
                                   {t(lang, 'availability.onlyAvailable', { count: availableCount })}
                                 </span>
                               )}
-                              {isUnavailable && (
+                              {isUnavailable && typeof availableCount === 'number' && (
                                 <span className="kiosk-option-subtext">
                                   {t(lang, 'availability.joinWaitlist')}
                                 </span>
@@ -314,4 +341,3 @@ export function SelectionScreen({
     </I18nProvider>
   );
 }
-

@@ -3,6 +3,9 @@ import { useEffect, useRef } from 'react';
 export function TransactionCompleteModal({
   isOpen,
   agreementPending,
+  agreementBypassPending,
+  agreementSignedMethod,
+  selectionSummary,
   assignedLabel,
   assignedNumber,
   checkoutAt,
@@ -10,11 +13,23 @@ export function TransactionCompleteModal({
   showComplete,
   completeLabel,
   completeDisabled,
+  showBypassAction,
+  showPhysicalConfirmAction,
   onVerifyAgreementArtifacts,
+  onStartAgreementBypass,
+  onConfirmPhysicalAgreement,
   onCompleteTransaction,
 }: {
   isOpen: boolean;
   agreementPending: boolean;
+  agreementBypassPending: boolean;
+  agreementSignedMethod: 'DIGITAL' | 'MANUAL' | null;
+  selectionSummary?: {
+    membershipChoice?: string | null;
+    rentalType?: string | null;
+    waitlistDesiredType?: string | null;
+    waitlistBackupType?: string | null;
+  };
   assignedLabel: string;
   assignedNumber: string;
   checkoutAt: string | null;
@@ -22,7 +37,11 @@ export function TransactionCompleteModal({
   showComplete: boolean;
   completeLabel: string;
   completeDisabled: boolean;
+  showBypassAction: boolean;
+  showPhysicalConfirmAction: boolean;
   onVerifyAgreementArtifacts: () => void;
+  onStartAgreementBypass: () => void;
+  onConfirmPhysicalAgreement: () => void;
   onCompleteTransaction: () => void;
 }) {
   const modalRef = useRef<HTMLDivElement | null>(null);
@@ -83,8 +102,36 @@ export function TransactionCompleteModal({
           <div className="er-txn-complete-modal__notice er-surface">
             <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>Agreement Pending</div>
             <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
-              Waiting for customer to sign the agreement on their device.
+              {agreementBypassPending
+                ? 'Digital agreement bypass requested; awaiting physical signature.'
+                : 'Waiting for customer to sign the agreement on their device.'}
             </div>
+          </div>
+        )}
+
+        {selectionSummary && (
+          <div className="er-txn-complete-modal__assignment er-surface">
+            <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>Selection Summary</div>
+            {selectionSummary.membershipChoice && (
+              <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+                Membership: {selectionSummary.membershipChoice}
+              </div>
+            )}
+            {selectionSummary.rentalType && (
+              <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+                Rental: {selectionSummary.rentalType}
+              </div>
+            )}
+            {selectionSummary.waitlistDesiredType && (
+              <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+                Waitlist desired: {selectionSummary.waitlistDesiredType}
+              </div>
+            )}
+            {selectionSummary.waitlistBackupType && (
+              <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+                Waitlist backup: {selectionSummary.waitlistBackupType}
+              </div>
+            )}
           </div>
         )}
 
@@ -99,14 +146,38 @@ export function TransactionCompleteModal({
           )}
         </div>
 
-        <button
-          type="button"
-          className="cs-liquid-button cs-liquid-button--secondary er-txn-complete-modal__verify"
-          onClick={onVerifyAgreementArtifacts}
-          disabled={verifyDisabled}
-        >
-          Verify agreement PDF + signature saved
-        </button>
+        {agreementSignedMethod !== 'MANUAL' && (
+          <button
+            type="button"
+            className="cs-liquid-button cs-liquid-button--secondary er-txn-complete-modal__verify"
+            onClick={onVerifyAgreementArtifacts}
+            disabled={verifyDisabled}
+          >
+            Verify agreement PDF + signature saved
+          </button>
+        )}
+
+        {showBypassAction && (
+          <button
+            type="button"
+            className="cs-liquid-button cs-liquid-button--warning er-txn-complete-modal__verify"
+            onClick={onStartAgreementBypass}
+            disabled={completeDisabled}
+          >
+            Bypass digital agreement
+          </button>
+        )}
+
+        {showPhysicalConfirmAction && (
+          <button
+            type="button"
+            className="cs-liquid-button cs-liquid-button--success er-txn-complete-modal__verify"
+            onClick={onConfirmPhysicalAgreement}
+            disabled={completeDisabled}
+          >
+            Physical agreement signed
+          </button>
+        )}
 
         {showComplete && (
           <button
@@ -122,4 +193,3 @@ export function TransactionCompleteModal({
     </div>
   );
 }
-

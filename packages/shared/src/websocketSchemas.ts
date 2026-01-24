@@ -83,6 +83,8 @@ export const SessionUpdatedPayloadSchema: z.ZodType<SessionUpdatedPayload, z.Zod
       .optional(),
     paymentFailureReason: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
     agreementSigned: z.boolean().optional(),
+    agreementBypassPending: z.boolean().optional(),
+    agreementSignedMethod: z.enum(['DIGITAL', 'MANUAL']).optional(),
     assignedResourceType: z.enum(['room', 'locker']).optional(),
     assignedResourceNumber: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
     checkoutAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
@@ -92,7 +94,7 @@ export const SessionUpdatedPayloadSchema: z.ZodType<SessionUpdatedPayload, z.Zod
 export const CheckinOptionHighlightedPayloadSchema: z.ZodType<CheckinOptionHighlightedPayload> = z
   .object({
     sessionId: z.string(),
-    step: z.enum(['LANGUAGE', 'MEMBERSHIP']),
+    step: z.enum(['LANGUAGE', 'MEMBERSHIP', 'WAITLIST_BACKUP']),
     option: z.string().nullable(),
     by: z.literal('EMPLOYEE'),
   })
@@ -418,4 +420,3 @@ export function safeParseWebSocketEvent(input: unknown): ParsedWebSocketEvent | 
       return null;
   }
 }
-

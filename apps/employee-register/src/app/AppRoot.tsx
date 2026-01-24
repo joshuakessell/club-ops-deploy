@@ -272,6 +272,8 @@ export function AppRoot() {
     membershipNumber,
     currentSessionId,
     agreementSigned,
+    agreementBypassPending,
+    agreementSignedMethod,
     customerSelectedType,
     waitlistDesiredTier,
     waitlistBackupType,
@@ -1158,9 +1160,19 @@ export function AppRoot() {
   const handlePassiveCapture = useCallback(
     (rawScanText: string) => {
       void (async () => {
+        const cleanedScanText = rawScanText.trim();
+        if (
+          cleanedScanText === 'TZTAN' ||
+          (cleanedScanText.length > 0 &&
+            cleanedScanText.length <= 8 &&
+            /^[A-Za-z]+$/.test(cleanedScanText))
+        ) {
+          passiveScanProcessingRef.current = false;
+          setPassiveScanProcessing(false);
+          hideScanOverlay();
+          return;
+        }
         setScanToastMessage(null);
-        passiveScanProcessingRef.current = true;
-        setPassiveScanProcessing(true);
         const result = await onBarcodeCaptured(rawScanText);
         passiveScanProcessingRef.current = false;
         setPassiveScanProcessing(false);
@@ -1182,11 +1194,33 @@ export function AppRoot() {
     [hideScanOverlay, onBarcodeCaptured]
   );
 
+  const computeScanIdleTimeout = useCallback((buffer: string) => {
+    const trimmed = buffer.trim();
+    if (!trimmed) return 250;
+    const looksAamva =
+      trimmed.startsWith('@') ||
+      trimmed.includes('ANSI ') ||
+      trimmed.includes('AAMVA') ||
+      trimmed.includes('DL');
+    if (!looksAamva) return 250;
+    const hasCoreFields =
+      trimmed.includes('DCS') &&
+      trimmed.includes('DAC') &&
+      (trimmed.includes('DBB') || trimmed.includes('DBD')) &&
+      trimmed.includes('DAQ');
+    return hasCoreFields ? 250 : 1200;
+  }, []);
+
   usePassiveScannerInput({
     enabled: passiveScanEnabled,
-    onCaptureStart: () => showScanOverlay(),
+    idleTimeoutMs: 250,
+    enterGraceMs: 80,
+    captureWhenEditable: false,
+    enterTerminates: false,
+    tabTerminates: false,
+    getIdleTimeoutMs: computeScanIdleTimeout,
     onCaptureEnd: () => {
-      // If the capture ended but no processing started (e.g. too-short scan), undim.
+      // Only hide if a capture ended without processing (e.g. too-short scan).
       if (!passiveScanProcessingRef.current) hideScanOverlay();
     },
     onCancel: () => {
@@ -1194,7 +1228,12 @@ export function AppRoot() {
       setPassiveScanProcessing(false);
       hideScanOverlay();
     },
-    onCapture: (raw) => handlePassiveCapture(raw),
+    onCapture: (raw) => {
+      passiveScanProcessingRef.current = true;
+      setPassiveScanProcessing(true);
+      showScanOverlay();
+      handlePassiveCapture(raw);
+    },
   });
 
   // Cleanup overlay timer on unmount.
@@ -1508,7 +1547,7 @@ export function AppRoot() {
 
   // Waitlist/Upgrades functions
   const fetchWaitlist = async () => {
-    if (!session?.sessionToken) return;
+    if (!session?.sessionToken || !registerSession) return;
 
     try {
       // Fetch both ACTIVE and OFFERED waitlist entries
@@ -1524,6 +1563,13 @@ export function AppRoot() {
           },
         }),
       ]);
+
+      if (activeResponse.status === 401 || offeredResponse.status === 401) {
+        localStorage.removeItem('staff_session');
+        setSession(null);
+        setRegisterSession(null);
+        return;
+      }
 
       const allEntries: typeof waitlistEntries = [];
 
@@ -1647,21 +1693,21 @@ export function AppRoot() {
 
   // Fetch waitlist on mount and when session is available
   useEffect(() => {
-    if (session?.sessionToken) {
+    if (session?.sessionToken && registerSession) {
       void fetchWaitlistRef.current?.();
       void fetchInventoryAvailableRef.current?.();
     }
-  }, [session?.sessionToken]);
+  }, [registerSession, session?.sessionToken]);
 
   // 60s polling fallback for waitlist + availability (WebSocket is primary)
   useEffect(() => {
-    if (!session?.sessionToken) return;
+    if (!session?.sessionToken || !registerSession) return;
     const interval = window.setInterval(() => {
       void fetchWaitlistRef.current?.();
       void fetchInventoryAvailableRef.current?.();
     }, 60000);
     return () => window.clearInterval(interval);
-  }, [session?.sessionToken]);
+  }, [registerSession, session?.sessionToken]);
 
   const sessionActive = !!currentSessionId;
 
@@ -1869,9 +1915,11 @@ export function AppRoot() {
   };
 
   useEffect(() => {
-    // Check API health (avoid JSON parse crashes on empty/non-JSON responses)
+    // Poll API health so the badge recovers after transient startup failures.
     let cancelled = false;
-    void (async () => {
+    let intervalId: number | null = null;
+
+    const checkHealth = async () => {
       try {
         const res = await fetch(`${API_BASE}/health`);
         const data = await readJson<unknown>(res);
@@ -1885,11 +1933,27 @@ export function AppRoot() {
           setHealth({ status: data.status, timestamp: data.timestamp, uptime: data.uptime });
         }
       } catch (err) {
+        if (!cancelled) {
+          setHealth({
+            status: 'down',
+            timestamp: new Date().toISOString(),
+            uptime: 0,
+          });
+        }
         console.error('Health check failed:', err);
       }
-    })();
+    };
+
+    void checkHealth();
+    intervalId = window.setInterval(() => {
+      void checkHealth();
+    }, 5000);
+
     return () => {
       cancelled = true;
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+      }
     };
   }, [lane]);
 
@@ -2044,7 +2108,7 @@ export function AppRoot() {
   };
 
   const highlightKioskOption = async (params: {
-    step: 'LANGUAGE' | 'MEMBERSHIP';
+    step: 'LANGUAGE' | 'MEMBERSHIP' | 'WAITLIST_BACKUP';
     option: string | null;
   }) => {
     if (!currentSessionId || !session?.sessionToken) return;
@@ -2154,13 +2218,18 @@ export function AppRoot() {
     if (!currentSessionId || !session?.sessionToken) return;
     setIsSubmitting(true);
     try {
+      const availableCount =
+        inventoryAvailable?.rooms?.[rentalType] ??
+        (rentalType === 'LOCKER' ? inventoryAvailable?.lockers : undefined);
+      const waitlistDesiredType = availableCount === 0 ? rentalType : undefined;
+
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${session.sessionToken}`,
         },
-        body: JSON.stringify({ rentalType, proposedBy: 'EMPLOYEE' }),
+        body: JSON.stringify({ rentalType, proposedBy: 'EMPLOYEE', waitlistDesiredType }),
       });
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
@@ -2178,20 +2247,82 @@ export function AppRoot() {
     if (!currentSessionId) return;
     setIsSubmitting(true);
     try {
+      const availableCount =
+        inventoryAvailable?.rooms?.[rentalType] ??
+        (rentalType === 'LOCKER' ? inventoryAvailable?.lockers : undefined);
+      if (availableCount === 0) {
+        await fetch(`${API_BASE}/v1/checkin/lane/${lane}/waitlist-desired`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(typeof kioskToken === 'string' && kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
+          },
+          body: JSON.stringify({ waitlistDesiredType: rentalType }),
+        });
+        await pollOnce();
+        return;
+      }
+
       // Public endpoint; we intentionally set proposedBy=CUSTOMER so the kiosk enters its
       // "pending approval" step and employee-register shows the OK button.
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof kioskToken === 'string' && kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
+        },
         body: JSON.stringify({ rentalType, proposedBy: 'CUSTOMER' }),
       });
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to select rental');
       }
+      const confirmResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof kioskToken === 'string' && kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
+        },
+        body: JSON.stringify({ confirmedBy: 'CUSTOMER' }),
+      });
+      if (!confirmResponse.ok) {
+        const errorPayload: unknown = await confirmResponse.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
+      }
       await pollOnce();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to select rental');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSelectWaitlistBackupAsCustomer = async (
+    rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => {
+    if (!currentSessionId || !waitlistDesiredTier) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof kioskToken === 'string' && kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
+        },
+        body: JSON.stringify({
+          rentalType,
+          proposedBy: 'CUSTOMER',
+          waitlistDesiredType: waitlistDesiredTier,
+          backupRentalType: rentalType,
+        }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to select waitlist backup');
+      }
+      await pollOnce();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to select waitlist backup');
     } finally {
       setIsSubmitting(false);
     }
@@ -2229,6 +2360,54 @@ export function AppRoot() {
       alert(
         error instanceof Error ? error.message : 'Failed to confirm selection. Please try again.'
       );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleStartAgreementBypass = async () => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/agreement-bypass`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ sessionId: currentSessionId }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to bypass agreement');
+      }
+      await pollOnce();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to bypass agreement');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmPhysicalAgreement = async () => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/manual-signature-override`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ sessionId: currentSessionId }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm physical agreement');
+      }
+      await pollOnce();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to confirm physical agreement');
     } finally {
       setIsSubmitting(false);
     }
@@ -2902,6 +3081,12 @@ export function AppRoot() {
                         onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
                         onHighlightRental={(rental) => void handleProposeSelection(rental)}
                         onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+                        onHighlightWaitlistBackup={(rental) =>
+                          void highlightKioskOption({ step: 'WAITLIST_BACKUP', option: rental })
+                        }
+                        onSelectWaitlistBackupAsCustomer={(rental) =>
+                          void handleSelectWaitlistBackupAsCustomer(rental)
+                        }
                         onApproveRental={() => void handleConfirmSelection()}
                       />
                     ) : currentSessionId && customerName ? (
@@ -2959,6 +3144,12 @@ export function AppRoot() {
                             onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
                             onHighlightRental={(rental) => void handleProposeSelection(rental)}
                             onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+                            onHighlightWaitlistBackup={(rental) =>
+                              void highlightKioskOption({ step: 'WAITLIST_BACKUP', option: rental })
+                            }
+                            onSelectWaitlistBackupAsCustomer={(rental) =>
+                              void handleSelectWaitlistBackupAsCustomer(rental)
+                            }
                             onApproveRental={() => void handleConfirmSelection()}
                           />
                         </div>
@@ -3662,24 +3853,46 @@ export function AppRoot() {
             </div>
           )}
           {/* Agreement + Assignment Display */}
+          {(() => {
+            const agreementPending = !agreementSigned && selectionConfirmed && paymentStatus === 'PAID';
+            const canShowModal = Boolean(
+              currentSessionId &&
+                customerName &&
+                (agreementPending || (assignedResourceType && assignedResourceNumber))
+            );
+            return (
           <TransactionCompleteModal
-            isOpen={Boolean(currentSessionId && customerName && assignedResourceType && assignedResourceNumber)}
-            agreementPending={!agreementSigned && selectionConfirmed && paymentStatus === 'PAID'}
-            assignedLabel={assignedResourceType === 'room' ? 'Room' : 'Locker'}
+            isOpen={canShowModal}
+            agreementPending={agreementPending}
+            agreementBypassPending={agreementBypassPending}
+            agreementSignedMethod={agreementSignedMethod}
+            selectionSummary={{
+              membershipChoice: membershipChoice || null,
+              rentalType: proposedRentalType || customerSelectedType || null,
+              waitlistDesiredType: waitlistDesiredTier || null,
+              waitlistBackupType: waitlistBackupType || null,
+            }}
+            assignedLabel={assignedResourceType === 'room' ? 'Room' : assignedResourceType === 'locker' ? 'Locker' : 'Resource'}
             assignedNumber={assignedResourceNumber || '—'}
             checkoutAt={checkoutAt}
             verifyDisabled={!session?.sessionToken || !currentSessionIdRef.current}
             showComplete={Boolean(agreementSigned && assignedResourceType)}
             completeLabel={isSubmitting ? 'Processing...' : 'Complete Transaction'}
             completeDisabled={isSubmitting}
+            showBypassAction={agreementPending && !agreementBypassPending}
+            showPhysicalConfirmAction={agreementPending && agreementBypassPending}
             onVerifyAgreementArtifacts={() => {
               const sid = currentSessionIdRef.current;
               if (!sid) return;
               setDocumentsModalOpen(true);
               void fetchDocumentsBySession(sid);
             }}
+            onStartAgreementBypass={() => void handleStartAgreementBypass()}
+            onConfirmPhysicalAgreement={() => void handleConfirmPhysicalAgreement()}
             onCompleteTransaction={() => void handleCompleteTransaction()}
           />
+            );
+          })()}
 
           {/* Pay-First Demo Buttons (after selection confirmed) */}
           {currentSessionId &&
@@ -3789,4 +4002,3 @@ export function AppRoot() {
     </RegisterSignIn>
   );
 }
-

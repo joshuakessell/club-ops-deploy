@@ -1,4 +1,4 @@
-import { query, transaction } from './index';
+import { closeDatabase, query, transaction } from './index';
 import { randomUUID } from 'crypto';
 import {
   DOUBLE_ROOM_NUMBERS,
@@ -9,6 +9,7 @@ import {
   SPECIAL_ROOM_NUMBERS,
 } from '@club-ops/shared';
 import { RentalType, RoomStatus, RoomType, getRoomTierFromNumber } from '@club-ops/shared';
+import { computeSha256Hex, normalizeScanText } from '../checkin/identity';
 
 /**
  * Demo mode seeding for shifts and timeclock sessions.
@@ -294,6 +295,24 @@ export async function seedDemoData(): Promise<void> {
           );
           customerIds.push(id);
         }
+
+        // Seed a known DL hash for encrypted lookup testing (no change to total count).
+        const dlTestCustomerId = customerIds[customerIds.length - 1]!;
+        const dlRawScan =
+          '@\nANSI 636015090002DL00410289ZT03300007DLDCACDCBNONEDCDNONEDBA07152032DCSKESSELLDDENDACJOSHUADDFNDADCALEBDDGNDBD06042025DBB07151988DBC1DAYBRODAU072 inDAG3011 MAHANNA SPRINGS DR APT ADAIDALLASDAJTXDAK75235-8742DAQ21026653DCF35629580160034005135DCGUSADAZBRODCK10032599522DCLWDDAFDDB07162021DAW155DDK1\nZTZTAN';
+        const dlNormalized = normalizeScanText(dlRawScan);
+        const dlHash = computeSha256Hex(dlNormalized);
+        await client.query(
+          `UPDATE customers
+           SET name = $1,
+               dob = $2,
+               id_scan_hash = $3,
+               id_scan_value = $4,
+               updated_at = NOW()
+           WHERE id = $5`,
+          ['Joshua Kessell', new Date('1988-07-15'), dlHash, dlNormalized, dlTestCustomerId]
+        );
+        console.log(`✓ Seeded DL hash test customer: Joshua Kessell (${dlTestCustomerId})`);
 
         // -------------------------------------------------------------------
         // Current ACTIVE occupancy at NOW
@@ -1123,6 +1142,8 @@ export async function seedDemoData(): Promise<void> {
   } catch (error) {
     console.error('❌ Demo seed failed:', error);
     throw error;
+  } finally {
+    await closeDatabase();
   }
 }
 

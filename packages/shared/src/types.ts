@@ -185,6 +185,8 @@ export interface SessionUpdatedPayload {
   }>;
   paymentFailureReason?: string;
   agreementSigned?: boolean;
+  agreementBypassPending?: boolean;
+  agreementSignedMethod?: 'DIGITAL' | 'MANUAL';
   assignedResourceType?: 'room' | 'locker';
   assignedResourceNumber?: string;
   checkoutAt?: string;
@@ -196,11 +198,12 @@ export interface SessionUpdatedPayload {
  */
 export interface CheckinOptionHighlightedPayload {
   sessionId: string;
-  step: 'LANGUAGE' | 'MEMBERSHIP';
+  step: 'LANGUAGE' | 'MEMBERSHIP' | 'WAITLIST_BACKUP';
   /**
    * Option identifier for the step:
    * - LANGUAGE: 'EN' | 'ES'
    * - MEMBERSHIP: 'ONE_TIME' | 'SIX_MONTH'
+   * - WAITLIST_BACKUP: rental type (e.g., 'LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL')
    *
    * null clears the highlight for the step.
    */
