@@ -541,7 +541,7 @@ describe('App', () => {
     });
   });
 
-  it('Customer Account: if customer is already checked in (409), shows inline status (no modal)', async () => {
+  it('Customer Account: if customer is already checked in, shows inline status (no modal)', async () => {
     localStorage.setItem(
       'staff_session',
       JSON.stringify({
@@ -598,11 +598,12 @@ describe('App', () => {
         if (u.includes('/v1/checkin/lane/lane-1/start')) {
           expect(init?.method).toBe('POST');
           return Promise.resolve({
-            ok: false,
-            status: 409,
+            ok: true,
+            status: 200,
             json: () =>
               Promise.resolve({
                 code: 'ALREADY_CHECKED_IN',
+                alreadyCheckedIn: true,
                 activeCheckin: {
                   visitId: 'visit-1',
                   rentalType: 'LOCKER',

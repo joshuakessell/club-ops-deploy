@@ -101,6 +101,24 @@ export function useStartLaneCheckinForCustomerIfNotVisiting(params: {
 
         const payload: unknown = await response.json().catch(() => null);
 
+        if (
+          response.ok &&
+          isRecord(payload) &&
+          payload['code'] === 'ALREADY_CHECKED_IN'
+        ) {
+          const ac = payload['activeCheckin'];
+          if (isRecord(ac) && typeof ac['visitId'] === 'string') {
+            if (!cancelled) {
+              setState({
+                mode: 'ALREADY_VISITING',
+                isStarting: false,
+                activeCheckin: ac as ActiveCheckinDetails,
+              });
+            }
+            return;
+          }
+        }
+
         if (!response.ok) {
           if (
             response.status === 409 &&

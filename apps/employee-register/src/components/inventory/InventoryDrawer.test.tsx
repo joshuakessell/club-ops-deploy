@@ -86,7 +86,7 @@ describe('InventoryDrawer', () => {
     render(<InventoryDrawer lane="lane-1" sessionToken="test-token" />);
 
     // Wait for inventory to load and render.
-    await screen.findByText('Inventory');
+    await screen.findByText('Rentals');
 
     const standardBtn = screen.getByRole('button', { name: /Standard/i });
     const doubleBtn = screen.getByRole('button', { name: /Double/i });
@@ -102,7 +102,7 @@ describe('InventoryDrawer', () => {
 
   it('search filters by assignedMemberName (case-insensitive substring)', async () => {
     render(<InventoryDrawer lane="lane-1" sessionToken="test-token" />);
-    await screen.findByText('Inventory');
+    await screen.findByText('Rentals');
 
     const search = screen.getByLabelText('Inventory search');
     fireEvent.change(search, { target: { value: 'smith' } });
@@ -116,7 +116,7 @@ describe('InventoryDrawer', () => {
 
   it('search filters by number as well (typing 101 shows room 101)', async () => {
     render(<InventoryDrawer lane="lane-1" sessionToken="test-token" />);
-    await screen.findByText('Inventory');
+    await screen.findByText('Rentals');
 
     const search = screen.getByLabelText('Inventory search');
     fireEvent.change(search, { target: { value: '101' } });
