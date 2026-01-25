@@ -1,6 +1,7 @@
 import { PastDuePaymentModal } from '../../components/register/modals/PastDuePaymentModal';
 import { RequiredTenderOutcomeModal } from '../../components/register/modals/RequiredTenderOutcomeModal';
 import { UpgradePaymentModal } from '../../components/register/modals/UpgradePaymentModal';
+import { AddOnSaleModal } from '../../components/register/modals/AddOnSaleModal';
 import { PaymentDeclineToast } from '../../components/register/toasts/PaymentDeclineToast';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
 
@@ -32,6 +33,13 @@ export function PaymentRoot() {
     handleDemoPayment,
     paymentDeclineError,
     setPaymentDeclineError,
+    showAddOnSaleModal,
+    openAddOnSaleModal,
+    closeAddOnSaleModal,
+    addOnCart,
+    addAddOnItem,
+    removeAddOnItem,
+    handleAddOnSaleToCheckin,
   } = useEmployeeRegisterState();
 
   return (
@@ -94,8 +102,20 @@ export function PaymentRoot() {
               if (choice === 'CREDIT_DECLINE')
                 void handleDemoPayment('CREDIT_DECLINE', 'Card declined');
             }}
+            extraActionLabel="Add On Sale"
+            onExtraAction={() => openAddOnSaleModal()}
           />
         )}
+
+      <AddOnSaleModal
+        isOpen={showAddOnSaleModal}
+        cart={addOnCart}
+        onAddItem={addAddOnItem}
+        onRemoveItem={removeAddOnItem}
+        onAddToCheckin={() => void handleAddOnSaleToCheckin()}
+        onClose={closeAddOnSaleModal}
+        isSubmitting={isSubmitting}
+      />
 
       <PaymentDeclineToast
         message={paymentDeclineError}

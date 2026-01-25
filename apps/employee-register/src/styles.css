@@ -181,6 +181,10 @@
   gap: 12px;
 }
 
+.er-required-modal__addon {
+  grid-column: 1 / -1;
+}
+
 .er-required-modal__continue {
   width: 100%;
 }
@@ -812,6 +816,131 @@ body::after {
   font-size: 0.875rem;
   color: var(--text-muted);
   margin-bottom: 1rem;
+}
+
+.er-retail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+}
+
+.er-retail-section-title {
+  font-weight: 800;
+  color: rgba(226, 232, 240, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+}
+
+.er-retail-section-hint {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(148, 163, 184, 0.9);
+  text-transform: none;
+}
+
+.er-retail-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
+  --er-retail-item-row-height: 4rem;
+  grid-auto-rows: var(--er-retail-item-row-height);
+  max-height: calc(
+    var(--er-retail-item-row-height) + var(--er-retail-item-row-height) + 0.6rem
+  );
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.er-retail-item-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  font-weight: 700;
+  height: 100%;
+}
+
+.er-retail-price {
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.er-retail-cart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 80px;
+  max-height: min(35vh, 260px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.er-retail-cart-empty {
+  color: rgba(148, 163, 184, 0.9);
+  font-weight: 600;
+}
+
+.er-retail-cart-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.er-retail-cart-remove {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.er-retail-cart-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.er-retail-cart-name {
+  font-weight: 700;
+}
+
+.er-retail-cart-meta {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.9);
+  font-weight: 700;
+}
+
+.er-retail-cart-unit {
+  font-weight: 800;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.er-retail-total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 900;
+  font-size: 1.05rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.er-retail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.er-retail-tender-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.6rem;
+  width: 100%;
 }
 
 .counts {

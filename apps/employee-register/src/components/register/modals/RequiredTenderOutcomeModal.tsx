@@ -7,11 +7,15 @@ export function RequiredTenderOutcomeModal({
   totalLabel,
   isSubmitting,
   onConfirm,
+  extraActionLabel,
+  onExtraAction,
 }: {
   isOpen: boolean;
   totalLabel: string;
   isSubmitting: boolean;
   onConfirm: (choice: TenderOutcomeChoice) => void;
+  extraActionLabel?: string;
+  onExtraAction?: () => void;
 }) {
   const [choice, setChoice] = useState<TenderOutcomeChoice | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
@@ -111,6 +115,23 @@ export function RequiredTenderOutcomeModal({
               </button>
             );
           })}
+          {extraActionLabel && onExtraAction && (
+            <button
+              type="button"
+              className={[
+                'cs-liquid-button',
+                'cs-liquid-button--secondary',
+                'er-required-modal__addon',
+              ].join(' ')}
+              onClick={() => {
+                if (isSubmitting) return;
+                onExtraAction();
+              }}
+              disabled={isSubmitting}
+            >
+              {extraActionLabel}
+            </button>
+          )}
         </div>
       </div>
     </div>

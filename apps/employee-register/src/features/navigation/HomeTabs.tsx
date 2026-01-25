@@ -119,6 +119,17 @@ export function HomeTabs() {
       >
         Room Cleaning
       </button>
+      <button
+        type="button"
+        className={[
+          'er-home-tab-btn',
+          'cs-liquid-button',
+          homeTab === 'retail' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+        ].join(' ')}
+        onClick={() => selectHomeTab('retail')}
+      >
+        Retail
+      </button>
     </nav>
   );
 }

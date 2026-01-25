@@ -8,8 +8,6 @@ type CheckinStageInput = {
   assignedResourceNumber: string | null;
   agreementSigned: boolean;
   selectionConfirmed: boolean;
-  proposedBy: 'CUSTOMER' | 'EMPLOYEE' | null;
-  proposedRentalType: string | null;
   customerPrimaryLanguage: 'EN' | 'ES' | undefined;
   membershipNumber: string | null;
   customerMembershipValidUntil: string | null;
@@ -25,8 +23,6 @@ export function deriveCheckinStage(input: CheckinStageInput): CheckinStage | nul
     assignedResourceNumber,
     agreementSigned,
     selectionConfirmed,
-    proposedBy,
-    proposedRentalType,
     customerPrimaryLanguage,
     membershipNumber,
     customerMembershipValidUntil,
@@ -36,23 +32,18 @@ export function deriveCheckinStage(input: CheckinStageInput): CheckinStage | nul
 
   if (!currentSessionId || !customerName) return null;
 
-  // 6 - Assigned
+  // 5 - Assigned
   if (assignedResourceType && assignedResourceNumber) {
-    return { number: 6, label: 'Locker/Room Assigned' };
+    return { number: 5, label: 'Locker/Room Assigned' };
   }
 
-  // 5 - Signing agreement (after rental confirmation, before assignment)
+  // 4 - Signing agreement (after rental confirmation, before assignment)
   if (agreementSigned) {
-    // In practice assignment follows immediately; treat as stage 6 when agreement is already signed.
-    return { number: 6, label: 'Locker/Room Assigned' };
+    // In practice assignment follows immediately; treat as stage 5 when agreement is already signed.
+    return { number: 5, label: 'Locker/Room Assigned' };
   }
   if (selectionConfirmed) {
-    return { number: 5, label: 'Signing Member Agreement' };
-  }
-
-  // 4 - Employee confirms customer selection
-  if (proposedBy === 'CUSTOMER' && proposedRentalType) {
-    return { number: 4, label: 'Employee Rental Confirmation' };
+    return { number: 4, label: 'Signing Member Agreement' };
   }
 
   // 1 - Language selection

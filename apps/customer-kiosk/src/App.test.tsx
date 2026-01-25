@@ -172,6 +172,12 @@ describe('App', () => {
           json: () => Promise.resolve({ success: true }),
         } as unknown as Response);
       }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/confirm-selection')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
+      }
       return Promise.resolve({ json: () => Promise.resolve({}) } as unknown as Response);
     });
   });
@@ -572,7 +578,7 @@ describe('App', () => {
     });
   });
 
-  it('shows Pending approval overlay after non-member completes membership + rental selection', async () => {
+  it('auto-confirms selection after non-member completes membership + rental selection', async () => {
     // Override inventory to allow immediate rental selection (avoid waitlist path).
     (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
       const u =
@@ -602,6 +608,12 @@ describe('App', () => {
         } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/propose-selection')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/confirm-selection')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({ success: true }),
@@ -649,7 +661,12 @@ describe('App', () => {
       (lockerBtn as HTMLButtonElement).click();
     });
 
-    expect(await screen.findByText('Waiting for approval')).toBeDefined();
+    await waitFor(() => {
+      const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes('/confirm-selection'))).toBe(true);
+    });
+
+    expect(screen.queryByText('Waiting for approval')).toBeNull();
   });
 
   it('shows whole-dollar prices next to rental options and never shows Join Waitlist for Upgrade', async () => {

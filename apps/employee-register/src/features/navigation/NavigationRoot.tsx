@@ -10,6 +10,7 @@ import { UpgradesPanel } from './UpgradesPanel';
 import { CheckoutPanel } from './CheckoutPanel';
 import { RoomCleaningPanel } from './RoomCleaningPanel';
 import { ManualEntryPanel } from './ManualEntryPanel';
+import { RetailPanel } from './RetailPanel';
 
 export function NavigationRoot() {
   const {
@@ -72,6 +73,7 @@ export function NavigationRoot() {
               {homeTab === 'checkout' && <CheckoutPanel />}
               {homeTab === 'roomCleaning' && <RoomCleaningPanel />}
               {homeTab === 'firstTime' && <ManualEntryPanel />}
+              {homeTab === 'retail' && <RetailPanel />}
             </div>
           </div>
         </section>

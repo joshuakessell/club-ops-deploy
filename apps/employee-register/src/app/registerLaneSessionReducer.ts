@@ -188,6 +188,23 @@ export function registerLaneSessionReducer(
       next.paymentIntentId = p.paymentIntentId ?? null;
       next.paymentStatus = p.paymentStatus ?? null;
 
+      if (p.paymentLineItems !== undefined || p.paymentTotal !== undefined) {
+        const lineItems = Array.isArray(p.paymentLineItems)
+          ? p.paymentLineItems
+          : next.paymentQuote?.lineItems ?? [];
+        const total =
+          typeof p.paymentTotal === 'number'
+            ? p.paymentTotal
+            : next.paymentQuote?.total ?? 0;
+        if (lineItems.length > 0 || typeof p.paymentTotal === 'number') {
+          next.paymentQuote = {
+            total,
+            lineItems,
+            messages: next.paymentQuote?.messages ?? [],
+          };
+        }
+      }
+
       next.assignedResourceType = (p.assignedResourceType ??
         null) as RegisterLaneSessionState['assignedResourceType'];
       next.assignedResourceNumber = p.assignedResourceNumber ?? null;
