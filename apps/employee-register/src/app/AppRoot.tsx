@@ -4065,6 +4065,17 @@ export function AppRoot() {
           {(() => {
             const agreementPending =
               !agreementSigned && selectionConfirmed && paymentStatus === 'PAID';
+            const inferredAssignedLabel = assignedResourceType
+              ? assignedResourceType === 'room'
+                ? 'Room'
+                : 'Locker'
+              : (() => {
+                  const rentalType = proposedRentalType || customerSelectedType;
+                  if (rentalType === 'LOCKER' || rentalType === 'GYM_LOCKER') return 'Locker';
+                  if (rentalType === 'STANDARD' || rentalType === 'DOUBLE' || rentalType === 'SPECIAL')
+                    return 'Room';
+                  return 'Resource';
+                })();
             const canShowModal = Boolean(
               currentSessionId &&
               customerName &&
@@ -4074,6 +4085,7 @@ export function AppRoot() {
               <TransactionCompleteModal
                 isOpen={canShowModal}
                 agreementPending={agreementPending}
+                agreementSigned={agreementSigned}
                 agreementBypassPending={agreementBypassPending}
                 agreementSignedMethod={agreementSignedMethod}
                 selectionSummary={{
@@ -4082,14 +4094,8 @@ export function AppRoot() {
                   waitlistDesiredType: waitlistDesiredTier || null,
                   waitlistBackupType: waitlistBackupType || null,
                 }}
-                assignedLabel={
-                  assignedResourceType === 'room'
-                    ? 'Room'
-                    : assignedResourceType === 'locker'
-                      ? 'Locker'
-                      : 'Resource'
-                }
-                assignedNumber={assignedResourceNumber || '—'}
+                assignedLabel={inferredAssignedLabel}
+                assignedNumber={assignedResourceNumber}
                 checkoutAt={checkoutAt}
                 verifyDisabled={!session?.sessionToken || !currentSessionIdRef.current}
                 showComplete={Boolean(agreementSigned && assignedResourceType)}

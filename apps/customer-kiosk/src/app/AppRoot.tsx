@@ -676,20 +676,25 @@ export function AppRoot() {
   useEffect(() => {
     const lang = session.customerPrimaryLanguage;
     if (view === 'agreement') {
-      fetch(`${API_BASE}/v1/agreements/active`)
-        .then((res) => res.json())
-        .then((data: Agreement) => {
+      void (async () => {
+        try {
+          const response = await fetch(`${API_BASE}/v1/agreements/active`);
+          if (!response.ok) {
+            const errorPayload = await readJson(response);
+            throw new Error(getErrorMessage(errorPayload) || 'Failed to load agreement');
+          }
+          const data = (await response.json()) as Agreement;
           setAgreement({
             id: data.id,
             version: data.version,
             title: lang === 'ES' ? t(lang, 'agreementTitle') : data.title,
             bodyText: lang === 'ES' ? t(lang, 'agreement.legalBodyHtml') : data.bodyText,
           });
-        })
-        .catch((error) => {
+        } catch (error) {
           console.error('Failed to load agreement:', error);
           alert(t(lang, 'error.loadAgreement'));
-        });
+        }
+      })();
     }
   }, [view, session.customerPrimaryLanguage]);
 

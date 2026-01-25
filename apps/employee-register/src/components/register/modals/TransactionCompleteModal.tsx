@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 export function TransactionCompleteModal({
   isOpen,
   agreementPending,
+  agreementSigned,
   agreementBypassPending,
   agreementSignedMethod,
   selectionSummary,
@@ -22,6 +23,7 @@ export function TransactionCompleteModal({
 }: {
   isOpen: boolean;
   agreementPending: boolean;
+  agreementSigned: boolean;
   agreementBypassPending: boolean;
   agreementSignedMethod: 'DIGITAL' | 'MANUAL' | null;
   selectionSummary?: {
@@ -31,7 +33,7 @@ export function TransactionCompleteModal({
     waitlistBackupType?: string | null;
   };
   assignedLabel: string;
-  assignedNumber: string;
+  assignedNumber: string | null;
   checkoutAt: string | null;
   verifyDisabled: boolean;
   showComplete: boolean;
@@ -45,6 +47,7 @@ export function TransactionCompleteModal({
   onCompleteTransaction: () => void;
 }) {
   const modalRef = useRef<HTMLDivElement | null>(null);
+  const hasAssignment = Boolean(assignedNumber);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -137,7 +140,9 @@ export function TransactionCompleteModal({
 
         <div className="er-txn-complete-modal__assignment er-surface">
           <div style={{ fontWeight: 900, fontSize: '1.2rem' }}>
-            Assigned: {assignedLabel} {assignedNumber}
+            {hasAssignment
+              ? `Assigned: ${assignedLabel} ${assignedNumber}`
+              : `Assignment: ${assignedLabel === 'Resource' ? 'Pending' : `${assignedLabel} pending`}`}
           </div>
           {checkoutAt && (
             <div style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 700 }}>
@@ -146,7 +151,7 @@ export function TransactionCompleteModal({
           )}
         </div>
 
-        {agreementSignedMethod !== 'MANUAL' && (
+        {agreementSigned && agreementSignedMethod !== 'MANUAL' && (
           <button
             type="button"
             className="cs-liquid-button cs-liquid-button--secondary er-txn-complete-modal__verify"
