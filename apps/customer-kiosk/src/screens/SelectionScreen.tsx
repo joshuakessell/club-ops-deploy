@@ -207,6 +207,9 @@ export function SelectionScreen({
                             'cs-liquid-button',
                             'kiosk-option-button',
                             membershipChoice === 'ONE_TIME' ? 'cs-liquid-button--selected' : '',
+                            highlightedMembershipChoice === 'ONE_TIME'
+                              ? 'cs-liquid-button--staff-proposed'
+                              : '',
                             highlightedMembershipChoice === 'ONE_TIME' ? 'ck-option-highlight' : '',
                           ]
                             .filter(Boolean)
@@ -227,6 +230,9 @@ export function SelectionScreen({
                             'cs-liquid-button',
                             'kiosk-option-button',
                             membershipChoice === 'SIX_MONTH' ? 'cs-liquid-button--selected' : '',
+                            highlightedMembershipChoice === 'SIX_MONTH'
+                              ? 'cs-liquid-button--staff-proposed'
+                              : '',
                             highlightedMembershipChoice === 'SIX_MONTH'
                               ? 'ck-option-highlight'
                               : '',

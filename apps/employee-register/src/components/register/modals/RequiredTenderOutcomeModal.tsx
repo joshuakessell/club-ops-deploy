@@ -15,7 +15,6 @@ export function RequiredTenderOutcomeModal({
 }) {
   const [choice, setChoice] = useState<TenderOutcomeChoice | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
-  const continueDisabled = isSubmitting || !choice;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -100,7 +99,11 @@ export function RequiredTenderOutcomeModal({
                   'cs-liquid-button',
                   selected ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
                 ].join(' ')}
-                onClick={() => setChoice(o.value)}
+                onClick={() => {
+                  if (isSubmitting) return;
+                  setChoice(o.value);
+                  onConfirm(o.value);
+                }}
                 disabled={isSubmitting}
                 aria-pressed={selected}
               >
@@ -109,18 +112,6 @@ export function RequiredTenderOutcomeModal({
             );
           })}
         </div>
-
-        <button
-          type="button"
-          className="cs-liquid-button er-required-modal__continue"
-          onClick={() => {
-            if (!choice) return;
-            onConfirm(choice);
-          }}
-          disabled={continueDisabled}
-        >
-          {isSubmitting ? 'Processing…' : 'Continue'}
-        </button>
       </div>
     </div>
   );

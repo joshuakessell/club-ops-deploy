@@ -3,7 +3,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { RequiredTenderOutcomeModal } from './RequiredTenderOutcomeModal';
 
 describe('RequiredTenderOutcomeModal', () => {
-  it('requires selecting exactly one option before continuing', () => {
+  it('confirms immediately when an option is selected', () => {
     const onConfirm = vi.fn();
     const { container } = render(
       <RequiredTenderOutcomeModal
@@ -16,13 +16,9 @@ describe('RequiredTenderOutcomeModal', () => {
 
     const dialog = screen.getByRole('dialog', { name: /select tender outcome/i });
     const m = within(dialog);
-    const continueBtn = m.getByRole<HTMLButtonElement>('button', { name: 'Continue' });
-    expect(continueBtn.disabled).toBe(true);
+    expect(m.queryByRole('button', { name: 'Continue' })).toBeNull();
 
     fireEvent.click(m.getByRole('button', { name: 'Credit Success' }));
-    expect(continueBtn.disabled).toBe(false);
-
-    fireEvent.click(continueBtn);
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledWith('CREDIT_SUCCESS');
 
