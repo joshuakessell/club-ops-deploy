@@ -20,6 +20,7 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
   const [activeList, setActiveList] = useState<'DIRTY' | 'CLEANING' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   const dirtyRooms = useMemo(
     () =>
@@ -80,7 +81,7 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
     return () => {
       mounted = false;
     };
-  }, [sessionToken]);
+  }, [sessionToken, refreshNonce]);
 
   const toggleRoom = (roomId: string, source: 'DIRTY' | 'CLEANING') => {
     // Prevent mixed-status batch: selecting in one list clears the other.
@@ -118,6 +119,7 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
       // Reset selection after success
       setSelectedRoomIds(new Set());
       setActiveList(null);
+      setRefreshNonce((prev) => prev + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update room statuses');
     } finally {

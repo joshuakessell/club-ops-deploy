@@ -2976,6 +2976,19 @@ export function AppRoot() {
                     className={[
                       'er-home-tab-btn',
                       'cs-liquid-button',
+                      homeTab === 'account'
+                        ? 'cs-liquid-button--selected'
+                        : 'cs-liquid-button--secondary',
+                    ].join(' ')}
+                    onClick={() => selectHomeTab('account')}
+                  >
+                    Customer Account
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'er-home-tab-btn',
+                      'cs-liquid-button',
                       homeTab === 'scan'
                         ? 'cs-liquid-button--selected'
                         : 'cs-liquid-button--secondary',
@@ -2999,25 +3012,16 @@ export function AppRoot() {
                   </button>
                   <button
                     type="button"
-                    disabled={!accountCustomerId && !(currentSessionId && customerName)}
                     className={[
                       'er-home-tab-btn',
                       'cs-liquid-button',
-                      homeTab === 'account'
+                      homeTab === 'firstTime'
                         ? 'cs-liquid-button--selected'
                         : 'cs-liquid-button--secondary',
                     ].join(' ')}
-                    onClick={() => selectHomeTab('account')}
-                    style={{
-                      opacity: !accountCustomerId && !(currentSessionId && customerName) ? 0.6 : 1,
-                    }}
-                    title={
-                      !accountCustomerId && !(currentSessionId && customerName)
-                        ? 'Select a customer first'
-                        : undefined
-                    }
+                    onClick={() => selectHomeTab('firstTime')}
                   >
-                    Customer Account
+                    Manual Entry
                   </button>
                   <button
                     type="button"
@@ -3032,7 +3036,7 @@ export function AppRoot() {
                     ].join(' ')}
                     onClick={() => selectHomeTab('inventory')}
                   >
-                    Inventory
+                    Rentals
                   </button>
                   <button
                     type="button"
@@ -3078,19 +3082,6 @@ export function AppRoot() {
                     onClick={() => selectHomeTab('roomCleaning')}
                   >
                     Room Cleaning
-                  </button>
-                  <button
-                    type="button"
-                    className={[
-                      'er-home-tab-btn',
-                      'cs-liquid-button',
-                      homeTab === 'firstTime'
-                        ? 'cs-liquid-button--selected'
-                        : 'cs-liquid-button--secondary',
-                    ].join(' ')}
-                    onClick={() => selectHomeTab('firstTime')}
-                  >
-                    First Time Customer
                   </button>
                 </nav>
 
