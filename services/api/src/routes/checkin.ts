@@ -710,6 +710,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           const message = (error as { message?: string }).message;
           const code = (error as { code?: unknown }).code;
           const activeCheckin = (error as { activeCheckin?: unknown }).activeCheckin;
+          if (statusCode === 409 && code === 'ALREADY_CHECKED_IN') {
+            return reply.status(200).send({
+              code: 'ALREADY_CHECKED_IN',
+              alreadyCheckedIn: true,
+              activeCheckin:
+                activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
+            });
+          }
           return reply.status(statusCode).send({
             error: message ?? 'Failed to start session',
             code: typeof code === 'string' ? code : undefined,
@@ -1501,6 +1509,14 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           const message = (error as { message?: string }).message;
           const code = (error as { code?: unknown }).code;
           const activeCheckin = (error as { activeCheckin?: unknown }).activeCheckin;
+          if (statusCode === 409 && code === 'ALREADY_CHECKED_IN') {
+            return reply.status(200).send({
+              code: 'ALREADY_CHECKED_IN',
+              alreadyCheckedIn: true,
+              activeCheckin:
+                activeCheckin && typeof activeCheckin === 'object' ? activeCheckin : undefined,
+            });
+          }
           return reply.status(statusCode).send({
             error: message ?? 'Failed to scan ID',
             code: typeof code === 'string' ? code : undefined,

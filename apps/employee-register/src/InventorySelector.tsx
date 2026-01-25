@@ -751,7 +751,7 @@ export function InventorySelector({
         }}
       >
         <h2 className="er-card-title" style={{ margin: 0, marginBottom: '0.75rem' }}>
-          Inventory
+          Rentals
         </h2>
 
         {!occupancyLookupMode && !disableSelection && selectedItem && onClearSelection && (
@@ -780,9 +780,9 @@ export function InventorySelector({
             {(
               [
                 ['LOCKER', 'Lockers'],
-                ['STANDARD', 'Standard Rooms'],
-                ['DOUBLE', 'Double Rooms'],
-                ['SPECIAL', 'Special Rooms'],
+                ['STANDARD', 'Standard'],
+                ['DOUBLE', 'Double'],
+                ['SPECIAL', 'Special'],
               ] as const
             ).map(([tier, label]) => {
               const counts = navCounts[tier];
@@ -1213,14 +1213,12 @@ function RoomItem({
     >
       {isOccupied ? (
         <div className="er-inv-occupied-row">
-          <div className="er-inv-occupied-number">Room {room.number}</div>
+          <div className="er-inv-occupied-number">{room.number}</div>
           <div className="er-inv-occupied-customer">
             <span className="er-inv-occupied-customer-text">{customerLabel ?? '—'}</span>
           </div>
           <div className="er-inv-occupied-checkout">
-            <div className="er-inv-occupied-time">
-              Checkout Time: {checkoutTime ?? '—'}
-            </div>
+            <div className="er-inv-occupied-time">{checkoutTime ?? '—'}</div>
             <div
               className="er-inv-occupied-duration"
               style={{
@@ -1230,7 +1228,7 @@ function RoomItem({
               {duration
                 ? duration.isOverdue
                   ? `Late ${duration.label}`
-                  : `${duration.label} remaining`
+                  : duration.label
                 : '—'}
             </div>
           </div>
@@ -1254,7 +1252,7 @@ function RoomItem({
                 textOverflow: 'ellipsis',
               }}
             >
-              Room {room.number}
+              {room.number}
             </div>
             {!isCleaning && !isDirty && isWaitlistMatch && (
               <div
@@ -1398,16 +1396,14 @@ function LockerSection({
                     .join(' ')}
                 >
                   <div className="er-inv-occupied-row">
-                    <div className="er-inv-occupied-number">Locker {locker.number}</div>
+                    <div className="er-inv-occupied-number">{locker.number}</div>
                     <div className="er-inv-occupied-customer">
                       <span className="er-inv-occupied-customer-text">
                         {customerLabel ?? '—'}
                       </span>
                     </div>
                     <div className="er-inv-occupied-checkout">
-                      <div className="er-inv-occupied-time">
-                        Checkout Time: {checkoutTime ?? '—'}
-                      </div>
+                      <div className="er-inv-occupied-time">{checkoutTime ?? '—'}</div>
                       <div
                         className="er-inv-occupied-duration"
                         style={{
@@ -1417,7 +1413,7 @@ function LockerSection({
                         {duration
                           ? duration.isOverdue
                             ? `Late ${duration.label}`
-                            : `${duration.label} remaining`
+                            : duration.label
                           : '—'}
                       </div>
                     </div>

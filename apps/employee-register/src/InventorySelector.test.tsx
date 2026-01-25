@@ -87,7 +87,7 @@ describe('InventorySelector', () => {
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
     // Wait for data to load
-    await screen.findByRole('heading', { name: 'Inventory' });
+    await screen.findByRole('heading', { name: 'Rentals' });
 
     // Check that sections are rendered
     expect(screen.getByRole('button', { name: /standard/i })).toBeDefined();
@@ -101,7 +101,7 @@ describe('InventorySelector', () => {
 
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
-    await screen.findByRole('heading', { name: 'Inventory' });
+    await screen.findByRole('heading', { name: 'Rentals' });
     expect(screen.getByRole('button', { name: /standard/i })).toBeDefined();
 
     // Section should be expanded (we can check by looking for room numbers)
@@ -119,7 +119,7 @@ describe('InventorySelector', () => {
       <InventorySelector {...mockProps} customerSelectedType="STANDARD" onSelect={onSelect} />
     );
 
-    await screen.findByRole('heading', { name: 'Inventory' });
+    await screen.findByRole('heading', { name: 'Rentals' });
     await waitFor(() => {
       expect(onSelect).toHaveBeenCalledWith('room', 'room-1', '101', 'STANDARD');
     });
@@ -169,7 +169,7 @@ describe('InventorySelector', () => {
     );
 
     // Wait for the section content to render.
-    await screen.findByRole('heading', { name: 'Inventory' });
+    await screen.findByRole('heading', { name: 'Rentals' });
     await screen.findByText('Room 101');
 
     // Should not auto-select anything in lookup mode.
