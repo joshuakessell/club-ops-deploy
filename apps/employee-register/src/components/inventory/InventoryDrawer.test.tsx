@@ -92,12 +92,12 @@ describe('InventoryDrawer', () => {
     const doubleBtn = screen.getByRole('button', { name: /Double/i });
 
     fireEvent.click(standardBtn);
-    expect(await screen.findByText('Room 101')).toBeDefined();
-    expect(screen.queryByText('Room 216')).toBeNull();
+    expect(await screen.findByText(/^101$/)).toBeDefined();
+    expect(screen.queryByText(/^216$/)).toBeNull();
 
     fireEvent.click(doubleBtn);
-    expect(await screen.findByText('Room 216')).toBeDefined();
-    expect(screen.queryByText('Room 101')).toBeNull();
+    expect(await screen.findByText(/^216$/)).toBeDefined();
+    expect(screen.queryByText(/^101$/)).toBeNull();
   });
 
   it('search filters by assignedMemberName (case-insensitive substring)', async () => {
@@ -110,8 +110,8 @@ describe('InventoryDrawer', () => {
     const standardBtn = screen.getByRole('button', { name: /Standard/i });
     fireEvent.click(standardBtn);
 
-    expect(await screen.findByText('Room 101')).toBeDefined();
-    expect(screen.queryByText('Room 102')).toBeNull();
+    expect(await screen.findByText(/^101$/)).toBeDefined();
+    expect(screen.queryByText(/^102$/)).toBeNull();
   });
 
   it('search filters by number as well (typing 101 shows room 101)', async () => {
@@ -124,7 +124,7 @@ describe('InventoryDrawer', () => {
     const standardBtn = screen.getByRole('button', { name: /Standard/i });
     fireEvent.click(standardBtn);
 
-    expect(await screen.findByText('Room 101')).toBeDefined();
-    expect(screen.queryByText('Room 102')).toBeNull();
+    expect(await screen.findByText(/^101$/)).toBeDefined();
+    expect(screen.queryByText(/^102$/)).toBeNull();
   });
 });

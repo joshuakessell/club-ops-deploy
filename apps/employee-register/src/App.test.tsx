@@ -728,6 +728,24 @@ describe('App', () => {
         } as unknown as Response);
       }
 
+      if (u.includes('/v1/checkin/lane/lane-1/session-snapshot')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              session: {
+                sessionId: 'session-123',
+                customerName: 'Alex Rivera',
+                membershipNumber: '700001',
+                allowedRentals: ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'],
+                customerPrimaryLanguage: 'EN',
+                membershipChoice: 'ONE_TIME',
+                selectionConfirmed: false,
+              },
+            }),
+        } as unknown as Response);
+      }
+
       if (u.includes('/v1/checkin/lane/lane-1/propose-selection')) {
         return Promise.resolve({
           ok: true,
@@ -827,31 +845,36 @@ describe('App', () => {
     act(() => {
       fireEvent.click(proposeLocker); // first tap highlights
     });
-    act(() => {
-      fireEvent.click(proposeLocker); // second tap selects as customer (approval step)
-    });
 
-    // Drive the app to APPROVAL step (normally via WS after /propose-selection).
+    // Server snapshot updates with the proposed rental so we can confirm it.
     act(() => {
       wsWithHandler?.onmessage?.({
         data: JSON.stringify({
-          type: 'SELECTION_PROPOSED',
+          type: 'SESSION_UPDATED',
           timestamp: new Date().toISOString(),
           payload: {
             sessionId: 'session-123',
-            rentalType: 'LOCKER',
-            proposedBy: 'CUSTOMER',
+            customerName: 'Alex Rivera',
+            allowedRentals: ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'],
+            customerPrimaryLanguage: 'EN',
+            membershipChoice: 'ONE_TIME',
+            selectionConfirmed: false,
+            proposedRentalType: 'LOCKER',
+            proposedBy: 'EMPLOYEE',
           },
         }),
       });
     });
 
-    const ok = await screen.findByRole('button', { name: 'OK' });
-    act(() => {
-      fireEvent.click(ok);
+    await waitFor(() => {
+      expect(proposeLocker).toHaveProperty('disabled', false);
     });
 
-    // Approval triggers /confirm-selection and then payment intent creation.
+    act(() => {
+      fireEvent.click(proposeLocker); // second tap confirms selection
+    });
+
+    // Confirmation triggers /confirm-selection and then payment intent creation.
     await waitFor(() => {
       const urls = fetchMock.mock.calls.map((c) => String(c[0]));
       expect(urls.some((u) => u.includes('/v1/checkin/lane/lane-1/confirm-selection'))).toBe(true);
@@ -1106,7 +1129,9 @@ describe('App', () => {
     });
 
     // Open manual entry
-    fireEvent.click(await screen.findByText(/First Time Customer/i));
+    const manualEntryTab = await screen.findByRole('button', { name: /Manual Entry/i });
+    fireEvent.click(manualEntryTab);
+    expect(await screen.findByText(/First Time Customer/i)).toBeDefined();
 
     fireEvent.change(screen.getByLabelText(/First Name/i), { target: { value: 'John' } });
     fireEvent.change(screen.getByLabelText(/Last Name/i), { target: { value: 'Smith' } });

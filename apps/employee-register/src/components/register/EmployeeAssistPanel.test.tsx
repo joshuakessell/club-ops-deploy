@@ -33,17 +33,13 @@ function baseProps() {
 }
 
 describe('EmployeeAssistPanel', () => {
-  it('LANGUAGE step: first tap highlights, second tap confirms', () => {
+  it('LANGUAGE step: tap highlights and confirms immediately', () => {
     const props = baseProps();
     render(<EmployeeAssistPanel {...props} />);
 
     const english = screen.getByRole('button', { name: 'English' });
     fireEvent.click(english);
     expect(props.onHighlightLanguage).toHaveBeenCalledWith('EN');
-    expect(props.onConfirmLanguage).not.toHaveBeenCalled();
-
-    fireEvent.click(english);
-    expect(props.onHighlightLanguage).toHaveBeenCalledWith(null);
     expect(props.onConfirmLanguage).toHaveBeenCalledWith('EN');
   });
 

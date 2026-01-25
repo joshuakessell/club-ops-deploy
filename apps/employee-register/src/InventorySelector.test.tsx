@@ -170,19 +170,19 @@ describe('InventorySelector', () => {
 
     // Wait for the section content to render.
     await screen.findByRole('heading', { name: 'Rentals' });
-    await screen.findByText('Room 101');
+    await screen.findByText(/^101$/);
 
     // Should not auto-select anything in lookup mode.
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(onSelect).not.toHaveBeenCalled();
 
     // Available item: clicking should do nothing (no select, no modal).
-    fireEvent.click(screen.getByText('Room 101'));
+    fireEvent.click(screen.getByText(/^101$/));
     expect(onSelect).not.toHaveBeenCalled();
     expect(screen.queryByRole('heading', { name: /room 102/i })).toBeNull();
 
     // Occupied item: clicking opens details modal with check-in/out timestamps.
-    fireEvent.click(screen.getByText('Room 102'));
+    fireEvent.click(screen.getByText(/^102$/));
     expect(await screen.findByRole('heading', { name: /room 102/i })).toBeDefined();
 
     const expectedCheckin = new Date(occupiedCheckin).toLocaleString();
