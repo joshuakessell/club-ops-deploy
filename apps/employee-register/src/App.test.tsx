@@ -673,6 +673,7 @@ describe('App', () => {
     );
 
     const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+    let proposedRental: string | null = null;
 
     fetchMock.mockImplementation((url: RequestInfo | URL, _init?: RequestInit) => {
       const u =
@@ -741,12 +742,15 @@ describe('App', () => {
                 customerPrimaryLanguage: 'EN',
                 membershipChoice: 'ONE_TIME',
                 selectionConfirmed: false,
+                proposedRentalType: proposedRental ?? undefined,
+                proposedBy: proposedRental ? 'EMPLOYEE' : undefined,
               },
             }),
         } as unknown as Response);
       }
 
       if (u.includes('/v1/checkin/lane/lane-1/propose-selection')) {
+        proposedRental = 'LOCKER';
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve({}),

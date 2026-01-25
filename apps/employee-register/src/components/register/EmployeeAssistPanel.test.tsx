@@ -116,7 +116,7 @@ describe('EmployeeAssistPanel', () => {
     expect(props.onApproveRental).toHaveBeenCalled();
   });
 
-  it('APPROVAL step: shows green OK and calls approve', () => {
+  it('skips approval when customer already selected a rental', () => {
     const props = {
       ...baseProps(),
       customerPrimaryLanguage: 'EN' as const,
@@ -127,9 +127,7 @@ describe('EmployeeAssistPanel', () => {
     };
     render(<EmployeeAssistPanel {...props} />);
 
-    expect(screen.getByText('Step: APPROVAL')).toBeTruthy();
-    const ok = screen.getByRole('button', { name: 'OK' });
-    fireEvent.click(ok);
-    expect(props.onApproveRental).toHaveBeenCalled();
+    expect(screen.getByText('Step: DONE')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'OK' })).toBeNull();
   });
 });

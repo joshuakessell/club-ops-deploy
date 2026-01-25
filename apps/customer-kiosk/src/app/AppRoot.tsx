@@ -337,10 +337,7 @@ export function AppRoot() {
 
       // Handle view transitions based on session state
       // First check: Reset to idle if session is completed and cleared
-      if (
-        payload.status === 'COMPLETED' &&
-        (!payload.customerName || payload.customerName === '')
-      ) {
+      if (payload.status === 'COMPLETED') {
         resetToIdle();
         return;
       }
@@ -438,7 +435,16 @@ export function AppRoot() {
             setProposedRentalType(payload.rentalType);
             setProposedBy(payload.proposedBy);
           }
-        } else if (message.type === 'SELECTION_LOCKED' || message.type === 'SELECTION_FORCED') {
+        } else if (message.type === 'SELECTION_LOCKED') {
+          const payload = message.payload;
+          if (payload.sessionId === sessionIdRef.current) {
+            setSelectionConfirmed(true);
+            setSelectionConfirmedBy(payload.confirmedBy);
+            setSelectedRental(payload.rentalType);
+            setSelectionAcknowledged(true);
+            setView('payment');
+          }
+        } else if (message.type === 'SELECTION_FORCED') {
           const payload = message.payload;
           if (payload.sessionId === sessionIdRef.current) {
             setSelectionConfirmed(true);
@@ -776,26 +782,44 @@ export function AppRoot() {
       }
 
       await response.json().catch(() => null);
-      setProposedRentalType(rental);
-      setProposedBy('CUSTOMER');
+      const confirmResponse = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...kioskAuthHeaders(),
+          },
+          body: JSON.stringify({
+            confirmedBy: 'CUSTOMER',
+          }),
+        }
+      );
 
-      // Auto-confirm selection (no employee approval required).
-      const confirmRes = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-        body: JSON.stringify({ confirmedBy: 'CUSTOMER' }),
-      });
-      if (!confirmRes.ok) {
-        const errorPayload: unknown = await confirmRes.json().catch(() => null);
+      if (!confirmResponse.ok) {
+        const errorPayload: unknown = await confirmResponse.json().catch(() => null);
+        if (
+          confirmResponse.status === 409 &&
+          isRecord(errorPayload) &&
+          errorPayload.code === 'LANGUAGE_REQUIRED'
+        ) {
+          setView('language');
+          alert(t('EN', 'selectLanguage'));
+          return;
+        }
         throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
       }
 
+      const confirmPayload: unknown = await confirmResponse.json().catch(() => null);
+      const confirmedBy =
+        isRecord(confirmPayload) &&
+        (confirmPayload.confirmedBy === 'CUSTOMER' || confirmPayload.confirmedBy === 'EMPLOYEE')
+          ? confirmPayload.confirmedBy
+          : 'CUSTOMER';
+      setProposedRentalType(rental);
+      setProposedBy('CUSTOMER');
       setSelectionConfirmed(true);
-      setSelectionConfirmedBy('CUSTOMER');
-      setSelectionAcknowledged(true);
+      setSelectionConfirmedBy(confirmedBy);
       setIsSubmitting(false);
     } catch (error) {
       console.error('Failed to propose selection:', error);
@@ -842,32 +866,47 @@ export function AppRoot() {
         throw new Error(getErrorMessage(errorPayload) || 'Failed to process waitlist selection');
       }
 
+      const confirmResponse = await fetch(
+        `${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...kioskAuthHeaders(),
+          },
+          body: JSON.stringify({
+            confirmedBy: 'CUSTOMER',
+          }),
+        }
+      );
+
+      if (!confirmResponse.ok) {
+        const errorPayload: unknown = await confirmResponse.json().catch(() => null);
+        if (
+          confirmResponse.status === 409 &&
+          isRecord(errorPayload) &&
+          errorPayload.code === 'LANGUAGE_REQUIRED'
+        ) {
+          setView('language');
+          alert(t('EN', 'selectLanguage'));
+          return;
+        }
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
+      }
+
+      const confirmPayload: unknown = await confirmResponse.json().catch(() => null);
+      const confirmedBy =
+        isRecord(confirmPayload) &&
+        (confirmPayload.confirmedBy === 'CUSTOMER' || confirmPayload.confirmedBy === 'EMPLOYEE')
+          ? confirmPayload.confirmedBy
+          : 'CUSTOMER';
       setUpgradeDisclaimerAcknowledged(true);
       setShowUpgradeDisclaimer(false);
       setUpgradeAction(null);
       setProposedRentalType(backupType);
       setProposedBy('CUSTOMER');
-
-      // Auto-confirm backup selection (no employee approval required).
-      const confirmRes = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-        body: JSON.stringify({ confirmedBy: 'CUSTOMER' }),
-      });
-      if (!confirmRes.ok) {
-        const errorPayload: unknown = await confirmRes.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
-      }
-
       setSelectionConfirmed(true);
-      setSelectionConfirmedBy('CUSTOMER');
-      setSelectionAcknowledged(true);
-
-      // After acknowledging upgrade disclaimer, customer should confirm the backup selection
-      // Then proceed to agreement if CHECKIN/RENEWAL
+      setSelectionConfirmedBy(confirmedBy);
     } catch (error) {
       console.error('Failed to acknowledge upgrade disclaimer:', error);
       alert(t(session.customerPrimaryLanguage, 'error.process'));
@@ -1363,48 +1402,6 @@ export function AppRoot() {
           isSubmitting={isSubmitting}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
-          onComplete={() => {
-            void (async () => {
-              setIsSubmitting(true);
-              try {
-                // Kiosk acknowledgement: UI-only. Must NOT end/clear the lane session.
-                await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
-                  body: JSON.stringify({}),
-                });
-              } catch (error) {
-                console.error('Failed to kiosk-ack completion:', error);
-                // Continue to local UI reset even if server call fails; WS will reconcile when possible.
-              } finally {
-                // Local reset (immediate UX): hide customer flow and return kiosk to idle,
-                // but keep session data so the kiosk remains "locked" until employee-register completes.
-                setView('idle');
-                setSession((prev) => ({
-                  ...prev,
-                  kioskAcknowledgedAt: new Date().toISOString(),
-                }));
-                setSelectedRental(null);
-                setAgreed(false);
-                setSignatureData(null);
-                setShowUpgradeDisclaimer(false);
-                setUpgradeAction(null);
-                setShowRenewalDisclaimer(false);
-                setCheckinMode(null);
-                setShowWaitlistModal(false);
-                setWaitlistDesiredType(null);
-                setWaitlistBackupType(null);
-                setProposedRentalType(null);
-                setProposedBy(null);
-                setSelectionConfirmed(false);
-                setSelectionConfirmedBy(null);
-                setSelectionAcknowledged(false);
-                setUpgradeDisclaimerAcknowledged(false);
-                setHasScrolledAgreement(false);
-                setIsSubmitting(false);
-              }
-            })();
-          }}
         />
       );
 

@@ -61,22 +61,16 @@ export function SelectionScreen({
   const isNonMember = !isMember;
 
   const prereqsSatisfied = isMember || membershipChoice !== null;
-  const showPendingApprovalOverlay =
-    proposedBy === 'CUSTOMER' &&
-    Boolean(proposedRentalType) &&
-    prereqsSatisfied &&
-    !selectionConfirmed;
   const canInteract =
     !isSubmitting &&
     !session.pastDueBlocked &&
-    !showPendingApprovalOverlay &&
+    !selectionConfirmed &&
     !!session.customerPrimaryLanguage;
 
   const activeStep: 'MEMBERSHIP' | 'RENTAL' | null = (() => {
     if (!canInteract) return null;
-    if (isMember) return proposedBy === 'CUSTOMER' && proposedRentalType ? null : 'RENTAL';
-    if (!membershipChoice) return 'MEMBERSHIP';
-    return proposedBy === 'CUSTOMER' && proposedRentalType ? null : 'RENTAL';
+    if (!isMember && !membershipChoice) return 'MEMBERSHIP';
+    return 'RENTAL';
   })();
 
   const rentalOrder = ['LOCKER', 'GYM_LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'] as const;
@@ -158,7 +152,7 @@ export function SelectionScreen({
                     ? `✓ ${t(session.customerPrimaryLanguage, 'selected')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${selectionConfirmedBy === 'CUSTOMER' ? t(session.customerPrimaryLanguage, 'common.you') : t(session.customerPrimaryLanguage, 'common.staff')})`
                     : proposedBy === 'EMPLOYEE'
                       ? `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${t(session.customerPrimaryLanguage, 'selection.staffSuggestionHint')})`
-                      : `${t(session.customerPrimaryLanguage, 'proposed')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${t(session.customerPrimaryLanguage, 'selection.yourSelectionWaiting')})`}
+                      : `${t(session.customerPrimaryLanguage, 'selected')}: ${getRentalDisplayName(proposedRentalType, session.customerPrimaryLanguage)} (${t(session.customerPrimaryLanguage, 'common.you')})`}
                 </div>
               </div>
             )}
@@ -292,7 +286,7 @@ export function SelectionScreen({
                             !session.customerPrimaryLanguage ||
                             session.pastDueBlocked ||
                             (isNonMember && !membershipChoice) ||
-                            showPendingApprovalOverlay;
+                            selectionConfirmed;
                           // Show the customer's chosen rental as selected even while waiting for attendant approval,
                           // so the UI gives immediate visual feedback before/under the pending overlay.
                           const isSelected =
@@ -358,18 +352,6 @@ export function SelectionScreen({
           </main>
         </div>
 
-        {showPendingApprovalOverlay && (
-          <div className="ck-pending-overlay" role="status" aria-live="polite">
-            <div className="ck-pending-overlay__text">
-              {t(lang, 'selection.pendingApproval')}
-              <span className="ck-ellipsis" aria-hidden="true">
-                <span className="ck-dot">.</span>
-                <span className="ck-dot">.</span>
-                <span className="ck-dot">.</span>
-              </span>
-            </div>
-          </div>
-        )}
       </ScreenShell>
     </I18nProvider>
   );

@@ -6,7 +6,6 @@ export type EmployeeAssistStep =
   | 'MEMBERSHIP'
   | 'UPGRADE'
   | 'RENTAL'
-  | 'APPROVAL'
   | 'DONE';
 
 type Pending =
@@ -140,7 +139,7 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     if (isMembershipNeeded) return 'MEMBERSHIP';
     if (waitlistDesiredTier && !waitlistBackupType) return 'UPGRADE';
     if (selectionConfirmed) return 'DONE';
-    if (proposedBy === 'CUSTOMER' && proposedRentalType) return 'APPROVAL';
+    if (proposedBy === 'CUSTOMER' && proposedRentalType) return 'DONE';
     return 'RENTAL';
   }, [
     customerName,
@@ -482,23 +481,6 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {step === 'APPROVAL' && (
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-              Customer selection is ready for approval.
-            </div>
-            <button
-              type="button"
-              className="cs-liquid-button cs-liquid-button--success"
-              disabled={isSubmitting}
-              onClick={() => void onApproveRental()}
-              style={{ width: '100%', padding: '1rem', fontWeight: 950, fontSize: '1.05rem' }}
-            >
-              OK
-            </button>
           </div>
         )}
 

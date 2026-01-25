@@ -28,6 +28,7 @@ import { deriveAssignedLabel } from '../../shared/derive/assignedLabel';
 import { deriveCheckinStage } from '../../shared/derive/checkinStage';
 import { derivePastDueLineItems } from '../../shared/derive/pastDueLineItems';
 import { deriveWaitlistEligibility } from '../../shared/derive/waitlistEligibility';
+import { RETAIL_CATALOG, type RetailCart } from '../../components/retail/retailCatalog';
 
 type ScanResult =
   | { outcome: 'matched' }
@@ -130,7 +131,8 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
     | 'upgrades'
     | 'checkout'
     | 'roomCleaning'
-    | 'firstTime';
+    | 'firstTime'
+    | 'retail';
   const [homeTab, setHomeTab] = useState<HomeTab>('scan');
   const [accountCustomerId, setAccountCustomerId] = useState<string | null>(null);
   const [accountCustomerLabel, setAccountCustomerLabel] = useState<string | null>(null);
@@ -175,6 +177,35 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
   const manualDobIso = useMemo(() => parseDobDigitsToIso(manualDobDigits), [manualDobDigits]);
   const [manualIdNumber, setManualIdNumber] = useState('');
   const [manualEntrySubmitting, setManualEntrySubmitting] = useState(false);
+  const [showAddOnSaleModal, setShowAddOnSaleModal] = useState(false);
+  const [addOnCart, setAddOnCart] = useState<RetailCart>({});
+
+  const resetAddOnCart = useCallback(() => setAddOnCart({}), []);
+
+  const addAddOnItem = useCallback((itemId: string) => {
+    setAddOnCart((prev) => ({ ...prev, [itemId]: (prev[itemId] ?? 0) + 1 }));
+  }, []);
+
+  const removeAddOnItem = useCallback((itemId: string) => {
+    setAddOnCart((prev) => {
+      const next = { ...prev };
+      const current = next[itemId] ?? 0;
+      if (current <= 1) {
+        delete next[itemId];
+      } else {
+        next[itemId] = current - 1;
+      }
+      return next;
+    });
+  }, []);
+
+  const openAddOnSaleModal = useCallback(() => {
+    setShowAddOnSaleModal(true);
+  }, []);
+  const closeAddOnSaleModal = useCallback(() => {
+    setShowAddOnSaleModal(false);
+    resetAddOnCart();
+  }, [resetAddOnCart]);
   const [manualExistingPrompt, setManualExistingPrompt] = useState<null | {
     firstName: string;
     lastName: string;
@@ -395,8 +426,6 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
         assignedResourceNumber,
         agreementSigned,
         selectionConfirmed,
-        proposedBy,
-        proposedRentalType,
         customerPrimaryLanguage,
         membershipNumber: membershipNumber || null,
         customerMembershipValidUntil: customerMembershipValidUntil || null,
@@ -409,13 +438,11 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
       assignedResourceType,
       customerMembershipValidUntil,
       customerName,
-    customerPrimaryLanguage,
-    currentSessionId,
-    membershipChoice,
-    membershipNumber,
+      customerPrimaryLanguage,
+      currentSessionId,
+      membershipChoice,
+      membershipNumber,
       membershipPurchaseIntent,
-      proposedBy,
-      proposedRentalType,
       selectionConfirmed,
     ]
   );
@@ -2001,6 +2028,8 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
     },
     onLaneSessionCleared: () => {
       setSelectedInventoryItem(null);
+      setShowAddOnSaleModal(false);
+      resetAddOnCart();
       setShowMembershipIdPrompt(false);
       setMembershipIdInput('');
       setMembershipIdError(null);
@@ -2294,8 +2323,7 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
         return;
       }
 
-      // Public endpoint; we intentionally set proposedBy=CUSTOMER so the kiosk enters its
-      // "pending approval" step and employee-register shows the OK button.
+      // Public endpoint; customer selections should proceed directly to payment.
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
         method: 'POST',
         headers: {
@@ -2350,6 +2378,18 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
       if (!response.ok) {
         const errorPayload: unknown = await response.json().catch(() => null);
         throw new Error(getErrorMessage(errorPayload) || 'Failed to select waitlist backup');
+      }
+      const confirmResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof kioskToken === 'string' && kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
+        },
+        body: JSON.stringify({ confirmedBy: 'CUSTOMER' }),
+      });
+      if (!confirmResponse.ok) {
+        const errorPayload: unknown = await confirmResponse.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
       }
       await pollOnce();
     } catch (error) {
@@ -2509,6 +2549,83 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
     paymentIntentId,
     paymentStatus,
     handleCreatePaymentIntent,
+  ]);
+
+  const handleAddOnSaleToCheckin = useCallback(async () => {
+    if (!currentSessionId || !session?.sessionToken) {
+      alert('Not authenticated');
+      return;
+    }
+    if (!paymentIntentId) {
+      alert('No active payment intent for this session.');
+      return;
+    }
+
+    const items = Object.entries(addOnCart)
+      .map(([id, quantity]) => {
+        const catalogItem = RETAIL_CATALOG.find((item) => item.id === id);
+        if (!catalogItem || quantity <= 0) return null;
+        return {
+          label: catalogItem.label,
+          quantity,
+          unitPrice: catalogItem.price,
+        };
+      })
+      .filter(
+        (item): item is { label: string; quantity: number; unitPrice: number } => Boolean(item)
+      );
+
+    if (items.length === 0) {
+      alert('Add at least one item to continue.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/add-ons`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ sessionId: currentSessionId, items }),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to add add-on items');
+      }
+
+      const payload = await readJson<{
+        quote?: {
+          total: number;
+          lineItems: Array<{ description: string; amount: number }>;
+          messages: string[];
+        };
+      }>(response);
+
+      if (payload.quote) {
+        setPaymentQuote(payload.quote);
+      }
+
+      setShowAddOnSaleModal(false);
+      resetAddOnCart();
+      setSuccessToastMessage('Add-on items added to check-in.');
+    } catch (error) {
+      console.error('Failed to add add-on items:', error);
+      alert(error instanceof Error ? error.message : 'Failed to add add-on items');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    addOnCart,
+    currentSessionId,
+    lane,
+    paymentIntentId,
+    resetAddOnCart,
+    session?.sessionToken,
+    setPaymentQuote,
+    setSuccessToastMessage,
   ]);
 
   const handleCompleteMembershipPurchase = async (membershipNumberOverride?: string) => {
@@ -2800,6 +2917,8 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
       setPaymentIntentId(null);
       setPaymentQuote(null);
       setPaymentStatus(null);
+      resetAddOnCart();
+      setShowAddOnSaleModal(false);
       setAssignedResourceType(null);
       setAssignedResourceNumber(null);
       setCheckoutAt(null);
@@ -3011,6 +3130,14 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
     setMembershipIdInput,
     setMembershipIdError,
     handleCompleteMembershipPurchase,
+    showAddOnSaleModal,
+    setShowAddOnSaleModal,
+    openAddOnSaleModal,
+    closeAddOnSaleModal,
+    addOnCart,
+    addAddOnItem,
+    removeAddOnItem,
+    handleAddOnSaleToCheckin,
     upgradeContext,
     showUpgradePaymentModal,
     setShowUpgradePaymentModal,
