@@ -5,4 +5,5 @@
 - Feature roots: domain-specific UI roots (session, navigation, payment, modals, notifications).
 - app/state: register state provider + context hook.
 - app/hooks: app-wide bootstrap hooks.
+- scanner: keyboard-wedge scan helpers used by scanner hooks.
 - shared/derive: pure derived-state helpers used by state providers and feature roots.

@@ -166,7 +166,10 @@ Other markdown files may describe workflows, but **must not redefine** these ent
   - `started_at`: Visit start time.
   - `ended_at`: Visit end time (nullable until ended).
 - **Relationships**:
+  - `visits.customer_id` → `customers.id`
   - `checkin_blocks.visit_id` → `visits.id`
+  - `charges.visit_id` → `visits.id`
+  - `waitlist.visit_id` → `visits.id`
 - **Invariants**:
   - A visit belongs to exactly one customer.
   - Check-in blocks are the authoritative sub-records for time windows and assigned resources.

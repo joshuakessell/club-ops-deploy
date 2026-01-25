@@ -1,20 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getErrorMessage, isRecord } from '@club-ops/ui';
 import type { ActiveCheckinDetails } from '../components/register/modals/AlreadyCheckedInModal';
-import { getApiUrl } from '@club-ops/shared';
-
-const API_BASE = getApiUrl('/api');
-
-type StartLaneResponse = {
-  sessionId?: string;
-  customerName?: string;
-  membershipNumber?: string;
-  mode?: 'CHECKIN' | 'RENEWAL';
-  blockEndsAt?: string;
-  activeAssignedResourceType?: 'room' | 'locker';
-  activeAssignedResourceNumber?: string;
-  customerHasEncryptedLookupMarker?: boolean;
-};
+import { startLaneCheckin, type StartLaneResponse } from './startLaneCheckin';
 
 export type StartLaneCheckinState =
   | { mode: 'CHECKING_IN'; isStarting: boolean }
@@ -87,67 +73,25 @@ export function useStartLaneCheckinForCustomerIfNotVisiting(params: {
 
     void (async () => {
       try {
-        const response = await fetch(
-          `${API_BASE}/v1/checkin/lane/${encodeURIComponent(lane)}/start`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${sessionToken}`,
-            },
-            body: JSON.stringify({ customerId }),
-          }
-        );
+        const result = await startLaneCheckin({ lane, sessionToken, customerId });
+        if (cancelled) return;
 
-        const payload: unknown = await response.json().catch(() => null);
-
-        if (
-          response.ok &&
-          isRecord(payload) &&
-          payload['code'] === 'ALREADY_CHECKED_IN'
-        ) {
-          const ac = payload['activeCheckin'];
-          if (isRecord(ac) && typeof ac['visitId'] === 'string') {
-            if (!cancelled) {
-              setState({
-                mode: 'ALREADY_VISITING',
-                isStarting: false,
-                activeCheckin: ac as ActiveCheckinDetails,
-              });
-            }
-            return;
-          }
-        }
-
-        if (!response.ok) {
-          if (
-            response.status === 409 &&
-            isRecord(payload) &&
-            payload['code'] === 'ALREADY_CHECKED_IN'
-          ) {
-            const ac = payload['activeCheckin'];
-            if (isRecord(ac) && typeof ac['visitId'] === 'string') {
-              if (!cancelled) {
-                setState({
-                  mode: 'ALREADY_VISITING',
-                  isStarting: false,
-                  activeCheckin: ac as ActiveCheckinDetails,
-                });
-              }
-              return;
-            }
-          }
-
-          const msg =
-            getErrorMessage(payload) || `Failed to start check-in (HTTP ${response.status})`;
-          if (!cancelled) setState({ mode: 'ERROR', isStarting: false, errorMessage: msg });
+        if (result.kind === 'already-visiting') {
+          setState({
+            mode: 'ALREADY_VISITING',
+            isStarting: false,
+            activeCheckin: result.activeCheckin,
+          });
           return;
         }
 
-        if (!cancelled) {
-          setState({ mode: 'CHECKING_IN', isStarting: false });
-          if (isRecord(payload)) onStartedRef.current?.(payload as StartLaneResponse);
+        if (result.kind === 'error') {
+          setState({ mode: 'ERROR', isStarting: false, errorMessage: result.message });
+          return;
         }
+
+        setState({ mode: 'CHECKING_IN', isStarting: false });
+        if (result.payload) onStartedRef.current?.(result.payload);
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to start check-in';
         if (!cancelled) setState({ mode: 'ERROR', isStarting: false, errorMessage: msg });
