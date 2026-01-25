@@ -1,0 +1,34 @@
+import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
+
+export function ScanPanel() {
+  const { currentSessionId, customerName, selectHomeTab } = useEmployeeRegisterState();
+
+  return (
+    <div className="er-home-panel er-home-panel--center cs-liquid-card er-main-panel-card">
+      <div style={{ fontSize: '4rem', lineHeight: 1 }} aria-hidden="true">
+        📷
+      </div>
+      <div className="er-card-title" style={{ marginTop: '0.75rem' }}>
+        Scan Now
+      </div>
+      <div className="er-card-subtitle" style={{ marginTop: '0.5rem' }}>
+        Scan a membership ID or driver license.
+      </div>
+      {currentSessionId && customerName ? (
+        <div style={{ marginTop: '1rem', display: 'grid', gap: '0.5rem' }}>
+          <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+            Active lane session: <span style={{ color: '#e2e8f0' }}>{customerName}</span>
+          </div>
+          <button
+            type="button"
+            className="cs-liquid-button"
+            onClick={() => selectHomeTab('account')}
+            style={{ width: '100%', padding: '0.75rem', fontWeight: 900 }}
+          >
+            Open Customer Account
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}

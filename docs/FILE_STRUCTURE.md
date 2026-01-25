@@ -13,6 +13,7 @@ This file is the **canonical, human-maintained** map of the repository layout.
 ## Top-level layout
 
 ```
+agents.md                  # Agent CI/deploy rules + code-writing docs index
 CONTRIBUTING.md            # Engineering guide (scope, non-negotiables, quality gates)
 SPEC.md                    # Business invariants + pointers (keep short)
 openapi.yaml               # API contract (source of truth)

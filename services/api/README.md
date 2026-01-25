@@ -174,9 +174,9 @@ await transaction(async (client) => {
 });
 ```
 
-## Testing the Cleaning Station Kiosk
+## Testing the Cleaning Workflow (API)
 
-After seeding the database, you can test the cleaning station workflow:
+After seeding the database, you can test the cleaning workflow endpoints used by staff tools:
 
 ### 1. Test Key Resolution
 
