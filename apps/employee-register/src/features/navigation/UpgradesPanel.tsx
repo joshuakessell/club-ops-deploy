@@ -1,5 +1,6 @@
 import { UpgradesDrawerContent } from '../../components/upgrades/UpgradesDrawerContent';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
+import { PanelShell } from '../../views/PanelShell';
 
 export function UpgradesPanel() {
   const {
@@ -16,7 +17,7 @@ export function UpgradesPanel() {
   } = useEmployeeRegisterState();
 
   return (
-    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll">
+    <PanelShell align="top" scroll="hidden" card={false}>
       <UpgradesDrawerContent
         waitlistEntries={waitlistEntries}
         hasEligibleEntries={hasEligibleEntries}
@@ -46,6 +47,6 @@ export function UpgradesPanel() {
         onOpenCustomerAccount={openCustomerAccount}
         isSubmitting={isSubmitting}
       />
-    </div>
+    </PanelShell>
   );
 }

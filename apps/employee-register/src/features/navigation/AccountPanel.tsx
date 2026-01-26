@@ -2,6 +2,8 @@ import { CustomerProfileCard } from '../../components/register/CustomerProfileCa
 import { EmployeeAssistPanel } from '../../components/register/EmployeeAssistPanel';
 import { CustomerAccountPanel } from '../../components/register/panels/CustomerAccountPanel';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
+import { PanelHeader } from '../../views/PanelHeader';
+import { PanelShell } from '../../views/PanelShell';
 
 export function AccountPanel() {
   const {
@@ -98,7 +100,9 @@ export function AccountPanel() {
             laneSessionActions.patch(patch);
           }
         }}
-        onHighlightLanguage={(lang) => void highlightKioskOption({ step: 'LANGUAGE', option: lang })}
+        onHighlightLanguage={(lang) =>
+          void highlightKioskOption({ step: 'LANGUAGE', option: lang })
+        }
         onConfirmLanguage={(lang) => void handleConfirmLanguage(lang)}
         onHighlightMembership={(choice) =>
           void highlightKioskOption({ step: 'MEMBERSHIP', option: choice })
@@ -120,7 +124,7 @@ export function AccountPanel() {
 
   if (currentSessionId && customerName) {
     return (
-      <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
+      <PanelShell align="top" scroll="hidden">
         <div
           style={{
             display: 'flex',
@@ -129,7 +133,7 @@ export function AccountPanel() {
             minHeight: 0,
           }}
         >
-          <div className="er-card-title">Customer Account</div>
+          <PanelHeader title="Customer Account" spacing="none" />
           <CustomerProfileCard
             name={customerName}
             preferredLanguage={customerPrimaryLanguage || null}
@@ -202,16 +206,18 @@ export function AccountPanel() {
             onApproveRental={() => void handleConfirmSelection()}
           />
         </div>
-      </div>
+      </PanelShell>
     );
   }
 
   return (
-    <div className="er-home-panel er-home-panel--center cs-liquid-card er-main-panel-card">
-      <div className="er-card-title">Customer Account</div>
-      <div className="er-card-subtitle" style={{ marginTop: '0.5rem' }}>
-        Select a customer (scan, search, or first-time) to view their account.
-      </div>
-    </div>
+    <PanelShell align="center">
+      <PanelHeader
+        align="center"
+        spacing="sm"
+        title="Customer Account"
+        subtitle="Select a customer (scan, search, or first-time) to view their account."
+      />
+    </PanelShell>
   );
 }

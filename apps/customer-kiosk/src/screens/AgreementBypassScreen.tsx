@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { I18nProvider, t, type Language } from '../i18n';
 import { ScreenShell } from '../components/ScreenShell';
+import { KioskMessageCard } from '../views/KioskMessageCard';
 
 export interface AgreementBypassScreenProps {
   customerPrimaryLanguage: Language | null | undefined;
@@ -20,14 +21,10 @@ export function AgreementBypassScreen({
         {welcomeOverlay}
         <div className="active-content agreement-bypass-screen">
           <main className="main-content">
-            <div className="cs-liquid-card agreement-bypass-card">
-              <div className="agreement-bypass-title">
-                {t(customerPrimaryLanguage, 'agreementTitle')}
-              </div>
-              <div className="agreement-bypass-body">
-                Please wait while staff completes a physical agreement signature.
-              </div>
-            </div>
+            <KioskMessageCard
+              title={t(customerPrimaryLanguage, 'agreementTitle')}
+              body="Please wait while staff completes a physical agreement signature."
+            />
           </main>
         </div>
       </ScreenShell>

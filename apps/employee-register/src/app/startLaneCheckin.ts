@@ -37,17 +37,14 @@ export async function startLaneCheckin(params: {
 }): Promise<StartLaneCheckinResult> {
   const { lane, sessionToken, customerId } = params;
 
-  const response = await fetch(
-    `${API_BASE}/v1/checkin/lane/${encodeURIComponent(lane)}/start`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${sessionToken}`,
-      },
-      body: JSON.stringify({ customerId }),
-    }
-  );
+  const response = await fetch(`${API_BASE}/v1/checkin/lane/${encodeURIComponent(lane)}/start`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${sessionToken}`,
+    },
+    body: JSON.stringify({ customerId }),
+  });
 
   const payload: unknown = await response.json().catch(() => null);
 
@@ -66,7 +63,6 @@ export async function startLaneCheckin(params: {
     }
   }
 
-  const msg =
-    getErrorMessage(payload) || `Failed to start check-in (HTTP ${response.status})`;
+  const msg = getErrorMessage(payload) || `Failed to start check-in (HTTP ${response.status})`;
   return { kind: 'error', message: msg };
 }

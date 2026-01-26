@@ -1,0 +1,49 @@
+.ck-message-card {
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.ck-message-card--wide {
+  width: min(720px, 92vw);
+  padding: clamp(2rem, 4vw, 3rem);
+}
+
+.ck-message-card--compact {
+  max-width: 720px;
+  padding: 1.25rem;
+}
+
+.ck-message-card--muted {
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  color: #fff;
+}
+
+.ck-message-card--spaced {
+  margin-top: 2rem;
+}
+
+.ck-message-title--wide {
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-weight: 900;
+  margin-bottom: 1rem;
+}
+
+.ck-message-body--wide {
+  font-size: clamp(1.35rem, 3.2vw, 2.1rem);
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.ck-message-title--compact {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+}
+
+.ck-message-body--compact {
+  font-size: 1.05rem;
+  opacity: 0.9;
+}

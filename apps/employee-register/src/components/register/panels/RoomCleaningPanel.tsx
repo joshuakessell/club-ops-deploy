@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getApiUrl } from '@club-ops/shared';
+import { PanelCard } from '../../../views/PanelCard';
+import { PanelHeader } from '../../../views/PanelHeader';
 
 type DetailedRoom = {
   id: string;
@@ -128,10 +130,8 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
   };
 
   return (
-    <div className="cs-liquid-card er-main-panel-card">
-      <div className="er-card-title" style={{ marginBottom: '0.75rem' }}>
-        Room Cleaning
-      </div>
+    <PanelCard>
+      <PanelHeader title="Room Cleaning" />
 
       {error && (
         <div
@@ -265,6 +265,6 @@ export function RoomCleaningPanel({ sessionToken, staffId, onSuccess }: RoomClea
           </div>
         </div>
       )}
-    </div>
+    </PanelCard>
   );
 }

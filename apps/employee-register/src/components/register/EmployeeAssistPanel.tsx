@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getCustomerMembershipStatus } from '@club-ops/shared';
 
-export type EmployeeAssistStep =
-  | 'LANGUAGE'
-  | 'MEMBERSHIP'
-  | 'UPGRADE'
-  | 'RENTAL'
-  | 'DONE';
+export type EmployeeAssistStep = 'LANGUAGE' | 'MEMBERSHIP' | 'UPGRADE' | 'RENTAL' | 'DONE';
 
 type Pending =
   | { step: 'LANGUAGE'; option: 'EN' | 'ES' }

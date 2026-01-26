@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getApiUrl } from '@club-ops/shared';
+import { PanelCard } from '../../../views/PanelCard';
+import { PanelHeader } from '../../../views/PanelHeader';
 
 type Step = 'select' | 'confirm';
 
@@ -231,18 +233,8 @@ export function ManualCheckoutPanel({
   }, [autoContinue, canContinue, entryMode, handleContinue, step]);
 
   return (
-    <div className="cs-liquid-card er-main-panel-card">
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
-        }}
-      >
-        <div className="er-card-title">{title}</div>
-        <div />
-      </div>
+    <PanelCard>
+      <PanelHeader title={title} spacing="none" />
 
       {candidatesError && (
         <div
@@ -525,6 +517,6 @@ export function ManualCheckoutPanel({
           </>
         )}
       </div>
-    </div>
+    </PanelCard>
   );
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { PanelHeader } from '../../views/PanelHeader';
 
 export type UpgradeWaitlistStatus = string;
 
@@ -58,21 +59,7 @@ export function UpgradesDrawerContent({
         flexDirection: 'column',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'start',
-          justifyContent: 'space-between',
-          gap: '1rem',
-        }}
-      >
-        <div>
-          <h2 className="er-card-title" style={{ margin: 0, marginBottom: '0.35rem' }}>
-            Upgrade Waitlist
-          </h2>
-        </div>
-        {headerRightSlot}
-      </div>
+      <PanelHeader title="Upgrade Waitlist" spacing="sm" action={headerRightSlot} />
 
       <div
         style={{

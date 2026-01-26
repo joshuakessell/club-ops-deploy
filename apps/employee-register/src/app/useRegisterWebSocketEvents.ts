@@ -2,11 +2,14 @@ import { useEffect, useRef } from 'react';
 import { safeParseWebSocketEvent, useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
 import { getWebSocketUrl } from '@club-ops/shared';
-import { applyRegisterWebSocketEvent, type RegisterWebSocketParams } from './registerWebSocketHandlers';
+import {
+  applyRegisterWebSocketEvent,
+  type RegisterWebSocketParams,
+} from './registerWebSocketHandlers';
 
-export function useRegisterWebSocketEvents(
-  params: RegisterWebSocketParams
-): { connected: boolean } {
+export function useRegisterWebSocketEvents(params: RegisterWebSocketParams): {
+  connected: boolean;
+} {
   const { lane } = params;
   const wsUrl = getWebSocketUrl(`/ws?lane=${encodeURIComponent(lane)}`);
   const rawEnv = import.meta.env as unknown as Record<string, unknown>;

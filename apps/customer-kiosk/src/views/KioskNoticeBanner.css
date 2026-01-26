@@ -1,0 +1,27 @@
+.ck-notice {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+  color: white;
+}
+
+.ck-notice--info {
+  background: #2563eb;
+}
+
+.ck-notice--success {
+  background: #10b981;
+}
+
+.ck-notice--muted {
+  background: #334155;
+}
+
+.ck-notice__title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.ck-notice__title--solo {
+  margin-bottom: 0;
+}

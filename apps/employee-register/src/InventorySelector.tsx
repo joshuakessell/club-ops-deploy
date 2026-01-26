@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
-import { RoomStatus } from '@club-ops/shared';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { RoomStatus, getApiUrl, getWebSocketUrl, useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
-import { useLaneSession } from '@club-ops/shared';
-import { getRoomTier } from './utils/getRoomTier';
+
 import { ModalFrame } from './components/register/modals/ModalFrame';
-import { getApiUrl, getWebSocketUrl } from '@club-ops/shared';
+import { PanelHeader } from './views/PanelHeader';
+import { getRoomTier } from './utils/getRoomTier';
 
 const INVENTORY_COLUMN_HEADER_STYLE: CSSProperties = {
   fontWeight: 700,
@@ -750,9 +750,7 @@ export function InventorySelector({
           flexDirection: 'column',
         }}
       >
-        <h2 className="er-card-title" style={{ margin: 0, marginBottom: '0.75rem' }}>
-          Rentals
-        </h2>
+        <PanelHeader title="Rentals" />
 
         {!occupancyLookupMode && !disableSelection && selectedItem && onClearSelection && (
           <button
@@ -827,10 +825,7 @@ export function InventorySelector({
 
             {/* Search directly beneath the Special button */}
             <div style={{ marginTop: '0.5rem' }}>
-              <div
-                className="er-inv-search-label"
-                style={{ marginBottom: '0.35rem' }}
-              >
+              <div className="er-inv-search-label" style={{ marginBottom: '0.35rem' }}>
                 Search
               </div>
               <div className="cs-liquid-search">
@@ -1130,9 +1125,7 @@ function InventorySection({
 
         {/* Available */}
         <div style={{ minWidth: 0 }}>
-          <div className="er-inv-column-title er-inv-column-title--available">
-            ✓ Available
-          </div>
+          <div className="er-inv-column-title er-inv-column-title--available">✓ Available</div>
           {availableForDisplay.length > 0 ? (
             availableForDisplay.map(({ room, isWaitlistMatch }) => (
               <RoomItem
@@ -1225,11 +1218,7 @@ function RoomItem({
                 color: duration?.isOverdue ? '#ef4444' : 'rgba(148, 163, 184, 0.95)',
               }}
             >
-              {duration
-                ? duration.isOverdue
-                  ? `Late ${duration.label}`
-                  : duration.label
-                : '—'}
+              {duration ? (duration.isOverdue ? `Late ${duration.label}` : duration.label) : '—'}
             </div>
           </div>
         </div>
@@ -1398,9 +1387,7 @@ function LockerSection({
                   <div className="er-inv-occupied-row">
                     <div className="er-inv-occupied-number">{locker.number}</div>
                     <div className="er-inv-occupied-customer">
-                      <span className="er-inv-occupied-customer-text">
-                        {customerLabel ?? '—'}
-                      </span>
+                      <span className="er-inv-occupied-customer-text">{customerLabel ?? '—'}</span>
                     </div>
                     <div className="er-inv-occupied-checkout">
                       <div className="er-inv-occupied-time">{checkoutTime ?? '—'}</div>
@@ -1427,9 +1414,7 @@ function LockerSection({
         </div>
 
         <div style={{ minWidth: 0 }}>
-          <div className="er-inv-column-title er-inv-column-title--available">
-            ✓ Available
-          </div>
+          <div className="er-inv-column-title er-inv-column-title--available">✓ Available</div>
           {availableLockers.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem' }}>
               {availableLockers.map((locker) => {

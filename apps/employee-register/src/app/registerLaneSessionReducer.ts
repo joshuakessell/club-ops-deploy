@@ -191,11 +191,9 @@ export function registerLaneSessionReducer(
       if (p.paymentLineItems !== undefined || p.paymentTotal !== undefined) {
         const lineItems = Array.isArray(p.paymentLineItems)
           ? p.paymentLineItems
-          : next.paymentQuote?.lineItems ?? [];
+          : (next.paymentQuote?.lineItems ?? []);
         const total =
-          typeof p.paymentTotal === 'number'
-            ? p.paymentTotal
-            : next.paymentQuote?.total ?? 0;
+          typeof p.paymentTotal === 'number' ? p.paymentTotal : (next.paymentQuote?.total ?? 0);
         if (lineItems.length > 0 || typeof p.paymentTotal === 'number') {
           next.paymentQuote = {
             total,

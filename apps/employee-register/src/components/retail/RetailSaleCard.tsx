@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { PanelHeader } from '../../views/PanelHeader';
 import type { RetailCatalogItem, RetailCartItem } from './retailCatalog';
 
 export function RetailSaleCard({
@@ -20,7 +21,7 @@ export function RetailSaleCard({
 }) {
   return (
     <div className="er-retail-card">
-      <div className="er-card-title">{title}</div>
+      <PanelHeader title={title} spacing="sm" />
       <div className="er-retail-section-title">
         Items <span className="er-retail-section-hint">(Scroll for more)</span>
       </div>

@@ -7,3 +7,4 @@
 - app/hooks: app-wide bootstrap hooks.
 - scanner: keyboard-wedge scan helpers used by scanner hooks.
 - shared/derive: pure derived-state helpers used by state providers and feature roots.
+- views: standardized view shells with co-located CSS (panel layouts, headers, cards).

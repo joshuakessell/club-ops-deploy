@@ -7,6 +7,7 @@ import {
   getRetailCartTotal,
   type RetailCart,
 } from '../../components/retail/retailCatalog';
+import { PanelShell } from '../../views/PanelShell';
 
 export function RetailPanel() {
   const { setSuccessToastMessage } = useEmployeeRegisterState();
@@ -50,7 +51,7 @@ export function RetailPanel() {
   };
 
   return (
-    <div className="er-home-panel er-home-panel--top cs-liquid-card er-main-panel-card">
+    <PanelShell align="top">
       <RetailSaleCard
         title="Retail"
         items={RETAIL_CATALOG}
@@ -98,6 +99,6 @@ export function RetailPanel() {
           )
         }
       />
-    </div>
+    </PanelShell>
   );
 }
