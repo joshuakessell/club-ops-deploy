@@ -79,6 +79,7 @@ const RenewVisitSchema = z
     rentalType: z.enum(['STANDARD', 'DOUBLE', 'SPECIAL', 'LOCKER', 'GYM_LOCKER']),
     roomId: z.string().uuid().optional(),
     lockerId: z.string().uuid().optional(),
+    renewalHours: z.union([z.literal(2), z.literal(6)]).optional(),
   })
   .superRefine((v, ctx) => {
     const hasRoom = Boolean(v.roomId);
@@ -174,14 +175,17 @@ interface LockerRow {
 }
 
 /**
- * Calculate total hours for a visit including a potential renewal.
+ * Calculate total hours for a visit based on existing blocks.
  */
-function calculateTotalHours(blocks: CheckinBlockRow[], renewalHours: number = 6): number {
-  const existingHours = blocks.reduce((total, block) => {
+function calculateTotalHours(blocks: CheckinBlockRow[]): number {
+  return blocks.reduce((total, block) => {
     const hours = (block.ends_at.getTime() - block.starts_at.getTime()) / (1000 * 60 * 60);
     return total + hours;
   }, 0);
-  return existingHours + renewalHours;
+}
+
+function calculateTotalHoursWithExtension(blocks: CheckinBlockRow[], extensionHours: number): number {
+  return calculateTotalHours(blocks) + extensionHours;
 }
 
 /**
@@ -402,6 +406,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
       try {
         const result = await serializableTransaction(async (client) => {
+          const requestedRenewalHours = body.renewalHours ?? 6;
           // 1. Get the visit and verify it's active
           const visitResult = await client.query<VisitRow>(
             `SELECT id, customer_id, started_at, ended_at FROM visits WHERE id = $1 FOR UPDATE`,
@@ -454,11 +459,15 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           // 3. Check if renewal would exceed 14-hour maximum
-          const totalHoursIfRenewed = calculateTotalHours(blocks, 6);
+          const totalHoursIfRenewed = calculateTotalHoursWithExtension(
+            blocks,
+            requestedRenewalHours
+          );
           if (totalHoursIfRenewed > 14) {
+            const currentTotal = calculateTotalHours(blocks);
             throw {
               statusCode: 400,
-              message: `Renewal would exceed 14-hour maximum. Current total: ${calculateTotalHours(blocks)} hours, renewal would add 6 hours.`,
+              message: `Renewal would exceed 14-hour maximum. Current total: ${currentTotal} hours, renewal would add ${requestedRenewalHours} hours.`,
             };
           }
 
@@ -468,11 +477,22 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
             throw { statusCode: 400, message: 'Cannot determine renewal start time' };
           }
 
+          const diffMs = Math.abs(latestBlockEnd.getTime() - Date.now());
+          if (diffMs > 60 * 60 * 1000) {
+            throw {
+              statusCode: 400,
+              message: 'Renewal is only available within 1 hour of checkout',
+            };
+          }
+
           // 5. Renewal extends from previous checkout time, not from now
           const renewalStartsAt = latestBlockEnd;
-          const renewalEndsAt = roundUpToQuarterHour(
-            new Date(renewalStartsAt.getTime() + 6 * 60 * 60 * 1000)
-          ); // 6 hours from previous checkout, rounded up to next 15m boundary
+          const renewalEndsAt =
+            requestedRenewalHours === 2
+              ? new Date(renewalStartsAt.getTime() + 2 * 60 * 60 * 1000)
+              : roundUpToQuarterHour(
+                  new Date(renewalStartsAt.getTime() + 6 * 60 * 60 * 1000)
+                ); // 6 hours from previous checkout, rounded up to next 15m boundary
 
           // 6. Handle room assignment if requested
           let assignedRoomId: string | null = null;
@@ -546,10 +566,11 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           // 8. Create the renewal block
           const blockResult = await client.query<CheckinBlockRow>(
             `INSERT INTO checkin_blocks (visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id)
-           VALUES ($1, 'RENEWAL', $2, $3, $4, $5, $6)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id, visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, session_id, agreement_signed, created_at, updated_at`,
             [
               visit.id,
+              requestedRenewalHours === 2 ? 'FINAL2H' : 'RENEWAL',
               renewalStartsAt,
               renewalEndsAt,
               body.rentalType,
@@ -606,7 +627,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
    * GET /v1/visits/active - Search for active visits
    *
    * Searches active visits by membership number or customer name.
-   * Returns computed fields: current_checkout_at, total_hours_if_renewed, can_final_extend
+   * Returns computed fields: current_checkout_at, total_hours_if_renewed, can_final_extend (2-hour renewal)
    */
   fastify.get<{
     Querystring: { query?: string; membershipNumber?: string; customerName?: string };
@@ -675,8 +696,8 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
 
           const blocks = blocksResult.rows;
           const latestBlockEnd = getLatestBlockEnd(blocks);
-          const totalHoursIfRenewed = calculateTotalHours(blocks, 6);
-          const canFinalExtend = totalHoursIfRenewed <= 12; // Can extend if renewal + final2h would be <= 14
+          const totalHoursIfRenewed = calculateTotalHoursWithExtension(blocks, 6);
+          const canFinalExtend = calculateTotalHoursWithExtension(blocks, 2) <= 14;
 
           return {
             id: visit.id,
@@ -796,8 +817,7 @@ export async function visitRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           // 6. Calculate total hours - should be 12 hours (two 6-hour blocks)
-          // Pass 0 as second parameter since we just want the total, not adding renewal hours
-          const totalHours = calculateTotalHours(blocks, 0);
+          const totalHours = calculateTotalHours(blocks);
           if (totalHours !== 12) {
             throw {
               statusCode: 400,

@@ -26,3 +26,9 @@ Agents MUST:
 - `apps/employee-register/src/app/ARCHITECTURE.md` — employee-register app layering and ownership rules
 - `apps/customer-kiosk/src/app/ARCHITECTURE.md` — customer-kiosk app layering and ownership rules
 - `apps/office-dashboard/src/app/ARCHITECTURE.md` — office-dashboard app layering and ownership rules
+
+## File Size + Organization Rules
+
+- Avoid bloated source files: no file under `apps/**/src` may exceed 400 lines without explicit approval.
+- Prefer feature/domain folders; co-locate related state, hooks, UI, and utilities for the same responsibility.
+- Split by single responsibility; avoid "god files" that centralize unrelated concerns.

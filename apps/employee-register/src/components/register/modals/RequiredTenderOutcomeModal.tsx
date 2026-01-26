@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 export type TenderOutcomeChoice = 'CREDIT_SUCCESS' | 'CREDIT_DECLINE' | 'CASH_SUCCESS';
 
 export function RequiredTenderOutcomeModal({
   isOpen,
   totalLabel,
+  details,
   isSubmitting,
   onConfirm,
   extraActionLabel,
@@ -12,6 +13,7 @@ export function RequiredTenderOutcomeModal({
 }: {
   isOpen: boolean;
   totalLabel: string;
+  details?: ReactNode;
   isSubmitting: boolean;
   onConfirm: (choice: TenderOutcomeChoice) => void;
   extraActionLabel?: string;
@@ -90,6 +92,7 @@ export function RequiredTenderOutcomeModal({
       >
         <div className="er-required-modal__title">Select Tender Outcome</div>
         <div className="er-required-modal__subtitle">{totalLabel}</div>
+        {details ? <div className="er-required-modal__details">{details}</div> : null}
 
         <div className="er-required-modal__options" role="radiogroup" aria-label="Tender outcome">
           {options.map((o) => {

@@ -150,6 +150,7 @@ export interface SessionUpdatedPayload {
   kioskAcknowledgedAt?: string;
   allowedRentals: string[];
   mode?: 'CHECKIN' | 'RENEWAL';
+  renewalHours?: 2 | 6;
   blockEndsAt?: string;
   visitId?: string;
   /**
@@ -184,6 +185,11 @@ export interface SessionUpdatedPayload {
     amount: number;
   }>;
   paymentFailureReason?: string;
+  ledgerLineItems?: Array<{
+    description: string;
+    amount: number;
+  }>;
+  ledgerTotal?: number;
   agreementSigned?: boolean;
   agreementBypassPending?: boolean;
   agreementSignedMethod?: 'DIGITAL' | 'MANUAL';

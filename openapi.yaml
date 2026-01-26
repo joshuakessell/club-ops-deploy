@@ -454,6 +454,9 @@ paths:
                 visitId:
                   type: string
                   format: uuid
+                renewalHours:
+                  type: integer
+                  enum: [2, 6]
               anyOf:
                 - required: [customerId]
                 - required: [idScanValue]
@@ -499,6 +502,9 @@ paths:
                         nullable: true
                       overdue:
                         type: boolean
+                        nullable: true
+                      currentTotalHours:
+                        type: number
                         nullable: true
                       waitlist:
                         type: object
@@ -1773,7 +1779,7 @@ paths:
   /v1/visits/{id}/renew:
     post:
       tags: [Visits]
-      summary: Renew visit (add 6-hour block)
+      summary: Renew visit (add 2-hour or 6-hour block)
       security:
         - bearerAuth: []
       parameters:
@@ -1800,6 +1806,9 @@ paths:
                 lockerId:
                   type: string
                   format: uuid
+                renewalHours:
+                  type: integer
+                  enum: [2, 6]
                 lane:
                   type: string
       responses:

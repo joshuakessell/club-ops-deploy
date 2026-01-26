@@ -78,6 +78,8 @@ Other markdown files may describe workflows, but **must not redefine** these ent
     - `selection_confirmed`, `selection_confirmed_by`, `selection_locked_at`
   - Waitlist coordination:
     - `waitlist_desired_type`, `backup_rental_type`
+  - Renewal coordination:
+    - `renewal_hours` (2 or 6 when the session is a renewal; null otherwise)
   - Pricing / acknowledgement:
     - `price_quote_json` (server-authoritative quote snapshot)
     - `disclaimers_ack_json` (record of acknowledgements, when applicable)
@@ -199,6 +201,7 @@ Other markdown files may describe workflows, but **must not redefine** these ent
 - **Invariants**:
   - A check-in block belongs to exactly one visit.
   - `starts_at < ends_at` must always hold.
+  - `FINAL2H` blocks represent 2-hour renewals; multiple `FINAL2H` blocks may occur across a visit as long as the total visit duration stays within the 14-hour cap.
   - Assigned inventory is reflected both here (historical) and on the inventory unit (current assignment), with server-side locking for concurrency safety.
 
 ### `rooms`

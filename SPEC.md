@@ -43,6 +43,7 @@ Canonical event types and payload schemas:
 - DB meaning/contracts: docs/database/\*
 - Monorepo structure (canonical): docs/FILE_STRUCTURE.md
 - Check-in / lane session flows: docs/specs/\* (add new spec docs here)
+- Visit renewals + extension rules: docs/specs/visit-renewals.md
 - Register sessions admin: docs/specs/register-sessions-admin.md
 - Staff scheduling + timeclock + documents: docs/specs/staff-scheduling-timeclock-documents.md
 

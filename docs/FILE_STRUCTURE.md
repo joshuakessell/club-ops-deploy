@@ -35,7 +35,7 @@ Customer- and staff-facing UIs (generally Vite + React).
 ```
 apps/
   customer-kiosk/          # Customer-facing kiosk UI
-  employee-register/       # Staff register UI (sign-in, register workflows)
+  employee-register/       # Staff register UI (sign-in, register workflows; state slices + value helpers under src/app/state)
   office-dashboard/        # Admin/office dashboard UI
 ```
 

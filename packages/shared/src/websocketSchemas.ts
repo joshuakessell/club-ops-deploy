@@ -56,6 +56,10 @@ export const SessionUpdatedPayloadSchema: z.ZodType<SessionUpdatedPayload, z.Zod
       // Server normally includes this, but keep tolerant so older servers/tests don't drop WS events.
       allowedRentals: z.array(z.string()).default([]),
       mode: z.enum(['CHECKIN', 'RENEWAL']).optional(),
+      renewalHours: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.union([z.literal(2), z.literal(6)]).optional()
+      ),
       blockEndsAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
       visitId: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
       waitlistDesiredType: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
@@ -92,6 +96,15 @@ export const SessionUpdatedPayloadSchema: z.ZodType<SessionUpdatedPayload, z.Zod
         (v) => (v === null ? undefined : v),
         z.string().optional()
       ),
+      ledgerLineItems: z
+        .array(
+          z.object({
+            description: z.string(),
+            amount: z.number(),
+          })
+        )
+        .optional(),
+      ledgerTotal: z.number().optional(),
       agreementSigned: z.boolean().optional(),
       agreementBypassPending: z.boolean().optional(),
       agreementSignedMethod: z.enum(['DIGITAL', 'MANUAL']).optional(),

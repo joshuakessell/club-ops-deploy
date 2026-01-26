@@ -8,7 +8,10 @@ export function HomeTabs() {
     hasEligibleEntries,
     dismissUpgradePulse,
     startCheckoutFromHome,
+    canOpenAccountTab,
   } = useEmployeeRegisterState();
+
+  const accountDisabled = !canOpenAccountTab && homeTab !== 'account';
 
   return (
     <nav className="er-home-tabs" aria-label="Home actions">
@@ -17,9 +20,15 @@ export function HomeTabs() {
         className={[
           'er-home-tab-btn',
           'cs-liquid-button',
+          accountDisabled ? 'er-home-tab-btn--disabled' : '',
           homeTab === 'account' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
         ].join(' ')}
-        onClick={() => selectHomeTab('account')}
+        onClick={() => {
+          if (accountDisabled) return;
+          selectHomeTab('account');
+        }}
+        disabled={accountDisabled}
+        aria-disabled={accountDisabled}
       >
         Customer Account
       </button>

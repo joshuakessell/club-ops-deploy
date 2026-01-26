@@ -10,6 +10,9 @@ export type StartLaneResponse = {
   membershipNumber?: string;
   mode?: 'CHECKIN' | 'RENEWAL';
   blockEndsAt?: string;
+  visitId?: string;
+  currentTotalHours?: number;
+  renewalHours?: 2 | 6;
   activeAssignedResourceType?: 'room' | 'locker';
   activeAssignedResourceNumber?: string;
   customerHasEncryptedLookupMarker?: boolean;
@@ -34,8 +37,10 @@ export async function startLaneCheckin(params: {
   lane: string;
   sessionToken: string;
   customerId: string;
+  visitId?: string;
+  renewalHours?: 2 | 6;
 }): Promise<StartLaneCheckinResult> {
-  const { lane, sessionToken, customerId } = params;
+  const { lane, sessionToken, customerId, visitId, renewalHours } = params;
 
   const response = await fetch(`${API_BASE}/v1/checkin/lane/${encodeURIComponent(lane)}/start`, {
     method: 'POST',
@@ -43,7 +48,11 @@ export async function startLaneCheckin(params: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${sessionToken}`,
     },
-    body: JSON.stringify({ customerId }),
+    body: JSON.stringify({
+      customerId,
+      ...(visitId ? { visitId } : {}),
+      ...(renewalHours ? { renewalHours } : {}),
+    }),
   });
 
   const payload: unknown = await response.json().catch(() => null);

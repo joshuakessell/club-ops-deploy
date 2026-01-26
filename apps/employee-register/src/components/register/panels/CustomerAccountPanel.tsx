@@ -4,11 +4,28 @@ import { EmployeeAssistPanel } from '../EmployeeAssistPanel';
 import { useStartLaneCheckinForCustomerIfNotVisiting } from '../../../app/useStartLaneCheckinForCustomerIfNotVisiting';
 import { PanelHeader } from '../../../views/PanelHeader';
 import { PanelShell } from '../../../views/PanelShell';
+import type { ActiveCheckinDetails } from '../modals/AlreadyCheckedInModal';
 
 function formatLocal(value: string | null): string {
   if (!value) return '—';
   const d = new Date(value);
   return Number.isFinite(d.getTime()) ? d.toLocaleString() : '—';
+}
+
+function getRenewalEligibility(activeCheckin: ActiveCheckinDetails | null) {
+  if (!activeCheckin?.checkoutAt) {
+    return { withinWindow: false, allowTwoHour: false, allowSixHour: false, totalHours: null };
+  }
+  const checkoutAt = new Date(activeCheckin.checkoutAt);
+  const totalHours =
+    typeof activeCheckin.currentTotalHours === 'number'
+      ? activeCheckin.currentTotalHours
+      : null;
+  const diffMs = Math.abs(checkoutAt.getTime() - Date.now());
+  const withinWindow = Number.isFinite(diffMs) && diffMs <= 60 * 60 * 1000;
+  const allowTwoHour = withinWindow && totalHours !== null && totalHours + 2 <= 14;
+  const allowSixHour = withinWindow && totalHours !== null && totalHours + 6 <= 14;
+  return { withinWindow, allowTwoHour, allowSixHour, totalHours };
 }
 
 export function CustomerAccountPanel(props: {
@@ -40,6 +57,14 @@ export function CustomerAccountPanel(props: {
   inventoryAvailable: null | { rooms: Record<string, number>; lockers: number };
   isSubmitting: boolean;
   checkinStage: CheckinStage | null;
+  sessionMode?: 'CHECKIN' | 'RENEWAL';
+  renewalHours?: 2 | 6 | null;
+  directSelect?: boolean;
+  onDirectSelectRental?: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL') => void;
+  onDirectSelectWaitlistBackup?: (
+    rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => void;
+  onStartRenewal?: (activeCheckin: ActiveCheckinDetails) => void;
 
   // callbacks to apply immediate REST response (WS will still be source-of-truth)
   onStartedSession: (payload: {
@@ -108,11 +133,19 @@ export function CustomerAccountPanel(props: {
               className="er-text-sm"
               style={{ color: '#cbd5e1', fontWeight: 700, lineHeight: 1.45 }}
             >
-              This customer already has an active visit. No new check-in was started.
+              This customer already has an active visit.
             </div>
           </div>
 
           <div className="cs-liquid-card" style={{ padding: '0.85rem' }}>
+            {(() => {
+              const renewalEligibility = getRenewalEligibility(state.activeCheckin);
+              const showRenewal =
+                !!state.activeCheckin?.visitId &&
+                renewalEligibility.withinWindow &&
+                (renewalEligibility.allowTwoHour || renewalEligibility.allowSixHour);
+
+              return (
             <div style={{ display: 'grid', gap: '0.6rem' }}>
               <div>
                 <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
@@ -161,7 +194,10 @@ export function CustomerAccountPanel(props: {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'center', flex: 1, minWidth: 220 }}>
+                <div
+                  className="er-account-actions"
+                  style={{ display: 'flex', justifyContent: 'center', flex: 1, minWidth: 220 }}
+                >
                   <button
                     type="button"
                     className="cs-liquid-button"
@@ -172,6 +208,21 @@ export function CustomerAccountPanel(props: {
                   >
                     Checkout
                   </button>
+                  {showRenewal && props.onStartRenewal ? (
+                    <button
+                      type="button"
+                      className="cs-liquid-button cs-liquid-button--secondary"
+                      onClick={() => props.onStartRenewal?.(state.activeCheckin)}
+                      style={{
+                        width: '100%',
+                        maxWidth: 260,
+                        padding: '0.7rem',
+                        fontWeight: 900,
+                      }}
+                    >
+                      Renew Checkin
+                    </button>
+                  ) : null}
                 </div>
               </div>
 
@@ -188,6 +239,8 @@ export function CustomerAccountPanel(props: {
                 </div>
               ) : null}
             </div>
+              );
+            })()}
           </div>
         </div>
       ) : state.mode === 'ERROR' ? (
@@ -266,6 +319,7 @@ export function CustomerAccountPanel(props: {
                 waitlistBackupType={props.waitlistBackupType}
                 inventoryAvailable={props.inventoryAvailable}
                 isSubmitting={props.isSubmitting}
+                directSelect={props.directSelect}
                 onHighlightLanguage={props.onHighlightLanguage}
                 onConfirmLanguage={props.onConfirmLanguage}
                 onHighlightMembership={props.onHighlightMembership}
@@ -273,8 +327,10 @@ export function CustomerAccountPanel(props: {
                 onConfirmMembershipSixMonth={props.onConfirmMembershipSixMonth}
                 onHighlightRental={props.onHighlightRental}
                 onSelectRentalAsCustomer={props.onSelectRentalAsCustomer}
+                onDirectSelectRental={props.onDirectSelectRental}
                 onHighlightWaitlistBackup={props.onHighlightWaitlistBackup}
                 onSelectWaitlistBackupAsCustomer={props.onSelectWaitlistBackupAsCustomer}
+                onDirectSelectWaitlistBackup={props.onDirectSelectWaitlistBackup}
                 onApproveRental={props.onApproveRental}
               />
             </>

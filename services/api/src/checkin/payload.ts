@@ -26,6 +26,7 @@ interface LaneSessionRow {
   membership_choice?: 'ONE_TIME' | 'SIX_MONTH' | null;
   kiosk_acknowledged_at?: Date | null;
   checkin_mode: string | null; // 'CHECKIN' or 'RENEWAL'
+  renewal_hours?: number | null;
   proposed_rental_type: string | null;
   proposed_by: string | null;
   selection_confirmed: boolean;
@@ -111,6 +112,17 @@ function extractPaymentLineItems(
     normalized.push({ description, amount });
   }
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function formatChargeDescription(type: string): string {
+  switch (type) {
+    case 'UPGRADE_FEE':
+      return 'Upgrade Fee';
+    case 'LATE_FEE':
+      return 'Late Fee';
+    default:
+      return type.replace(/_/g, ' ');
+  }
 }
 
 function isGymLockerEligible(membershipNumber: string | null | undefined): boolean {
@@ -296,6 +308,65 @@ export async function buildFullSessionUpdatedPayload(
     extractPaymentLineItems(session.price_quote_json) ??
     extractPaymentLineItems(paymentIntent?.quote_json);
 
+  let ledgerLineItems: Array<{ description: string; amount: number }> | undefined;
+  let ledgerTotal: number | undefined;
+
+  if (session.checkin_mode === 'RENEWAL') {
+    const ledgerVisitId = blockForSession?.visit_id || activeVisitId;
+    if (ledgerVisitId) {
+      const ledgerItems: Array<{ description: string; amount: number }> = [];
+      let total = 0;
+
+      const paidIntents = await client.query<{
+        quote_json: unknown;
+        amount: number | string;
+      }>(
+        `SELECT pi.quote_json, pi.amount
+         FROM payment_intents pi
+         JOIN lane_sessions ls ON ls.id = pi.lane_session_id
+         JOIN checkin_blocks cb ON cb.session_id = ls.id
+         WHERE cb.visit_id = $1
+           AND pi.status = 'PAID'
+           AND pi.paid_at >= date_trunc('day', NOW())`,
+        [ledgerVisitId]
+      );
+
+      for (const intent of paidIntents.rows) {
+        const items = extractPaymentLineItems(intent.quote_json);
+        if (items && items.length > 0) {
+          for (const item of items) {
+            ledgerItems.push(item);
+            total += item.amount;
+          }
+          continue;
+        }
+        const amount = toNumber(intent.amount);
+        if (amount !== undefined) {
+          ledgerItems.push({ description: 'Check-in', amount });
+          total += amount;
+        }
+      }
+
+      const charges = await client.query<{ type: string; amount: number | string }>(
+        `SELECT type, amount
+         FROM charges
+         WHERE visit_id = $1
+           AND created_at >= date_trunc('day', NOW())`,
+        [ledgerVisitId]
+      );
+
+      for (const charge of charges.rows) {
+        const amount = toNumber(charge.amount);
+        if (amount === undefined) continue;
+        ledgerItems.push({ description: formatChargeDescription(charge.type), amount });
+        total += amount;
+      }
+
+      ledgerLineItems = ledgerItems;
+      ledgerTotal = total;
+    }
+  }
+
   const membershipValidUntilRaw = (customer as any)?.membership_valid_until as unknown;
   const customerMembershipValidUntil =
     membershipValidUntilRaw instanceof Date
@@ -352,6 +423,12 @@ export async function buildFullSessionUpdatedPayload(
       ? blockForSession.ends_at.toISOString()
       : activeBlockEndsAt,
     checkoutAt: blockForSession?.ends_at ? blockForSession.ends_at.toISOString() : undefined,
+    renewalHours:
+      session.renewal_hours === 2 || session.renewal_hours === 6
+        ? (session.renewal_hours as 2 | 6)
+        : undefined,
+    ledgerLineItems,
+    ledgerTotal,
   };
 
   return { laneId, payload };

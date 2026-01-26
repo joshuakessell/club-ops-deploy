@@ -35,6 +35,7 @@ export interface EmployeeAssistPanelProps {
   } | null;
 
   isSubmitting?: boolean;
+  directSelect?: boolean;
 
   onHighlightLanguage: (lang: 'EN' | 'ES' | null) => void;
   onConfirmLanguage: (lang: 'EN' | 'ES') => Promise<void> | void;
@@ -47,8 +48,14 @@ export interface EmployeeAssistPanelProps {
   onSelectRentalAsCustomer: (
     rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
   ) => Promise<void> | void;
+  onDirectSelectRental?: (
+    rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => Promise<void> | void;
   onHighlightWaitlistBackup: (rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null) => void;
   onSelectWaitlistBackupAsCustomer: (
+    rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => Promise<void> | void;
+  onDirectSelectWaitlistBackup?: (
     rental: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
   ) => Promise<void> | void;
   onApproveRental: () => Promise<void> | void;
@@ -77,6 +84,7 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     waitlistBackupType,
     inventoryAvailable,
     isSubmitting = false,
+    directSelect = false,
     onHighlightLanguage,
     onConfirmLanguage,
     onHighlightMembership,
@@ -85,7 +93,9 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     onHighlightRental,
     onHighlightWaitlistBackup,
     onSelectWaitlistBackupAsCustomer,
+    onDirectSelectWaitlistBackup,
     onApproveRental,
+    onDirectSelectRental,
   } = props;
 
   const [pending, setPending] = useState<PendingState>(null);
@@ -170,30 +180,30 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     return [
       {
         id: 'LOCKER' as const,
-        label: 'Propose Locker',
+        label: directSelect ? 'Select Locker' : 'Propose Locker',
         count: lockers,
         allowed: allowed.has('LOCKER'),
       },
       {
         id: 'STANDARD' as const,
-        label: 'Propose Standard',
+        label: directSelect ? 'Select Standard' : 'Propose Standard',
         count: standard,
         allowed: allowed.has('STANDARD'),
       },
       {
         id: 'DOUBLE' as const,
-        label: 'Propose Double',
+        label: directSelect ? 'Select Double' : 'Propose Double',
         count: deluxe,
         allowed: allowed.has('DOUBLE'),
       },
       {
         id: 'SPECIAL' as const,
-        label: 'Propose Special',
+        label: directSelect ? 'Select Special' : 'Propose Special',
         count: special,
         allowed: allowed.has('SPECIAL'),
       },
     ];
-  }, [allowedRentals, inventoryAvailable]);
+  }, [allowedRentals, directSelect, inventoryAvailable]);
 
   const waitlistBackupButtons = useMemo(() => {
     if (!waitlistDesiredTier) return [];
@@ -273,7 +283,9 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         {step === 'LANGUAGE' && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-              Tap once to set the language (it will also highlight on the kiosk).
+              {directSelect
+                ? 'Tap once to set the language.'
+                : 'Tap once to set the language (it will also highlight on the kiosk).'}
             </div>
             {(
               [
@@ -293,8 +305,10 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                   disabled={isSubmitting}
                   onClick={() => {
                     if (isSubmitting) return;
-                    setPending({ step: 'LANGUAGE', option: opt.id });
-                    onHighlightLanguage(opt.id);
+                    if (!directSelect) {
+                      setPending({ step: 'LANGUAGE', option: opt.id });
+                      onHighlightLanguage(opt.id);
+                    }
                     void onConfirmLanguage(opt.id);
                   }}
                   style={{ width: '100%', padding: '0.9rem 1rem', fontWeight: 900 }}
@@ -309,7 +323,9 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         {step === 'MEMBERSHIP' && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-              Tap once to highlight on kiosk, tap again to confirm.
+              {directSelect
+                ? 'Tap once to select the membership option.'
+                : 'Tap once to highlight on kiosk, tap again to confirm.'}
             </div>
             {(
               [
@@ -328,6 +344,14 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                   ].join(' ')}
                   disabled={isSubmitting}
                   onClick={() => {
+                      if (directSelect) {
+                        if (opt.id === 'ONE_TIME') {
+                          void onConfirmMembershipOneTime();
+                          return;
+                        }
+                        void onConfirmMembershipSixMonth();
+                        return;
+                      }
                       runTwoStep(
                         'MEMBERSHIP',
                         opt.id,
@@ -355,7 +379,9 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         {step === 'UPGRADE' && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-              Customer selected {waitlistDesiredTier}. Choose a backup rental.
+              {directSelect
+                ? `Select a backup rental for ${waitlistDesiredTier}.`
+                : `Customer selected ${waitlistDesiredTier}. Choose a backup rental.`}
             </div>
             <div style={{ display: 'grid', gap: '0.6rem' }}>
               {waitlistBackupButtons.map((btn) => {
@@ -379,6 +405,10 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                     disabled={disabled}
                     onClick={() => {
                       if (disabled) return;
+                      if (directSelect && onDirectSelectWaitlistBackup) {
+                        void onDirectSelectWaitlistBackup(btn.id);
+                        return;
+                      }
                       runTwoStep(
                         'WAITLIST_BACKUP',
                         btn.id,
@@ -422,7 +452,9 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         {step === 'RENTAL' && (
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-              Tap once to propose on kiosk, tap again to confirm.
+              {directSelect
+                ? 'Tap once to select a rental.'
+                : 'Tap once to propose on kiosk, tap again to confirm.'}
             </div>
             <div style={{ display: 'grid', gap: '0.6rem' }}>
               {rentalButtons.map((btn) => {
@@ -446,6 +478,10 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                     disabled={disabled}
                     onClick={() => {
                       if (disabled) return;
+                      if (directSelect && onDirectSelectRental) {
+                        void onDirectSelectRental(btn.id);
+                        return;
+                      }
                       runTwoStep(
                         'RENTAL',
                         btn.id,

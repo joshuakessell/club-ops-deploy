@@ -3,6 +3,7 @@ import { getErrorMessage } from '@club-ops/ui';
 import { ModalFrame } from '../../components/register/modals/ModalFrame';
 import { CustomerConfirmationPendingModal } from '../../components/register/modals/CustomerConfirmationPendingModal';
 import { MultipleMatchesModal } from '../../components/register/modals/MultipleMatchesModal';
+import { RenewCheckinModal } from '../../components/register/modals/RenewCheckinModal';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
 
 const API_BASE = getApiUrl('/api');
@@ -34,6 +35,10 @@ export function CustomerModals() {
     setManualIdNumber,
     session,
     isSubmitting,
+    renewalSelection,
+    renewalSelectionError,
+    closeRenewalSelection,
+    handleStartRenewal,
     showCreateFromScanPrompt,
     pendingCreateFromScan,
     createFromScanError,
@@ -71,6 +76,15 @@ export function CustomerModals() {
           setScanResolutionError(null);
         }}
         onSelect={(customerId) => void resolvePendingScanSelection(customerId)}
+      />
+
+      <RenewCheckinModal
+        isOpen={!!renewalSelection}
+        activeCheckin={renewalSelection}
+        errorMessage={renewalSelectionError}
+        isSubmitting={isSubmitting}
+        onClose={closeRenewalSelection}
+        onSelectHours={(hours) => void handleStartRenewal(hours)}
       />
 
       <ModalFrame

@@ -574,6 +574,7 @@ CREATE TABLE public.lane_sessions (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     checkin_mode character varying(20) DEFAULT 'CHECKIN'::character varying,
+    renewal_hours integer,
     customer_id uuid,
     proposed_rental_type public.rental_type,
     proposed_by character varying(20),
@@ -581,6 +582,7 @@ CREATE TABLE public.lane_sessions (
     selection_confirmed_by character varying(20),
     selection_locked_at timestamp with time zone,
     CONSTRAINT lane_sessions_membership_choice_check CHECK ((((membership_choice)::text = ANY (ARRAY[('ONE_TIME'::character varying)::text, ('SIX_MONTH'::character varying)::text])) OR (membership_choice IS NULL))),
+    CONSTRAINT lane_sessions_renewal_hours_check CHECK (((renewal_hours = ANY (ARRAY[2, 6])) OR (renewal_hours IS NULL))),
     CONSTRAINT lane_sessions_proposed_by_check CHECK (((proposed_by)::text = ANY (ARRAY[('CUSTOMER'::character varying)::text, ('EMPLOYEE'::character varying)::text]))),
     CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY (ARRAY[('CUSTOMER'::character varying)::text, ('EMPLOYEE'::character varying)::text])))
 );
@@ -2533,4 +2535,3 @@ ALTER TABLE ONLY public.webauthn_challenges
 --
 
 \unrestrict CFrzBp80k6cGa6pb5iAAwgv8pu1egAkcf5tM9wfKrHnKSswkf0SRvkA8Y2Aogze
-

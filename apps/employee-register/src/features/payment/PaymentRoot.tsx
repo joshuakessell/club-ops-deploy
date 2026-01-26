@@ -29,6 +29,10 @@ export function PaymentRoot() {
     selectionConfirmed,
     paymentQuote,
     paymentStatus,
+    laneSessionMode,
+    renewalHours,
+    ledgerLineItems,
+    ledgerTotal,
     pastDueBlocked,
     handleDemoPayment,
     paymentDeclineError,
@@ -41,6 +45,53 @@ export function PaymentRoot() {
     removeAddOnItem,
     handleAddOnSaleToCheckin,
   } = useEmployeeRegisterState();
+
+  const ledgerItems = Array.isArray(ledgerLineItems) ? ledgerLineItems : [];
+
+  const renewalDetails =
+    laneSessionMode === 'RENEWAL' && paymentQuote ? (
+      <div className="er-renewal-ledger">
+        <div className="er-renewal-ledger__section">
+          <div className="er-renewal-ledger__label">Today&apos;s Ledger</div>
+          {ledgerItems.length > 0 ? (
+            <div className="er-renewal-ledger__items">
+              {ledgerItems.map((item, idx) => (
+                <div key={`${item.description}-${idx}`} className="er-renewal-ledger__row">
+                  <span>{item.description}</span>
+                  <span>${item.amount.toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 700 }}>
+              No charges yet today.
+            </div>
+          )}
+          {typeof ledgerTotal === 'number' ? (
+            <div className="er-renewal-ledger__total">
+              Ledger total: ${ledgerTotal.toFixed(2)}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="er-renewal-ledger__section">
+          <div className="er-renewal-ledger__label">
+            Renewal Charges{renewalHours ? ` (${renewalHours} hours)` : ''}
+          </div>
+          <div className="er-renewal-ledger__items">
+            {paymentQuote.lineItems.map((item, idx) => (
+              <div key={`${item.description}-${idx}`} className="er-renewal-ledger__row">
+                <span>{item.description}</span>
+                <span>${item.amount.toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="er-renewal-ledger__total">
+            Renewal total: ${paymentQuote.total.toFixed(2)}
+          </div>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <>
@@ -95,6 +146,7 @@ export function PaymentRoot() {
           <RequiredTenderOutcomeModal
             isOpen={true}
             totalLabel={`Total: $${paymentQuote.total.toFixed(2)}`}
+            details={renewalDetails}
             isSubmitting={isSubmitting}
             onConfirm={(choice) => {
               if (choice === 'CREDIT_SUCCESS') void handleDemoPayment('CREDIT_SUCCESS');

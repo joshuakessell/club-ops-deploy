@@ -175,6 +175,52 @@
   font-size: 1.1rem;
 }
 
+.er-required-modal__details {
+  padding: 0.75rem;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.er-renewal-ledger {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.er-renewal-ledger__section {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.er-renewal-ledger__label {
+  font-weight: 900;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.er-renewal-ledger__items {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.er-renewal-ledger__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+
+.er-renewal-ledger__total {
+  text-align: right;
+  font-weight: 900;
+  color: #fff;
+}
+
 .er-required-modal__options {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -696,6 +742,12 @@ body::after {
   border-radius: 0 9999px 9999px 0;
 }
 
+.er-home-tab-btn--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+}
+
 .er-home-content {
   min-width: 0;
   display: flex;
@@ -958,6 +1010,17 @@ body::after {
 .er-account-already-visiting .cs-liquid-card {
   opacity: 0.7;
   transition: opacity 0.2s ease;
+}
+
+.er-account-actions {
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.er-renewal-modal__actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
 }
 
 /* Lock Screen Styles */

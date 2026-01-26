@@ -11,6 +11,7 @@ export function AccountPanel() {
     accountCustomerLabel,
     lane,
     session,
+    openRenewalSelection,
     startCheckoutFromCustomerAccount,
     handleClearSession,
     selectHomeTab,
@@ -33,16 +34,22 @@ export function AccountPanel() {
     inventoryAvailable,
     isSubmitting,
     checkinStage,
+    laneSessionMode,
+    renewalHours,
     highlightKioskOption,
     handleConfirmLanguage,
     handleConfirmMembershipOneTime,
     handleConfirmMembershipSixMonth,
     handleProposeSelection,
     handleCustomerSelectRental,
+    handleDirectSelectRental,
     handleSelectWaitlistBackupAsCustomer,
+    handleDirectSelectWaitlistBackup,
     handleConfirmSelection,
     laneSessionActions,
   } = useEmployeeRegisterState();
+
+  const directSelect = laneSessionMode === 'RENEWAL';
 
   if (accountCustomerId) {
     return (
@@ -52,6 +59,7 @@ export function AccountPanel() {
         customerId={accountCustomerId}
         customerLabel={accountCustomerLabel}
         onStartCheckout={startCheckoutFromCustomerAccount}
+        onStartRenewal={(activeCheckin) => openRenewalSelection(activeCheckin)}
         onClearSession={() => void handleClearSession().then(() => selectHomeTab('scan'))}
         currentSessionId={currentSessionId}
         currentSessionCustomerId={laneSession.customerId}
@@ -80,12 +88,19 @@ export function AccountPanel() {
         }
         isSubmitting={isSubmitting}
         checkinStage={checkinStage}
+        sessionMode={laneSessionMode}
+        renewalHours={renewalHours}
+        directSelect={directSelect}
+        onDirectSelectRental={(rental) => void handleDirectSelectRental(rental)}
+        onDirectSelectWaitlistBackup={(rental) => void handleDirectSelectWaitlistBackup(rental)}
         onStartedSession={(data) => {
           const patch: Partial<typeof laneSession> = {};
           if (accountCustomerId) patch.customerId = accountCustomerId;
           if (data.customerName) patch.customerName = data.customerName;
           if (data.membershipNumber) patch.membershipNumber = data.membershipNumber;
           if (data.sessionId) patch.currentSessionId = data.sessionId;
+          if (data.mode) patch.mode = data.mode;
+          if (data.renewalHours) patch.renewalHours = data.renewalHours;
           if (data.customerHasEncryptedLookupMarker !== undefined) {
             patch.customerHasEncryptedLookupMarker = Boolean(data.customerHasEncryptedLookupMarker);
           }
@@ -111,12 +126,14 @@ export function AccountPanel() {
         onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
         onHighlightRental={(rental) => void handleProposeSelection(rental)}
         onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+        onDirectSelectRental={(rental) => void handleDirectSelectRental(rental)}
         onHighlightWaitlistBackup={(rental) =>
           void highlightKioskOption({ step: 'WAITLIST_BACKUP', option: rental })
         }
         onSelectWaitlistBackupAsCustomer={(rental) =>
           void handleSelectWaitlistBackupAsCustomer(rental)
         }
+        onDirectSelectWaitlistBackup={(rental) => void handleDirectSelectWaitlistBackup(rental)}
         onApproveRental={() => void handleConfirmSelection()}
       />
     );
@@ -186,6 +203,7 @@ export function AccountPanel() {
                 : null
             }
             isSubmitting={isSubmitting}
+            directSelect={directSelect}
             onHighlightLanguage={(lang) =>
               void highlightKioskOption({ step: 'LANGUAGE', option: lang })
             }
@@ -197,12 +215,14 @@ export function AccountPanel() {
             onConfirmMembershipSixMonth={() => void handleConfirmMembershipSixMonth()}
             onHighlightRental={(rental) => void handleProposeSelection(rental)}
             onSelectRentalAsCustomer={(rental) => void handleCustomerSelectRental(rental)}
+            onDirectSelectRental={(rental) => void handleDirectSelectRental(rental)}
             onHighlightWaitlistBackup={(rental) =>
               void highlightKioskOption({ step: 'WAITLIST_BACKUP', option: rental })
             }
             onSelectWaitlistBackupAsCustomer={(rental) =>
               void handleSelectWaitlistBackupAsCustomer(rental)
             }
+            onDirectSelectWaitlistBackup={(rental) => void handleDirectSelectWaitlistBackup(rental)}
             onApproveRental={() => void handleConfirmSelection()}
           />
         </div>

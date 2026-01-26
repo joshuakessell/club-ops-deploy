@@ -27,6 +27,13 @@ These rules are mechanically verifiable and must be enforced for this app.
 
 - Any hook **over 150 lines** must be split into smaller hooks/helpers.
 
+## File size + organization
+
+- No file under `src/` may exceed 400 lines without explicit approval.
+- `src/app/state/EmployeeRegisterStateProvider.tsx` must remain under 250 lines and only compose smaller providers/hooks.
+- Keep register state split across `src/app/state/slices/` (no reconsolidation into a single monolith).
+- Organize by domain: group related state, hooks, UI, and utilities together (avoid cross-domain "grab bag" folders).
+
 ## Docs + structure
 
 - If structure changes, update `docs/FILE_STRUCTURE.md` and `apps/employee-register/src/app/ARCHITECTURE.md` as needed.

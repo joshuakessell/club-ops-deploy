@@ -287,6 +287,52 @@ export function calculatePriceQuote(input: PricingInput): PriceQuote {
 }
 
 /**
+ * Calculate price quote for a renewal (2h or 6h).
+ * - 2h renewals: flat $20 + daily membership fee (if applicable)
+ * - 6h renewals: full base pricing (same as initial check-in)
+ */
+export function calculateRenewalQuote(
+  input: PricingInput & { renewalHours: 2 | 6 | null | undefined }
+): PriceQuote {
+  const hours = input.renewalHours ?? 6;
+  if (hours === 6) {
+    return calculatePriceQuote(input);
+  }
+
+  const lineItems: Array<{ description: string; amount: number }> = [];
+  const renewalFee = 20;
+  lineItems.push({ description: 'Renewal (2 Hours)', amount: renewalFee });
+
+  const sixMonthMembershipPurchaseFee = input.includeSixMonthMembershipPurchase ? 43 : 0;
+  const membershipFee = input.includeSixMonthMembershipPurchase
+    ? 0
+    : getMembershipFee(
+        input.checkInTime,
+        input.customerAge,
+        input.membershipCardType,
+        input.membershipValidUntil
+      );
+
+  if (membershipFee > 0) {
+    lineItems.push({ description: 'Membership Fee', amount: membershipFee });
+  }
+
+  if (sixMonthMembershipPurchaseFee > 0) {
+    lineItems.push({ description: '6 Month Membership', amount: sixMonthMembershipPurchaseFee });
+  }
+
+  const total = renewalFee + membershipFee + sixMonthMembershipPurchaseFee;
+
+  return {
+    rentalFee: renewalFee,
+    membershipFee,
+    total,
+    lineItems,
+    messages: ['No refunds'],
+  };
+}
+
+/**
  * Get upgrade fee amounts (informational only, charged when upgrade happens).
  */
 export function getUpgradeFee(from: RentalType, to: RentalType): number | null {

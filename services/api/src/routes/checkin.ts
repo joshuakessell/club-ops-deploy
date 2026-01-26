@@ -22,7 +22,7 @@ import type {
   SelectionAcknowledgedPayload,
   CheckinOptionHighlightedPayload,
 } from '@club-ops/shared';
-import { calculatePriceQuote, type PricingInput } from '../pricing/engine';
+import { calculatePriceQuote, calculateRenewalQuote, type PricingInput } from '../pricing/engine';
 import {
   AGREEMENT_LEGAL_BODY_HTML_BY_LANG,
   IdScanPayloadSchema,
@@ -69,6 +69,7 @@ interface LaneSessionRow {
   membership_choice?: 'ONE_TIME' | 'SIX_MONTH' | null;
   kiosk_acknowledged_at?: Date | null;
   checkin_mode: string | null; // 'CHECKIN' or 'RENEWAL'
+  renewal_hours?: number | null;
   proposed_rental_type: string | null;
   proposed_by: string | null;
   selection_confirmed: boolean;
@@ -365,6 +366,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       idScanValue: z.string().min(1).optional(),
       membershipScanValue: z.string().optional(),
       visitId: z.string().uuid().optional(),
+      renewalHours: z.union([z.literal(2), z.literal(6)]).optional(),
     })
     .refine((val) => !!val.customerId || !!val.idScanValue, {
       message: 'customerId or idScanValue is required',
@@ -405,6 +407,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
       idScanValue?: string;
       membershipScanValue?: string;
       visitId?: string;
+      renewalHours?: 2 | 6;
     };
   }>(
     '/v1/checkin/lane/:laneId/start',
@@ -428,7 +431,13 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      const { customerId: requestedCustomerId, idScanValue, membershipScanValue, visitId } = body;
+      const {
+        customerId: requestedCustomerId,
+        idScanValue,
+        membershipScanValue,
+        visitId,
+        renewalHours,
+      } = body;
 
       try {
         const result = await transaction(async (client) => {
@@ -518,6 +527,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
           let visitIdForSession: string | null = null;
           let blockEndsAtDate: Date | null = null;
           let currentTotalHours = 0;
+          let renewalHoursForSession: number | null = null;
           let activeAssignedResourceType: 'room' | 'locker' | null = null;
           let activeAssignedResourceNumber: string | null = null;
           let activeRentalType: string | null = null;
@@ -568,6 +578,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             }
           };
 
+          if (renewalHours && !visitId) {
+            throw { statusCode: 400, message: 'renewalHours requires an explicit visitId' };
+          }
+
           if (visitId) {
             // Explicit visit selection forces renewal
             const visitResult = await client.query<{
@@ -587,6 +601,26 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             computedMode = 'RENEWAL';
             await resolveVisitBlocks(visit.id);
             await resolveActiveAssignment(visit.id);
+
+            const requestedRenewalHours = renewalHours ?? 6;
+            if (!blockEndsAtDate) {
+              throw { statusCode: 400, message: 'Cannot determine checkout time for renewal' };
+            }
+            const now = new Date();
+            const diffMs = Math.abs(blockEndsAtDate.getTime() - now.getTime());
+            if (diffMs > 60 * 60 * 1000) {
+              throw {
+                statusCode: 400,
+                message: 'Renewal is only available within 1 hour of checkout',
+              };
+            }
+            if (currentTotalHours + requestedRenewalHours > 14) {
+              throw {
+                statusCode: 400,
+                message: `Renewal would exceed 14-hour maximum. Current total: ${currentTotalHours} hours, renewal would add ${requestedRenewalHours} hours.`,
+              };
+            }
+            renewalHoursForSession = requestedRenewalHours;
           } else if (customerId) {
             const activeVisit = await client.query<{ id: string }>(
               `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
@@ -594,6 +628,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             );
             if (activeVisit.rows.length > 0) {
               const activeVisitId = activeVisit.rows[0]!.id;
+
+              await resolveVisitBlocks(activeVisitId);
 
               const activeBlock = await client.query<{
                 starts_at: Date;
@@ -648,6 +684,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                   checkinAt: block?.starts_at ? block.starts_at.toISOString() : null,
                   checkoutAt: block?.ends_at ? block.ends_at.toISOString() : null,
                   overdue: block?.ends_at ? block.ends_at.getTime() < Date.now() : null,
+                  currentTotalHours,
                   waitlist: wl
                     ? {
                         id: wl.id,
@@ -682,8 +719,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                  status = 'ACTIVE',
                  staff_id = $4,
                  checkin_mode = $5,
+                 renewal_hours = $6,
                  updated_at = NOW()
-             WHERE id = $6
+             WHERE id = $7
              RETURNING *`,
               [
                 customerName,
@@ -691,6 +729,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 customerId,
                 staffId,
                 computedMode,
+                renewalHoursForSession,
                 existingSession.rows[0]!.id,
               ]
             );
@@ -699,10 +738,18 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             // Create new session
             const newSessionResult = await client.query<LaneSessionRow>(
               `INSERT INTO lane_sessions 
-             (lane_id, status, staff_id, customer_id, customer_display_name, membership_number, checkin_mode)
-             VALUES ($1, 'ACTIVE', $2, $3, $4, $5, $6)
+             (lane_id, status, staff_id, customer_id, customer_display_name, membership_number, checkin_mode, renewal_hours)
+             VALUES ($1, 'ACTIVE', $2, $3, $4, $5, $6, $7)
              RETURNING *`,
-              [laneId, staffId, customerId, customerName, membershipNumber, computedMode]
+              [
+                laneId,
+                staffId,
+                customerId,
+                customerName,
+                membershipNumber,
+                computedMode,
+                renewalHoursForSession,
+              ]
             );
             session = newSessionResult.rows[0]!;
           }
@@ -733,6 +780,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             blockEndsAt: toDate(blockEndsAtDate)?.toISOString(),
             visitId: visitIdForSession || undefined,
             currentTotalHours: computedMode === 'RENEWAL' ? currentTotalHours : undefined,
+            renewalHours: renewalHoursForSession ?? undefined,
             pastDueBalance,
             pastDueBlocked,
             activeAssignedResourceType: activeAssignedResourceType || undefined,
@@ -1479,11 +1527,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             const updateResult = await client.query<LaneSessionRow>(
               `UPDATE lane_sessions
              SET customer_id = $1,
-                 customer_display_name = $2,
-                 status = 'ACTIVE',
-                 staff_id = $3,
-                 checkin_mode = $4,
-                 updated_at = NOW()
+                customer_display_name = $2,
+                status = 'ACTIVE',
+                staff_id = $3,
+                checkin_mode = $4,
+                renewal_hours = NULL,
+                updated_at = NOW()
              WHERE id = $5
              RETURNING *`,
               [customerId, customerName, staffId, computedMode, existingSession.rows[0]!.id]
@@ -1493,8 +1542,8 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             // Create new session
             const newSessionResult = await client.query<LaneSessionRow>(
               `INSERT INTO lane_sessions 
-             (lane_id, status, staff_id, customer_id, customer_display_name, checkin_mode)
-             VALUES ($1, 'ACTIVE', $2, $3, $4, $5)
+             (lane_id, status, staff_id, customer_id, customer_display_name, checkin_mode, renewal_hours)
+             VALUES ($1, 'ACTIVE', $2, $3, $4, $5, NULL)
              RETURNING *`,
               [laneId, staffId, customerId, customerName, computedMode]
             );
@@ -2547,6 +2596,15 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             session.backup_rental_type ||
             'LOCKER') as 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | 'GYM_LOCKER';
 
+          const isRenewal = session.checkin_mode === 'RENEWAL';
+          const renewalHours =
+            session.renewal_hours === 2 || session.renewal_hours === 6
+              ? session.renewal_hours
+              : null;
+          if (isRenewal && !renewalHours) {
+            throw { statusCode: 400, message: 'Renewal hours not set for this session' };
+          }
+
           // Calculate price quote
           const pricingInput: PricingInput = {
             rentalType,
@@ -2557,7 +2615,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             includeSixMonthMembershipPurchase: !!session.membership_purchase_intent,
           };
 
-          const quote = calculatePriceQuote(pricingInput);
+          const quote = isRenewal
+            ? calculateRenewalQuote({
+                ...pricingInput,
+                renewalHours,
+              })
+            : calculatePriceQuote(pricingInput);
 
           // Ensure at most one active DUE payment intent for this lane session.
           // - If one exists, reuse newest DUE and cancel extras.
@@ -3148,11 +3211,20 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           // Complete check-in: create visit and check-in block with PDF
           const isRenewal = session.checkin_mode === 'RENEWAL';
+          const renewalHours =
+            session.renewal_hours === 2 || session.renewal_hours === 6
+              ? session.renewal_hours
+              : null;
 
           let visitId: string;
-          let blockType: 'INITIAL' | 'RENEWAL';
+          let blockType: 'INITIAL' | 'RENEWAL' | 'FINAL2H';
+          let startsAt: Date;
+          let endsAt: Date;
 
           if (isRenewal) {
+            if (!renewalHours) {
+              throw { statusCode: 400, message: 'Renewal hours not set for this session' };
+            }
             const visitResult = await client.query<{ id: string }>(
               `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
               [session.customer_id]
@@ -3161,7 +3233,49 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               throw { statusCode: 400, message: 'No active visit found for renewal' };
             }
             visitId = visitResult.rows[0]!.id;
-            blockType = 'RENEWAL';
+
+            const blocksResult = await client.query<{
+              starts_at: Date;
+              ends_at: Date;
+            }>(
+              `SELECT starts_at, ends_at
+               FROM checkin_blocks
+               WHERE visit_id = $1
+               ORDER BY ends_at DESC`,
+              [visitId]
+            );
+            if (blocksResult.rows.length === 0) {
+              throw { statusCode: 400, message: 'Visit has no blocks' };
+            }
+
+            let currentTotalHours = 0;
+            for (const block of blocksResult.rows) {
+              const hours = (block.ends_at.getTime() - block.starts_at.getTime()) / (1000 * 60 * 60);
+              currentTotalHours += hours;
+            }
+
+            const latestBlockEnd = blocksResult.rows[0]!.ends_at;
+            const diffMs = Math.abs(latestBlockEnd.getTime() - Date.now());
+            if (diffMs > 60 * 60 * 1000) {
+              throw {
+                statusCode: 400,
+                message: 'Renewal is only available within 1 hour of checkout',
+              };
+            }
+
+            if (currentTotalHours + renewalHours > 14) {
+              throw {
+                statusCode: 400,
+                message: `Renewal would exceed 14-hour maximum. Current total: ${currentTotalHours} hours, renewal would add ${renewalHours} hours.`,
+              };
+            }
+
+            startsAt = latestBlockEnd;
+            endsAt =
+              renewalHours === 2
+                ? new Date(startsAt.getTime() + 2 * 60 * 60 * 1000)
+                : roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
+            blockType = renewalHours === 2 ? 'FINAL2H' : 'RENEWAL';
           } else {
             const visitResult = await client.query<{ id: string }>(
               `INSERT INTO visits (customer_id, started_at) VALUES ($1, NOW()) RETURNING id`,
@@ -3169,10 +3283,9 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             );
             visitId = visitResult.rows[0]!.id;
             blockType = 'INITIAL';
+            startsAt = checkinAt; // demo: now (consistent with PDF)
+            endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
           }
-
-          const startsAt = checkinAt; // demo: now (consistent with PDF)
-          const endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
 
           // Create checkin_block with PDF
           const blockResult = await client.query<{ id: string }>(
@@ -3649,11 +3762,20 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
 
           // Complete check-in: create visit and check-in block with PDF (same as normal flow)
           const isRenewal = session.checkin_mode === 'RENEWAL';
+          const renewalHours =
+            session.renewal_hours === 2 || session.renewal_hours === 6
+              ? session.renewal_hours
+              : null;
 
           let visitId: string;
-          let blockType: 'INITIAL' | 'RENEWAL';
+          let blockType: 'INITIAL' | 'RENEWAL' | 'FINAL2H';
+          let startsAt: Date;
+          let endsAt: Date;
 
           if (isRenewal) {
+            if (!renewalHours) {
+              throw { statusCode: 400, message: 'Renewal hours not set for this session' };
+            }
             const visitResult = await client.query<{ id: string }>(
               `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
               [session.customer_id]
@@ -3662,7 +3784,49 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
               throw { statusCode: 400, message: 'No active visit found for renewal' };
             }
             visitId = visitResult.rows[0]!.id;
-            blockType = 'RENEWAL';
+
+            const blocksResult = await client.query<{
+              starts_at: Date;
+              ends_at: Date;
+            }>(
+              `SELECT starts_at, ends_at
+               FROM checkin_blocks
+               WHERE visit_id = $1
+               ORDER BY ends_at DESC`,
+              [visitId]
+            );
+            if (blocksResult.rows.length === 0) {
+              throw { statusCode: 400, message: 'Visit has no blocks' };
+            }
+
+            let currentTotalHours = 0;
+            for (const block of blocksResult.rows) {
+              const hours = (block.ends_at.getTime() - block.starts_at.getTime()) / (1000 * 60 * 60);
+              currentTotalHours += hours;
+            }
+
+            const latestBlockEnd = blocksResult.rows[0]!.ends_at;
+            const diffMs = Math.abs(latestBlockEnd.getTime() - Date.now());
+            if (diffMs > 60 * 60 * 1000) {
+              throw {
+                statusCode: 400,
+                message: 'Renewal is only available within 1 hour of checkout',
+              };
+            }
+
+            if (currentTotalHours + renewalHours > 14) {
+              throw {
+                statusCode: 400,
+                message: `Renewal would exceed 14-hour maximum. Current total: ${currentTotalHours} hours, renewal would add ${renewalHours} hours.`,
+              };
+            }
+
+            startsAt = latestBlockEnd;
+            endsAt =
+              renewalHours === 2
+                ? new Date(startsAt.getTime() + 2 * 60 * 60 * 1000)
+                : roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
+            blockType = renewalHours === 2 ? 'FINAL2H' : 'RENEWAL';
           } else {
             const visitResult = await client.query<{ id: string }>(
               `INSERT INTO visits (customer_id, started_at) VALUES ($1, $2) RETURNING id`,
@@ -3670,11 +3834,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             );
             visitId = visitResult.rows[0]!.id;
             blockType = 'INITIAL';
+            startsAt = signedAt;
+            endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
           }
-
-          const checkoutAt = roundUpToQuarterHour(
-            new Date(signedAt.getTime() + 6 * 60 * 60 * 1000)
-          );
+          const checkoutAt = endsAt;
 
           const blockResult = await client.query<{ id: string }>(
             `INSERT INTO checkin_blocks
@@ -3684,7 +3847,7 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
             [
               visitId,
               blockType,
-              signedAt,
+              startsAt,
               checkoutAt,
               rentalType,
               assignedResourceType === 'room' ? assignedResourceId : null,
@@ -4044,6 +4207,10 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     const isRenewal = session.checkin_mode === 'RENEWAL';
+    const renewalHours =
+      session.renewal_hours === 2 || session.renewal_hours === 6
+        ? session.renewal_hours
+        : null;
     const rentalType = (session.desired_rental_type ||
       session.backup_rental_type ||
       'LOCKER') as string;
@@ -4051,9 +4218,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
     let visitId: string;
     let startsAt: Date;
     let endsAt: Date;
-    let blockType: 'INITIAL' | 'RENEWAL';
+    let blockType: 'INITIAL' | 'RENEWAL' | 'FINAL2H';
 
     if (isRenewal) {
+      if (!renewalHours) {
+        throw new Error('Renewal hours not set for this session');
+      }
       // For RENEWAL: find existing visit and get latest block end time
       const visitResult = await client.query<{ id: string }>(
         `SELECT id FROM visits WHERE customer_id = $1 AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1`,
@@ -4086,18 +4256,27 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
         currentTotalHours += hours;
       }
 
+      const latestBlockEnd = blocksResult.rows[0]!.ends_at;
+
+      const diffMs = Math.abs(latestBlockEnd.getTime() - Date.now());
+      if (diffMs > 60 * 60 * 1000) {
+        throw new Error('Renewal is only available within 1 hour of checkout');
+      }
+
       // Check 14-hour limit
-      if (currentTotalHours + 6 > 14) {
+      if (currentTotalHours + renewalHours > 14) {
         throw new Error(
-          `Renewal would exceed 14-hour maximum. Current total: ${currentTotalHours} hours, renewal would add 6 hours.`
+          `Renewal would exceed 14-hour maximum. Current total: ${currentTotalHours} hours, renewal would add ${renewalHours} hours.`
         );
       }
 
       // Renewal extends from previous checkout time, not from now
-      const latestBlockEnd = blocksResult.rows[0]!.ends_at;
       startsAt = latestBlockEnd;
-      endsAt = roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000)); // 6 hours from previous checkout, rounded up
-      blockType = 'RENEWAL';
+      endsAt =
+        renewalHours === 2
+          ? new Date(startsAt.getTime() + 2 * 60 * 60 * 1000)
+          : roundUpToQuarterHour(new Date(startsAt.getTime() + 6 * 60 * 60 * 1000));
+      blockType = renewalHours === 2 ? 'FINAL2H' : 'RENEWAL';
     } else {
       // For CHECKIN: create new visit
       const visitResult = await client.query<{ id: string }>(
@@ -4760,6 +4939,15 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 updatedSession.backup_rental_type ||
                 'LOCKER') as 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | 'GYM_LOCKER';
 
+              const isRenewal = updatedSession.checkin_mode === 'RENEWAL';
+              const renewalHours =
+                updatedSession.renewal_hours === 2 || updatedSession.renewal_hours === 6
+                  ? updatedSession.renewal_hours
+                  : null;
+              if (isRenewal && !renewalHours) {
+                throw { statusCode: 400, message: 'Renewal hours not set for this session' };
+              }
+
               const pricingInput: PricingInput = {
                 rentalType,
                 customerAge,
@@ -4769,7 +4957,12 @@ export async function checkinRoutes(fastify: FastifyInstance): Promise<void> {
                 includeSixMonthMembershipPurchase: intent !== 'NONE',
               };
 
-              const quote = calculatePriceQuote(pricingInput);
+              const quote = isRenewal
+                ? calculateRenewalQuote({
+                    ...pricingInput,
+                    renewalHours,
+                  })
+                : calculatePriceQuote(pricingInput);
 
               await client.query(
                 `UPDATE payment_intents

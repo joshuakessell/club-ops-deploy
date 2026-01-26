@@ -20,6 +20,10 @@ export type RegisterLaneSessionState = {
   membershipPurchaseIntent: 'PURCHASE' | 'RENEW' | null;
   membershipChoice: 'ONE_TIME' | 'SIX_MONTH' | null;
   allowedRentals: string[];
+  mode: 'CHECKIN' | 'RENEWAL' | null;
+  renewalHours: 2 | 6 | null;
+  ledgerLineItems: Array<{ description: string; amount: number }>;
+  ledgerTotal: number | null;
 
   agreementSigned: boolean;
   agreementBypassPending: boolean;
@@ -63,6 +67,10 @@ export const initialRegisterLaneSessionState: RegisterLaneSessionState = {
   membershipPurchaseIntent: null,
   membershipChoice: null,
   allowedRentals: [],
+  mode: null,
+  renewalHours: null,
+  ledgerLineItems: [],
+  ledgerTotal: null,
 
   agreementSigned: false,
   agreementBypassPending: false,
@@ -240,6 +248,21 @@ export function registerLaneSessionReducer(
       if (p.pastDueBalance !== undefined) {
         const balance = Number(p.pastDueBalance);
         next.pastDueBalance = Number.isFinite(balance) ? balance : 0;
+      }
+
+      if (p.mode !== undefined) next.mode = p.mode ?? null;
+      if (p.renewalHours !== undefined) {
+        next.renewalHours =
+          p.renewalHours === 2 || p.renewalHours === 6 ? p.renewalHours : null;
+      }
+      if (p.ledgerLineItems !== undefined) {
+        next.ledgerLineItems = Array.isArray(p.ledgerLineItems) ? p.ledgerLineItems : [];
+      }
+      if (p.ledgerTotal !== undefined) {
+        next.ledgerTotal =
+          typeof p.ledgerTotal === 'number' && Number.isFinite(p.ledgerTotal)
+            ? p.ledgerTotal
+            : null;
       }
 
       return next;

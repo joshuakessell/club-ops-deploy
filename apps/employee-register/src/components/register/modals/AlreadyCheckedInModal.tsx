@@ -7,6 +7,7 @@ export type ActiveCheckinDetails = {
   assignedResourceNumber: string | null;
   checkinAt: string | null;
   checkoutAt: string | null;
+  currentTotalHours?: number | null;
   overdue: boolean | null;
   waitlist: null | {
     id: string;
