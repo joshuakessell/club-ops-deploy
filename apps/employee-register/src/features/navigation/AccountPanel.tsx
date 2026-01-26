@@ -88,11 +88,9 @@ export function AccountPanel() {
         }
         isSubmitting={isSubmitting}
         checkinStage={checkinStage}
-        sessionMode={laneSessionMode}
+        sessionMode={laneSessionMode ?? undefined}
         renewalHours={renewalHours}
         directSelect={directSelect}
-        onDirectSelectRental={(rental) => void handleDirectSelectRental(rental)}
-        onDirectSelectWaitlistBackup={(rental) => void handleDirectSelectWaitlistBackup(rental)}
         onStartedSession={(data) => {
           const patch: Partial<typeof laneSession> = {};
           if (accountCustomerId) patch.customerId = accountCustomerId;

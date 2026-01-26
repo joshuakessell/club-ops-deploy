@@ -3,11 +3,7 @@ import { getErrorMessage, readJson } from '@club-ops/ui';
 import { deriveWaitlistEligibility } from '../../../shared/derive/waitlistEligibility';
 import { API_BASE } from '../shared/api';
 import type { HomeTab, StaffSession } from '../shared/types';
-import {
-  useWaitlistDataState,
-  type InventoryAvailable,
-  type WaitlistEntry,
-} from './useWaitlistDataState';
+import { useWaitlistDataState, type WaitlistEntry } from './useWaitlistDataState';
 
 type RegisterSession = {
   employeeId: string;
@@ -266,7 +262,7 @@ export function useWaitlistUpgradeState({
   return {
     waitlistEntries,
     setSelectedWaitlistEntry,
-    inventoryAvailable: inventoryAvailable as InventoryAvailable | null,
+    inventoryAvailable,
     showWaitlistModal,
     setShowWaitlistModal,
     offerUpgradeModal,

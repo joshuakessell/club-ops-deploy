@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { SessionUpdatedPayloadSchema } from '@club-ops/shared';
+import { SessionUpdatedPayloadSchema, type SessionUpdatedPayload } from '@club-ops/shared';
 import { isRecord, readJson } from '@club-ops/ui';
 import { API_BASE } from '../shared/api';
 
 type LaneSessionActions = {
-  applySessionUpdated: (payload: unknown) => void;
+  applySessionUpdated: (payload: SessionUpdatedPayload) => void;
   resetCleared: () => void;
 };
 

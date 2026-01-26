@@ -119,7 +119,8 @@ For the canonical database meaning/contracts, see:
 For the current schema snapshot and history, see:
 
 - `db/schema.sql`
-- `services/api/migrations/001_init.sql` (baseline)
+- `services/api/migrations/000_baseline.sql` (no-op baseline for migration tracking)
+- `services/api/migrations/001_init.sql` (schema snapshot baseline)
 - `services/api/migrations/_archive/` (legacy migration history before re-baseline)
 
 Note: the re-baselined migration history assumes a clean database. If you're coming from older migrations,
@@ -136,7 +137,8 @@ NNN_description.sql
 Where `NNN` is a zero-padded sequence number (e.g., `009_add_staff_table.sql`).
 
 Migrations are executed in alphabetical order and tracked in the `schema_migrations` table. The current
-baseline is `001_init.sql`, so new migrations should start at `002_...`.
+no-op baseline is `000_baseline.sql`, and `001_init.sql` contains the schema snapshot. New migrations
+should continue the numeric sequence after the latest file.
 
 ## Development
 

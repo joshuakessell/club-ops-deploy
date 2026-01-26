@@ -7,22 +7,17 @@ import {
   type CustomerConfirmationRequiredPayload,
   type SessionUpdatedPayload,
 } from '@club-ops/shared';
-import { safeJsonParse, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
+import { safeJsonParse, isRecord, readJson, getErrorMessage } from '@club-ops/ui';
 import { t, type Language } from '../i18n';
 import { getMembershipStatus, type SessionState } from '../utils/membership';
+import { AgreementFlow } from './AgreementFlow';
+import { SelectionFlow } from './SelectionFlow';
 import { IdleScreen } from '../screens/IdleScreen';
 import { LanguageScreen } from '../screens/LanguageScreen';
 import { LaneSelectionScreen } from '../screens/LaneSelectionScreen';
-import { SelectionScreen } from '../screens/SelectionScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';
-import { AgreementScreen, type Agreement } from '../screens/AgreementScreen';
 import { AgreementBypassScreen } from '../screens/AgreementBypassScreen';
 import { CompleteScreen } from '../screens/CompleteScreen';
-import { UpgradeDisclaimerModal } from '../components/modals/UpgradeDisclaimerModal';
-import { CustomerConfirmationModal } from '../components/modals/CustomerConfirmationModal';
-import { WaitlistModal } from '../components/modals/WaitlistModal';
-import { RenewalDisclaimerModal } from '../components/modals/RenewalDisclaimerModal';
-import { MembershipModal } from '../components/modals/MembershipModal';
 
 interface HealthStatus {
   status: string;
@@ -54,9 +49,6 @@ export function AppComposition() {
   });
   const [view, setView] = useState<AppView>('idle');
   const [selectedRental, setSelectedRental] = useState<string | null>(null);
-  const [agreement, setAgreement] = useState<Agreement | null>(null);
-  const [agreed, setAgreed] = useState(false);
-  const [signatureData, setSignatureData] = useState<string | null>(null);
   const [showUpgradeDisclaimer, setShowUpgradeDisclaimer] = useState(false);
   const [upgradeAction, setUpgradeAction] = useState<'waitlist' | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,11 +76,6 @@ export function AppComposition() {
   // Selection acknowledgement is tracked for gating/coordination (currently no direct UI).
   const [, setSelectionAcknowledged] = useState(true);
   const [upgradeDisclaimerAcknowledged, setUpgradeDisclaimerAcknowledged] = useState(false);
-  const [hasScrolledAgreement, setHasScrolledAgreement] = useState(false);
-  const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
-  const agreementScrollRef = useRef<HTMLDivElement>(null);
-  const isDrawingRef = useRef(false);
-  const idleTimeoutRef = useRef<number | null>(null);
   const welcomeOverlayTimeoutRef = useRef<number | null>(null);
   const lastWelcomeSessionIdRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -282,8 +269,6 @@ export function AppComposition() {
       agreementSignedMethod: undefined,
     });
     setSelectedRental(null);
-    setAgreed(false);
-    setSignatureData(null);
     setShowUpgradeDisclaimer(false);
     setUpgradeAction(null);
     setShowRenewalDisclaimer(false);
@@ -297,7 +282,6 @@ export function AppComposition() {
     setSelectionConfirmedBy(null);
     setSelectionAcknowledged(false);
     setUpgradeDisclaimerAcknowledged(false);
-    setHasScrolledAgreement(false);
     setHighlightedLanguage(null);
     setHighlightedMembershipChoice(null);
     setHighlightedWaitlistBackup(null);
@@ -710,472 +694,6 @@ export function AppComposition() {
     );
   };
 
-  // Load active agreement when agreement view is shown
-  useEffect(() => {
-    const lang = session.customerPrimaryLanguage;
-    if (view === 'agreement') {
-      void (async () => {
-        try {
-          const response = await fetch(`${API_BASE}/v1/agreements/active`);
-          if (!response.ok) {
-            const errorPayload = await readJson(response);
-            throw new Error(getErrorMessage(errorPayload) || 'Failed to load agreement');
-          }
-          const data = (await response.json()) as Agreement;
-          setAgreement({
-            id: data.id,
-            version: data.version,
-            title: lang === 'ES' ? t(lang, 'agreementTitle') : data.title,
-            bodyText: lang === 'ES' ? t(lang, 'agreement.legalBodyHtml') : data.bodyText,
-          });
-        } catch (error) {
-          console.error('Failed to load agreement:', error);
-          alert(t(lang, 'error.loadAgreement'));
-        }
-      })();
-    }
-  }, [API_BASE, view, session.customerPrimaryLanguage]);
-
-  const handleRentalSelection = async (rental: string) => {
-    if (!session.sessionId) {
-      alert(t(session.customerPrimaryLanguage, 'error.noActiveSession'));
-      return;
-    }
-    if (!lane) return;
-
-    const availableCount =
-      inventory?.rooms?.[rental] ??
-      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : undefined);
-
-    // If unavailable, show waitlist modal
-    if (availableCount === 0) {
-      setWaitlistDesiredType(rental);
-      try {
-        await fetch(`${API_BASE}/v1/checkin/lane/${lane}/waitlist-desired`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...kioskAuthHeaders(),
-          },
-          body: JSON.stringify({ waitlistDesiredType: rental }),
-        });
-      } catch {
-        // Best-effort; UI can still proceed with local waitlist flow.
-      }
-      // Fetch waitlist info (position, ETA, upgrade fee)
-      try {
-        const response = await fetch(
-          `${API_BASE}/v1/checkin/lane/${lane}/waitlist-info?desiredTier=${rental}&currentTier=${selectedRental || 'LOCKER'}`
-        );
-        if (response.ok) {
-          const data: unknown = await response.json();
-          if (isRecord(data)) {
-            setWaitlistPosition(typeof data.position === 'number' ? data.position : null);
-            setWaitlistETA(
-              typeof data.estimatedReadyAt === 'string' ? data.estimatedReadyAt : null
-            );
-            setWaitlistUpgradeFee(typeof data.upgradeFee === 'number' ? data.upgradeFee : null);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch waitlist info:', error);
-      }
-      setShowWaitlistModal(true);
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      // Propose selection (customer proposes)
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-        body: JSON.stringify({
-          rentalType: rental,
-          proposedBy: 'CUSTOMER',
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        if (
-          response.status === 409 &&
-          isRecord(errorPayload) &&
-          errorPayload.code === 'LANGUAGE_REQUIRED'
-        ) {
-          setView('language');
-          alert(t('EN', 'selectLanguage'));
-          return;
-        }
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to propose selection');
-      }
-
-      await response.json().catch(() => null);
-      const confirmResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-        body: JSON.stringify({
-          confirmedBy: 'CUSTOMER',
-        }),
-      });
-
-      if (!confirmResponse.ok) {
-        const errorPayload: unknown = await confirmResponse.json().catch(() => null);
-        if (
-          confirmResponse.status === 409 &&
-          isRecord(errorPayload) &&
-          errorPayload.code === 'LANGUAGE_REQUIRED'
-        ) {
-          setView('language');
-          alert(t('EN', 'selectLanguage'));
-          return;
-        }
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
-      }
-
-      const confirmPayload: unknown = await confirmResponse.json().catch(() => null);
-      const confirmedBy =
-        isRecord(confirmPayload) &&
-        (confirmPayload.confirmedBy === 'CUSTOMER' || confirmPayload.confirmedBy === 'EMPLOYEE')
-          ? confirmPayload.confirmedBy
-          : 'CUSTOMER';
-      setProposedRentalType(rental);
-      setProposedBy('CUSTOMER');
-      setSelectionConfirmed(true);
-      setSelectionConfirmedBy(confirmedBy);
-      setIsSubmitting(false);
-    } catch (error) {
-      console.error('Failed to propose selection:', error);
-      // Customer-facing UI: keep it generic (server errors may not be localized).
-      alert(t(session.customerPrimaryLanguage, 'error.processSelection'));
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDisclaimerAcknowledge = async () => {
-    if (!session.sessionId || !upgradeAction) return;
-    if (!lane) return;
-
-    // Upgrade disclaimer is informational only - no signature required
-    // Store acknowledgement and propose backup selection
-    try {
-      const backupType = waitlistBackupType || selectedRental || 'LOCKER';
-
-      // Propose the backup rental type with waitlist info
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-        body: JSON.stringify({
-          rentalType: backupType,
-          proposedBy: 'CUSTOMER',
-          waitlistDesiredType: waitlistDesiredType || undefined,
-          backupRentalType: backupType,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        if (
-          response.status === 409 &&
-          isRecord(errorPayload) &&
-          errorPayload.code === 'LANGUAGE_REQUIRED'
-        ) {
-          setView('language');
-          alert(t('EN', 'selectLanguage'));
-          return;
-        }
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to process waitlist selection');
-      }
-
-      const confirmResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-        body: JSON.stringify({
-          confirmedBy: 'CUSTOMER',
-        }),
-      });
-
-      if (!confirmResponse.ok) {
-        const errorPayload: unknown = await confirmResponse.json().catch(() => null);
-        if (
-          confirmResponse.status === 409 &&
-          isRecord(errorPayload) &&
-          errorPayload.code === 'LANGUAGE_REQUIRED'
-        ) {
-          setView('language');
-          alert(t('EN', 'selectLanguage'));
-          return;
-        }
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
-      }
-
-      const confirmPayload: unknown = await confirmResponse.json().catch(() => null);
-      const confirmedBy =
-        isRecord(confirmPayload) &&
-        (confirmPayload.confirmedBy === 'CUSTOMER' || confirmPayload.confirmedBy === 'EMPLOYEE')
-          ? confirmPayload.confirmedBy
-          : 'CUSTOMER';
-      setUpgradeDisclaimerAcknowledged(true);
-      setShowUpgradeDisclaimer(false);
-      setUpgradeAction(null);
-      setProposedRentalType(backupType);
-      setProposedBy('CUSTOMER');
-      setSelectionConfirmed(true);
-      setSelectionConfirmedBy(confirmedBy);
-    } catch (error) {
-      console.error('Failed to acknowledge upgrade disclaimer:', error);
-      alert(t(session.customerPrimaryLanguage, 'error.process'));
-    }
-  };
-
-  const handleWaitlistBackupSelection = (rental: string) => {
-    if (!session.sessionId || !waitlistDesiredType) {
-      return;
-    }
-
-    const availableCount =
-      inventory?.rooms?.[rental] ??
-      (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : undefined);
-    if (availableCount === 0) {
-      alert(t(session.customerPrimaryLanguage, 'error.rentalNotAvailable'));
-      return;
-    }
-
-    setWaitlistBackupType(rental);
-    setShowWaitlistModal(false);
-
-    // Show upgrade disclaimer modal
-    setUpgradeAction('waitlist');
-    setShowUpgradeDisclaimer(true);
-  };
-
-  const handleWaitlistCancel = async () => {
-    setShowWaitlistModal(false);
-    if (!session.sessionId) {
-      setWaitlistDesiredType(null);
-      setWaitlistBackupType(null);
-      return;
-    }
-    if (!lane) return;
-    try {
-      await fetch(`${API_BASE}/v1/checkin/lane/${lane}/waitlist-desired`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(typeof kioskToken === 'string' && kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
-        },
-        body: JSON.stringify({ waitlistDesiredType: null, sessionId: session.sessionId }),
-      });
-    } catch (error) {
-      console.error('Failed to clear waitlist selection:', error);
-    } finally {
-      setWaitlistDesiredType(null);
-      setWaitlistBackupType(null);
-      setHighlightedWaitlistBackup(null);
-    }
-  };
-
-  useEffect(() => {
-    if (!waitlistDesiredType || !waitlistBackupType) return;
-    if (upgradeDisclaimerAcknowledged) return;
-    if (showUpgradeDisclaimer) return;
-    setUpgradeAction('waitlist');
-    setShowUpgradeDisclaimer(true);
-  }, [
-    showUpgradeDisclaimer,
-    upgradeDisclaimerAcknowledged,
-    waitlistBackupType,
-    waitlistDesiredType,
-  ]);
-
-  useEffect(() => {
-    if (view !== 'selection') return;
-    if (!waitlistDesiredType) return;
-    if (waitlistBackupType) return;
-    if (!session.sessionId) return;
-    const laneId = lane;
-    if (!laneId) return;
-    setShowWaitlistModal(true);
-    void (async () => {
-      try {
-        const response = await fetch(
-          `${API_BASE}/v1/checkin/lane/${laneId}/waitlist-info?desiredTier=${waitlistDesiredType}&currentTier=${selectedRental || 'LOCKER'}`
-        );
-        if (response.ok) {
-          const data: unknown = await response.json();
-          if (isRecord(data)) {
-            setWaitlistPosition(typeof data.position === 'number' ? data.position : null);
-            setWaitlistETA(
-              typeof data.estimatedReadyAt === 'string' ? data.estimatedReadyAt : null
-            );
-            setWaitlistUpgradeFee(typeof data.upgradeFee === 'number' ? data.upgradeFee : null);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch waitlist info:', error);
-      }
-    })();
-  }, [
-    API_BASE,
-    lane,
-    selectedRental,
-    session.sessionId,
-    view,
-    waitlistBackupType,
-    waitlistDesiredType,
-  ]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (idleTimeoutRef.current !== null) {
-        clearTimeout(idleTimeoutRef.current);
-        idleTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  // Initialize signature canvas
-  useEffect(() => {
-    const canvas = signatureCanvasRef.current;
-    if (canvas && view === 'agreement') {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Fill white background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // Set black ink for signature
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-      }
-    }
-  }, [view]);
-
-  const handleSignatureStart = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
-  ) => {
-    isDrawingRef.current = true;
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-
-    // Translate pointer coordinates (CSS pixels) into canvas coordinates (canvas pixels).
-    // The canvas is rendered responsively in CSS, so rect.width/height often differs from canvas.width/height.
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY;
-    if (clientX == null || clientY == null) return;
-    if ('touches' in e) e.preventDefault();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top) * scaleY;
-
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    }
-  };
-
-  const handleSignatureMove = (
-    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
-  ) => {
-    if (!isDrawingRef.current) return;
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY;
-    if (clientX == null || clientY == null) return;
-    if ('touches' in e) e.preventDefault();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (clientX - rect.left) * scaleX;
-    const y = (clientY - rect.top) * scaleY;
-
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.lineTo(x, y);
-      ctx.stroke();
-    }
-  };
-
-  const handleSignatureEnd = () => {
-    isDrawingRef.current = false;
-    const canvas = signatureCanvasRef.current;
-    if (canvas) {
-      setSignatureData(canvas.toDataURL('image/png'));
-    }
-  };
-
-  const handleClearSignature = () => {
-    const canvas = signatureCanvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        // Clear and fill white background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // Reset stroke style to black
-        ctx.strokeStyle = '#000000';
-      }
-      setSignatureData(null);
-    }
-  };
-
-  const handleSubmitAgreement = async () => {
-    if (!agreed || !signatureData || !session.sessionId || !hasScrolledAgreement) {
-      const lang = session.customerPrimaryLanguage;
-      alert(t(lang, 'signatureRequired'));
-      return;
-    }
-    if (!lane) return;
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/sign-agreement`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-        body: JSON.stringify({
-          signaturePayload: signatureData, // Full data URL or base64
-          sessionId: session.sessionId || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to sign agreement');
-      }
-
-      // Wait for SESSION_UPDATED event with assignment to show complete view
-      // The view will be updated via WebSocket when assignment is created
-    } catch (error) {
-      console.error('Failed to sign agreement:', error);
-      alert(t(session.customerPrimaryLanguage, 'error.signAgreement'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // Handle language selection
   const handleLanguageSelection = async (language: Language) => {
     if (!session.sessionId) {
@@ -1211,157 +729,6 @@ export function AppComposition() {
       setIsSubmitting(false);
     }
   };
-
-  const handleCustomerConfirmSelection = async (confirmed: boolean) => {
-    if (!customerConfirmationData?.sessionId) return;
-    if (!lane) return;
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/customer-confirm`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
-        body: JSON.stringify({
-          sessionId: customerConfirmationData.sessionId,
-          confirmed,
-        }),
-      });
-      if (response.ok) {
-        setShowCustomerConfirmation(false);
-        setCustomerConfirmationData(null);
-      }
-    } catch (error) {
-      console.error('Failed to confirm selection:', error);
-      alert(t(session.customerPrimaryLanguage, 'error.confirmSelection'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const openMembershipModal = (intent: 'PURCHASE' | 'RENEW') => {
-    setMembershipModalIntent(intent);
-    setShowMembershipModal(true);
-  };
-
-  const handleSelectOneTimeMembership = async () => {
-    setMembershipChoice('ONE_TIME');
-    // Ensure one-time explicitly clears any previously selected 6-month intent.
-    if (session.membershipPurchaseIntent) {
-      await handleClearMembershipPurchaseIntent();
-    }
-    // Persist the explicit choice so employee-register can mirror the kiosk step reliably.
-    if (session.sessionId) {
-      if (!lane) return;
-      try {
-        const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
-          body: JSON.stringify({ choice: 'ONE_TIME', sessionId: session.sessionId }),
-        });
-        if (!response.ok && response.status === 409) {
-          const errorPayload: unknown = await response.json().catch(() => null);
-          if (isRecord(errorPayload) && errorPayload.code === 'LANGUAGE_REQUIRED') {
-            setView('language');
-            alert(t('EN', 'selectLanguage'));
-          }
-        }
-        // SESSION_UPDATED will reconcile; we don't need to block UX on this.
-      } catch {
-        // Best-effort (UI still works locally).
-      }
-    }
-  };
-
-  const handleClearMembershipPurchaseIntent = async () => {
-    if (!session.sessionId) return;
-    if (!lane) return;
-    const lang = session.customerPrimaryLanguage;
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(
-        `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
-          body: JSON.stringify({ intent: 'NONE', sessionId: session.sessionId }),
-        }
-      );
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        if (
-          response.status === 409 &&
-          isRecord(errorPayload) &&
-          errorPayload.code === 'LANGUAGE_REQUIRED'
-        ) {
-          setView('language');
-          alert(t('EN', 'selectLanguage'));
-          return;
-        }
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to clear membership intent');
-      }
-      // Immediate UX; server WS broadcast will also reconcile.
-      setSession((prev) => ({ ...prev, membershipPurchaseIntent: null }));
-    } catch (error) {
-      console.error('Failed to clear membership purchase intent:', error);
-      alert(error instanceof Error ? error.message : t(lang, 'error.process'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleMembershipContinue = async () => {
-    if (!membershipModalIntent || !session.sessionId) return;
-    if (!lane) return;
-    const lang = session.customerPrimaryLanguage;
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(
-        `${API_BASE}/v1/checkin/lane/${lane}/membership-purchase-intent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...kioskAuthHeaders() },
-          body: JSON.stringify({ intent: membershipModalIntent, sessionId: session.sessionId }),
-        }
-      );
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        if (
-          response.status === 409 &&
-          isRecord(errorPayload) &&
-          errorPayload.code === 'LANGUAGE_REQUIRED'
-        ) {
-          setView('language');
-          alert(t('EN', 'selectLanguage'));
-          return;
-        }
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to request membership purchase');
-      }
-      // Immediate UX; server WS broadcast will also reconcile.
-      setSession((prev) => ({ ...prev, membershipPurchaseIntent: membershipModalIntent }));
-      setMembershipChoice('SIX_MONTH');
-      setShowMembershipModal(false);
-      setMembershipModalIntent(null);
-    } catch (error) {
-      console.error('Failed to set membership purchase intent:', error);
-      alert(error instanceof Error ? error.message : t(lang, 'error.process'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Check if agreement has been scrolled
-  useEffect(() => {
-    const scrollArea = agreementScrollRef.current;
-    if (scrollArea && view === 'agreement') {
-      const handleScroll = () => {
-        const { scrollTop, scrollHeight, clientHeight } = scrollArea;
-        if (scrollTop + clientHeight >= scrollHeight - 10) {
-          setHasScrolledAgreement(true);
-        }
-      };
-      scrollArea.addEventListener('scroll', handleScroll);
-      return () => scrollArea.removeEventListener('scroll', handleScroll);
-    }
-  }, [view]);
 
   const welcomeOverlayNode = <WelcomeOverlay />;
 
@@ -1420,29 +787,17 @@ export function AppComposition() {
       );
 
     case 'agreement':
-      // Only show agreement for CHECKIN/RENEWAL
-      if (checkinMode !== 'CHECKIN' && checkinMode !== 'RENEWAL') {
-        // For upgrades, skip agreement and go to complete (will be handled by useEffect above)
-        return null;
-      }
       return (
-        <AgreementScreen
-          customerPrimaryLanguage={session.customerPrimaryLanguage}
-          agreement={agreement}
-          agreed={agreed}
-          signatureData={signatureData}
-          hasScrolledAgreement={hasScrolledAgreement}
-          isSubmitting={isSubmitting}
+        <AgreementFlow
+          apiBase={API_BASE}
+          kioskAuthHeaders={kioskAuthHeaders}
+          session={session}
+          lane={lane}
+          checkinMode={checkinMode}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
-          agreementScrollRef={agreementScrollRef}
-          signatureCanvasRef={signatureCanvasRef}
-          onAgreeChange={setAgreed}
-          onSignatureStart={handleSignatureStart}
-          onSignatureMove={handleSignatureMove}
-          onSignatureEnd={handleSignatureEnd}
-          onClearSignature={handleClearSignature}
-          onSubmit={() => void handleSubmitAgreement()}
+          isSubmitting={isSubmitting}
+          setIsSubmitting={setIsSubmitting}
         />
       );
 
@@ -1459,89 +814,65 @@ export function AppComposition() {
         />
       );
 
-    case 'selection': {
-      const membershipStatus = getMembershipStatus(session, Date.now());
-      const isMember = membershipStatus === 'ACTIVE' || membershipStatus === 'PENDING';
-      const isExpired = membershipStatus === 'EXPIRED';
+    case 'selection':
       return (
-        <>
-          <SelectionScreen
-            session={session}
-            inventory={inventory}
-            proposedRentalType={proposedRentalType}
-            proposedBy={proposedBy}
-            selectionConfirmed={selectionConfirmed}
-            selectionConfirmedBy={selectionConfirmedBy}
-            selectedRental={selectedRental}
-            isSubmitting={isSubmitting}
-            orientationOverlay={orientationOverlay}
-            welcomeOverlay={welcomeOverlayNode}
-            onSelectRental={(rental) => void handleRentalSelection(rental)}
-            membershipChoice={isMember ? null : membershipChoice}
-            onSelectOneTimeMembership={() => void handleSelectOneTimeMembership()}
-            onSelectSixMonthMembership={() => openMembershipModal(isExpired ? 'RENEW' : 'PURCHASE')}
-            highlightedMembershipChoice={highlightedMembershipChoice}
-          />
-          <UpgradeDisclaimerModal
-            isOpen={showUpgradeDisclaimer}
-            customerPrimaryLanguage={session.customerPrimaryLanguage}
-            onClose={() => setShowUpgradeDisclaimer(false)}
-            onAcknowledge={() => void handleDisclaimerAcknowledge()}
-            isSubmitting={isSubmitting}
-          />
-          {customerConfirmationData && (
-            <CustomerConfirmationModal
-              isOpen={showCustomerConfirmation}
-              customerPrimaryLanguage={session.customerPrimaryLanguage}
-              data={customerConfirmationData}
-              onAccept={() => void handleCustomerConfirmSelection(true)}
-              onDecline={() => void handleCustomerConfirmSelection(false)}
-              isSubmitting={isSubmitting}
-            />
-          )}
-          {waitlistDesiredType && (
-            <WaitlistModal
-              isOpen={showWaitlistModal}
-              customerPrimaryLanguage={session.customerPrimaryLanguage}
-              desiredType={waitlistDesiredType}
-              allowedRentals={session.allowedRentals}
-              inventory={inventory}
-              position={waitlistPosition}
-              eta={waitlistETA}
-              upgradeFee={waitlistUpgradeFee}
-              isSubmitting={isSubmitting}
-              highlightedBackupRental={highlightedWaitlistBackup}
-              onBackupSelection={handleWaitlistBackupSelection}
-              onClose={() => void handleWaitlistCancel()}
-            />
-          )}
-          <RenewalDisclaimerModal
-            isOpen={showRenewalDisclaimer}
-            customerPrimaryLanguage={session.customerPrimaryLanguage}
-            blockEndsAt={session.blockEndsAt}
-            onClose={() => setShowRenewalDisclaimer(false)}
-            onProceed={() => {
-              setShowRenewalDisclaimer(false);
-              setView('agreement');
-            }}
-            isSubmitting={isSubmitting}
-          />
-          {membershipModalIntent && (
-            <MembershipModal
-              isOpen={showMembershipModal}
-              customerPrimaryLanguage={session.customerPrimaryLanguage}
-              intent={membershipModalIntent}
-              onContinue={() => void handleMembershipContinue()}
-              onClose={() => {
-                setShowMembershipModal(false);
-                setMembershipModalIntent(null);
-              }}
-              isSubmitting={isSubmitting}
-            />
-          )}
-        </>
+        <SelectionFlow
+          apiBase={API_BASE}
+          kioskAuthHeaders={kioskAuthHeaders}
+          session={session}
+          lane={lane}
+          inventory={inventory}
+          selectedRental={selectedRental}
+          proposedRentalType={proposedRentalType}
+          proposedBy={proposedBy}
+          selectionConfirmed={selectionConfirmed}
+          selectionConfirmedBy={selectionConfirmedBy}
+          waitlistDesiredType={waitlistDesiredType}
+          waitlistBackupType={waitlistBackupType}
+          waitlistPosition={waitlistPosition}
+          waitlistETA={waitlistETA}
+          waitlistUpgradeFee={waitlistUpgradeFee}
+          showWaitlistModal={showWaitlistModal}
+          showUpgradeDisclaimer={showUpgradeDisclaimer}
+          upgradeAction={upgradeAction}
+          upgradeDisclaimerAcknowledged={upgradeDisclaimerAcknowledged}
+          showRenewalDisclaimer={showRenewalDisclaimer}
+          showCustomerConfirmation={showCustomerConfirmation}
+          customerConfirmationData={customerConfirmationData}
+          membershipChoice={membershipChoice}
+          showMembershipModal={showMembershipModal}
+          membershipModalIntent={membershipModalIntent}
+          highlightedMembershipChoice={highlightedMembershipChoice}
+          highlightedWaitlistBackup={highlightedWaitlistBackup}
+          orientationOverlay={orientationOverlay}
+          welcomeOverlay={welcomeOverlayNode}
+          isSubmitting={isSubmitting}
+          setIsSubmitting={setIsSubmitting}
+          onSwitchToLanguage={() => setView('language')}
+          onProceedToAgreement={() => setView('agreement')}
+          setProposedRentalType={setProposedRentalType}
+          setProposedBy={setProposedBy}
+          setSelectionConfirmed={setSelectionConfirmed}
+          setSelectionConfirmedBy={setSelectionConfirmedBy}
+          setWaitlistDesiredType={setWaitlistDesiredType}
+          setWaitlistBackupType={setWaitlistBackupType}
+          setWaitlistPosition={setWaitlistPosition}
+          setWaitlistETA={setWaitlistETA}
+          setWaitlistUpgradeFee={setWaitlistUpgradeFee}
+          setShowWaitlistModal={setShowWaitlistModal}
+          setShowUpgradeDisclaimer={setShowUpgradeDisclaimer}
+          setUpgradeAction={setUpgradeAction}
+          setUpgradeDisclaimerAcknowledged={setUpgradeDisclaimerAcknowledged}
+          setShowRenewalDisclaimer={setShowRenewalDisclaimer}
+          setShowCustomerConfirmation={setShowCustomerConfirmation}
+          setCustomerConfirmationData={setCustomerConfirmationData}
+          setMembershipChoice={setMembershipChoice}
+          setShowMembershipModal={setShowMembershipModal}
+          setMembershipModalIntent={setMembershipModalIntent}
+          setHighlightedWaitlistBackup={setHighlightedWaitlistBackup}
+          setSession={setSession}
+        />
       );
-    }
 
     default:
       return null;

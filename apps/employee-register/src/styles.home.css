@@ -1,0 +1,495 @@
+/* ------------------------------------------------------------
+   Home actions (left tabs + right panel)
+------------------------------------------------------------ */
+
+.er-home-layout {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-height: 0;
+}
+
+.er-home-tabs {
+  /* Fixed-position left rail (behaves like the right drawer tabs) */
+  position: fixed;
+  left: 0;
+  top: calc(var(--er-topbar-height) + var(--er-viewport-gap));
+  bottom: var(--er-viewport-gap);
+  width: var(--er-home-rail-width);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+
+  padding: 0.5rem 0;
+  z-index: 90; /* under .register-top-bar (100), above main content */
+  pointer-events: auto;
+}
+
+.er-home-tab-btn {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  /* Slightly shorter so all tabs fit on landscape iPad */
+  padding: 0.9rem 1.05rem !important;
+  min-height: 64px !important;
+  font-weight: 800;
+  border-radius: 0 9999px 9999px 0;
+}
+
+.er-home-tab-btn--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: grayscale(0.25);
+}
+
+.er-home-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+
+  /* Keep content fully visible to the right of the fixed rail,
+     with a gutter that matches the right edge gutter. */
+  margin-left: var(--er-home-rail-width);
+  padding-left: var(--er-home-content-gap);
+  padding-right: var(--er-home-content-gap);
+}
+
+.er-home-tab-btn--checkout {
+  font-size: 22px !important;
+  letter-spacing: 0.01em;
+}
+
+.inventory-panel h2:not(.er-card-title),
+.actions-panel h2:not(.er-card-title) {
+  font-size: 1rem;
+  color: #fff;
+  margin-bottom: 1rem;
+  letter-spacing: 0.01em;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.inventory-card {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--cs-radius-xl);
+  padding: 1.25rem;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all var(--cs-transition-base) var(--cs-ease-standard);
+}
+
+.inventory-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateY(-2px);
+}
+
+.inventory-card h3 {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+}
+
+.er-retail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-height: 0;
+}
+
+.er-retail-section-title {
+  font-weight: 800;
+  color: rgba(226, 232, 240, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+}
+
+.er-retail-section-hint {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(148, 163, 184, 0.9);
+  text-transform: none;
+}
+
+.er-retail-items {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
+  --er-retail-item-row-height: 4rem;
+  grid-auto-rows: var(--er-retail-item-row-height);
+  max-height: calc(var(--er-retail-item-row-height) + var(--er-retail-item-row-height) + 0.6rem);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.er-retail-item-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  font-weight: 700;
+  height: 100%;
+}
+
+.er-retail-price {
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.er-retail-cart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 80px;
+  max-height: min(35vh, 260px);
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.er-retail-cart-empty {
+  color: rgba(148, 163, 184, 0.9);
+  font-weight: 600;
+}
+
+.er-retail-cart-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.er-retail-cart-remove {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.er-retail-cart-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.er-retail-cart-name {
+  font-weight: 700;
+}
+
+.er-retail-cart-meta {
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.9);
+  font-weight: 700;
+}
+
+.er-retail-cart-unit {
+  font-weight: 800;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.er-retail-total {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 900;
+  font-size: 1.05rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.er-retail-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.er-retail-tender-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.counts {
+  display: flex;
+  gap: 1rem;
+}
+
+.count {
+  flex: 1;
+  text-align: center;
+}
+
+.count-value {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.count-label {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.count-clean .count-value {
+  color: var(--success);
+}
+.count-cleaning .count-value {
+  color: var(--warning);
+}
+.count-dirty .count-value {
+  color: var(--error);
+}
+
+.action-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  color: var(--text);
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--cs-transition-base) var(--cs-ease-standard);
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.btn-icon {
+  font-size: 1.4rem;
+}
+
+/* Top action buttons: same size as Lane Session buttons, but not inside a bar/card */
+.register-top-actions {
+  margin-top: 0.75rem;
+  margin-bottom: 1rem; /* keep symmetric spacing around the Lane Session header */
+}
+
+.footer {
+  text-align: center;
+  margin-top: 2rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* Customer Account */
+.er-account-already-visiting .cs-liquid-card {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.er-account-actions {
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.er-renewal-modal__actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem;
+}
+
+/* Lock Screen Styles */
+.lock-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  padding: 2rem;
+}
+
+.lock-screen-content {
+  width: 100%;
+  max-width: 500px;
+  padding: 2rem;
+}
+
+.lock-screen-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.lock-screen-header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.lock-screen-header p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.lock-screen-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-button {
+  flex: 1;
+  padding: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tab-button:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.tab-button.active {
+  color: var(--text);
+}
+
+.tab-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lock-screen-error {
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid var(--error);
+  border-radius: 0.5rem;
+  color: var(--error);
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.lock-screen-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.qr-scanner-container {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  aspect-ratio: 1;
+  border: 2px solid var(--border);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: #000;
+}
+
+.qr-scanner-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.qr-scanner-canvas {
+  display: none;
+}
+
+.qr-scanner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  color: var(--text);
+}
+
+.spinner {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.qr-hint {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.lock-screen-pin {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pin-input {
+  width: 100%;
+  padding: 1rem;
+  color: var(--text);
+  font-size: 1.25rem;
+  text-align: center;
+  letter-spacing: 0.5em;
+  font-family: monospace;
+}
+
+.pin-input:focus {
+  outline: none;
+}
+
+.pin-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pin-submit-button {
+  width: 100%;
+  padding: 1rem;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--cs-transition-base) var(--cs-ease-standard);
+}
+
+.pin-submit-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.pin-submit-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.pin-submit-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

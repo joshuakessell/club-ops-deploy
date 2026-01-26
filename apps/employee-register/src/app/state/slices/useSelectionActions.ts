@@ -19,7 +19,7 @@ type Params = {
   currentSessionId: string | null;
   inventoryAvailable: InventoryAvailable;
   waitlistDesiredTier: string | null;
-  proposedRentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL' | null;
+  proposedRentalType: string | null;
   setIsSubmitting: (value: boolean) => void;
   pollOnce: () => Promise<void>;
   setSelectionConfirmed: (value: boolean) => void;
@@ -176,6 +176,96 @@ export function useSelectionActions({
     }
   };
 
+  const handleDirectSelectRental = async (
+    rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => {
+    if (!currentSessionId || !session?.sessionToken) return;
+    setIsSubmitting(true);
+    try {
+      const availableCount =
+        inventoryAvailable?.rooms?.[rentalType] ??
+        (rentalType === 'LOCKER' ? inventoryAvailable?.lockers : undefined);
+      const waitlistDesiredType = availableCount === 0 ? rentalType : undefined;
+
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ rentalType, proposedBy: 'EMPLOYEE', waitlistDesiredType }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to select rental');
+      }
+
+      const confirmResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ confirmedBy: 'EMPLOYEE' }),
+      });
+      if (!confirmResponse.ok) {
+        const errorPayload: unknown = await confirmResponse.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
+      }
+
+      await pollOnce();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to select rental');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDirectSelectWaitlistBackup = async (
+    rentalType: 'LOCKER' | 'STANDARD' | 'DOUBLE' | 'SPECIAL'
+  ) => {
+    if (!currentSessionId || !session?.sessionToken || !waitlistDesiredTier) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/propose-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          rentalType,
+          proposedBy: 'EMPLOYEE',
+          waitlistDesiredType: waitlistDesiredTier,
+          backupRentalType: rentalType,
+        }),
+      });
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to select waitlist backup');
+      }
+
+      const confirmResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({ confirmedBy: 'EMPLOYEE' }),
+      });
+      if (!confirmResponse.ok) {
+        const errorPayload: unknown = await confirmResponse.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to confirm selection');
+      }
+
+      await pollOnce();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to select waitlist backup');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleConfirmSelection = async () => {
     if (!currentSessionId || !session?.sessionToken || !proposedRentalType) {
       return;
@@ -268,6 +358,8 @@ export function useSelectionActions({
     handleProposeSelection,
     handleCustomerSelectRental,
     handleSelectWaitlistBackupAsCustomer,
+    handleDirectSelectRental,
+    handleDirectSelectWaitlistBackup,
     handleConfirmSelection,
     handleStartAgreementBypass,
     handleConfirmPhysicalAgreement,
