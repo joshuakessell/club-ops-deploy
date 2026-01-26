@@ -1,0 +1,15 @@
+.panel-content {
+  padding: 2rem;
+}
+
+.panel-content--md {
+  padding: 1.25rem;
+}
+
+.panel-content--compact {
+  padding: 1rem 1.5rem 1.5rem;
+}
+
+.panel-content--none {
+  padding: 0;
+}

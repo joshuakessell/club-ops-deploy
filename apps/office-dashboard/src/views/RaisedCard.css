@@ -1,0 +1,15 @@
+.csRaisedCard {
+  position: relative;
+  overflow: hidden;
+  padding: 1rem;
+  /* Background, border, border-radius, box-shadow handled by cs-liquid-card */
+  /* Keep only layout properties */
+}
+
+.csRaisedCard--lg {
+  padding: 1.5rem;
+}
+
+.csRaisedCard--none {
+  padding: 0;
+}

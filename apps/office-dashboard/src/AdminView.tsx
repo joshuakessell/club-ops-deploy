@@ -5,6 +5,7 @@ import type { WebSocketEvent } from '@club-ops/shared';
 import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
 import { getApiUrl } from '@club-ops/shared';
+import { RaisedCard } from './views/RaisedCard';
 
 const API_BASE = getApiUrl('/api');
 
@@ -337,38 +338,38 @@ export function AdminView({ session }: AdminViewProps) {
                 gap: '1rem',
               }}
             >
-              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
+              <RaisedCard padding="lg">
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.roomsOccupied ?? 0}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                   Rooms Occupied
                 </div>
-              </div>
-              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
+              </RaisedCard>
+              <RaisedCard padding="lg">
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.roomsUnoccupied ?? 0}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                   Rooms Unoccupied
                 </div>
-              </div>
-              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
+              </RaisedCard>
+              <RaisedCard padding="lg">
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.lockersOccupied ?? 0}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                   Lockers Occupied
                 </div>
-              </div>
-              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
+              </RaisedCard>
+              <RaisedCard padding="lg">
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.lockersAvailable ?? 0}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                   Lockers Available
                 </div>
-              </div>
+              </RaisedCard>
             </div>
           </section>
 

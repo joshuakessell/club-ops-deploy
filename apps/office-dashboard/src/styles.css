@@ -221,36 +221,12 @@
   color: var(--warning);
 }
 
-.panel {
-  overflow: hidden;
-  position: relative;
-  /* Background, border, border-radius, box-shadow handled by cs-liquid-card */
-  /* Keep only layout properties */
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.panel-header h2 {
-  font-size: 1rem;
-  font-weight: 600;
-}
-
 .btn-override {
   /* Background, border, border-radius handled by cs-liquid-button */
   /* Keep only sizing/font properties */
   padding: 0.5rem 1rem;
   font-size: 0.75rem;
   font-weight: 600;
-}
-
-.panel-content {
-  padding: 2rem;
 }
 
 .placeholder {
@@ -1055,9 +1031,3 @@
 }
 
 /* Raised module class for consistent card styling */
-.csRaisedCard {
-  position: relative;
-  overflow: hidden;
-  /* Background, border, border-radius, box-shadow handled by cs-liquid-card */
-  /* Keep only layout properties */
-}

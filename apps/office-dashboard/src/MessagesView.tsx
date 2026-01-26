@@ -1,17 +1,19 @@
+import { PanelContent } from './views/PanelContent';
+import { PanelHeader } from './views/PanelHeader';
+import { PanelShell } from './views/PanelShell';
+
 export function MessagesView() {
   return (
-    <section className="panel cs-liquid-card">
-      <div className="panel-header">
-        <h2>Messages (stub)</h2>
-      </div>
-      <div className="panel-content">
+    <PanelShell>
+      <PanelHeader title="Messages (stub)" />
+      <PanelContent>
         <div className="placeholder">
           <span className="placeholder-icon">💬</span>
           <p>
             Messaging is a stub in this demo. (Planned: staff broadcast + manager announcements.)
           </p>
         </div>
-      </div>
-    </section>
+      </PanelContent>
+    </PanelShell>
   );
 }

@@ -12,6 +12,7 @@ import { t, type Language } from '../i18n';
 import { getMembershipStatus, type SessionState } from '../utils/membership';
 import { IdleScreen } from '../screens/IdleScreen';
 import { LanguageScreen } from '../screens/LanguageScreen';
+import { LaneSelectionScreen } from '../screens/LaneSelectionScreen';
 import { SelectionScreen } from '../screens/SelectionScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';
 import { AgreementScreen, type Agreement } from '../screens/AgreementScreen';
@@ -165,48 +166,56 @@ export function AppRoot() {
     session.membershipNumber,
   ]);
 
-  // Get lane from URL pathname pattern, query param, or sessionStorage fallback
+  // Get lane from URL pathname pattern or query param.
   // Priority: /register-1 => lane-1, /register-2 => lane-2, etc.
   // Secondary: ?lane=lane-2 query param
-  // Fallback: sessionStorage (NOT localStorage - localStorage is shared across tabs)
-  // Default: lane-1
-  // Memoize to prevent unnecessary re-renders
-  const lane = useMemo(() => {
-    // Check pathname patterns: /register-1, /register-2, etc.
+  // Default: none (prompt for lane selection)
+  const [lane, setLane] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
     const pathMatch = window.location.pathname.match(/\/register-(\d+)/);
     if (pathMatch) {
       return `lane-${pathMatch[1]}`;
     }
 
-    // Check query param
     const params = new URLSearchParams(window.location.search);
     const queryLane = params.get('lane');
-    if (queryLane) {
+    if (queryLane && /^lane-\d+$/.test(queryLane)) {
       return queryLane;
     }
 
-    // Check sessionStorage fallback (per-tab, not shared)
-    try {
-      const stored = sessionStorage.getItem('lane');
-      if (stored) {
-        return stored;
-      }
-    } catch {
-      // sessionStorage might not be available
-    }
-
-    // Default
-    return 'lane-1';
-  }, []); // Empty deps - lane should only be computed once on mount
+    return null;
+  });
 
   // Store in sessionStorage for persistence within this tab
   useEffect(() => {
     try {
-      sessionStorage.setItem('lane', lane);
+      if (lane) {
+        sessionStorage.setItem('lane', lane);
+      } else {
+        sessionStorage.removeItem('lane');
+      }
     } catch {
       // Ignore if sessionStorage unavailable
     }
   }, [lane]);
+
+  const buildRegisterPath = useCallback((laneId: 'lane-1' | 'lane-2') => {
+    const laneNumber = laneId.replace('lane-', '');
+    if (typeof window === 'undefined') return `/register-${laneNumber}`;
+    const currentPath = window.location.pathname || '/';
+    const basePath = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
+    return `${basePath}register-${laneNumber}`;
+  }, []);
+
+  const handleLaneSelection = useCallback(
+    (laneId: 'lane-1' | 'lane-2') => {
+      setLane(laneId);
+      if (typeof window === 'undefined') return;
+      const targetPath = buildRegisterPath(laneId);
+      window.history.replaceState({}, '', targetPath);
+    },
+    [buildRegisterPath]
+  );
 
   useEffect(() => {
     const handleOrientation = () => {
@@ -501,10 +510,10 @@ export function AppRoot() {
   );
 
   const { connected: wsConnected, lastMessage } = useLaneSession({
-    laneId: lane,
+    laneId: lane ?? undefined,
     role: 'customer',
     kioskToken: kioskToken ?? '',
-    enabled: true,
+    enabled: Boolean(lane),
   });
 
   useEffect(() => {
@@ -521,6 +530,7 @@ export function AppRoot() {
   const pollingDelayTimerRef = useRef<number | null>(null);
   const pollingIntervalRef = useRef<number | null>(null);
   useEffect(() => {
+    if (!lane) return;
     if (pollingDelayTimerRef.current !== null) {
       window.clearTimeout(pollingDelayTimerRef.current);
       pollingDelayTimerRef.current = null;
@@ -586,6 +596,7 @@ export function AppRoot() {
   }, [API_BASE, applySessionUpdatedPayload, lane, resetToIdle, wsConnected]);
 
   useEffect(() => {
+    if (!lane) return;
     // Check API health (avoid JSON parse crashes on empty/non-JSON responses)
     let cancelled = false;
     void (async () => {
@@ -616,13 +627,14 @@ export function AppRoot() {
 
   // Keep inventory fresh if the initial fetch happened before the API was ready.
   useEffect(() => {
+    if (!lane) return;
     const intervalId = window.setInterval(() => {
       void refreshInventory();
     }, 10000);
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [refreshInventory]);
+  }, [lane, refreshInventory]);
 
   // Show a brief welcome overlay when a new session becomes active
   useEffect(() => {
@@ -711,6 +723,7 @@ export function AppRoot() {
       alert(t(session.customerPrimaryLanguage, 'error.noActiveSession'));
       return;
     }
+    if (!lane) return;
 
     const availableCount =
       inventory?.rooms?.[rental] ??
@@ -830,6 +843,7 @@ export function AppRoot() {
 
   const handleDisclaimerAcknowledge = async () => {
     if (!session.sessionId || !upgradeAction) return;
+    if (!lane) return;
 
     // Upgrade disclaimer is informational only - no signature required
     // Store acknowledgement and propose backup selection
@@ -937,6 +951,7 @@ export function AppRoot() {
       setWaitlistBackupType(null);
       return;
     }
+    if (!lane) return;
     try {
       await fetch(`${API_BASE}/v1/checkin/lane/${lane}/waitlist-desired`, {
         method: 'POST',
@@ -973,6 +988,7 @@ export function AppRoot() {
     if (!waitlistDesiredType) return;
     if (waitlistBackupType) return;
     if (!session.sessionId) return;
+    if (!lane) return;
     setShowWaitlistModal(true);
     void (async () => {
       try {
@@ -993,7 +1009,7 @@ export function AppRoot() {
         console.error('Failed to fetch waitlist info:', error);
       }
     })();
-  }, [session.sessionId, view, waitlistBackupType, waitlistDesiredType]);
+  }, [lane, session.sessionId, view, waitlistBackupType, waitlistDesiredType]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -1102,6 +1118,7 @@ export function AppRoot() {
       alert(t(lang, 'signatureRequired'));
       return;
     }
+    if (!lane) return;
 
     setIsSubmitting(true);
     try {
@@ -1137,6 +1154,7 @@ export function AppRoot() {
     if (!session.sessionId) {
       return;
     }
+    if (!lane) return;
 
     setIsSubmitting(true);
     try {
@@ -1169,6 +1187,7 @@ export function AppRoot() {
 
   const handleCustomerConfirmSelection = async (confirmed: boolean) => {
     if (!customerConfirmationData?.sessionId) return;
+    if (!lane) return;
     setIsSubmitting(true);
     try {
       const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/customer-confirm`, {
@@ -1204,6 +1223,7 @@ export function AppRoot() {
     }
     // Persist the explicit choice so employee-register can mirror the kiosk step reliably.
     if (session.sessionId) {
+      if (!lane) return;
       try {
         const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/membership-choice`, {
           method: 'POST',
@@ -1226,6 +1246,7 @@ export function AppRoot() {
 
   const handleClearMembershipPurchaseIntent = async () => {
     if (!session.sessionId) return;
+    if (!lane) return;
     const lang = session.customerPrimaryLanguage;
     setIsSubmitting(true);
     try {
@@ -1262,6 +1283,7 @@ export function AppRoot() {
 
   const handleMembershipContinue = async () => {
     if (!membershipModalIntent || !session.sessionId) return;
+    if (!lane) return;
     const lang = session.customerPrimaryLanguage;
     setIsSubmitting(true);
     try {

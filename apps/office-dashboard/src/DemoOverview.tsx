@@ -6,6 +6,10 @@ import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
 import { useNavigate } from 'react-router-dom';
 import { getApiUrl } from '@club-ops/shared';
+import { PanelContent } from './views/PanelContent';
+import { PanelHeader } from './views/PanelHeader';
+import { PanelShell } from './views/PanelShell';
+import { RaisedCard } from './views/RaisedCard';
 
 type InventorySummaryResponse = {
   byType: Record<string, { clean: number; cleaning: number; dirty: number; total: number }>;
@@ -112,11 +116,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
         </div>
       </section>
 
-      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="panel-header">
-          <h2>Administrative Demo Overview</h2>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+      <PanelShell spacing="md">
+        <PanelHeader title="Administrative Demo Overview" />
+        <PanelContent padding="md">
           <div
             style={{
               display: 'grid',
@@ -124,7 +126,7 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               gap: '1rem',
             }}
           >
-            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+            <RaisedCard>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Live Lane Monitor</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Pick lane 1 or 2; see employee + customer mirrored state with live WS updates.
@@ -132,9 +134,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               <button className="cs-liquid-button" onClick={() => navigate('/monitor')}>
                 Open Monitor
               </button>
-            </div>
+            </RaisedCard>
 
-            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+            <RaisedCard>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Waitlist Management</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Active / Offered lists, offer upgrades, complete or cancel, live refresh.
@@ -142,9 +144,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               <button className="cs-liquid-button" onClick={() => navigate('/waitlist')}>
                 Manage Waitlist
               </button>
-            </div>
+            </RaisedCard>
 
-            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+            <RaisedCard>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>
                 Agreement PDF verification
               </div>
@@ -275,9 +277,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                   )}
                 </div>
               )}
-            </div>
+            </RaisedCard>
 
-            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+            <RaisedCard>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Customer Admin Tools</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Search customers; admin can clear notes and waive past-due balance.
@@ -285,9 +287,9 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               <button className="cs-liquid-button" onClick={() => navigate('/customers')}>
                 Open Customer Tools
               </button>
-            </div>
+            </RaisedCard>
 
-            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+            <RaisedCard>
               <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>Reports (Demo)</div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                 Inventory summary + low-availability tiers; cash totals by method/register.
@@ -295,16 +297,14 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               <button className="cs-liquid-button" onClick={() => navigate('/reports')}>
                 Open Reports
               </button>
-            </div>
+            </RaisedCard>
           </div>
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
 
-      <section className="panel cs-liquid-card">
-        <div className="panel-header">
-          <h2>Low Availability (tiers &lt; 5 available)</h2>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+      <PanelShell>
+        <PanelHeader title="Low Availability (tiers < 5 available)" />
+        <PanelContent padding="md">
           {lowAvailability.length === 0 ? (
             <div style={{ color: 'var(--text-muted)' }}>No inventory data yet.</div>
           ) : (
@@ -350,8 +350,8 @@ export function DemoOverview({ session }: { session: StaffSession }) {
               </tbody>
             </table>
           )}
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
     </div>
   );
 }

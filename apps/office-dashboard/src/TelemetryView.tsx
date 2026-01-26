@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { StaffSession } from './LockScreen';
 import { ApiError, apiJson } from './api';
 import { getApiUrl } from '@club-ops/shared';
+import { PanelContent } from './views/PanelContent';
+import { PanelHeader } from './views/PanelHeader';
+import { PanelShell } from './views/PanelShell';
 
 type TelemetryTrace = {
   trace_id: string;
@@ -306,43 +309,45 @@ export function TelemetryView({ session }: { session: StaffSession }) {
 
   return (
     <div style={{ maxWidth: 1500, margin: '0 auto' }}>
-      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="panel-header">
-          <h2>Telemetry</h2>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <button className="cs-liquid-button" onClick={() => loadTraces()}>
-              Refresh
-            </button>
-            <button
-              className="cs-liquid-button"
-              disabled={!page?.nextCursor}
-              onClick={() => loadTraces({ cursor: page?.nextCursor, direction: 'next' })}
-            >
-              Older
-            </button>
-            <button
-              className="cs-liquid-button"
-              disabled={!page?.prevCursor}
-              onClick={() => loadTraces({ cursor: page?.prevCursor, direction: 'prev' })}
-            >
-              Newer
-            </button>
-            <label className="telemetry-toggle">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-              />
-              Auto-refresh (5s)
-            </label>
-            <button className="cs-liquid-button" onClick={() => handleDownload('json')}>
-              Export Trace JSON
-            </button>
-            <button className="cs-liquid-button" onClick={() => handleDownload('csv')}>
-              Export Trace CSV
-            </button>
-          </div>
-        </div>
+      <PanelShell spacing="md">
+        <PanelHeader
+          title="Telemetry"
+          actions={
+            <>
+              <button className="cs-liquid-button" onClick={() => loadTraces()}>
+                Refresh
+              </button>
+              <button
+                className="cs-liquid-button"
+                disabled={!page?.nextCursor}
+                onClick={() => loadTraces({ cursor: page?.nextCursor, direction: 'next' })}
+              >
+                Older
+              </button>
+              <button
+                className="cs-liquid-button"
+                disabled={!page?.prevCursor}
+                onClick={() => loadTraces({ cursor: page?.prevCursor, direction: 'prev' })}
+              >
+                Newer
+              </button>
+              <label className="telemetry-toggle">
+                <input
+                  type="checkbox"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                />
+                Auto-refresh (5s)
+              </label>
+              <button className="cs-liquid-button" onClick={() => handleDownload('json')}>
+                Export Trace JSON
+              </button>
+              <button className="cs-liquid-button" onClick={() => handleDownload('csv')}>
+                Export Trace CSV
+              </button>
+            </>
+          }
+        />
 
         <div className="metrics-filters cs-liquid-card" style={{ margin: '1rem 1.5rem' }}>
           <div className="filter-group">
@@ -413,7 +418,7 @@ export function TelemetryView({ session }: { session: StaffSession }) {
           </label>
         </div>
 
-        <div className="panel-content" style={{ padding: '1rem 1.5rem 1.5rem' }}>
+        <PanelContent padding="compact">
           {error && <div className="telemetry-error">{error}</div>}
           {loading && <div className="telemetry-loading">Loading…</div>}
           {!loading && !error && traces.length === 0 && (
@@ -466,15 +471,16 @@ export function TelemetryView({ session }: { session: StaffSession }) {
               </tbody>
             </table>
           )}
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
 
       {traceDetail && (
-        <section className="panel cs-liquid-card">
-          <div className="panel-header">
-            <h3>Trace Detail</h3>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              {incidentIds.length > 0 && (
+        <PanelShell>
+          <PanelHeader
+            title="Trace Detail"
+            titleAs="h3"
+            actions={
+              incidentIds.length > 0 ? (
                 <>
                   <select
                     value={selectedIncidentId}
@@ -502,11 +508,11 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                     Export Incident CSV
                   </button>
                 </>
-              )}
-            </div>
-          </div>
+              ) : null
+            }
+          />
 
-          <div className="panel-content" style={{ padding: '1rem 1.5rem 1.5rem' }}>
+          <PanelContent padding="compact">
             <div className="telemetry-details-grid" style={{ marginBottom: '1rem' }}>
               <div>
                 <div className="telemetry-label">Trace</div>
@@ -638,8 +644,8 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                 ))}
               </div>
             )}
-          </div>
-        </section>
+          </PanelContent>
+        </PanelShell>
       )}
 
       {toast && (

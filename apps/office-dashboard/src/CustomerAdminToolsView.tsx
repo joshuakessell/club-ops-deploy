@@ -2,6 +2,10 @@ import { useMemo, useState } from 'react';
 import type { StaffSession } from './LockScreen';
 import { ApiError, apiJson } from './api';
 import { ReAuthModal } from './ReAuthModal';
+import { PanelContent } from './views/PanelContent';
+import { PanelHeader } from './views/PanelHeader';
+import { PanelShell } from './views/PanelShell';
+import { RaisedCard } from './views/RaisedCard';
 
 type Customer = {
   id: string;
@@ -97,11 +101,9 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
         />
       )}
 
-      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="panel-header">
-          <h2>Customer Admin Tools</h2>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+      <PanelShell spacing="md">
+        <PanelHeader title="Customer Admin Tools" />
+        <PanelContent padding="md">
           {error && (
             <div
               style={{
@@ -156,17 +158,15 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
               Admin can clear notes and waive past-due balance (requires re-auth).
             </div>
           </div>
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
 
       <div
         style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}
       >
-        <section className="panel cs-liquid-card">
-          <div className="panel-header">
-            <h2>Results ({results.length})</h2>
-          </div>
-          <div className="panel-content" style={{ padding: '1.25rem' }}>
+        <PanelShell>
+          <PanelHeader title={`Results (${results.length})`} />
+          <PanelContent padding="md">
             {results.length === 0 ? (
               <div style={{ color: 'var(--text-muted)' }}>
                 {canSearch ? 'No results yet — run a search.' : 'Type at least 2 characters.'}
@@ -205,14 +205,12 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                 </tbody>
               </table>
             )}
-          </div>
-        </section>
+          </PanelContent>
+        </PanelShell>
 
-        <section className="panel cs-liquid-card">
-          <div className="panel-header">
-            <h2>{header}</h2>
-          </div>
-          <div className="panel-content" style={{ padding: '1.25rem' }}>
+        <PanelShell>
+          <PanelHeader title={header} />
+          <PanelContent padding="md">
             {!selected ? (
               <div className="placeholder">
                 <span className="placeholder-icon">🗂️</span>
@@ -244,10 +242,7 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                   </tbody>
                 </table>
 
-                <div
-                  className="csRaisedCard cs-liquid-card"
-                  style={{ padding: '1rem', marginBottom: '1rem' }}
-                >
+                <RaisedCard style={{ marginBottom: '1rem' }}>
                   <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>Notes</div>
                   <pre
                     style={{
@@ -267,9 +262,9 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                       Clear Notes (admin)
                     </button>
                   </div>
-                </div>
+                </RaisedCard>
 
-                <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+                <RaisedCard>
                   <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>Past Due</div>
                   <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
                     Waiving past due sets the customer’s past due balance to $0.00.
@@ -281,11 +276,11 @@ export function CustomerAdminToolsView({ session }: { session: StaffSession }) {
                   >
                     Waive Past Due (admin)
                   </button>
-                </div>
+                </RaisedCard>
               </>
             )}
-          </div>
-        </section>
+          </PanelContent>
+        </PanelShell>
       </div>
     </div>
   );

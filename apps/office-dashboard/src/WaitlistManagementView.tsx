@@ -5,6 +5,10 @@ import { safeJsonParse } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { ApiError, apiJson, wsBaseUrl } from './api';
 import { ReAuthModal } from './ReAuthModal';
+import { PanelContent } from './views/PanelContent';
+import { PanelHeader } from './views/PanelHeader';
+import { PanelShell } from './views/PanelShell';
+import { RaisedCard } from './views/RaisedCard';
 
 type WaitlistEntry = {
   id: string;
@@ -214,11 +218,9 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
         />
       )}
 
-      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="panel-header">
-          <h2>Waitlist Management</h2>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+      <PanelShell spacing="md">
+        <PanelHeader title="Waitlist Management" />
+        <PanelContent padding="md">
           {error && (
             <div
               style={{
@@ -240,7 +242,7 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
               gap: '1.5rem',
             }}
           >
-            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+            <RaisedCard>
               <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>
                 ACTIVE ({active.length})
               </div>
@@ -283,9 +285,9 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
                   </tbody>
                 </table>
               )}
-            </div>
+            </RaisedCard>
 
-            <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+            <RaisedCard>
               <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>
                 OFFERED ({offered.length})
               </div>
@@ -330,20 +332,20 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
                   </tbody>
                 </table>
               )}
-            </div>
+            </RaisedCard>
           </div>
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
 
-      <section className="panel cs-liquid-card">
-        <div className="panel-header">
-          <h2>
-            {selectedEntry
+      <PanelShell>
+        <PanelHeader
+          title={
+            selectedEntry
               ? `Selected: ${selectedEntry.displayIdentifier}`
-              : 'Select an entry to act'}
-          </h2>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+              : 'Select an entry to act'
+          }
+        />
+        <PanelContent padding="md">
           {!selectedEntry ? (
             <div style={{ color: 'var(--text-muted)' }}>
               Pick an entry from ACTIVE (Offer) or OFFERED (Complete). Then select a room in the
@@ -410,8 +412,8 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
               </div>
             </>
           )}
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
     </div>
   );
 }
