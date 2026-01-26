@@ -2571,8 +2571,8 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
           unitPrice: catalogItem.price,
         };
       })
-      .filter(
-        (item): item is { label: string; quantity: number; unitPrice: number } => Boolean(item)
+      .filter((item): item is { label: string; quantity: number; unitPrice: number } =>
+        Boolean(item)
       );
 
     if (items.length === 0) {

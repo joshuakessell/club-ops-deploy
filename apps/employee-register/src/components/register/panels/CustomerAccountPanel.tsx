@@ -2,6 +2,8 @@ import type { CheckinStage } from '../CustomerProfileCard';
 import { CustomerProfileCard } from '../CustomerProfileCard';
 import { EmployeeAssistPanel } from '../EmployeeAssistPanel';
 import { useStartLaneCheckinForCustomerIfNotVisiting } from '../../../app/useStartLaneCheckinForCustomerIfNotVisiting';
+import { PanelHeader } from '../../../views/PanelHeader';
+import { PanelShell } from '../../../views/PanelShell';
 
 function formatLocal(value: string | null): string {
   if (!value) return '—';
@@ -75,22 +77,18 @@ export function CustomerAccountPanel(props: {
   });
 
   return (
-    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
-          alignItems: 'baseline',
-        }}
-      >
-        <div className="er-card-title">Customer Account</div>
-        {props.customerLabel ? (
-          <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-            {props.customerLabel}
-          </div>
-        ) : null}
-      </div>
+    <PanelShell align="top" scroll="hidden">
+      <PanelHeader
+        title="Customer Account"
+        spacing="none"
+        action={
+          props.customerLabel ? (
+            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+              {props.customerLabel}
+            </div>
+          ) : null
+        }
+      />
 
       {state.mode === 'ALREADY_VISITING' ? (
         <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.75rem' }}>
@@ -284,6 +282,6 @@ export function CustomerAccountPanel(props: {
           )}
         </div>
       )}
-    </div>
+    </PanelShell>
   );
 }

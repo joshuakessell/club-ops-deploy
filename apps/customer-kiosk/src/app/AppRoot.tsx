@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  getApiUrl,
   safeParseWebSocketEvent,
+  SessionUpdatedPayloadSchema,
+  useLaneSession,
   type CustomerConfirmationRequiredPayload,
+  type SessionUpdatedPayload,
 } from '@club-ops/shared';
-import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse, isRecord, getErrorMessage, readJson } from '@club-ops/ui';
 import { t, type Language } from '../i18n';
 import { getMembershipStatus, type SessionState } from '../utils/membership';
@@ -19,7 +22,6 @@ import { CustomerConfirmationModal } from '../components/modals/CustomerConfirma
 import { WaitlistModal } from '../components/modals/WaitlistModal';
 import { RenewalDisclaimerModal } from '../components/modals/RenewalDisclaimerModal';
 import { MembershipModal } from '../components/modals/MembershipModal';
-import { getApiUrl } from '@club-ops/shared';
 
 interface HealthStatus {
   status: string;
@@ -290,7 +292,7 @@ export function AppRoot() {
   }, []);
 
   const applySessionUpdatedPayload = useCallback(
-    (payload: Record<string, any>) => {
+    (payload: SessionUpdatedPayload) => {
       const prevSession = sessionRef.current;
       const hasKey = (key: string) => Object.prototype.hasOwnProperty.call(payload, key);
       const assignedResourceType = hasKey('assignedResourceType')
@@ -425,10 +427,7 @@ export function AppRoot() {
         console.log('WebSocket message:', message);
 
         if (message.type === 'SESSION_UPDATED') {
-          const payload = message.payload;
-          if (payload && typeof payload === 'object') {
-            applySessionUpdatedPayload(payload as Record<string, any>);
-          }
+          applySessionUpdatedPayload(message.payload);
         } else if (message.type === 'SELECTION_PROPOSED') {
           const payload = message.payload;
           if (payload.sessionId === sessionIdRef.current) {
@@ -557,7 +556,10 @@ export function AppRoot() {
             return;
           }
           if (isRecord(sessionPayload)) {
-            applySessionUpdatedPayload(sessionPayload as Record<string, any>);
+            const parsedPayload = SessionUpdatedPayloadSchema.safeParse(sessionPayload);
+            if (parsedPayload.success) {
+              applySessionUpdatedPayload(parsedPayload.data);
+            }
           }
         } catch {
           // Best-effort; keep polling.
@@ -782,19 +784,16 @@ export function AppRoot() {
       }
 
       await response.json().catch(() => null);
-      const confirmResponse = await fetch(
-        `${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...kioskAuthHeaders(),
-          },
-          body: JSON.stringify({
-            confirmedBy: 'CUSTOMER',
-          }),
-        }
-      );
+      const confirmResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
+        },
+        body: JSON.stringify({
+          confirmedBy: 'CUSTOMER',
+        }),
+      });
 
       if (!confirmResponse.ok) {
         const errorPayload: unknown = await confirmResponse.json().catch(() => null);
@@ -866,19 +865,16 @@ export function AppRoot() {
         throw new Error(getErrorMessage(errorPayload) || 'Failed to process waitlist selection');
       }
 
-      const confirmResponse = await fetch(
-        `${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...kioskAuthHeaders(),
-          },
-          body: JSON.stringify({
-            confirmedBy: 'CUSTOMER',
-          }),
-        }
-      );
+      const confirmResponse = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/confirm-selection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
+        },
+        body: JSON.stringify({
+          confirmedBy: 'CUSTOMER',
+        }),
+      });
 
       if (!confirmResponse.ok) {
         const errorPayload: unknown = await confirmResponse.json().catch(() => null);

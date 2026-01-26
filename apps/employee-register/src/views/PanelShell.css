@@ -1,0 +1,25 @@
+.er-panel-shell {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.er-panel-shell--center {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.er-panel-shell--top {
+  justify-content: flex-start;
+  align-items: stretch;
+  text-align: left;
+}
+
+.er-panel-shell--no-scroll {
+  overflow: hidden;
+}

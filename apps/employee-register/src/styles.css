@@ -502,31 +502,6 @@ body::after {
   color: #60a5fa;
 }
 
-.er-card-title {
-  font-weight: 900;
-  font-size: 1.35rem;
-  color: #fff;
-  text-transform: none;
-  letter-spacing: 0.01em;
-}
-
-.actions-panel .er-card-title,
-.inventory-panel .er-card-title {
-  font-size: 1.35rem;
-}
-
-.er-ui-tweaks label.er-card-title {
-  font-size: 1.35rem !important;
-  line-height: 1.2 !important;
-}
-
-.er-card-subtitle {
-  font-weight: 800;
-  font-size: 1rem;
-  color: #60a5fa;
-  letter-spacing: 0.01em;
-}
-
 .er-inv-section-header {
   margin-bottom: 0.75rem;
 }
@@ -738,43 +713,9 @@ body::after {
   padding-right: var(--er-home-content-gap);
 }
 
-/* Standardized right-panel "main card" padding across all home tabs. */
-.er-main-panel-card {
-  padding: 1rem;
-}
-
 .er-home-tab-btn--checkout {
   font-size: 22px !important;
   letter-spacing: 0.01em;
-}
-
-/* Right-panel panels: always fill available height.
-   - Center vertically when short
-   - Scroll internally when long */
-.er-home-panel {
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: 100%;
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  align-self: stretch;
-}
-
-.er-home-panel--center {
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-}
-
-.er-home-panel--top {
-  justify-content: flex-start;
-  align-items: stretch;
-  text-align: left;
-}
-
-.er-home-panel--no-scroll {
-  overflow: hidden;
 }
 
 .inventory-panel h2:not(.er-card-title),
@@ -846,9 +787,7 @@ body::after {
   gap: 0.6rem;
   --er-retail-item-row-height: 4rem;
   grid-auto-rows: var(--er-retail-item-row-height);
-  max-height: calc(
-    var(--er-retail-item-row-height) + var(--er-retail-item-row-height) + 0.6rem
-  );
+  max-height: calc(var(--er-retail-item-row-height) + var(--er-retail-item-row-height) + 0.6rem);
   overflow-y: auto;
   padding-right: 0.25rem;
 }

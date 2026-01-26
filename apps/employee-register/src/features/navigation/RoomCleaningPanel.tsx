@@ -1,5 +1,6 @@
 import { RoomCleaningPanel as RoomCleaningPanelComponent } from '../../components/register/panels/RoomCleaningPanel';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
+import { PanelShell } from '../../views/PanelShell';
 
 export function RoomCleaningPanel() {
   const { session, setSuccessToastMessage } = useEmployeeRegisterState();
@@ -7,12 +8,12 @@ export function RoomCleaningPanel() {
   if (!session?.sessionToken || !session.staffId) return null;
 
   return (
-    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll">
+    <PanelShell align="top" scroll="hidden" card={false}>
       <RoomCleaningPanelComponent
         sessionToken={session.sessionToken}
         staffId={session.staffId}
         onSuccess={(message) => setSuccessToastMessage(message)}
       />
-    </div>
+    </PanelShell>
   );
 }

@@ -1,5 +1,6 @@
 import { InventoryDrawer } from '../../components/inventory/InventoryDrawer';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
+import { PanelShell } from '../../views/PanelShell';
 
 export function InventoryPanel() {
   const {
@@ -23,7 +24,7 @@ export function InventoryPanel() {
   if (!session?.sessionToken) return null;
 
   return (
-    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll cs-liquid-card er-main-panel-card">
+    <PanelShell align="top" scroll="hidden">
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <InventoryDrawer
           lane={lane}
@@ -44,6 +45,6 @@ export function InventoryPanel() {
           externalRefreshNonce={inventoryRefreshNonce}
         />
       </div>
-    </div>
+    </PanelShell>
   );
 }

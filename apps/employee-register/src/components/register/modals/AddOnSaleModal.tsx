@@ -28,12 +28,7 @@ export function AddOnSaleModal({
   const total = getRetailCartTotal(cartItems);
 
   return (
-    <ModalFrame
-      isOpen={isOpen}
-      title="Add-On Sale"
-      onClose={onClose}
-      maxWidth="760px"
-    >
+    <ModalFrame isOpen={isOpen} title="Add-On Sale" onClose={onClose} maxWidth="760px">
       <RetailSaleCard
         title="Add items to check-in"
         items={RETAIL_CATALOG}

@@ -546,44 +546,6 @@ body {
   animation-delay: 0.4s;
 }
 
-.purchase-card {
-  padding: 1.15rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.purchase-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.purchase-card__title {
-  font-weight: 800;
-  font-size: clamp(1.05rem, 2.2vw, 1.25rem);
-}
-
-.purchase-card__status {
-  color: rgba(255, 255, 255, 0.78);
-  font-weight: 700;
-  font-size: clamp(0.95rem, 2vw, 1.1rem);
-  white-space: nowrap;
-}
-
-.purchase-card__subheader {
-  color: rgba(255, 255, 255, 0.86);
-  font-weight: 700;
-  font-size: clamp(0.95rem, 2vw, 1.1rem);
-}
-
-.purchase-card__message {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: clamp(0.95rem, 2vw, 1.1rem);
-  line-height: 1.35;
-}
-
 .membership-option-stack {
   display: flex;
   flex-direction: column;
@@ -601,12 +563,6 @@ body {
   grid-column: 1 / -1;
 }
 
-.kiosk-option-subtext {
-  font-size: 0.85rem;
-  opacity: 0.85;
-  line-height: 1.15;
-}
-
 .membership-buttons,
 .experience-options {
   display: grid;
@@ -615,39 +571,10 @@ body {
   width: 100%;
 }
 
-.kiosk-option-button {
-  /* Override shared cs-liquid-button defaults that assume single-line labels. */
-  white-space: normal;
-  text-align: center;
-  padding: 1rem 1rem;
-  min-height: 92px;
-}
-
 .ck-option-highlight {
   box-shadow:
     0 0 0 4px rgba(255, 255, 255, 0.55),
     0 0 28px rgba(255, 255, 255, 0.18);
-}
-
-.kiosk-option-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.kiosk-option-title {
-  font-weight: 700;
-  font-size: clamp(1rem, 2.2vw, 1.25rem);
-  line-height: 1.15;
-  max-width: 100%;
-}
-
-.kiosk-option-price {
-  font-weight: 900;
-  font-size: clamp(1.1rem, 2.4vw, 1.35rem);
-  line-height: 1.1;
-  opacity: 0.95;
 }
 
 .proceed-section {
@@ -1068,73 +995,6 @@ body {
   color: var(--text-muted);
 }
 
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  animation: fadeIn 0.3s ease;
-}
-
-.modal-content {
-  padding: 2rem;
-  max-width: 600px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
-  animation: slideUp 0.3s var(--cs-ease-decelerate);
-  /* Background, border, border-radius, box-shadow handled by cs-liquid-card */
-  /* Keep only sizing/layout properties */
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.modal-content h2 {
-  font-size: clamp(1.5rem, 3vw, 2rem);
-  font-weight: 600;
-  margin-bottom: 1.5rem;
-  text-align: center;
-}
-
-.disclaimer-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 2rem;
-  line-height: 1.6;
-}
-
-.disclaimer-text p {
-  font-size: clamp(0.875rem, 1.5vw, 1rem);
-  color: var(--text);
-}
-
-.modal-ok-btn {
-  width: 100%;
-  padding: 1rem;
-  font-size: clamp(1rem, 2vw, 1.125rem);
-  font-weight: 600;
-  min-height: 56px;
-  /* Background, border, border-radius, box-shadow handled by cs-liquid-button */
-  /* Keep only sizing/font properties */
-}
-
 /* Language Selection Screen */
 .language-selection-screen {
   width: 100%;
@@ -1265,24 +1125,6 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 60vh;
-}
-
-.agreement-bypass-card {
-  width: min(720px, 92vw);
-  padding: clamp(2rem, 4vw, 3rem);
-  text-align: center;
-}
-
-.agreement-bypass-title {
-  font-size: clamp(2rem, 5vw, 3.2rem);
-  font-weight: 900;
-  margin-bottom: 1rem;
-}
-
-.agreement-bypass-body {
-  font-size: clamp(1.35rem, 3.2vw, 2.1rem);
-  color: var(--text-muted);
-  font-weight: 700;
 }
 
 /* Past Due Block Message */

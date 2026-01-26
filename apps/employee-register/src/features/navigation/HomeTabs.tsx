@@ -17,9 +17,7 @@ export function HomeTabs() {
         className={[
           'er-home-tab-btn',
           'cs-liquid-button',
-          homeTab === 'account'
-            ? 'cs-liquid-button--selected'
-            : 'cs-liquid-button--secondary',
+          homeTab === 'account' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
         ].join(' ')}
         onClick={() => selectHomeTab('account')}
       >
@@ -98,9 +96,7 @@ export function HomeTabs() {
           'er-home-tab-btn',
           'cs-liquid-button',
           'er-home-tab-btn--checkout',
-          homeTab === 'checkout'
-            ? 'cs-liquid-button--selected'
-            : 'cs-liquid-button--secondary',
+          homeTab === 'checkout' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
         ].join(' ')}
         onClick={() => startCheckoutFromHome()}
       >
@@ -111,9 +107,7 @@ export function HomeTabs() {
         className={[
           'er-home-tab-btn',
           'cs-liquid-button',
-          homeTab === 'roomCleaning'
-            ? 'cs-liquid-button--selected'
-            : 'cs-liquid-button--secondary',
+          homeTab === 'roomCleaning' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
         ].join(' ')}
         onClick={() => selectHomeTab('roomCleaning')}
       >

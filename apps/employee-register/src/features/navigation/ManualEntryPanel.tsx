@@ -1,5 +1,7 @@
 import { extractDobDigits, formatDobMmDdYyyy } from '../../utils/dob';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
+import { PanelHeader } from '../../views/PanelHeader';
+import { PanelShell } from '../../views/PanelShell';
 
 export function ManualEntryPanel() {
   const {
@@ -20,16 +22,16 @@ export function ManualEntryPanel() {
   } = useEmployeeRegisterState();
 
   return (
-    <form
-      className="er-home-panel er-home-panel--top manual-entry-form cs-liquid-card er-main-panel-card"
+    <PanelShell
+      as="form"
+      align="top"
+      className="manual-entry-form"
       onSubmit={(e) => void handleManualSubmit(e)}
     >
-      <div className="er-card-title" style={{ marginBottom: '0.75rem' }}>
-        First Time Customer
-      </div>
-      <div className="er-card-subtitle" style={{ marginBottom: '0.75rem' }}>
-        Enter customer details from alternate ID.
-      </div>
+      <PanelHeader
+        title="First Time Customer"
+        subtitle="Enter customer details from alternate ID."
+      />
       <div className="form-group">
         <label htmlFor="manualFirstName">First Name *</label>
         <input
@@ -112,6 +114,6 @@ export function ManualEntryPanel() {
           Cancel
         </button>
       </div>
-    </form>
+    </PanelShell>
   );
 }

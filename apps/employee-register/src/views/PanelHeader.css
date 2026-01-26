@@ -1,0 +1,72 @@
+.er-panel-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.er-panel-header__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.er-panel-header__title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.er-panel-header__action {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.er-panel-header--center {
+  align-items: center;
+  text-align: center;
+}
+
+.er-panel-header--center .er-panel-header__top {
+  justify-content: center;
+}
+
+.er-panel-header--space-none {
+  margin-bottom: 0;
+}
+
+.er-panel-header--space-sm {
+  margin-bottom: 0.5rem;
+}
+
+.er-panel-header--space-md {
+  margin-bottom: 0.75rem;
+}
+
+.er-card-title {
+  font-weight: 900;
+  font-size: 1.35rem;
+  color: #fff;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+.actions-panel .er-card-title,
+.inventory-panel .er-card-title {
+  font-size: 1.35rem;
+}
+
+.er-ui-tweaks label.er-card-title {
+  font-size: 1.35rem !important;
+  line-height: 1.2 !important;
+}
+
+.er-card-subtitle {
+  font-weight: 800;
+  font-size: 1rem;
+  color: #60a5fa;
+  letter-spacing: 0.01em;
+}

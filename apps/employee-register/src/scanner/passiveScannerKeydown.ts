@@ -38,15 +38,10 @@ export function handlePassiveScannerKeydown(
   options: PassiveScannerKeydownOptions,
   handlers: PassiveScannerKeydownHandlers
 ): void {
-  const {
-    capturingRef,
-    bufferRef,
-    lastWasEnterRef,
-    lastKeyAtRef,
-    cooldownUntilRef,
-  } = refs;
+  const { capturingRef, bufferRef, lastWasEnterRef, lastKeyAtRef, cooldownUntilRef } = refs;
   const { captureWhenEditable, enterTerminates, tabTerminates, scannerInterKeyMaxMs } = options;
-  const { onCaptureStart, onCancel, reset, scheduleFinalize, scheduleFinalizeAfterEnter } = handlers;
+  const { onCaptureStart, onCancel, reset, scheduleFinalize, scheduleFinalizeAfterEnter } =
+    handlers;
 
   const key = e.key;
   const editable = isEditableTarget(e.target);

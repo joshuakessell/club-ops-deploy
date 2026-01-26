@@ -1,5 +1,6 @@
 import { ManualCheckoutPanel } from '../../components/register/panels/ManualCheckoutPanel';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
+import { PanelShell } from '../../views/PanelShell';
 
 export function CheckoutPanel() {
   const {
@@ -15,7 +16,7 @@ export function CheckoutPanel() {
   if (!session?.sessionToken) return null;
 
   return (
-    <div className="er-home-panel er-home-panel--top er-home-panel--no-scroll">
+    <PanelShell align="top" scroll="hidden" card={false}>
       <ManualCheckoutPanel
         sessionToken={session.sessionToken}
         entryMode={checkoutEntryMode}
@@ -29,6 +30,6 @@ export function CheckoutPanel() {
           }
         }}
       />
-    </div>
+    </PanelShell>
   );
 }

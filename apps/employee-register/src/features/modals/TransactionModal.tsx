@@ -32,8 +32,8 @@ export function TransactionModal() {
   const agreementPending = !agreementSigned && selectionConfirmed && paymentStatus === 'PAID';
   const canShowModal = Boolean(
     currentSessionId &&
-      customerName &&
-      (agreementPending || (assignedResourceType && assignedResourceNumber))
+    customerName &&
+    (agreementPending || (assignedResourceType && assignedResourceNumber))
   );
 
   return (

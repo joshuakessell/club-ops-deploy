@@ -72,51 +72,52 @@ export function DocumentsModal() {
                 signature_hash_prefix?: string;
                 has_pdf?: boolean;
               }) => (
-              <div
-                key={doc.id}
-                className="er-surface"
-                style={{ padding: '0.75rem', borderRadius: 12, display: 'grid', gap: '0.35rem' }}
-              >
                 <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '0.75rem',
-                    flexWrap: 'wrap',
-                  }}
+                  key={doc.id}
+                  className="er-surface"
+                  style={{ padding: '0.75rem', borderRadius: 12, display: 'grid', gap: '0.35rem' }}
                 >
-                  <div style={{ fontWeight: 900 }}>
-                    {doc.doc_type}{' '}
-                    <span
-                      style={{ fontFamily: 'monospace', fontWeight: 700, color: '#94a3b8' }}
-                    >
-                      {doc.id}
-                    </span>
-                  </div>
-                  <div style={{ color: '#94a3b8' }}>{new Date(doc.created_at).toLocaleString()}</div>
-                </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-                  PDF stored: {doc.has_pdf ? 'yes' : 'no'} • Signature stored:{' '}
-                  {doc.has_signature ? 'yes' : 'no'}
-                  {doc.signature_hash_prefix ? ` • sig hash: ${doc.signature_hash_prefix}…` : ''}
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button
-                    className="cs-liquid-button"
-                    disabled={!doc.has_pdf}
-                    onClick={() => {
-                      void downloadAgreementPdf(doc.id).catch((e: unknown) => {
-                        setDocumentsError(
-                          e instanceof Error ? e.message : 'Failed to download PDF'
-                        );
-                      });
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: '0.75rem',
+                      flexWrap: 'wrap',
                     }}
                   >
-                    Download PDF
-                  </button>
+                    <div style={{ fontWeight: 900 }}>
+                      {doc.doc_type}{' '}
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#94a3b8' }}>
+                        {doc.id}
+                      </span>
+                    </div>
+                    <div style={{ color: '#94a3b8' }}>
+                      {new Date(doc.created_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                    PDF stored: {doc.has_pdf ? 'yes' : 'no'} • Signature stored:{' '}
+                    {doc.has_signature ? 'yes' : 'no'}
+                    {doc.signature_hash_prefix ? ` • sig hash: ${doc.signature_hash_prefix}…` : ''}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      className="cs-liquid-button"
+                      disabled={!doc.has_pdf}
+                      onClick={() => {
+                        void downloadAgreementPdf(doc.id).catch((e: unknown) => {
+                          setDocumentsError(
+                            e instanceof Error ? e.message : 'Failed to download PDF'
+                          );
+                        });
+                      }}
+                    >
+                      Download PDF
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            )}
           </div>
         )}
       </div>

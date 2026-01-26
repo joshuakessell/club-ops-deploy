@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { I18nProvider, t, type Language } from '../i18n';
 import { ScreenShell } from '../components/ScreenShell';
+import { KioskMessageCard } from '../views/KioskMessageCard';
 
 export interface IdleScreenProps {
   sessionId: string | null;
@@ -23,25 +24,13 @@ export function IdleScreen({
         {orientationOverlay}
         <div className="idle-content" onClick={() => locked && alert(t(lang, 'kiosk.locked.body'))}>
           {locked && (
-            <div
-              style={{
-                marginTop: '2rem',
-                padding: '1.25rem',
-                background: 'rgba(15,23,42,0.75)',
-                border: '1px solid rgba(148,163,184,0.35)',
-                borderRadius: '12px',
-                maxWidth: '720px',
-                textAlign: 'center',
-                color: 'white',
-              }}
-            >
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '0.5rem' }}>
-                {t(lang, 'kiosk.locked.title')}
-              </div>
-              <div style={{ fontSize: '1.05rem', opacity: 0.9 }}>
-                {t(lang, 'kiosk.locked.body')}
-              </div>
-            </div>
+            <KioskMessageCard
+              tone="muted"
+              size="compact"
+              className="ck-message-card--spaced"
+              title={t(lang, 'kiosk.locked.title')}
+              body={t(lang, 'kiosk.locked.body')}
+            />
           )}
         </div>
       </ScreenShell>
