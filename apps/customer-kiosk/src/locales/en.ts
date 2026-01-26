@@ -24,6 +24,14 @@ export const en = {
   english: 'English',
   spanish: 'Español',
 
+  // Lane selection
+  'lane.selectTitle': 'Select Lane',
+  'lane.selectSubtitle': 'Choose your register to begin.',
+  'lane.lane1': 'Lane 1',
+  'lane.lane2': 'Lane 2',
+  'lane.register1': 'Register 1',
+  'lane.register2': 'Register 2',
+
   // Orientation
   'orientation.title': 'Portrait mode required',
   'orientation.body': 'Please rotate the device to portrait to continue.',

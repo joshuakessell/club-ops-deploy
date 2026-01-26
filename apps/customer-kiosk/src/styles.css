@@ -1030,6 +1030,63 @@ body {
   /* Keep only sizing/font properties */
 }
 
+/* Lane Selection Screen */
+.lane-selection-screen {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  text-align: center;
+}
+
+.lane-title {
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+}
+
+.lane-subtitle {
+  font-size: clamp(1rem, 2.2vw, 1.4rem);
+  color: var(--text-muted);
+  font-weight: 600;
+  max-width: 520px;
+}
+
+.lane-options {
+  display: flex;
+  gap: 2rem;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.lane-option {
+  width: 100%;
+  flex: 1 1 240px;
+  min-width: 220px;
+  padding: 2.25rem 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.lane-option__title {
+  font-size: clamp(1.5rem, 2.8vw, 2.4rem);
+  font-weight: 700;
+}
+
+.lane-option__subtitle {
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 /* Payment Pending Screen */
 .payment-pending-screen {
   text-align: center;

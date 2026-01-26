@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { StaffSession } from './LockScreen';
 import { ReAuthModal } from './ReAuthModal';
 import { getApiUrl } from '@club-ops/shared';
@@ -46,11 +46,12 @@ export function StaffManagement({ session }: StaffManagementProps) {
   const [, setPendingPinReset] = useState<{ staffId: string; newPin: string } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  useEffect(() => {
-    loadStaff();
-  }, [search, roleFilter, activeFilter]);
+  const showToast = useCallback((message: string, type: 'success' | 'error') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
-  const loadStaff = async () => {
+  const loadStaff = useCallback(async () => {
     if (!session.sessionToken) return;
 
     setIsLoading(true);
@@ -76,7 +77,11 @@ export function StaffManagement({ session }: StaffManagementProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [activeFilter, roleFilter, search, session.sessionToken, showToast]);
+
+  useEffect(() => {
+    loadStaff();
+  }, [loadStaff]);
 
   const loadPasskeys = async (staffId: string) => {
     if (!session.sessionToken) return;
@@ -98,10 +103,6 @@ export function StaffManagement({ session }: StaffManagementProps) {
     }
   };
 
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
 
   const handleCreateStaff = async (formData: {
     name: string;
@@ -697,13 +698,7 @@ function StaffDetailModal({
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
-  useEffect(() => {
-    if (activeTab === 'documents') {
-      fetchDocuments();
-    }
-  }, [activeTab, staff.id]);
-
-  const fetchDocuments = async () => {
+  const fetchDocuments = useCallback(async () => {
     setLoadingDocs(true);
     try {
       const response = await fetch(`${API_BASE}/v1/admin/employees/${staff.id}/documents`, {
@@ -718,7 +713,13 @@ function StaffDetailModal({
     } finally {
       setLoadingDocs(false);
     }
-  };
+  }, [sessionToken, staff.id]);
+
+  useEffect(() => {
+    if (activeTab === 'documents') {
+      fetchDocuments();
+    }
+  }, [activeTab, fetchDocuments]);
 
   const handleUpload = async (file: File, docType: string, notes?: string) => {
     try {

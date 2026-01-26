@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import { getApiUrl } from '@club-ops/shared';
@@ -94,45 +94,16 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
   const [selectedShift, setSelectedShift] = useState<Shift | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  useEffect(() => {
-    if (!limitedAccess) {
-      fetchEmployees();
-    }
-  }, []);
-
-  useEffect(() => {
-    // For limited access, auto-filter to current employee
-    if (limitedAccess && employees.length > 0) {
-      const currentEmployee = employees.find((e) => e.name === session.name);
-      if (currentEmployee && employeeFilter !== currentEmployee.id) {
-        setEmployeeFilter(currentEmployee.id);
-      }
-    }
-  }, [limitedAccess, employees, session.name, employeeFilter]);
-
-  useEffect(() => {
-    if (!limitedAccess) {
-      fetchShifts();
-    } else {
-      setLoading(false);
-    }
-  }, [dateFrom, dateTo, employeeFilter, limitedAccess]);
-
-  useEffect(() => {
-    void fetchMonthData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [limitedAccess, isAdmin]);
-
-  const getCurrentMonthRange = () => {
+  const getCurrentMonthRange = useCallback(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
     start.setHours(0, 0, 0, 0);
     const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     end.setHours(23, 59, 59, 999);
     return { start, end };
-  };
+  }, []);
 
-  const fetchMonthData = async () => {
+  const fetchMonthData = useCallback(async () => {
     const { start, end } = getCurrentMonthRange();
     setMonthLoading(true);
     try {
@@ -186,9 +157,9 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
     } finally {
       setMonthLoading(false);
     }
-  };
+  }, [getCurrentMonthRange, isAdmin, limitedAccess, session.sessionToken]);
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/v1/admin/staff`, {
         headers: { Authorization: `Bearer ${session.sessionToken}` },
@@ -200,9 +171,9 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
     } catch (error) {
       console.error('Failed to fetch employees:', error);
     }
-  };
+  }, [session.sessionToken]);
 
-  const fetchShifts = async () => {
+  const fetchShifts = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -231,7 +202,35 @@ export function ShiftsView({ session, limitedAccess }: ShiftsViewProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFrom, dateTo, employeeFilter, employees, limitedAccess, session.name, session.sessionToken]);
+
+  useEffect(() => {
+    if (!limitedAccess) {
+      fetchEmployees();
+    }
+  }, [fetchEmployees, limitedAccess]);
+
+  useEffect(() => {
+    // For limited access, auto-filter to current employee
+    if (limitedAccess && employees.length > 0) {
+      const currentEmployee = employees.find((e) => e.name === session.name);
+      if (currentEmployee && employeeFilter !== currentEmployee.id) {
+        setEmployeeFilter(currentEmployee.id);
+      }
+    }
+  }, [limitedAccess, employees, session.name, employeeFilter]);
+
+  useEffect(() => {
+    if (!limitedAccess) {
+      fetchShifts();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchShifts, limitedAccess]);
+
+  useEffect(() => {
+    void fetchMonthData();
+  }, [fetchMonthData]);
 
   const formatTime = (isoString: string): string => {
     const date = new Date(isoString);

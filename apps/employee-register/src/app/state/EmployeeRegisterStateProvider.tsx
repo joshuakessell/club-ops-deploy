@@ -1,18 +1,11 @@
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AssignmentFailedPayload,
   type CheckoutChecklist,
   type CheckoutRequestSummary,
   getApiUrl,
   getCustomerMembershipStatus,
+  SessionUpdatedPayloadSchema,
 } from '@club-ops/shared';
 import { getErrorMessage, isRecord, readJson } from '@club-ops/ui';
 import { debounce } from '../../utils/debounce';
@@ -29,13 +22,14 @@ import { deriveCheckinStage } from '../../shared/derive/checkinStage';
 import { derivePastDueLineItems } from '../../shared/derive/pastDueLineItems';
 import { deriveWaitlistEligibility } from '../../shared/derive/waitlistEligibility';
 import { RETAIL_CATALOG, type RetailCart } from '../../components/retail/retailCatalog';
+import { EmployeeRegisterStateContext } from './EmployeeRegisterStateContext';
 
 type ScanResult =
   | { outcome: 'matched' }
   | { outcome: 'no_match'; message: string; canCreate?: boolean }
   | { outcome: 'error'; message: string };
 
-export const EmployeeRegisterStateContext = createContext<any>(null);
+export type EmployeeRegisterStateValue = ReturnType<typeof useEmployeeRegisterStateValue>;
 
 interface HealthStatus {
   status: string;
@@ -96,7 +90,7 @@ function generateUUID(): string {
   });
 }
 
-export function EmployeeRegisterStateProvider({ children }: { children: ReactNode }) {
+function useEmployeeRegisterStateValue() {
   // Tablet usability tweaks (Employee Register ONLY): measure baseline typography before applying CSS bumps.
   useEmployeeRegisterTabletUiTweaks();
 
@@ -269,23 +263,16 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
     [selectHomeTab]
   );
 
-  const startCheckoutFromCustomerAccount = useCallback(
-    (prefill?: { number?: string | null }) => {
-      checkoutReturnToTabRef.current = 'account';
-      const number = prefill?.number ?? null;
-      setCheckoutEntryMode(number ? 'direct-confirm' : 'default');
-      setCheckoutPrefill(number ? { number } : null);
-      selectHomeTab('checkout');
-    },
-    [selectHomeTab]
-  );
-
   const exitCheckout = useCallback(() => {
     const returnTo = checkoutReturnToTabRef.current;
     checkoutReturnToTabRef.current = null;
     setCheckoutPrefill(null);
     setCheckoutEntryMode('default');
     if (returnTo) {
+      if (returnTo === 'scan') {
+        setAccountCustomerId(null);
+        setAccountCustomerLabel(null);
+      }
       selectHomeTab(returnTo);
       return;
     }
@@ -327,6 +314,18 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
     checkoutAt,
     paymentDeclineError,
   } = laneSession;
+
+  const startCheckoutFromCustomerAccount = useCallback(
+    (prefill?: { number?: string | null }) => {
+      const returnTo: HomeTab = currentSessionId ? 'account' : 'scan';
+      checkoutReturnToTabRef.current = returnTo;
+      const number = prefill?.number ?? null;
+      setCheckoutEntryMode(number ? 'direct-confirm' : 'default');
+      setCheckoutPrefill(number ? { number } : null);
+      selectHomeTab('checkout');
+    },
+    [currentSessionId, selectHomeTab]
+  );
 
   // Keep naming stable throughout the existing component by providing setter wrappers.
   const setCustomerName = useCallback(
@@ -2091,7 +2090,10 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
         return;
       }
       if (isRecord(sessionPayload)) {
-        laneSessionActions.applySessionUpdated(sessionPayload as any);
+        const parsed = SessionUpdatedPayloadSchema.safeParse(sessionPayload);
+        if (parsed.success) {
+          laneSessionActions.applySessionUpdated(parsed.data);
+        }
       }
     } catch {
       // Best-effort; polling is a fallback.
@@ -3174,6 +3176,11 @@ export function EmployeeRegisterStateProvider({ children }: { children: ReactNod
     handleDemoPayment,
   };
 
+  return value;
+}
+
+export function EmployeeRegisterStateProvider({ children }: { children: ReactNode }) {
+  const value = useEmployeeRegisterStateValue();
   return (
     <EmployeeRegisterStateContext.Provider value={value}>
       {children}

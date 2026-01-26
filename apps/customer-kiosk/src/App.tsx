@@ -1,4 +1,3 @@
-import { AppProviders } from './app/AppProviders';
 import { AppRoot } from './app/AppRoot';
 
 // Keep global CSS import here if this app previously imported it in App.tsx.
@@ -7,9 +6,5 @@ import { AppRoot } from './app/AppRoot';
 // import './styles.css';
 
 export default function App() {
-  return (
-    <AppProviders>
-      <AppRoot />
-    </AppProviders>
-  );
+  return <AppRoot />;
 }

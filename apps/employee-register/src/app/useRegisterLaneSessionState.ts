@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useReducer } from 'react';
 import type { SessionUpdatedPayload } from '@club-ops/shared';
 import {
-  type PaymentQuoteViewModel,
   type RegisterLaneSessionState,
   initialRegisterLaneSessionState,
   registerLaneSessionReducer,

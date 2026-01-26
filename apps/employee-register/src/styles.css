@@ -954,6 +954,12 @@ body::after {
   font-size: 0.75rem;
 }
 
+/* Customer Account */
+.er-account-already-visiting .cs-liquid-card {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
 /* Lock Screen Styles */
 .lock-screen {
   min-height: 100vh;

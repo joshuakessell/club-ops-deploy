@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { WebSocketEvent } from '@club-ops/shared';
 import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
@@ -54,7 +54,7 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
     paymentIntentId?: string;
   }>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     const [a, o, r] = await Promise.all([
       apiJson<{ entries: WaitlistEntry[] }>('/v1/waitlist?status=ACTIVE', {
         sessionToken: session.sessionToken,
@@ -67,12 +67,11 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
     setActive(a.entries || []);
     setOffered(o.entries || []);
     setRooms((r.rooms || []).filter((x) => x.status === 'CLEAN')); // demo: only clean rooms
-  };
+  }, [session.sessionToken]);
 
   useEffect(() => {
     load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.sessionToken]);
+  }, [load]);
 
   const rawEnv = import.meta.env as unknown as Record<string, unknown>;
   const kioskToken =
@@ -94,7 +93,7 @@ export function WaitlistManagementView({ session }: { session: StaffSession }) {
     if (msg.type === 'WAITLIST_UPDATED' || msg.type === 'INVENTORY_UPDATED') {
       load().catch(() => {});
     }
-  }, [lastMessage]);
+  }, [lastMessage, load]);
 
   const availableRoomsForEntry = useMemo(() => {
     if (!selectedEntry) return [];

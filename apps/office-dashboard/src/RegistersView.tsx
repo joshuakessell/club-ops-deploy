@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { RegisterSessionUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
@@ -34,7 +34,7 @@ export function RegistersView({ session }: RegistersViewProps) {
   const [loading, setLoading] = useState(true);
   const [forceSignOutLoading, setForceSignOutLoading] = useState<number | null>(null);
 
-  const fetchRegisters = async () => {
+  const fetchRegisters = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/v1/admin/register-sessions`, {
         headers: {
@@ -50,11 +50,11 @@ export function RegistersView({ session }: RegistersViewProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [session.sessionToken]);
 
   useEffect(() => {
     fetchRegisters();
-  }, []);
+  }, [fetchRegisters]);
 
   const rawEnv = import.meta.env as unknown as Record<string, unknown>;
   const kioskToken =

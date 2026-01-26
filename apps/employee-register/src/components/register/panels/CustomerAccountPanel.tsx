@@ -91,7 +91,10 @@ export function CustomerAccountPanel(props: {
       />
 
       {state.mode === 'ALREADY_VISITING' ? (
-        <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.75rem' }}>
+        <div
+          className="er-account-already-visiting"
+          style={{ marginTop: '0.75rem', display: 'grid', gap: '0.75rem' }}
+        >
           <div
             className="cs-liquid-card"
             style={{

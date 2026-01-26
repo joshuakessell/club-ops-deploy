@@ -180,10 +180,9 @@ export function registerLaneSessionReducer(
       const nextSelectionConfirmed = Boolean(p.selectionConfirmed);
 
       next.proposedRentalType = nextProposedRentalType;
-      next.proposedBy = (p.proposedBy ?? null) as RegisterLaneSessionState['proposedBy'];
+      next.proposedBy = p.proposedBy ?? null;
       next.selectionConfirmed = nextSelectionConfirmed;
-      next.selectionConfirmedBy = (p.selectionConfirmedBy ??
-        null) as RegisterLaneSessionState['selectionConfirmedBy'];
+      next.selectionConfirmedBy = p.selectionConfirmedBy ?? null;
 
       next.paymentIntentId = p.paymentIntentId ?? null;
       next.paymentStatus = p.paymentStatus ?? null;
@@ -203,8 +202,7 @@ export function registerLaneSessionReducer(
         }
       }
 
-      next.assignedResourceType = (p.assignedResourceType ??
-        null) as RegisterLaneSessionState['assignedResourceType'];
+      next.assignedResourceType = p.assignedResourceType ?? null;
       next.assignedResourceNumber = p.assignedResourceNumber ?? null;
       next.checkoutAt = p.checkoutAt ?? null;
 

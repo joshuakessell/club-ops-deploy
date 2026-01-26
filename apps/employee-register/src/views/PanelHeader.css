@@ -47,6 +47,7 @@
 }
 
 .er-card-title {
+  margin: 0;
   font-weight: 900;
   font-size: 1.35rem;
   color: #fff;

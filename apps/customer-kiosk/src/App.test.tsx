@@ -102,6 +102,7 @@ describe('App', () => {
     Object.defineProperty(window, 'innerWidth', { value: 800, writable: true });
     Object.defineProperty(window, 'innerHeight', { value: 1200, writable: true });
     window.dispatchEvent(new Event('resize'));
+    window.history.replaceState({}, '', '/register-1');
     const storage = {
       getItem: vi.fn(() => null),
       setItem: vi.fn(),
@@ -207,6 +208,17 @@ describe('App', () => {
     // Should not show customer info
     expect(screen.queryByText(/Membership/i)).toBeNull();
     expect(screen.queryByText(/Rental/i)).toBeNull();
+  });
+
+  it('prompts for lane selection on the default URL', () => {
+    window.history.replaceState({}, '', '/');
+    sessionStorage.removeItem('lane');
+    act(() => {
+      render(<App />);
+    });
+    expect(screen.getByText('Select Lane')).toBeDefined();
+    expect(screen.getByText('Lane 1')).toBeDefined();
+    expect(screen.getByText('Lane 2')).toBeDefined();
   });
 
   it('never shows a payment decline reason (generic guidance only)', async () => {

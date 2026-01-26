@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { EmployeeRegisterStateContext } from './EmployeeRegisterStateProvider';
+import { EmployeeRegisterStateContext } from './EmployeeRegisterStateContext';
 
 export function useEmployeeRegisterState() {
   const ctx = useContext(EmployeeRegisterStateContext);

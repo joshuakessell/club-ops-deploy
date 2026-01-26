@@ -13,7 +13,7 @@ export function PanelCard<T extends ElementType = 'div'>({
   children,
   ...rest
 }: PanelCardProps<T>) {
-  const Component = (as ?? 'div') as ElementType;
+  const Component = as ?? 'div';
   const classes = ['cs-liquid-card', 'er-panel-card', className].filter(Boolean).join(' ');
 
   return (

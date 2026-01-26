@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { WebSocketEvent } from '@club-ops/shared';
@@ -154,7 +154,7 @@ export function AdminView({ session }: AdminViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.role, activeTab]);
 
-  const loadMetricsData = async () => {
+  const loadMetricsData = useCallback(async () => {
     if (!session.sessionToken) return;
 
     try {
@@ -194,21 +194,13 @@ export function AdminView({ session }: AdminViewProps) {
     } catch (error) {
       console.error('Failed to load metrics:', error);
     }
-  };
+  }, [dateFrom, dateTo, session.sessionToken, staffMembers]);
 
   useEffect(() => {
     if (session.role === 'ADMIN' && activeTab === 'metrics') {
       loadMetricsData();
     }
-  }, [
-    dateFrom,
-    dateTo,
-    selectedStaffId,
-    session.sessionToken,
-    session.role,
-    activeTab,
-    staffMembers.length,
-  ]);
+  }, [activeTab, loadMetricsData, session.role]);
 
   if (session.role !== 'ADMIN') {
     return (

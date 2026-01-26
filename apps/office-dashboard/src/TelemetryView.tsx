@@ -78,10 +78,15 @@ function truncate(value: string | null, max = 120): string {
 
 function formatMeta(meta: unknown): string {
   if (meta == null) return '—';
+  if (typeof meta === 'string') return meta;
+  if (typeof meta === 'number' || typeof meta === 'boolean' || typeof meta === 'bigint') {
+    return String(meta);
+  }
+  if (typeof meta === 'symbol') return meta.toString();
   try {
     return JSON.stringify(meta, null, 2);
   } catch {
-    return String(meta);
+    return '[unserializable]';
   }
 }
 

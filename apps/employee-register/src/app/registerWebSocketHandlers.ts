@@ -3,6 +3,7 @@ import type {
   AssignmentFailedPayload,
   CheckoutChecklist,
   CheckoutRequestSummary,
+  ParsedWebSocketEvent,
   SessionUpdatedPayload,
 } from '@club-ops/shared';
 import type { BottomToastTone } from '../components/register/toasts/BottomToastStack';
@@ -42,9 +43,10 @@ export type RegisterWebSocketParams = {
   onCustomerDeclined: () => void;
 };
 
-export function applyRegisterWebSocketEvent(message: any, params: RegisterWebSocketParams) {
-  if (!message) return;
-
+export function applyRegisterWebSocketEvent(
+  message: ParsedWebSocketEvent,
+  params: RegisterWebSocketParams
+) {
   if (message.type === 'CHECKOUT_REQUESTED') {
     const payload = message.payload;
     params.setCheckoutRequests((prev) => {

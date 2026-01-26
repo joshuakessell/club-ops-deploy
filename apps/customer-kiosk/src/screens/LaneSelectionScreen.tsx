@@ -19,6 +19,7 @@ export function LaneSelectionScreen({ orientationOverlay, onSelectLane }: LaneSe
               <p className="lane-subtitle">{t(null, 'lane.selectSubtitle')}</p>
               <div className="lane-options">
                 <button
+                  type="button"
                   className={['lane-option', 'cs-liquid-button'].join(' ')}
                   onClick={() => onSelectLane('lane-1')}
                 >
@@ -26,6 +27,7 @@ export function LaneSelectionScreen({ orientationOverlay, onSelectLane }: LaneSe
                   <span className="lane-option__subtitle">{t(null, 'lane.register1')}</span>
                 </button>
                 <button
+                  type="button"
                   className={['lane-option', 'cs-liquid-button'].join(' ')}
                   onClick={() => onSelectLane('lane-2')}
                 >

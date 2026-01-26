@@ -19,6 +19,14 @@ export const es: Record<keyof typeof en, string> = {
   english: 'English',
   spanish: 'Español',
 
+  // Lane selection
+  'lane.selectTitle': 'Selecciona carril',
+  'lane.selectSubtitle': 'Elige tu registro para comenzar.',
+  'lane.lane1': 'Carril 1',
+  'lane.lane2': 'Carril 2',
+  'lane.register1': 'Registro 1',
+  'lane.register2': 'Registro 2',
+
   // Orientation
   'orientation.title': 'Pon la pantalla vertical',
   'orientation.body': 'Gira la pantalla para seguir.',

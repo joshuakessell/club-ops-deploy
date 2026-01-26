@@ -23,7 +23,7 @@ export function PanelShell<T extends ElementType = 'div'>({
   children,
   ...rest
 }: PanelShellProps<T>) {
-  const Component = (as ?? 'div') as ElementType;
+  const Component = as ?? 'div';
   const classes = [
     'er-panel-shell',
     align === 'center' ? 'er-panel-shell--center' : 'er-panel-shell--top',

@@ -446,7 +446,7 @@ export function InventorySelector({
     return () => {
       mounted = false;
     };
-  }, [sessionToken, refreshTrigger, externalRefreshNonce]);
+  }, [API_BASE, sessionToken, refreshTrigger, externalRefreshNonce]);
 
   // Auto-select first available when customer selects type
   useEffect(() => {
@@ -1180,7 +1180,6 @@ function RoomItem({
   const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
   const checkoutTime = isOccupied ? formatTimeOfDay(room.checkoutAt) : null;
   const customerLabel = room.assignedMemberName || room.assignedTo || null;
-  const customerId = isUuid(room.assignedTo) ? room.assignedTo : null;
   const dueLevel = isOccupied ? alertLevelFromMsUntil(msUntil) : null;
 
   return (
@@ -1364,7 +1363,6 @@ function LockerSection({
               const duration = msUntil !== null ? formatDurationHuman(msUntil) : null;
               const checkoutTime = formatTimeOfDay(locker.checkoutAt);
               const customerLabel = locker.assignedMemberName || locker.assignedTo || null;
-              const customerId = isUuid(locker.assignedTo) ? locker.assignedTo : null;
               const dueLevel = alertLevelFromMsUntil(msUntil);
               return (
                 <button

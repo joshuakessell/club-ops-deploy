@@ -40,7 +40,7 @@ export function PanelHeader({
     <div className={classes}>
       <div className="er-panel-header__top">
         <div className="er-panel-header__title-group">
-          <div className="er-card-title">{title}</div>
+          <h2 className="er-card-title">{title}</h2>
           {isInline && subtitle ? <div className="er-card-subtitle">{subtitle}</div> : null}
         </div>
         {action ? <div className="er-panel-header__action">{action}</div> : null}

@@ -83,7 +83,6 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
     onConfirmMembershipOneTime,
     onConfirmMembershipSixMonth,
     onHighlightRental,
-    onSelectRentalAsCustomer,
     onHighlightWaitlistBackup,
     onSelectWaitlistBackupAsCustomer,
     onApproveRental,
@@ -329,18 +328,21 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                   ].join(' ')}
                   disabled={isSubmitting}
                   onClick={() => {
-                    runTwoStep(
-                      'MEMBERSHIP',
-                      opt.id,
-                      isPending,
-                      () => onHighlightMembership(opt.id),
-                      () => {
-                        if (opt.id === 'ONE_TIME') return onConfirmMembershipOneTime();
-                        return onConfirmMembershipSixMonth();
-                      },
-                      () => onHighlightMembership(null)
-                    );
-                  }}
+                      runTwoStep(
+                        'MEMBERSHIP',
+                        opt.id,
+                        isPending,
+                        () => onHighlightMembership(opt.id),
+                        () => {
+                          if (opt.id === 'ONE_TIME') {
+                            void onConfirmMembershipOneTime();
+                            return;
+                          }
+                          void onConfirmMembershipSixMonth();
+                        },
+                        () => onHighlightMembership(null)
+                      );
+                    }}
                   style={{ width: '100%', padding: '0.9rem 1rem', fontWeight: 900 }}
                 >
                   {opt.label}
@@ -382,7 +384,9 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                         btn.id,
                         isPending,
                         () => onHighlightWaitlistBackup(btn.id),
-                        () => onSelectWaitlistBackupAsCustomer(btn.id),
+                        () => {
+                          void onSelectWaitlistBackupAsCustomer(btn.id);
+                        },
                         () => onHighlightWaitlistBackup(null)
                       );
                     }}
@@ -446,8 +450,12 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                         'RENTAL',
                         btn.id,
                         isPending,
-                        () => onHighlightRental(btn.id),
-                        () => onApproveRental()
+                        () => {
+                          void onHighlightRental(btn.id);
+                        },
+                        () => {
+                          void onApproveRental();
+                        }
                       );
                     }}
                     style={{

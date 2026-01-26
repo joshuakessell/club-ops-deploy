@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { handleScannerKeydown } from './scanner/scannerKeydown';
-import type { ScannerCapture, ScannerInputOptions } from './scanner/scannerInputTypes';
+import type { ScannerInputOptions } from './scanner/scannerInputTypes';
 
 export type { ScannerCapture } from './scanner/scannerInputTypes';
 
