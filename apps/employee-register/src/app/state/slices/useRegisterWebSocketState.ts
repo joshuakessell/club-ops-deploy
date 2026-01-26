@@ -1,14 +1,33 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import type { AssignmentFailedPayload, CheckoutChecklist, CheckoutRequestSummary } from '@club-ops/shared';
+import type {
+  AssignmentFailedPayload,
+  CheckoutChecklist,
+  CheckoutRequestSummary,
+  SessionUpdatedPayload,
+} from '@club-ops/shared';
 import { useRegisterWebSocketEvents } from '../../useRegisterWebSocketEvents';
 import type { BottomToast } from '../../../components/register/toasts/BottomToastStack';
+import type { HomeTab } from '../shared/types';
 
 type LaneSessionActions = {
-  applySessionUpdated: (payload: unknown) => void;
-  applySelectionProposed: (payload: { rentalType: string; proposedBy: string }) => void;
-  applySelectionLocked: (payload: { rentalType: string; confirmedBy: string }) => void;
+  applySessionUpdated: (payload: SessionUpdatedPayload) => void;
+  applySelectionProposed: (payload: { rentalType: string; proposedBy: 'CUSTOMER' | 'EMPLOYEE' }) => void;
+  applySelectionLocked: (payload: { rentalType: string; confirmedBy: 'CUSTOMER' | 'EMPLOYEE' }) => void;
   applySelectionForced: (payload: { rentalType: string }) => void;
   selectionAcknowledged: () => void;
+};
+
+type InventorySelection = {
+  type: 'room' | 'locker';
+  id: string;
+  number: string;
+  tier: string;
+};
+
+type CustomerConfirmationType = {
+  requested: string;
+  selected: string;
+  number: string;
 };
 
 type Params = {
@@ -18,13 +37,13 @@ type Params = {
   customerSelectedType: string | null;
   laneSessionActions: LaneSessionActions;
   setCheckoutRequests: Dispatch<SetStateAction<Map<string, CheckoutRequestSummary>>>;
-  setCheckoutItemsConfirmed: (value: boolean) => void;
-  setCheckoutFeePaid: (value: boolean) => void;
-  setSelectedCheckoutRequest: (value: string | null) => void;
-  setCheckoutChecklist: (value: CheckoutChecklist) => void;
+  setCheckoutItemsConfirmed: Dispatch<SetStateAction<boolean>>;
+  setCheckoutFeePaid: Dispatch<SetStateAction<boolean>>;
+  setSelectedCheckoutRequest: Dispatch<SetStateAction<string | null>>;
+  setCheckoutChecklist: Dispatch<SetStateAction<CheckoutChecklist>>;
   refreshWaitlistAndInventory: () => void;
   refreshInventoryAvailable: () => void;
-  setSelectedInventoryItem: (value: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null) => void;
+  setSelectedInventoryItem: (value: InventorySelection | null) => void;
   setShowAddOnSaleModal: (value: boolean) => void;
   resetAddOnCart: () => void;
   resetMembershipPrompt: () => void;
@@ -32,10 +51,10 @@ type Params = {
   setCurrentSessionCustomerId: (value: string | null) => void;
   setAccountCustomerId: (value: string | null) => void;
   setAccountCustomerLabel: (value: string | null) => void;
-  selectHomeTab: (value: string) => void;
+  selectHomeTab: (value: HomeTab) => void;
   pushBottomToast: (toast: Omit<BottomToast, 'id'> & { id?: string }, ttlMs?: number) => void;
   setShowCustomerConfirmationPending: (value: boolean) => void;
-  setCustomerConfirmationType: (value: { requested: string; selected: string; number: string } | null) => void;
+  setCustomerConfirmationType: (value: CustomerConfirmationType | null) => void;
 };
 
 export function useRegisterWebSocketState({

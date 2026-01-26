@@ -11,7 +11,7 @@
     "db:start": "node scripts/compose.mjs up -d",
     "db:stop": "node scripts/compose.mjs down",
     "db:reset": "node scripts/compose.mjs reset && pnpm exec tsx scripts/wait-for-db.ts",
-    "db:migrate": "pnpm exec tsx scripts/wait-for-db.ts && pnpm exec tsx src/db/migrate.ts",
+    "db:migrate": "pnpm exec tsx scripts/wait-for-db.ts && pnpm exec tsx scripts/migrate.ts",
     "db:migrate:status": "pnpm exec tsx scripts/wait-for-db.ts && pnpm exec tsx src/db/migrate-status.ts",
     "seed": "pnpm exec tsx scripts/wait-for-db.ts && pnpm exec tsx src/db/seed.ts"
   },
@@ -36,6 +36,7 @@
     "@types/pdf-parse": "^1.1.4",
     "@types/pg": "^8.10.9",
     "@types/ws": "^8.5.10",
+    "node-pg-migrate": "^7.7.0",
     "pdf-parse": "^1.1.1",
     "tsx": "^4.6.2",
     "typescript": "^5.3.3",

@@ -6,11 +6,10 @@ import type { StaffSession } from '../shared/types';
 
 type Params = {
   session: StaffSession | null;
-  lane: string;
   setIsSubmitting: (value: boolean) => void;
 };
 
-export function useCheckoutState({ session, lane, setIsSubmitting }: Params) {
+export function useCheckoutState({ session, setIsSubmitting }: Params) {
   const [checkoutRequests, setCheckoutRequests] = useState<Map<string, CheckoutRequestSummary>>(
     new Map()
   );

@@ -54,7 +54,7 @@ export function useScanOverlayState({
       setScanOverlayActive(true);
       scanOverlayShownAtRef.current = Date.now();
     });
-  }, [scanOverlayHideTimer, scanOverlayMounted]);
+  }, [scanOverlayHideTimerRef, scanOverlayMounted]);
 
   const hideScanOverlay = useCallback(() => {
     if (scanOverlayHideTimerRef.current) return;

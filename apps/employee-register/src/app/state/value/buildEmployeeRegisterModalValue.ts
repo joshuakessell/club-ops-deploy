@@ -1,4 +1,34 @@
-export function buildEmployeeRegisterModalValue(params: Record<string, any>) {
+import type { MutableRefObject } from 'react';
+import type { useAddOnSaleState } from '../slices/useAddOnSaleState';
+import type { useDocumentsState } from '../slices/useDocumentsState';
+import type { useMembershipPromptState } from '../slices/useMembershipPromptState';
+import type { useNotesState } from '../slices/useNotesState';
+import type { usePastDueState } from '../slices/usePastDueState';
+import type { usePaymentActions } from '../slices/usePaymentActions';
+import type { useScanState } from '../slices/useScanState';
+import type { useSelectionActions } from '../slices/useSelectionActions';
+import type { useToastState } from '../slices/useToastState';
+import type { useWaitlistUpgradeState } from '../slices/useWaitlistUpgradeState';
+
+type PastDueLineItem = { description: string; amount: number };
+
+type EmployeeRegisterModalParams = {
+  scanState: ReturnType<typeof useScanState>;
+  pastDueState: ReturnType<typeof usePastDueState>;
+  pastDueLineItems: PastDueLineItem[];
+  membershipPromptState: ReturnType<typeof useMembershipPromptState>;
+  addOnState: ReturnType<typeof useAddOnSaleState>;
+  paymentActions: ReturnType<typeof usePaymentActions>;
+  waitlistState: ReturnType<typeof useWaitlistUpgradeState>;
+  notesState: ReturnType<typeof useNotesState>;
+  toastState: ReturnType<typeof useToastState>;
+  setPaymentDeclineError: (value: string | null) => void;
+  currentSessionIdRef: MutableRefObject<string | null>;
+  documentsState: ReturnType<typeof useDocumentsState>;
+  selectionActions: ReturnType<typeof useSelectionActions>;
+};
+
+export function buildEmployeeRegisterModalValue(params: EmployeeRegisterModalParams) {
   const {
     scanState,
     pastDueState,

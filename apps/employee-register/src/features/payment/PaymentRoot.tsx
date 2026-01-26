@@ -46,7 +46,12 @@ export function PaymentRoot() {
     handleAddOnSaleToCheckin,
   } = useEmployeeRegisterState();
 
-  const ledgerItems = Array.isArray(ledgerLineItems) ? ledgerLineItems : [];
+  const ledgerItems = Array.isArray(ledgerLineItems)
+    ? (ledgerLineItems as Array<{ description: string; amount: number }>)
+    : [];
+  const renewalLineItems = Array.isArray(paymentQuote?.lineItems)
+    ? (paymentQuote.lineItems as Array<{ description: string; amount: number }>)
+    : [];
 
   const renewalDetails =
     laneSessionMode === 'RENEWAL' && paymentQuote ? (
@@ -79,7 +84,7 @@ export function PaymentRoot() {
             Renewal Charges{renewalHours ? ` (${renewalHours} hours)` : ''}
           </div>
           <div className="er-renewal-ledger__items">
-            {paymentQuote.lineItems.map((item, idx) => (
+            {renewalLineItems.map((item, idx) => (
               <div key={`${item.description}-${idx}`} className="er-renewal-ledger__row">
                 <span>{item.description}</span>
                 <span>${item.amount.toFixed(2)}</span>

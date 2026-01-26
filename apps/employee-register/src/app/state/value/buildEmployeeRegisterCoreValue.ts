@@ -1,4 +1,52 @@
-export function buildEmployeeRegisterCoreValue(params: Record<string, any>) {
+import type { CheckinStage } from '../../../components/register/CustomerProfileCard';
+import type { useCheckoutState } from '../slices/useCheckoutState';
+import type { useCustomerSearchState } from '../slices/useCustomerSearchState';
+import type { useCustomerSessionActions } from '../slices/useCustomerSessionActions';
+import type { useHealthStatus } from '../slices/useHealthStatus';
+import type { useHomeNavigationState } from '../slices/useHomeNavigationState';
+import type { useInventorySelectionState } from '../slices/useInventorySelectionState';
+import type { useLaneSessionBindings } from '../slices/useLaneSessionBindings';
+import type { useManualEntryState } from '../slices/useManualEntryState';
+import type { useMembershipActions } from '../slices/useMembershipActions';
+import type { useRenewalSelectionState } from '../slices/useRenewalSelectionState';
+import type { useSelectionActions } from '../slices/useSelectionActions';
+import type { useSessionResetActions } from '../slices/useSessionResetActions';
+import type { useStaffSessionState } from '../slices/useStaffSessionState';
+import type { useWaitlistUpgradeState } from '../slices/useWaitlistUpgradeState';
+
+type EmployeeRegisterCoreParams = {
+  deviceId: ReturnType<typeof useStaffSessionState>['deviceId'];
+  handleRegisterSignIn: ReturnType<typeof useStaffSessionState>['handleRegisterSignIn'];
+  lane: ReturnType<typeof useStaffSessionState>['lane'];
+  health: ReturnType<typeof useHealthStatus>['health'];
+  wsConnected: boolean;
+  handleLogout: ReturnType<typeof useStaffSessionState>['handleLogout'];
+  handleCloseOut: ReturnType<typeof useStaffSessionState>['handleCloseOut'];
+  registerSession: ReturnType<typeof useStaffSessionState>['registerSession'];
+  session: ReturnType<typeof useStaffSessionState>['session'];
+  checkoutState: ReturnType<typeof useCheckoutState>;
+  navState: ReturnType<typeof useHomeNavigationState>;
+  waitlistState: ReturnType<typeof useWaitlistUpgradeState>;
+  laneBindings: ReturnType<typeof useLaneSessionBindings>;
+  selectionActions: ReturnType<typeof useSelectionActions>;
+  membershipActions: ReturnType<typeof useMembershipActions>;
+  sessionResetActions: ReturnType<typeof useSessionResetActions>;
+  inventorySelectionState: ReturnType<typeof useInventorySelectionState>;
+  customerSessionActions: ReturnType<typeof useCustomerSessionActions>;
+  manualEntryState: ReturnType<typeof useManualEntryState>;
+  setManualEntry: (value: boolean) => void;
+  customerSearchState: ReturnType<typeof useCustomerSearchState>;
+  assignedLabel: string;
+  checkinStage: CheckinStage | null;
+  isSubmitting: boolean;
+  laneSessionMode: ReturnType<typeof useLaneSessionBindings>['mode'];
+  renewalHours: ReturnType<typeof useLaneSessionBindings>['renewalHours'];
+  ledgerLineItems: ReturnType<typeof useLaneSessionBindings>['ledgerLineItems'];
+  ledgerTotal: ReturnType<typeof useLaneSessionBindings>['ledgerTotal'];
+  renewalSelectionState: ReturnType<typeof useRenewalSelectionState>;
+};
+
+export function buildEmployeeRegisterCoreValue(params: EmployeeRegisterCoreParams) {
   const {
     deviceId,
     handleRegisterSignIn,
@@ -23,6 +71,11 @@ export function buildEmployeeRegisterCoreValue(params: Record<string, any>) {
     customerSearchState,
     assignedLabel,
     checkinStage,
+    laneSessionMode,
+    renewalHours,
+    ledgerLineItems,
+    ledgerTotal,
+    renewalSelectionState,
   } = params;
 
   const {
@@ -84,6 +137,7 @@ export function buildEmployeeRegisterCoreValue(params: Record<string, any>) {
     setCheckoutFeePaid: checkoutState.setCheckoutFeePaid,
     homeTab: navState.homeTab,
     selectHomeTab: navState.selectHomeTab,
+    canOpenAccountTab: navState.canOpenAccountTab,
     inventoryHasLate: checkoutState.inventoryHasLate,
     setInventoryHasLate: checkoutState.setInventoryHasLate,
     hasEligibleEntries: waitlistState.hasEligibleEntries,
@@ -103,6 +157,10 @@ export function buildEmployeeRegisterCoreValue(params: Record<string, any>) {
     customerMembershipValidUntil,
     membershipPurchaseIntent,
     membershipChoice,
+    laneSessionMode,
+    renewalHours,
+    ledgerLineItems,
+    ledgerTotal,
     allowedRentals,
     proposedRentalType,
     proposedBy,
@@ -135,8 +193,15 @@ export function buildEmployeeRegisterCoreValue(params: Record<string, any>) {
     handleConfirmMembershipSixMonth: membershipActions.handleConfirmMembershipSixMonth,
     handleProposeSelection: selectionActions.handleProposeSelection,
     handleCustomerSelectRental: selectionActions.handleCustomerSelectRental,
+    handleDirectSelectRental: selectionActions.handleDirectSelectRental,
     handleSelectWaitlistBackupAsCustomer: selectionActions.handleSelectWaitlistBackupAsCustomer,
+    handleDirectSelectWaitlistBackup: selectionActions.handleDirectSelectWaitlistBackup,
     handleConfirmSelection: selectionActions.handleConfirmSelection,
+    renewalSelection: renewalSelectionState.renewalSelection,
+    renewalSelectionError: renewalSelectionState.renewalSelectionError,
+    openRenewalSelection: renewalSelectionState.openRenewalSelection,
+    closeRenewalSelection: renewalSelectionState.closeRenewalSelection,
+    handleStartRenewal: renewalSelectionState.handleStartRenewal,
     handleClearSession: sessionResetActions.handleClearSession,
     handleInventorySelect: inventorySelectionState.handleInventorySelect,
     startLaneSessionByCustomerId: customerSessionActions.startLaneSessionByCustomerId,

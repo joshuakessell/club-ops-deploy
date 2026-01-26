@@ -19,6 +19,7 @@ import { useNotesState } from './slices/useNotesState';
 import { usePastDueState } from './slices/usePastDueState';
 import { usePaymentActions } from './slices/usePaymentActions';
 import { usePollingFallback } from './slices/usePollingFallback';
+import { useRenewalSelectionState } from './slices/useRenewalSelectionState';
 import { useRegisterWebSocketState } from './slices/useRegisterWebSocketState';
 import { useScanState } from './slices/useScanState';
 import { useSelectionActions } from './slices/useSelectionActions';
@@ -51,6 +52,10 @@ export function useEmployeeRegisterStateValue() {
     customerMembershipValidUntil,
     pastDueBlocked,
     pastDueBalance,
+    mode,
+    renewalHours,
+    ledgerLineItems,
+    ledgerTotal,
     proposedRentalType,
     selectionConfirmed,
     paymentIntentId,
@@ -92,7 +97,7 @@ export function useEmployeeRegisterStateValue() {
 
   const inventorySelectionState = useInventorySelectionState({ customerSelectedType });
 
-  const checkoutState = useCheckoutState({ session, lane, setIsSubmitting });
+  const checkoutState = useCheckoutState({ session, setIsSubmitting });
 
   const waitlistState = useWaitlistUpgradeState({
     session,
@@ -206,6 +211,14 @@ export function useEmployeeRegisterStateValue() {
     },
   });
 
+  const renewalSelectionState = useRenewalSelectionState({
+    lane,
+    session,
+    accountCustomerId: navState.accountCustomerId,
+    setIsSubmitting,
+    laneSessionActions: laneBindings.laneSessionActions,
+  });
+
   const sessionResetActions = useSessionResetActions({
     session,
     lane,
@@ -274,6 +287,7 @@ export function useEmployeeRegisterStateValue() {
     notesState.showAddNoteModal ||
     documentsState.documentsModalOpen ||
     !!waitlistState.offerUpgradeModal ||
+    !!renewalSelectionState.renewalSelection ||
     (waitlistState.showWaitlistModal && !!waitlistDesiredTier && !!waitlistBackupType) ||
     (inventorySelectionState.showCustomerConfirmationPending &&
       !!inventorySelectionState.customerConfirmationType) ||
@@ -359,6 +373,11 @@ export function useEmployeeRegisterStateValue() {
     assignedLabel,
     checkinStage,
     isSubmitting,
+    laneSessionMode: mode,
+    renewalHours,
+    ledgerLineItems,
+    ledgerTotal,
+    renewalSelectionState,
   });
 
   const modalValue = buildEmployeeRegisterModalValue({

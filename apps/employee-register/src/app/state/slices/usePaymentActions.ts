@@ -3,6 +3,10 @@ import { getErrorMessage, readJson } from '@club-ops/ui';
 import { RETAIL_CATALOG } from '../../../components/retail/retailCatalog';
 import { API_BASE } from '../shared/api';
 import type { StaffSession } from '../shared/types';
+import type { PaymentQuoteViewModel } from '../../registerLaneSessionReducer';
+
+type PaymentQuote = PaymentQuoteViewModel | null;
+type PaymentQuoteSetter = (value: PaymentQuote | ((prev: PaymentQuote) => PaymentQuote)) => void;
 
 type RegisterSession = {
   employeeId: string;
@@ -22,7 +26,7 @@ type Params = {
   addOnCart: Record<string, number>;
   setIsSubmitting: (value: boolean) => void;
   setPaymentIntentId: (value: string | null) => void;
-  setPaymentQuote: (value: unknown) => void;
+  setPaymentQuote: PaymentQuoteSetter;
   setPaymentStatus: (value: 'DUE' | 'PAID' | null) => void;
   setPaymentDeclineError: (value: string | null) => void;
   setSuccessToastMessage: (value: string | null) => void;

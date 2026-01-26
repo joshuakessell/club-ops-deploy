@@ -73,6 +73,7 @@ export function CustomerAccountPanel(props: {
     membershipNumber?: string;
     mode?: 'CHECKIN' | 'RENEWAL';
     blockEndsAt?: string;
+    renewalHours?: 2 | 6;
     activeAssignedResourceType?: 'room' | 'locker';
     activeAssignedResourceNumber?: string;
     customerHasEncryptedLookupMarker?: boolean;

@@ -1,5 +1,9 @@
 import { API_BASE } from '../shared/api';
 import type { StaffSession } from '../shared/types';
+import type { PaymentQuoteViewModel } from '../../registerLaneSessionReducer';
+
+type PaymentQuote = PaymentQuoteViewModel | null;
+type PaymentQuoteSetter = (value: PaymentQuote | ((prev: PaymentQuote) => PaymentQuote)) => void;
 
 type Params = {
   session: StaffSession | null;
@@ -18,7 +22,7 @@ type Params = {
   setWaitlistBackupType: (value: string | null) => void;
   setSelectedInventoryItem: (value: { type: 'room' | 'locker'; id: string; number: string; tier: string } | null) => void;
   setPaymentIntentId: (value: string | null) => void;
-  setPaymentQuote: (value: unknown) => void;
+  setPaymentQuote: PaymentQuoteSetter;
   setPaymentStatus: (value: 'DUE' | 'PAID' | null) => void;
   setShowCustomerConfirmationPending: (value: boolean) => void;
   setCustomerConfirmationType: (value: { requested: string; selected: string; number: string } | null) => void;
