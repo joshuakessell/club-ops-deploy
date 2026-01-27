@@ -340,15 +340,15 @@ export function AppComposition() {
         return;
       }
 
-      // If we have assignment, show complete view (highest priority after reset)
-      if (assignedResourceType && assignedResourceNumber) {
-        setView('complete');
+      // Reset to idle if session is completed (employee completed transaction).
+      if (payload.status === 'COMPLETED') {
+        resetToIdle();
         return;
       }
 
-      // Reset to idle if session is completed and cleared
-      if (payload.status === 'COMPLETED') {
-        resetToIdle();
+      // If we have assignment, show complete view (highest priority after reset)
+      if (assignedResourceType && assignedResourceNumber) {
+        setView('complete');
         return;
       }
 

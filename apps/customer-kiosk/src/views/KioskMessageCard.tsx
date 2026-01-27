@@ -23,7 +23,7 @@ export function KioskMessageCard({
   titleClassName,
   bodyClassName,
 }: KioskMessageCardProps) {
-  const surfaceClasses = tone === 'glass' ? 'cs-liquid-card' : '';
+  const surfaceClasses = 'cs-liquid-card';
   const classes = [
     'ck-message-card',
     `ck-message-card--${tone}`,

@@ -30,15 +30,28 @@ export function useScanOverlayState({
   const [scanToastMessage, setScanToastMessage] = useState<string | null>(null);
   const scanOverlayHideTimerRef = useRef<number | null>(null);
   const scanOverlayShownAtRef = useRef<number | null>(null);
+  const passiveCaptureHandledRef = useRef(false);
   const SCAN_OVERLAY_MIN_VISIBLE_MS = 300;
+  const prevScanEnabledRef = useRef<boolean | null>(null);
 
   const passiveScanEnabled =
     homeTab === 'scan' &&
     !!session?.sessionToken &&
-    !passiveScanProcessing &&
     !isSubmitting &&
     !manualEntry &&
     !blockingModalOpen;
+
+  const scanBlockedReason = !session?.sessionToken
+    ? 'Not authenticated'
+    : homeTab !== 'scan'
+      ? 'Scan tab inactive'
+      : isSubmitting
+        ? 'Submitting'
+        : manualEntry
+          ? 'Manual entry active'
+            : blockingModalOpen
+              ? 'Modal open'
+              : null;
 
   const showScanOverlay = useCallback(() => {
     if (scanOverlayHideTimerRef.current) {
@@ -76,19 +89,19 @@ export function useScanOverlayState({
     (rawScanText: string) => {
       void (async () => {
         const cleanedScanText = rawScanText.trim();
-        if (
-          cleanedScanText === 'TZTAN' ||
-          (cleanedScanText.length > 0 &&
-            cleanedScanText.length <= 8 &&
-            /^[A-Za-z]+$/.test(cleanedScanText))
-        ) {
+        if (!cleanedScanText) {
           passiveScanProcessingRef.current = false;
           setPassiveScanProcessing(false);
           hideScanOverlay();
           return;
         }
+        const normalizedScanText = rawScanText
+          .split(/\r?\n/)
+          .filter((line) => line.trim().toUpperCase() !== 'ZTZTAN')
+          .join('\n')
+          .trim();
         setScanToastMessage(null);
-        const result = await onBarcodeCaptured(rawScanText);
+        const result = await onBarcodeCaptured(normalizedScanText || rawScanText);
         passiveScanProcessingRef.current = false;
         setPassiveScanProcessing(false);
         hideScanOverlay();
@@ -111,41 +124,52 @@ export function useScanOverlayState({
 
   const computeScanIdleTimeout = useCallback((buffer: string) => {
     const trimmed = buffer.trim();
-    if (!trimmed) return 250;
+    if (!trimmed) return 800;
     const looksAamva =
       trimmed.startsWith('@') ||
       trimmed.includes('ANSI ') ||
       trimmed.includes('AAMVA') ||
       trimmed.includes('DL');
-    if (!looksAamva) return 250;
-    const hasCoreFields =
-      trimmed.includes('DCS') &&
-      trimmed.includes('DAC') &&
-      (trimmed.includes('DBB') || trimmed.includes('DBD')) &&
-      trimmed.includes('DAQ');
-    return hasCoreFields ? 250 : 1200;
+    if (!looksAamva) return 800;
+
+    const upper = trimmed.toUpperCase();
+    const hasTerminator = upper.includes('ZTZTAN');
+    if (hasTerminator) return 200;
+
+    return 3000;
   }, []);
 
   usePassiveScannerInput({
     enabled: passiveScanEnabled,
-    idleTimeoutMs: 250,
-    enterGraceMs: 80,
-    captureWhenEditable: false,
+    idleTimeoutMs: 1200,
+    enterGraceMs: 350,
+    captureWhenEditable: true,
+    minLength: 1,
     enterTerminates: false,
     tabTerminates: false,
+    scannerInterKeyMaxMs: 2000,
     getIdleTimeoutMs: computeScanIdleTimeout,
+    onCaptureStart: () => {
+      passiveScanProcessingRef.current = true;
+      setPassiveScanProcessing(true);
+      passiveCaptureHandledRef.current = false;
+      showScanOverlay();
+    },
     onCaptureEnd: () => {
-      if (!passiveScanProcessingRef.current) hideScanOverlay();
+      if (!passiveCaptureHandledRef.current) {
+        passiveScanProcessingRef.current = false;
+        setPassiveScanProcessing(false);
+        hideScanOverlay();
+      }
     },
     onCancel: () => {
       passiveScanProcessingRef.current = false;
       setPassiveScanProcessing(false);
+      passiveCaptureHandledRef.current = false;
       hideScanOverlay();
     },
     onCapture: (raw) => {
-      passiveScanProcessingRef.current = true;
-      setPassiveScanProcessing(true);
-      showScanOverlay();
+      passiveCaptureHandledRef.current = true;
       handlePassiveCapture(raw);
     },
   });
@@ -163,5 +187,7 @@ export function useScanOverlayState({
     scanOverlayActive,
     scanToastMessage,
     setScanToastMessage,
+    scanReady: passiveScanEnabled,
+    scanBlockedReason,
   };
 }

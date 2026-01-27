@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../auth/middleware';
-import { transaction } from '../../db';
+import { query } from '../../db';
 import type { LaneSessionRow } from '../../checkin/types';
 
 export function registerCheckinLaneSessionsRoutes(fastify: FastifyInstance): void {
@@ -68,31 +68,4 @@ export function registerCheckinLaneSessionsRoutes(fastify: FastifyInstance): voi
     }
   );
 
-  /**
-   * Helper function to check past-due balance and bypass status.
-   * Returns true if customer is blocked by past-due balance.
-   */
-  async function checkPastDueBlocked(
-    client: Parameters<Parameters<typeof transaction>[0]>[0],
-    customerId: string | null,
-    sessionBypassed: boolean
-  ): Promise<{ blocked: boolean; balance: number }> {
-    if (!customerId) {
-      return { blocked: false, balance: 0 };
-    }
-
-    const customerResult = await client.query<CustomerRow>(
-      `SELECT past_due_balance FROM customers WHERE id = $1`,
-      [customerId]
-    );
-
-    if (customerResult.rows.length === 0) {
-      return { blocked: false, balance: 0 };
-    }
-
-    const balance = parseFloat(String(customerResult.rows[0]!.past_due_balance || 0));
-    const blocked = balance > 0 && !sessionBypassed;
-
-    return { blocked, balance };
-  }
 }

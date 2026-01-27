@@ -1,13 +1,19 @@
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { requireAuth } from '../../auth/middleware';
 import { serializableTransaction, transaction } from '../../db';
-import type { CheckoutRequestRow, CustomerRow, KeyTagRow, LockerRow, RoomRow } from '../../checkout/types';
+import type {
+  CheckoutRequestRow,
+  CheckinBlockRow,
+  WaitlistStatusRow,
+  VisitDateRow,
+} from '../../checkout/types';
 import { MarkFeePaidSchema, type MarkFeePaidInput } from '../../checkout/schemas';
 import type { CheckoutClaimedPayload, CheckoutCompletedPayload, CheckoutUpdatedPayload } from '@club-ops/shared';
 import { RoomStatus } from '@club-ops/shared';
 import { broadcastInventoryUpdate } from '../../inventory/broadcast';
 import { insertAuditLog } from '../../audit/auditLog';
-import { calculateLateFee, looksLikeUuid } from '../../checkout/utils';
+import { looksLikeUuid } from '../../checkout/utils';
 import { buildSystemLateFeeNote } from '../../utils/lateFeeNotes';
 
 export function registerCheckoutStaffRoutes(fastify: FastifyInstance): void {

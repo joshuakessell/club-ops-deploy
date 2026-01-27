@@ -12,13 +12,29 @@ import {
   scoreNameMatch,
   splitNamePartsForMatch,
 } from '../../checkin/identity';
-import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
+import { buildFullSessionUpdatedPayload, getAllowedRentals } from '../../checkin/payload';
 import { CheckinScanBodySchema } from '../../checkin/schemas';
-import type { LaneSessionRow } from '../../checkin/types';
+import type { CustomerRow, LaneSessionRow } from '../../checkin/types';
 import { maybeAttachScanIdentifiers } from '../../checkin/helpers';
 import { toDate } from '../../checkin/utils';
 import { transaction } from '../../db';
-import { broadcastInventoryUpdate } from '../../inventory/broadcast';
+
+function normalizeIdNumberForMatch(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/[^a-z0-9]/gi, '').toUpperCase();
+  return normalized || null;
+}
+
+function extractStoredIdNumberForMatch(value: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (isLikelyAamvaPdf417Text(trimmed)) {
+    const extracted = extractAamvaIdentity(normalizeScanText(trimmed));
+    return extracted.idNumber ?? null;
+  }
+  return trimmed;
+}
 
 export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
   /**
@@ -74,6 +90,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           id_scan_hash: string | null;
           id_scan_value: string | null;
         };
+        type CustomerIdentityCandidateRow = CustomerIdentityRow & { created_at: Date };
 
         const checkBanned = (row: CustomerIdentityRow) => {
           const bannedUntil = toDate(row.banned_until);
@@ -90,8 +107,15 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           const extracted = extractAamvaIdentity(normalized);
           const idScanValue = normalized;
           const idScanHash = computeSha256Hex(idScanValue);
+          const scannedIdNumber = extracted.idNumber?.trim() || null;
+          const scannedIdNumberNormalized = normalizeIdNumberForMatch(scannedIdNumber);
+          const issuerForHash = (extracted.issuer || extracted.jurisdiction || '').trim();
+          const idNumberHash =
+            scannedIdNumber && issuerForHash
+              ? computeSha256Hex(`${issuerForHash}:${scannedIdNumber}`)
+              : null;
 
-          // Employee-choice resolution (step after MULTIPLE_MATCHES)
+          // Employee-choice resolution (staff override after fuzzy evaluation)
           if (body.selectedCustomerId) {
             const selected = await client.query<CustomerIdentityRow>(
               `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
@@ -180,7 +204,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           }
 
           // Matching order:
-          // 1) customers.id_scan_hash OR customers.id_scan_value
+          // 1) customers.id_scan_hash OR customers.id_scan_value (raw scan)
           const byHashOrValue = await client.query<CustomerIdentityRow>(
             `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
              FROM customers
@@ -220,6 +244,49 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
               extracted,
               enriched: false,
             };
+          }
+
+          // 1b) fallback match by stored idNumber/hash (manual or scan-id with issuer+idNumber)
+          if (scannedIdNumber || idNumberHash) {
+            const byIdNumber = await client.query<CustomerIdentityRow>(
+              `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+               FROM customers
+               WHERE id_scan_value = $1 OR id_scan_hash = $2
+               LIMIT 2`,
+              [scannedIdNumber, idNumberHash]
+            );
+
+            if (byIdNumber.rows.length > 0) {
+              const matched = idNumberHash
+                ? byIdNumber.rows.find((r) => r.id_scan_hash === idNumberHash) ??
+                  byIdNumber.rows[0]!
+                : byIdNumber.rows[0]!;
+
+              checkBanned(matched);
+              await maybeAttachScanIdentifiers({
+                client,
+                customerId: matched.id,
+                existingIdScanHash: matched.id_scan_hash,
+                existingIdScanValue: matched.id_scan_value,
+                idScanHash,
+                idScanValue,
+              });
+
+              return {
+                result: 'MATCHED' as const,
+                scanType: 'STATE_ID' as const,
+                normalizedRawScanText: idScanValue,
+                idScanHash,
+                customer: {
+                  id: matched.id,
+                  name: matched.name,
+                  dob: matched.dob ? matched.dob.toISOString().slice(0, 10) : null,
+                  membershipNumber: matched.membership_number,
+                },
+                extracted,
+                enriched: Boolean(!matched.id_scan_hash || !matched.id_scan_value),
+              };
+            }
           }
 
           // 2) fallback match by (first_name,last_name,birthdate) normalized
@@ -272,8 +339,8 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                 `${extracted.firstName} ${extracted.lastName}`.trim()
               );
               if (scannedParts) {
-                const candidatesByDob = await client.query<CustomerIdentityRow>(
-                  `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+                const candidatesByDob = await client.query<CustomerIdentityCandidateRow>(
+                  `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value, created_at
                    FROM customers
                    WHERE dob = $1::date
                    LIMIT 200`,
@@ -290,19 +357,37 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                       storedFirst: storedParts.firstToken,
                       storedLast: storedParts.lastToken,
                     });
-                    return { row, score: s };
+                    const storedIdNumber = scannedIdNumberNormalized
+                      ? extractStoredIdNumberForMatch(row.id_scan_value)
+                      : null;
+                    const storedIdNumberNormalized = normalizeIdNumberForMatch(storedIdNumber);
+                    const idMatch =
+                      Boolean(
+                        scannedIdNumberNormalized &&
+                          storedIdNumberNormalized &&
+                          storedIdNumberNormalized === scannedIdNumberNormalized
+                      ) || Boolean(idNumberHash && row.id_scan_hash === idNumberHash);
+                    if (!idMatch && !passesFuzzyThresholds(s)) return null;
+                    const matchScore = s.score + (idMatch ? 1 : 0);
+                    return { row, score: s, idMatch, matchScore };
                   })
                   .filter(
                     (
                       x
                     ): x is {
-                      row: CustomerIdentityRow;
+                      row: CustomerIdentityCandidateRow;
                       score: { score: number; firstMax: number; lastMax: number };
-                    } => Boolean(x && passesFuzzyThresholds(x.score))
+                      idMatch: boolean;
+                      matchScore: number;
+                    } => Boolean(x)
                   )
-                  .sort((a, b) => b.score.score - a.score.score);
+                  .sort(
+                    (a, b) =>
+                      b.matchScore - a.matchScore ||
+                      a.row.created_at.getTime() - b.row.created_at.getTime()
+                  );
 
-                if (scored.length === 1) {
+                if (scored.length > 0) {
                   const matched = scored[0]!.row;
                   checkBanned(matched);
                   await maybeAttachScanIdentifiers({
@@ -326,23 +411,6 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                     },
                     extracted,
                     enriched: Boolean(!matched.id_scan_hash || !matched.id_scan_value),
-                  };
-                }
-
-                if (scored.length > 1) {
-                  return {
-                    result: 'MULTIPLE_MATCHES' as const,
-                    scanType: 'STATE_ID' as const,
-                    normalizedRawScanText: idScanValue,
-                    idScanHash,
-                    extracted,
-                    candidates: scored.slice(0, 10).map(({ row, score }) => ({
-                      id: row.id,
-                      name: row.name,
-                      dob: row.dob ? row.dob.toISOString().slice(0, 10) : null,
-                      membershipNumber: row.membership_number,
-                      matchScore: score.score,
-                    })),
                   };
                 }
               }

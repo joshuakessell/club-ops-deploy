@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { query, transaction } from '../../db';
+import { query } from '../../db';
 import { requireAdmin, requireAuth, requireReauthForAdmin } from '../../auth/middleware';
-import { insertAuditLog, insertAuditLogQuery } from '../../audit/auditLog';
+import { insertAuditLogQuery } from '../../audit/auditLog';
 
 export function registerAdminStaffRoutes(fastify: FastifyInstance): void {
   /**
@@ -122,7 +122,7 @@ export function registerAdminStaffRoutes(fastify: FastifyInstance): void {
       }
 
       try {
-        const { hashPin } = await import('../auth/utils.js');
+        const { hashPin } = await import('../../auth/utils');
         const pinHash = await hashPin(body.pin);
 
         const result = await query<{ id: string }>(
@@ -297,7 +297,7 @@ export function registerAdminStaffRoutes(fastify: FastifyInstance): void {
       }
 
       try {
-        const { hashPin } = await import('../auth/utils.js');
+        const { hashPin } = await import('../../auth/utils');
         const pinHash = await hashPin(body.newPin);
 
         const result = await query<{ id: string }>(

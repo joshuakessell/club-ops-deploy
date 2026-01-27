@@ -2,22 +2,18 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireAuth } from '../../auth/middleware';
 import { RoomStatus } from '@club-ops/shared';
-import { query, serializableTransaction, transaction } from '../../db';
+import { query, serializableTransaction } from '../../db';
 import type {
-  CheckinBlockRow,
-  CheckoutRequestRow,
-  CustomerRow,
-  KeyTagRow,
-  LockerRow,
   ManualCheckoutResourceType,
   ManualCheckoutCandidateRow,
   ManualResolveRow,
-  RoomRow,
   VisitDateRow,
+  WaitlistStatusRow,
 } from '../../checkout/types';
 import { broadcastInventoryUpdate } from '../../inventory/broadcast';
 import { insertAuditLog } from '../../audit/auditLog';
 import { buildSystemLateFeeNote } from '../../utils/lateFeeNotes';
+import { calculateLateFee, looksLikeUuid } from '../../checkout/utils';
 
 export function registerCheckoutManualRoutes(fastify: FastifyInstance): void {
   /**

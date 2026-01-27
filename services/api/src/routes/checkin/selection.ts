@@ -2,23 +2,39 @@ import type { FastifyInstance } from 'fastify';
 import { optionalAuth, requireAuth } from '../../auth/middleware';
 import { requireKioskTokenOrStaff } from '../../auth/kioskToken';
 import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
-import type { LaneSessionRow, RoomRentalType } from '../../checkin/types';
-import { toDate } from '../../checkin/utils';
-import { computeWaitlistInfo, getRoomTier } from '../../checkin/waitlist';
+import type { LaneSessionRow, PoolClient } from '../../checkin/types';
+import { getHttpError } from '../../checkin/utils';
+import { assertCustomerLanguageSelected } from '../../checkin/session';
 import { transaction } from '../../db';
-import { broadcastInventoryUpdate } from '../../inventory/broadcast';
-import { insertAuditLog } from '../../audit/auditLog';
-import {
-  assertAssignedResourcePersistedAndUnavailable,
-  selectRoomForNewCheckin,
-} from '../../checkin/helpers';
 import type {
-  AssignmentCreatedPayload,
-  AssignmentFailedPayload,
   SelectionAcknowledgedPayload,
   SelectionLockedPayload,
   SelectionProposedPayload,
 } from '@club-ops/shared';
+
+async function checkPastDueBlocked(
+  client: PoolClient,
+  customerId: string | null,
+  sessionBypassed: boolean
+): Promise<{ blocked: boolean; balance: number }> {
+  if (!customerId) {
+    return { blocked: false, balance: 0 };
+  }
+
+  const customerResult = await client.query<{ past_due_balance: number | null }>(
+    `SELECT past_due_balance FROM customers WHERE id = $1`,
+    [customerId]
+  );
+
+  if (customerResult.rows.length === 0) {
+    return { blocked: false, balance: 0 };
+  }
+
+  const balance = parseFloat(String(customerResult.rows[0]!.past_due_balance || 0));
+  const blocked = balance > 0 && !sessionBypassed;
+
+  return { blocked, balance };
+}
 
 export function registerCheckinSelectionRoutes(fastify: FastifyInstance): void {
   /**
