@@ -2,6 +2,7 @@ import { getApiUrl } from '@club-ops/shared';
 import { getErrorMessage } from '@club-ops/ui';
 import { ModalFrame } from '../../components/register/modals/ModalFrame';
 import { CustomerConfirmationPendingModal } from '../../components/register/modals/CustomerConfirmationPendingModal';
+import { IdScanBlockedModal } from '../../components/register/modals/IdScanBlockedModal';
 import { MultipleMatchesModal } from '../../components/register/modals/MultipleMatchesModal';
 import { RenewCheckinModal } from '../../components/register/modals/RenewCheckinModal';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
@@ -43,6 +44,8 @@ export function CustomerModals() {
     pendingCreateFromScan,
     createFromScanError,
     createFromScanSubmitting,
+    idScanIssue,
+    setIdScanIssue,
     setShowCreateFromScanPrompt,
     setPendingCreateFromScan,
     setCreateFromScanError,
@@ -52,6 +55,11 @@ export function CustomerModals() {
 
   return (
     <>
+      <IdScanBlockedModal
+        isOpen={!!idScanIssue}
+        issue={idScanIssue ?? null}
+        onClose={() => setIdScanIssue(null)}
+      />
       <CustomerConfirmationPendingModal
         isOpen={showCustomerConfirmationPending && !!customerConfirmationType}
         data={customerConfirmationType || { requested: '', selected: '', number: '' }}

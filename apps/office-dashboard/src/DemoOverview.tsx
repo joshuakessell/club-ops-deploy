@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InventoryUpdatedPayload, WebSocketEvent } from '@club-ops/shared';
 import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
@@ -24,10 +24,27 @@ export function DemoOverview({ session }: { session: StaffSession }) {
     activeCount: number;
     offeredCount: number;
   } | null>(null);
-  const [docSessionId, setDocSessionId] = useState('');
+  const [docCustomerName, setDocCustomerName] = useState('');
   const [docLookupBusy, setDocLookupBusy] = useState(false);
   const [docLookupError, setDocLookupError] = useState<string | null>(null);
   const [docLookup, setDocLookup] = useState<null | {
+    customers: Array<{
+      id: string;
+      name: string;
+      dob: string | null;
+      membership_number: string | null;
+      last_visit_at: string | null;
+    }>;
+  }>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<null | {
+    id: string;
+    name: string;
+    dob: string | null;
+    membership_number: string | null;
+    last_visit_at: string | null;
+  }>(null);
+  const [docHistoryBusy, setDocHistoryBusy] = useState(false);
+  const [customerDocs, setCustomerDocs] = useState<null | {
     documents: Array<{
       id: string;
       doc_type: string;
@@ -36,8 +53,12 @@ export function DemoOverview({ session }: { session: StaffSession }) {
       has_signature: boolean;
       signature_hash_prefix?: string;
       has_pdf?: boolean;
+      visit_started_at?: string | null;
     }>;
   }>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchSeqRef = useRef(0);
+  const lastSearchTermRef = useRef('');
 
   const lowAvailability = useMemo(() => {
     const byType = inventory?.byType || {};
@@ -92,6 +113,55 @@ export function DemoOverview({ session }: { session: StaffSession }) {
         .catch(() => setWaitlistMetrics(null));
     }
   }, [lastMessage, session.sessionToken]);
+
+  useEffect(() => {
+    if (selectedCustomer) {
+      searchAbortRef.current?.abort();
+      setDocLookupBusy(false);
+      return;
+    }
+    const trimmed = docCustomerName.trim();
+    if (!trimmed) {
+      setDocLookup(null);
+      setDocLookupError(null);
+      setDocLookupBusy(false);
+      return;
+    }
+    if (trimmed === lastSearchTermRef.current && docLookup) return;
+    const handle = window.setTimeout(() => {
+      const seq = ++searchSeqRef.current;
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+      lastSearchTermRef.current = trimmed;
+      setDocLookupBusy(true);
+      setDocLookupError(null);
+      apiJson<{ customers: any[] }>(
+        `/v1/documents/customers?name=${encodeURIComponent(trimmed)}`,
+        {
+          sessionToken: session.sessionToken,
+          signal: controller.signal,
+        }
+      )
+        .then((data) => {
+          if (searchSeqRef.current !== seq) return;
+          setDocLookup({
+            customers: Array.isArray(data.customers) ? (data.customers as any) : [],
+          });
+        })
+        .catch((e) => {
+          if (controller.signal.aborted) return;
+          if (searchSeqRef.current !== seq) return;
+          setDocLookupError(e instanceof Error ? e.message : 'Failed to fetch');
+        })
+        .finally(() => {
+          if (searchSeqRef.current !== seq) return;
+          setDocLookupBusy(false);
+        });
+    }, 350);
+
+    return () => window.clearTimeout(handle);
+  }, [docCustomerName, selectedCustomer, session.sessionToken, docLookup]);
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
@@ -151,131 +221,238 @@ export function DemoOverview({ session }: { session: StaffSession }) {
                 Agreement PDF verification
               </div>
               <div style={{ color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                Paste a lane session ID to verify PDF + signature artifacts, and download the PDF.
+                Search by customer name to verify PDF + signature artifacts, and download the PDF.
               </div>
-              <div
-                style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}
-              >
-                <input
-                  value={docSessionId}
-                  onChange={(e) => setDocSessionId(e.target.value)}
-                  placeholder="lane session id (uuid)…"
-                  style={{
-                    flex: '1 1 320px',
-                    padding: '0.5rem 0.75rem',
-                    background: 'var(--bg)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 8,
-                    color: 'var(--text)',
-                    fontFamily: 'monospace',
-                  }}
-                />
-                <button
-                  className="cs-liquid-button cs-liquid-button--secondary"
-                  disabled={docLookupBusy || !docSessionId.trim()}
-                  onClick={() => {
-                    const sid = docSessionId.trim();
-                    if (!sid) return;
-                    setDocLookupBusy(true);
-                    setDocLookupError(null);
-                    apiJson<{ documents: any[] }>(`/v1/documents/by-session/${sid}`, {
-                      sessionToken: session.sessionToken,
-                    })
-                      .then((data) =>
-                        setDocLookup({
-                          documents: Array.isArray(data.documents) ? (data.documents as any) : [],
-                        })
-                      )
-                      .catch((e) =>
-                        setDocLookupError(e instanceof Error ? e.message : 'Failed to fetch')
-                      )
-                      .finally(() => setDocLookupBusy(false));
-                  }}
-                >
-                  {docLookupBusy ? 'Checking…' : 'Check'}
-                </button>
-              </div>
-              {docLookupError && (
-                <div style={{ marginTop: '0.75rem', color: '#fecaca', fontWeight: 700 }}>
-                  {docLookupError}
-                </div>
-              )}
-              {docLookup && (
-                <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
-                  {docLookup.documents.length === 0 ? (
-                    <div style={{ color: 'var(--text-muted)' }}>No documents found.</div>
-                  ) : (
-                    docLookup.documents.map((d) => (
-                      <div
-                        key={d.id}
-                        className="er-surface"
-                        style={{
-                          padding: '0.75rem',
-                          borderRadius: 12,
-                          display: 'grid',
-                          gap: '0.35rem',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            gap: '0.75rem',
-                            flexWrap: 'wrap',
-                          }}
-                        >
-                          <div style={{ fontWeight: 900 }}>
-                            {d.doc_type}{' '}
-                            <span
-                              style={{
-                                fontFamily: 'monospace',
-                                fontWeight: 700,
-                                color: 'var(--text-muted)',
-                              }}
-                            >
-                              {d.id}
-                            </span>
-                          </div>
-                          <div style={{ color: 'var(--text-muted)' }}>
-                            {d.created_at ? new Date(d.created_at).toLocaleString() : '—'}
-                          </div>
-                        </div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                          PDF stored: {d.has_pdf ? 'yes' : 'no'} • Signature stored:{' '}
-                          {d.has_signature ? 'yes' : 'no'}
-                          {d.signature_hash_prefix
-                            ? ` • sig hash: ${d.signature_hash_prefix}…`
-                            : ''}
-                        </div>
-                        <div>
-                          <button
-                            className="cs-liquid-button"
-                            disabled={!d.has_pdf}
-                            onClick={() => {
-                              fetch(getApiUrl(`/api/v1/documents/${d.id}/download`), {
-                                headers: { Authorization: `Bearer ${session.sessionToken}` },
-                              })
-                                .then(async (res) => {
-                                  if (!res.ok) throw new Error('Download failed');
-                                  const blob = await res.blob();
-                                  const obj = URL.createObjectURL(blob);
-                                  window.open(obj, '_blank', 'noopener,noreferrer');
-                                  window.setTimeout(() => URL.revokeObjectURL(obj), 60_000);
-                                })
-                                .catch((e) =>
-                                  setDocLookupError(
-                                    e instanceof Error ? e.message : 'Download failed'
-                                  )
-                                );
-                            }}
-                          >
-                            Download PDF
-                          </button>
-                        </div>
-                      </div>
-                    ))
+              {selectedCustomer ? (
+                <div style={{ display: 'grid', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      className="cs-liquid-button cs-liquid-button--secondary"
+                      onClick={() => {
+                        setSelectedCustomer(null);
+                        setCustomerDocs(null);
+                        setDocHistoryBusy(false);
+                        setDocLookupError(null);
+                      }}
+                    >
+                      Back to customer list
+                    </button>
+                  </div>
+                  <div style={{ fontWeight: 800 }}>
+                    {selectedCustomer.name}
+                    {"'"}s Visit and Agreement History
+                  </div>
+                  {docLookupError && (
+                    <div style={{ color: '#fecaca', fontWeight: 700 }}>{docLookupError}</div>
                   )}
+                  {docHistoryBusy ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <div className="inline-spinner" aria-label="Loading history" />
+                      <div style={{ color: 'var(--text-muted)' }}>Loading history…</div>
+                    </div>
+                  ) : customerDocs ? (
+                    customerDocs.documents.length === 0 ? (
+                      <div style={{ color: 'var(--text-muted)' }}>No agreements found.</div>
+                    ) : (
+                      <table className="rooms-table">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Download</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {customerDocs.documents.map((d) => (
+                            <tr key={d.id}>
+                              <td className="room-number">
+                                {d.visit_started_at
+                                  ? new Date(d.visit_started_at).toLocaleString()
+                                  : d.created_at
+                                    ? new Date(d.created_at).toLocaleString()
+                                    : '—'}
+                              </td>
+                              <td>
+                                <button
+                                  className="cs-liquid-button"
+                                  disabled={!d.has_pdf}
+                                  onClick={() => {
+                                    fetch(getApiUrl(`/api/v1/documents/${d.id}/download`), {
+                                      headers: { Authorization: `Bearer ${session.sessionToken}` },
+                                    })
+                                      .then(async (res) => {
+                                        if (!res.ok) throw new Error('Download failed');
+                                        const blob = await res.blob();
+                                        const obj = URL.createObjectURL(blob);
+                                        window.open(obj, '_blank', 'noopener,noreferrer');
+                                        window.setTimeout(() => URL.revokeObjectURL(obj), 60_000);
+                                      })
+                                      .catch((e) =>
+                                        setDocLookupError(
+                                          e instanceof Error ? e.message : 'Download failed'
+                                        )
+                                      );
+                                  }}
+                                >
+                                  Download PDF
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )
+                  ) : null}
                 </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      className="cs-liquid-button cs-liquid-button--secondary"
+                      onClick={() => {
+                        setDocCustomerName('');
+                        setDocLookup(null);
+                        setDocLookupError(null);
+                        navigate('/overview');
+                      }}
+                    >
+                      Back to menu
+                    </button>
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '0.5rem',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <input
+                      value={docCustomerName}
+                      onChange={(e) => setDocCustomerName(e.target.value)}
+                      placeholder="customer name…"
+                      style={{
+                        flex: '1 1 320px',
+                        padding: '0.5rem 0.75rem',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 8,
+                        color: 'var(--text)',
+                      }}
+                    />
+                    <button
+                      className="cs-liquid-button cs-liquid-button--secondary"
+                      disabled={docLookupBusy || !docCustomerName.trim()}
+                      onClick={() => {
+                        const name = docCustomerName.trim();
+                        if (!name) return;
+                        const seq = ++searchSeqRef.current;
+                        searchAbortRef.current?.abort();
+                        const controller = new AbortController();
+                        searchAbortRef.current = controller;
+                        lastSearchTermRef.current = name;
+                        setDocLookupBusy(true);
+                        setDocLookupError(null);
+                        apiJson<{ customers: any[] }>(
+                          `/v1/documents/customers?name=${encodeURIComponent(name)}`,
+                          {
+                            sessionToken: session.sessionToken,
+                            signal: controller.signal,
+                          }
+                        )
+                          .then((data) => {
+                            if (searchSeqRef.current !== seq) return;
+                            setDocLookup({
+                              customers: Array.isArray(data.customers)
+                                ? (data.customers as any)
+                                : [],
+                            });
+                          })
+                          .catch((e) => {
+                            if (controller.signal.aborted) return;
+                            if (searchSeqRef.current !== seq) return;
+                            setDocLookupError(e instanceof Error ? e.message : 'Failed to fetch');
+                          })
+                          .finally(() => {
+                            if (searchSeqRef.current !== seq) return;
+                            setDocLookupBusy(false);
+                          });
+                      }}
+                    >
+                      {docLookupBusy ? 'Searching…' : 'Search'}
+                    </button>
+                    {docLookupBusy && (
+                      <div className="inline-spinner" aria-label="Searching" />
+                    )}
+                  </div>
+                  {docLookupError && (
+                    <div style={{ marginTop: '0.75rem', color: '#fecaca', fontWeight: 700 }}>
+                      {docLookupError}
+                    </div>
+                  )}
+                  {docLookup && (
+                    <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.5rem' }}>
+                      {docLookup.customers.length === 0 ? (
+                        <div style={{ color: 'var(--text-muted)' }}>No customers found.</div>
+                      ) : (
+                        <table className="rooms-table">
+                          <thead>
+                            <tr>
+                              <th>Name</th>
+                              <th>DOB</th>
+                              <th>Membership #</th>
+                              <th>Last Visit</th>
+                              <th>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {docLookup.customers.map((c) => (
+                              <tr key={c.id}>
+                                <td className="room-number">{c.name}</td>
+                                <td>{c.dob ? new Date(c.dob).toLocaleDateString() : '—'}</td>
+                                <td>{c.membership_number ?? '—'}</td>
+                                <td>
+                                  {c.last_visit_at
+                                    ? new Date(c.last_visit_at).toLocaleString()
+                                    : '—'}
+                                </td>
+                                <td>
+                                  <button
+                                    className="cs-liquid-button"
+                                    onClick={() => {
+                                      setSelectedCustomer(c);
+                                      setCustomerDocs(null);
+                                      setDocHistoryBusy(true);
+                                      setDocLookupError(null);
+                                      apiJson<{ documents: any[] }>(
+                                        `/v1/documents/by-customer/${c.id}`,
+                                        { sessionToken: session.sessionToken }
+                                      )
+                                        .then((data) =>
+                                          setCustomerDocs({
+                                            documents: Array.isArray(data.documents)
+                                              ? (data.documents as any)
+                                              : [],
+                                          })
+                                        )
+                                        .catch((e) =>
+                                          setDocLookupError(
+                                            e instanceof Error ? e.message : 'Failed to fetch'
+                                          )
+                                        )
+                                        .finally(() => setDocHistoryBusy(false));
+                                    }}
+                                  >
+                                    View history
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+                </>
               )}
             </RaisedCard>
 

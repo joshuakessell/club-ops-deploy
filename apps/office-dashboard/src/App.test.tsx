@@ -3,6 +3,11 @@ import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+};
+
 // Mock WebSocket
 const createMockWebSocket = () => {
   const listeners = new Map<string, Set<EventListener>>();
@@ -160,7 +165,7 @@ describe('App', () => {
   it('renders lock screen when not authenticated', async () => {
     await act(async () => {
       render(
-        <MemoryRouter>
+        <MemoryRouter future={routerFuture}>
           <App />
         </MemoryRouter>
       );
@@ -171,7 +176,7 @@ describe('App', () => {
 
   it('shows employee selection on the lock screen', async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <App />
       </MemoryRouter>
     );
@@ -191,7 +196,7 @@ describe('App', () => {
 
     await act(async () => {
       render(
-        <MemoryRouter initialEntries={['/']}>
+        <MemoryRouter future={routerFuture} initialEntries={['/']}>
           <App />
         </MemoryRouter>
       );

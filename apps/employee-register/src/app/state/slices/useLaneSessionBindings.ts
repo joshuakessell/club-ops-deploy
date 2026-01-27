@@ -40,6 +40,7 @@ export function useLaneSessionBindings() {
     assignedResourceNumber,
     checkoutAt,
     paymentDeclineError,
+    idScanIssue,
   } = laneSession;
 
   const setCustomerName = useCallback(
@@ -167,6 +168,7 @@ export function useLaneSessionBindings() {
     assignedResourceNumber,
     checkoutAt,
     paymentDeclineError,
+    idScanIssue,
     setCustomerName,
     setMembershipNumber,
     setCurrentSessionId,

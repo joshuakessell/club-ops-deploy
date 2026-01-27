@@ -38,6 +38,11 @@ export const es: Record<keyof typeof en, string> = {
   'common.decline': 'No acepto',
   'common.you': 'Tú',
   'common.staff': 'Staff',
+  'idScan.expired.title': 'ID vencida',
+  'idScan.expired.body': 'Esta identificación está vencida. Presenta una identificación vigente.',
+  'idScan.underage.title': 'Menor de 18',
+  'idScan.underage.body':
+    'El cliente es menor de 18 años. Presenta una identificación que muestre que tiene 18 o más.',
   'kiosk.locked.title': 'Ve con el empleado',
   'kiosk.locked.body': 'Este carril sigue en proceso. Ve con el empleado para terminar.',
 

@@ -18,6 +18,7 @@ import { LaneSelectionScreen } from '../screens/LaneSelectionScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';
 import { AgreementBypassScreen } from '../screens/AgreementBypassScreen';
 import { CompleteScreen } from '../screens/CompleteScreen';
+import { IdScanBlockedModal } from '../components/modals/IdScanBlockedModal';
 
 interface HealthStatus {
   status: string;
@@ -267,6 +268,7 @@ export function AppComposition() {
       blockEndsAt: undefined,
       agreementBypassPending: undefined,
       agreementSignedMethod: undefined,
+      idScanIssue: null,
     });
     setSelectedRental(null);
     setShowUpgradeDisclaimer(false);
@@ -326,6 +328,7 @@ export function AppComposition() {
         assignedResourceType,
         assignedResourceNumber,
         checkoutAt,
+        idScanIssue: payload.idScanIssue || null,
       }));
 
       // Set check-in mode from payload
@@ -340,15 +343,20 @@ export function AppComposition() {
         return;
       }
 
-      // Reset to idle if session is completed (employee completed transaction).
-      if (payload.status === 'COMPLETED') {
-        resetToIdle();
+      if (payload.idScanIssue) {
+        setView('idle');
         return;
       }
 
-      // If we have assignment, show complete view (highest priority after reset)
+      // If we have assignment, show complete view (highest priority after kiosk-ack).
       if (assignedResourceType && assignedResourceNumber) {
         setView('complete');
+        return;
+      }
+
+      // Reset to idle if session is completed (employee completed transaction).
+      if (payload.status === 'COMPLETED') {
+        resetToIdle();
         return;
       }
 
@@ -730,6 +738,60 @@ export function AppComposition() {
     }
   };
 
+  const handleKioskAcknowledge = useCallback(async () => {
+    if (!lane) return;
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorPayload = await readJson(response);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to acknowledge completion');
+      }
+
+      setView('idle');
+      // Session update will be delivered via WS/polling.
+    } catch (error) {
+      console.error('Failed to acknowledge completion:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [API_BASE, getErrorMessage, isSubmitting, kioskAuthHeaders, lane, readJson]);
+
+  const handleIdScanIssueDismiss = useCallback(async () => {
+    if (!lane) return;
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/reset`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...kioskAuthHeaders(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorPayload = await readJson(response);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to reset');
+      }
+
+      resetToIdle();
+    } catch (error) {
+      console.error('Failed to reset after ID scan issue:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [API_BASE, getErrorMessage, isSubmitting, kioskAuthHeaders, lane, readJson, resetToIdle]);
+
   const welcomeOverlayNode = <WelcomeOverlay />;
 
   if (!lane) {
@@ -741,20 +803,21 @@ export function AppComposition() {
     );
   }
 
+  let screen: JSX.Element | null = null;
+
   // Render based on view
   switch (view) {
     case 'idle':
-      return (
+      screen = (
         <IdleScreen
-          sessionId={session.sessionId}
-          kioskAcknowledgedAt={session.kioskAcknowledgedAt}
           customerPrimaryLanguage={session.customerPrimaryLanguage}
           orientationOverlay={orientationOverlay}
         />
       );
+      break;
 
     case 'language':
-      return (
+      screen = (
         <LanguageScreen
           customerPrimaryLanguage={session.customerPrimaryLanguage}
           onSelectLanguage={(lang) => void handleLanguageSelection(lang)}
@@ -764,9 +827,10 @@ export function AppComposition() {
           welcomeOverlay={welcomeOverlayNode}
         />
       );
+      break;
 
     case 'payment':
-      return (
+      screen = (
         <PaymentScreen
           customerPrimaryLanguage={session.customerPrimaryLanguage}
           paymentLineItems={session.paymentLineItems}
@@ -776,18 +840,20 @@ export function AppComposition() {
           welcomeOverlay={welcomeOverlayNode}
         />
       );
+      break;
 
     case 'agreement-bypass':
-      return (
+      screen = (
         <AgreementBypassScreen
           customerPrimaryLanguage={session.customerPrimaryLanguage}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
         />
       );
+      break;
 
     case 'agreement':
-      return (
+      screen = (
         <AgreementFlow
           apiBase={API_BASE}
           kioskAuthHeaders={kioskAuthHeaders}
@@ -800,22 +866,25 @@ export function AppComposition() {
           setIsSubmitting={setIsSubmitting}
         />
       );
+      break;
 
     case 'complete':
-      return (
+      screen = (
         <CompleteScreen
           customerPrimaryLanguage={session.customerPrimaryLanguage}
           assignedResourceType={session.assignedResourceType}
           assignedResourceNumber={session.assignedResourceNumber}
           checkoutAt={session.checkoutAt}
           isSubmitting={isSubmitting}
+          onAcknowledge={handleKioskAcknowledge}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
         />
       );
+      break;
 
     case 'selection':
-      return (
+      screen = (
         <SelectionFlow
           apiBase={API_BASE}
           kioskAuthHeaders={kioskAuthHeaders}
@@ -873,8 +942,22 @@ export function AppComposition() {
           setSession={setSession}
         />
       );
+      break;
 
     default:
-      return null;
+      screen = null;
   }
+
+  return (
+    <>
+      {screen}
+      <IdScanBlockedModal
+        isOpen={!!session.idScanIssue}
+        issue={session.idScanIssue ?? null}
+        customerPrimaryLanguage={session.customerPrimaryLanguage}
+        onAcknowledge={handleIdScanIssueDismiss}
+        isSubmitting={isSubmitting}
+      />
+    </>
+  );
 }

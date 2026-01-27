@@ -14,6 +14,7 @@ export interface SessionState {
   mode?: 'CHECKIN' | 'RENEWAL';
   blockEndsAt?: string; // ISO timestamp of when current block ends
   customerPrimaryLanguage?: Language | null;
+  idScanIssue?: 'ID_EXPIRED' | 'UNDERAGE';
   pastDueBlocked?: boolean;
   pastDueBalance?: number;
   paymentStatus?: 'DUE' | 'PAID';

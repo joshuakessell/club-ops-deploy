@@ -150,7 +150,7 @@ export function PaymentRoot() {
         !pastDueBlocked && (
           <RequiredTenderOutcomeModal
             isOpen={true}
-            totalLabel={`Total: $${paymentQuote.total.toFixed(2)}`}
+            totalAmount={paymentQuote.total}
             details={renewalDetails}
             isSubmitting={isSubmitting}
             onConfirm={(choice) => {

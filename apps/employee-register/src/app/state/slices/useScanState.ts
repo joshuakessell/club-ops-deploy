@@ -27,7 +27,10 @@ export function useScanState({
   const resolution = useScanResolutionState({ session, lane, startLaneSessionByCustomerId });
 
   const blockingModalOpen =
-    externalBlocking || !!resolution.pendingScanResolution || resolution.showCreateFromScanPrompt;
+    externalBlocking ||
+    !!resolution.pendingScanResolution ||
+    resolution.showCreateFromScanPrompt ||
+    !!resolution.idScanIssue;
 
   const overlay = useScanOverlayState({
     session,
@@ -58,6 +61,8 @@ export function useScanState({
     pendingCreateFromScan: resolution.pendingCreateFromScan,
     createFromScanError: resolution.createFromScanError,
     createFromScanSubmitting: resolution.createFromScanSubmitting,
+    idScanIssue: resolution.idScanIssue,
+    setIdScanIssue: resolution.setIdScanIssue,
     setShowCreateFromScanPrompt: resolution.setShowCreateFromScanPrompt,
     setPendingCreateFromScan: resolution.setPendingCreateFromScan,
     setCreateFromScanError: resolution.setCreateFromScanError,

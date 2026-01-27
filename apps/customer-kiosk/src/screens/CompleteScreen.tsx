@@ -8,6 +8,7 @@ export interface CompleteScreenProps {
   assignedResourceNumber?: string;
   checkoutAt?: string;
   isSubmitting: boolean;
+  onAcknowledge: () => void;
   orientationOverlay: ReactNode;
   welcomeOverlay: ReactNode;
 }
@@ -17,6 +18,8 @@ export function CompleteScreen({
   assignedResourceType,
   assignedResourceNumber,
   checkoutAt,
+  isSubmitting,
+  onAcknowledge,
   orientationOverlay,
   welcomeOverlay,
 }: CompleteScreenProps) {
@@ -41,26 +44,58 @@ export function CompleteScreen({
           <main className="main-content">
             <div className="complete-screen">
               {assignedResourceType && assignedResourceNumber ? (
-                <div className="assignment-info cs-liquid-card">
-                  <div className="assignment-row">
-                    <div className="assignment-label">{t(lang, assignedResourceType)}</div>
-                    <div className="assignment-value">{assignedResourceNumber}</div>
-                  </div>
-
-                  {checkoutAt && (
-                    <div className="assignment-row assignment-row--checkout">
-                      <div className="assignment-label">{t(lang, 'checkoutAt')}</div>
-                      <div className="assignment-value assignment-value--time">
-                        {checkoutTimeText ?? new Date(checkoutAt).toLocaleString(locale)}
-                      </div>
-                      {checkoutDateText && (
-                        <div className="assignment-subvalue">{checkoutDateText}</div>
-                      )}
+                <>
+                  <div className="assignment-info cs-liquid-card">
+                    <div className="assignment-row">
+                      <div className="assignment-label">{t(lang, assignedResourceType)}</div>
+                      <div className="assignment-value">{assignedResourceNumber}</div>
                     </div>
-                  )}
-                </div>
+
+                    {checkoutAt && (
+                      <div className="assignment-row assignment-row--checkout">
+                        <div className="assignment-label">{t(lang, 'checkoutAt')}</div>
+                        <div className="assignment-value assignment-value--time">
+                          {checkoutTimeText ?? new Date(checkoutAt).toLocaleString(locale)}
+                        </div>
+                        {checkoutDateText && (
+                          <div className="assignment-subvalue">{checkoutDateText}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className={[
+                      'cs-liquid-button',
+                      'complete-ok-btn',
+                      isSubmitting ? 'cs-liquid-button--disabled' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={onAcknowledge}
+                    disabled={isSubmitting}
+                  >
+                    OK
+                  </button>
+                </>
               ) : (
-                <p>{t(lang, 'assignmentComplete')}</p>
+                <>
+                  <p>{t(lang, 'assignmentComplete')}</p>
+                  <button
+                    type="button"
+                    className={[
+                      'cs-liquid-button',
+                      'complete-ok-btn',
+                      isSubmitting ? 'cs-liquid-button--disabled' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={onAcknowledge}
+                    disabled={isSubmitting}
+                  >
+                    OK
+                  </button>
+                </>
               )}
             </div>
           </main>

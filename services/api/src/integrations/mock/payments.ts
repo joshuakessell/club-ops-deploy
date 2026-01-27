@@ -52,6 +52,7 @@ function createPaymentRecord(
   source: 'CARD' | 'CASH'
 ): PaymentRecord {
   return {
+    provider: 'mock',
     externalId: nextPaymentId(store, 'mock-pay'),
     status: 'PAID',
     amount: params.amount,
@@ -108,6 +109,7 @@ export class MockPaymentsProvider implements PaymentsProvider {
     }
 
     const record: PaymentRecord = {
+      provider: 'mock',
       externalId: nextPaymentId(this.store, 'mock-refund'),
       status,
       amount: refundAmount,

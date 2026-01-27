@@ -565,6 +565,7 @@ CREATE TABLE public.customers (
     banned_until timestamp with time zone,
     id_scan_hash character varying(255),
     id_scan_value text,
+    id_expiration_date date,
     primary_language text,
     notes text,
     past_due_balance numeric(10,2) DEFAULT 0 NOT NULL,

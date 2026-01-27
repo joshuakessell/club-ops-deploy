@@ -66,6 +66,7 @@ export const IdScanPayloadSchema = z
     lastName: z.string().optional(),
     fullName: z.string().optional(), // Full name if first/last not available separately
     dob: z.string().optional(), // Date of birth in ISO YYYY-MM-DD format
+    idExpirationDate: z.string().optional(), // ID expiration date in ISO YYYY-MM-DD format
     idNumber: z.string().optional(), // ID number/license number
     issuer: z.string().optional(), // Issuing jurisdiction/state
     jurisdiction: z.string().optional(), // Alternative field name for issuer

@@ -11,3 +11,4 @@
 - scanner: keyboard-wedge scan helpers used by scanner hooks.
 - shared/derive: pure derived-state helpers used by state providers and feature roots.
 - views: standardized view shells with co-located CSS (panel layouts, headers, cards).
+- Routing: this app does not use React Router; navigation is state-driven within the register workflow.

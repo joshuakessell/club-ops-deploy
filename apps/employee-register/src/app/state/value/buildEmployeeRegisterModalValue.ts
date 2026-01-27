@@ -62,6 +62,8 @@ export function buildEmployeeRegisterModalValue(params: EmployeeRegisterModalPar
     pendingCreateFromScan: scanState.pendingCreateFromScan,
     createFromScanError: scanState.createFromScanError,
     createFromScanSubmitting: scanState.createFromScanSubmitting,
+    idScanIssue: scanState.idScanIssue,
+    setIdScanIssue: scanState.setIdScanIssue,
     setShowCreateFromScanPrompt: scanState.setShowCreateFromScanPrompt,
     setPendingCreateFromScan: scanState.setPendingCreateFromScan,
     setCreateFromScanError: scanState.setCreateFromScanError,

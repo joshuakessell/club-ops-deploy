@@ -44,6 +44,7 @@ export type RegisterLaneSessionState = {
   customerLastVisitAt: string | undefined;
   customerNotes: string | undefined;
   customerHasEncryptedLookupMarker: boolean;
+  idScanIssue: 'ID_EXPIRED' | 'UNDERAGE' | null;
 
   assignedResourceType: 'room' | 'locker' | null;
   assignedResourceNumber: string | null;
@@ -91,6 +92,7 @@ export const initialRegisterLaneSessionState: RegisterLaneSessionState = {
   customerLastVisitAt: undefined,
   customerNotes: undefined,
   customerHasEncryptedLookupMarker: false,
+  idScanIssue: null,
 
   assignedResourceType: null,
   assignedResourceNumber: null,
@@ -242,6 +244,9 @@ export function registerLaneSessionReducer(
       }
       if (p.customerHasEncryptedLookupMarker !== undefined) {
         next.customerHasEncryptedLookupMarker = Boolean(p.customerHasEncryptedLookupMarker);
+      }
+      if (p.idScanIssue !== undefined) {
+        next.idScanIssue = p.idScanIssue ?? null;
       }
 
       if (p.pastDueBlocked !== undefined) next.pastDueBlocked = Boolean(p.pastDueBlocked);

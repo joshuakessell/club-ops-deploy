@@ -21,6 +21,27 @@ interface IdScannerProps {
 function parseAAMVA(raw: string): Partial<IdScanPayload> {
   const lines = raw.split('\n');
   const result: Partial<IdScanPayload> = { raw };
+  const parseAamvaDate = (value: string): string | null => {
+    const digits = value.replace(/\D/g, '');
+    if (!/^\d{8}$/.test(digits)) return null;
+    const yyyyFirst = Number(digits.slice(0, 4));
+    const toIso = (yyyy: number, mm: number, dd: number) => {
+      if (yyyy < 1900 || yyyy > 2100) return null;
+      if (mm < 1 || mm > 12) return null;
+      if (dd < 1 || dd > 31) return null;
+      return `${String(yyyy).padStart(4, '0')}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+    };
+    if (yyyyFirst >= 1900 && yyyyFirst <= 2100) {
+      return (
+        toIso(
+          yyyyFirst,
+          Number(digits.slice(4, 6)),
+          Number(digits.slice(6, 8))
+        ) || toIso(Number(digits.slice(4, 8)), Number(digits.slice(0, 2)), Number(digits.slice(2, 4)))
+      );
+    }
+    return toIso(Number(digits.slice(4, 8)), Number(digits.slice(0, 2)), Number(digits.slice(2, 4)));
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] || '';
@@ -43,12 +64,8 @@ function parseAAMVA(raw: string): Partial<IdScanPayload> {
     // DBD = Date of birth (YYYYMMDD format)
     else if (line.startsWith('DBD')) {
       const dobStr = line.substring(3).trim();
-      if (dobStr.length === 8) {
-        const year = dobStr.substring(0, 4);
-        const month = dobStr.substring(4, 6);
-        const day = dobStr.substring(6, 8);
-        result.dob = `${year}-${month}-${day}`;
-      }
+      const parsed = parseAamvaDate(dobStr);
+      if (parsed) result.dob = parsed;
     }
     // DAQ = ID number
     else if (line.startsWith('DAQ')) {
@@ -57,7 +74,12 @@ function parseAAMVA(raw: string): Partial<IdScanPayload> {
     // DAG = Address (not needed for our use case)
     // DAU = Height (not needed)
     // DAV = Weight (not needed)
-    // DBA = Expiration date (not needed)
+    // DBA = Expiration date
+    else if (line.startsWith('DBA')) {
+      const expStr = line.substring(3).trim();
+      const parsed = parseAamvaDate(expStr);
+      if (parsed) result.idExpirationDate = parsed;
+    }
     // DBB = Issue date (not needed)
     // DBC = Gender (not needed)
     // DAA = Full name (if available, prefer this)

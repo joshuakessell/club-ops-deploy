@@ -14,6 +14,7 @@ type Params = {
 };
 
 export function useScanResolutionState({ session, lane, startLaneSessionByCustomerId }: Params) {
+  const [idScanIssue, setIdScanIssue] = useState<'ID_EXPIRED' | 'UNDERAGE' | null>(null);
   const [pendingCreateFromScan, setPendingCreateFromScan] = useState<{
     idScanValue: string;
     idScanHash: string | null;
@@ -22,6 +23,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
       lastName?: string;
       fullName?: string;
       dob?: string;
+      idExpirationDate?: string;
       idNumber?: string;
       issuer?: string;
       jurisdiction?: string;
@@ -42,6 +44,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
       lastName?: string;
       fullName?: string;
       dob?: string;
+      idExpirationDate?: string;
       idNumber?: string;
       issuer?: string;
       jurisdiction?: string;
@@ -58,6 +61,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
       }
 
       try {
+        setIdScanIssue(null);
         const response = await fetch(`${API_BASE}/v1/checkin/scan`, {
           method: 'POST',
           headers: {
@@ -71,6 +75,30 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
         });
 
         const payload: unknown = await response.json().catch(() => null);
+        const issueCode = (() => {
+          if (!payload || typeof payload !== 'object') return null;
+          const error = (payload as { error?: unknown }).error;
+          const codeFromError =
+            error && typeof error === 'object' && 'code' in error
+              ? (error as { code?: unknown }).code
+              : undefined;
+          const code =
+            typeof codeFromError === 'string'
+              ? codeFromError
+              : typeof (payload as { code?: unknown }).code === 'string'
+                ? (payload as { code?: string }).code
+                : undefined;
+          if (code === 'ID_EXPIRED' || code === 'UNDERAGE') return code;
+          return null;
+        })();
+        if (issueCode) {
+          setIdScanIssue(issueCode);
+          setPendingCreateFromScan(null);
+          setShowCreateFromScanPrompt(false);
+          setPendingScanResolution(null);
+          setScanResolutionError(null);
+          return { outcome: 'error', message: '' };
+        }
         if (!response.ok) {
           const msg = getErrorMessage(payload) || 'Failed to process scan';
           return { outcome: 'error', message: msg };
@@ -85,6 +113,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
             lastName?: string;
             fullName?: string;
             dob?: string;
+            idExpirationDate?: string;
             idNumber?: string;
             issuer?: string;
             jurisdiction?: string;
@@ -103,6 +132,11 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
         };
 
         if (data.result === 'ERROR') {
+          const code = data.error?.code;
+          if (code === 'ID_EXPIRED' || code === 'UNDERAGE') {
+            setIdScanIssue(code);
+            return { outcome: 'error', message: '' };
+          }
           return { outcome: 'error', message: data.error?.message || 'Scan failed' };
         }
 
@@ -128,6 +162,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
               lastName: extracted.lastName,
               fullName: extracted.fullName,
               dob: extracted.dob,
+              idExpirationDate: extracted.idExpirationDate,
               idNumber: extracted.idNumber,
               issuer: extracted.issuer,
               jurisdiction: extracted.jurisdiction,
@@ -147,6 +182,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
               lastName: extracted.lastName,
               fullName: extracted.fullName,
               dob: extracted.dob,
+              idExpirationDate: extracted.idExpirationDate,
               idNumber: extracted.idNumber,
               issuer: extracted.issuer,
               jurisdiction: extracted.jurisdiction,
@@ -266,11 +302,20 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
           firstName,
           lastName,
           dob,
+          idExpirationDate: extracted.idExpirationDate || undefined,
         }),
       });
 
       const payload: unknown = await response.json().catch(() => null);
       if (!response.ok) {
+        const code =
+          payload && typeof payload === 'object' && 'code' in payload
+            ? (payload as { code?: unknown }).code
+            : undefined;
+        if (code === 'ID_EXPIRED' || code === 'UNDERAGE') {
+          setIdScanIssue(code);
+          return { outcome: 'error', message: '' };
+        }
         const msg = getErrorMessage(payload) || 'Failed to create customer';
         return { outcome: 'error', message: msg };
       }
@@ -306,6 +351,8 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
     showCreateFromScanPrompt,
     createFromScanError,
     createFromScanSubmitting,
+    idScanIssue,
+    setIdScanIssue,
     setPendingCreateFromScan,
     setShowCreateFromScanPrompt,
     setCreateFromScanError,

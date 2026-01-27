@@ -8,17 +8,22 @@ describe('RequiredTenderOutcomeModal', () => {
     const { container } = render(
       <RequiredTenderOutcomeModal
         isOpen={true}
-        totalLabel="Total: $10.00"
+        totalAmount={10}
         isSubmitting={false}
         onConfirm={onConfirm}
       />
     );
 
-    const dialog = screen.getByRole('dialog', { name: /select tender outcome/i });
+    const dialog = screen.getByRole('dialog', { name: /process payment/i });
     const m = within(dialog);
     expect(m.queryByRole('button', { name: 'Continue' })).toBeNull();
 
-    fireEvent.click(m.getByRole('button', { name: 'Credit Success' }));
+    const creditButton = dialog.querySelector(
+      'button[data-choice="CREDIT_SUCCESS"]'
+    ) as HTMLButtonElement | null;
+    expect(creditButton).toBeTruthy();
+    if (!creditButton) throw new Error('Expected credit success button');
+    fireEvent.click(creditButton);
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledWith('CREDIT_SUCCESS');
 
@@ -27,10 +32,10 @@ describe('RequiredTenderOutcomeModal', () => {
     expect(overlay).toBeTruthy();
     if (!overlay) throw new Error('Expected overlay to exist');
     fireEvent.click(overlay);
-    expect(m.getByText('Select Tender Outcome')).toBeDefined();
+    expect(m.getByText('Process Payment')).toBeDefined();
 
     // ESC should not dismiss or change selection
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(m.getByText('Select Tender Outcome')).toBeDefined();
+    expect(m.getByText('Process Payment')).toBeDefined();
   });
 });

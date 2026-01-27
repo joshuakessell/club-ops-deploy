@@ -5,6 +5,8 @@ import { requireAuth } from '../../auth/middleware';
 import {
   computeSha256Hex,
   extractAamvaIdentity,
+  getIdScanIssue,
+  getIdScanIssueMessage,
   isLikelyAamvaPdf417Text,
   normalizeScanText,
   parseMembershipNumber,
@@ -85,6 +87,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           id: string;
           name: string;
           dob: Date | null;
+          id_expiration_date: Date | null;
           membership_number: string | null;
           banned_until: Date | null;
           id_scan_hash: string | null;
@@ -105,6 +108,10 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
 
         if (isAamva) {
           const extracted = extractAamvaIdentity(normalized);
+          const idScanIssue = getIdScanIssue({
+            dob: extracted.dob,
+            idExpirationDate: extracted.idExpirationDate,
+          });
           const idScanValue = normalized;
           const idScanHash = computeSha256Hex(idScanValue);
           const scannedIdNumber = extracted.idNumber?.trim() || null;
@@ -118,7 +125,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           // Employee-choice resolution (staff override after fuzzy evaluation)
           if (body.selectedCustomerId) {
             const selected = await client.query<CustomerIdentityRow>(
-              `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+              `SELECT id, name, dob, id_expiration_date, membership_number, banned_until, id_scan_hash, id_scan_value
                FROM customers
                WHERE id = $1
                LIMIT 1`,
@@ -186,6 +193,36 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
               idScanHash,
               idScanValue,
             });
+            const identityUpdates: string[] = [];
+            const identityValues: Array<string> = [];
+            if (extracted.dob && !chosen.dob) {
+              identityUpdates.push(`dob = $${identityValues.length + 1}::date`);
+              identityValues.push(extracted.dob);
+            }
+            if (extracted.idExpirationDate) {
+              identityUpdates.push(`id_expiration_date = $${identityValues.length + 1}::date`);
+              identityValues.push(extracted.idExpirationDate);
+            }
+            if (identityUpdates.length > 0) {
+              identityValues.push(chosen.id);
+              await client.query(
+                `UPDATE customers
+                 SET ${identityUpdates.join(', ')},
+                     updated_at = NOW()
+                 WHERE id = $${identityValues.length}`,
+                identityValues
+              );
+            }
+
+            if (idScanIssue) {
+              return {
+                result: 'ERROR' as const,
+                error: {
+                  code: idScanIssue,
+                  message: getIdScanIssueMessage(idScanIssue),
+                },
+              };
+            }
 
             return {
               result: 'MATCHED' as const,
@@ -206,7 +243,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           // Matching order:
           // 1) customers.id_scan_hash OR customers.id_scan_value (raw scan)
           const byHashOrValue = await client.query<CustomerIdentityRow>(
-            `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+            `SELECT id, name, dob, id_expiration_date, membership_number, banned_until, id_scan_hash, id_scan_value
              FROM customers
              WHERE id_scan_hash = $1 OR id_scan_value = $2
              LIMIT 2`,
@@ -229,6 +266,25 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
               idScanHash,
               idScanValue,
             });
+            if (extracted.idExpirationDate) {
+              await client.query(
+                `UPDATE customers
+                 SET id_expiration_date = $1::date,
+                     updated_at = NOW()
+                 WHERE id = $2`,
+                [extracted.idExpirationDate, matched.id]
+              );
+            }
+
+            if (idScanIssue) {
+              return {
+                result: 'ERROR' as const,
+                error: {
+                  code: idScanIssue,
+                  message: getIdScanIssueMessage(idScanIssue),
+                },
+              };
+            }
 
             return {
               result: 'MATCHED' as const,
@@ -249,7 +305,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           // 1b) fallback match by stored idNumber/hash (manual or scan-id with issuer+idNumber)
           if (scannedIdNumber || idNumberHash) {
             const byIdNumber = await client.query<CustomerIdentityRow>(
-              `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+              `SELECT id, name, dob, id_expiration_date, membership_number, banned_until, id_scan_hash, id_scan_value
                FROM customers
                WHERE id_scan_value = $1 OR id_scan_hash = $2
                LIMIT 2`,
@@ -271,6 +327,25 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                 idScanHash,
                 idScanValue,
               });
+              if (extracted.idExpirationDate) {
+                await client.query(
+                  `UPDATE customers
+                   SET id_expiration_date = $1::date,
+                       updated_at = NOW()
+                   WHERE id = $2`,
+                  [extracted.idExpirationDate, matched.id]
+                );
+              }
+
+              if (idScanIssue) {
+                return {
+                  result: 'ERROR' as const,
+                  error: {
+                    code: idScanIssue,
+                    message: getIdScanIssueMessage(idScanIssue),
+                  },
+                };
+              }
 
               return {
                 result: 'MATCHED' as const,
@@ -295,7 +370,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
             const dobStr = extracted.dob;
             if (/^\d{4}-\d{2}-\d{2}$/.test(dobStr)) {
               const byNameDob = await client.query<CustomerIdentityRow>(
-                `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value
+                `SELECT id, name, dob, id_expiration_date, membership_number, banned_until, id_scan_hash, id_scan_value
                  FROM customers
                  WHERE dob = $1::date
                    AND lower(split_part(name, ' ', 1)) = lower($2)
@@ -317,6 +392,25 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                   idScanHash,
                   idScanValue,
                 });
+                if (extracted.idExpirationDate) {
+                  await client.query(
+                    `UPDATE customers
+                     SET id_expiration_date = $1::date,
+                         updated_at = NOW()
+                     WHERE id = $2`,
+                    [extracted.idExpirationDate, matched.id]
+                  );
+                }
+
+                if (idScanIssue) {
+                  return {
+                    result: 'ERROR' as const,
+                    error: {
+                      code: idScanIssue,
+                      message: getIdScanIssueMessage(idScanIssue),
+                    },
+                  };
+                }
 
                 return {
                   result: 'MATCHED' as const,
@@ -340,7 +434,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
               );
               if (scannedParts) {
                 const candidatesByDob = await client.query<CustomerIdentityCandidateRow>(
-                  `SELECT id, name, dob, membership_number, banned_until, id_scan_hash, id_scan_value, created_at
+                  `SELECT id, name, dob, id_expiration_date, membership_number, banned_until, id_scan_hash, id_scan_value, created_at
                    FROM customers
                    WHERE dob = $1::date
                    LIMIT 200`,
@@ -398,6 +492,24 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                     idScanHash,
                     idScanValue,
                   });
+                  if (extracted.idExpirationDate) {
+                    await client.query(
+                      `UPDATE customers
+                       SET id_expiration_date = $1::date,
+                           updated_at = NOW()
+                       WHERE id = $2`,
+                      [extracted.idExpirationDate, matched.id]
+                    );
+                  }
+                  if (idScanIssue) {
+                    return {
+                      result: 'ERROR' as const,
+                      error: {
+                        code: idScanIssue,
+                        message: getIdScanIssueMessage(idScanIssue),
+                      },
+                    };
+                  }
                   return {
                     result: 'MATCHED' as const,
                     scanType: 'STATE_ID' as const,
@@ -419,11 +531,19 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
 
           // 3) no match: return extracted identity for prefill
           return {
-            result: 'NO_MATCH' as const,
+            result: idScanIssue ? ('ERROR' as const) : ('NO_MATCH' as const),
             scanType: 'STATE_ID' as const,
             normalizedRawScanText: idScanValue,
             idScanHash,
             extracted,
+            ...(idScanIssue
+              ? {
+                  error: {
+                    code: idScanIssue,
+                    message: getIdScanIssueMessage(idScanIssue),
+                  },
+                }
+              : {}),
           };
         }
 
@@ -553,6 +673,19 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
             }
           }
 
+          // Parse ID expiration date if provided
+          let idExpirationDate: Date | null = null;
+          if (body.idExpirationDate) {
+            const parsedExpiration = new Date(`${body.idExpirationDate}T00:00:00Z`);
+            if (!isNaN(parsedExpiration.getTime())) {
+              idExpirationDate = parsedExpiration;
+            }
+          }
+          const idScanIssue = getIdScanIssue({
+            dob: dob ?? body.dob,
+            idExpirationDate: idExpirationDate ?? body.idExpirationDate,
+          });
+
           // Upsert customer based on id_scan_hash
           let customerId: string | null = null;
 
@@ -562,8 +695,12 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
               id: string;
               name: string;
               dob: Date | null;
+              id_expiration_date: Date | null;
             }>(
-              `SELECT id, name, dob FROM customers WHERE id_scan_hash = $1 OR id_scan_value = $2 LIMIT 1`,
+              `SELECT id, name, dob, id_expiration_date
+               FROM customers
+               WHERE id_scan_hash = $1 OR id_scan_value = $2
+               LIMIT 1`,
               [idScanHash, idScanValue]
             );
 
@@ -583,6 +720,15 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                   [dob, customerId]
                 );
               }
+              if (idExpirationDate) {
+                await client.query(
+                  `UPDATE customers
+                   SET id_expiration_date = $1::date,
+                       updated_at = NOW()
+                   WHERE id = $2`,
+                  [idExpirationDate.toISOString().slice(0, 10), customerId]
+                );
+              }
 
               // Ensure scan identifiers are persisted for future matches.
               if (idScanValue) {
@@ -598,10 +744,16 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
             } else {
               // Create new customer
               const newCustomer = await client.query<{ id: string }>(
-                `INSERT INTO customers (name, dob, id_scan_hash, id_scan_value, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, NOW(), NOW())
+                `INSERT INTO customers (name, dob, id_expiration_date, id_scan_hash, id_scan_value, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
                RETURNING id`,
-                [customerName, dob, idScanHash, idScanValue]
+                [
+                  customerName,
+                  dob,
+                  idExpirationDate ? idExpirationDate.toISOString().slice(0, 10) : null,
+                  idScanHash,
+                  idScanValue,
+                ]
               );
               customerId = newCustomer.rows[0]!.id;
             }
@@ -609,12 +761,25 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
             // No hash available - create new customer (manual entry fallback)
             // This should be rare but allowed for manual entry
             const newCustomer = await client.query<{ id: string }>(
-              `INSERT INTO customers (name, dob, id_scan_value, created_at, updated_at)
-             VALUES ($1, $2, $3, NOW(), NOW())
+              `INSERT INTO customers (name, dob, id_expiration_date, id_scan_value, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, NOW(), NOW())
              RETURNING id`,
-              [customerName, dob, idScanValue]
+              [
+                customerName,
+                dob,
+                idExpirationDate ? idExpirationDate.toISOString().slice(0, 10) : null,
+                idScanValue,
+              ]
             );
             customerId = newCustomer.rows[0]!.id;
+          }
+
+          if (idScanIssue) {
+            throw {
+              statusCode: 403,
+              code: idScanIssue,
+              message: getIdScanIssueMessage(idScanIssue),
+            };
           }
 
           // Check if customer is banned

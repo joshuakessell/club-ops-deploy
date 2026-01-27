@@ -6,3 +6,4 @@
 - OfficeShell: authenticated layout chrome (sidebar + topbar).
 - views: standardized view shells with co-located CSS (panel layouts, headers, cards).
 - View modules (Overview, Monitor, Reports, etc.) are route-level features.
+- Routing: this app uses React Router for URL-based navigation (admin sections are route-level views).
