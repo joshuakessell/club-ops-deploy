@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { serializableTransaction, query } from '../db';
+import { serializableTransaction } from '../db';
 import { requireAuth, requireReauth } from '../auth/middleware';
 import type { Broadcaster } from '../websocket/broadcaster';
 import { roundUpToQuarterHour } from '../time/rounding';

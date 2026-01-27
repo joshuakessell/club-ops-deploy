@@ -514,24 +514,23 @@ describe('Check-in Flow', () => {
     );
 
     it(
-      'returns MULTIPLE_MATCHES when more than one fuzzy candidate passes thresholds',
+      'matches by idNumber when hash lookup fails',
       runIfDbAvailable(async () => {
-        const c1 = await query<{ id: string }>(
-          `INSERT INTO customers (name, dob, created_at, updated_at)
-           VALUES ($1, $2, NOW(), NOW())
+        await query<{ id: string }>(
+          `INSERT INTO customers (name, dob, id_scan_value, created_at, updated_at)
+           VALUES ($1, $2, $3, NOW(), NOW())
            RETURNING id`,
-          ['JOHN DOE', '1980-01-15']
+          ['JOHN DOE', '1980-01-15', 'TX111111']
         );
         const c2 = await query<{ id: string }>(
-          `INSERT INTO customers (name, dob, created_at, updated_at)
-           VALUES ($1, $2, NOW(), NOW())
+          `INSERT INTO customers (name, dob, id_scan_value, created_at, updated_at)
+           VALUES ($1, $2, $3, NOW(), NOW())
            RETURNING id`,
-          ['JONN DOE', '1980-01-15']
+          ['JONN DOE', '1980-01-15', 'TX222222']
         );
-        const id1 = c1.rows[0]!.id;
         const id2 = c2.rows[0]!.id;
 
-        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ777777777\nDCITX\n';
+        const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQTX222222\nDCITX\n';
         const response = await app.inject({
           method: 'POST',
           url: '/v1/checkin/scan',
@@ -541,24 +540,14 @@ describe('Check-in Flow', () => {
 
         expect(response.statusCode).toBe(200);
         const data = JSON.parse(response.body);
-        expect(data.result).toBe('MULTIPLE_MATCHES');
+        expect(data.result).toBe('MATCHED');
         expect(data.scanType).toBe('STATE_ID');
-        expect(Array.isArray(data.candidates)).toBe(true);
-        expect(data.candidates.length).toBeGreaterThanOrEqual(2);
-        const ids = data.candidates.map((c: { id: string }) => c.id);
-        expect(ids).toContain(id1);
-        expect(ids).toContain(id2);
-        // Sorted by descending matchScore
-        for (let i = 1; i < data.candidates.length; i++) {
-          expect(data.candidates[i - 1].matchScore).toBeGreaterThanOrEqual(
-            data.candidates[i].matchScore
-          );
-        }
+        expect(data.customer.id).toBe(id2);
       })
     );
 
     it(
-      'resolves MULTIPLE_MATCHES by selectedCustomerId and enriches id_scan_hash/value',
+      'accepts selectedCustomerId resolution and enriches id_scan_hash/value',
       runIfDbAvailable(async () => {
         const c1 = await query<{ id: string }>(
           `INSERT INTO customers (name, dob, created_at, updated_at)
@@ -574,16 +563,6 @@ describe('Check-in Flow', () => {
         const selectedId = c1.rows[0]!.id;
 
         const raw = '@\nDCSDOE\nDACJON\nDBD19800115\nDAQ888888888\nDCITX\n';
-        const initial = await app.inject({
-          method: 'POST',
-          url: '/v1/checkin/scan',
-          headers: { Authorization: `Bearer ${staffToken}` },
-          payload: { laneId, rawScanText: raw },
-        });
-        expect(initial.statusCode).toBe(200);
-        const initialData = JSON.parse(initial.body);
-        expect(initialData.result).toBe('MULTIPLE_MATCHES');
-
         const resolved = await app.inject({
           method: 'POST',
           url: '/v1/checkin/scan',

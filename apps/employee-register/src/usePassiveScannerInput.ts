@@ -24,6 +24,9 @@ export function usePassiveScannerInput({
   const lastWasEnterRef = useRef(false);
   const lastKeyAtRef = useRef<number | null>(null);
   const cooldownUntilRef = useRef<number>(0);
+  const enabledRef = useRef(enabled);
+  const pendingDisableRef = useRef(false);
+  const resetRef = useRef<() => void>(() => {});
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -40,7 +43,12 @@ export function usePassiveScannerInput({
     lastKeyAtRef.current = null;
     clearTimer();
     if (wasCapturing) onCaptureEnd?.();
+    pendingDisableRef.current = false;
   }, [clearTimer, onCaptureEnd]);
+
+  useEffect(() => {
+    resetRef.current = reset;
+  }, [reset]);
 
   const finalize = useCallback(() => {
     clearTimer();
@@ -66,6 +74,10 @@ export function usePassiveScannerInput({
     cooldownUntilRef.current = Date.now() + cooldownMs;
     onCapture(raw);
     onCaptureEnd?.();
+    if (pendingDisableRef.current && !enabledRef.current) {
+      pendingDisableRef.current = false;
+      reset();
+    }
   }, [clearTimer, cooldownMs, minLength, onCapture, onCaptureEnd]);
 
   const resolveIdleTimeout = useCallback(() => {
@@ -93,6 +105,11 @@ export function usePassiveScannerInput({
 
   const handleKeyDownCapture = useCallback(
     (e: KeyboardEvent) => {
+      if (!enabledRef.current && !capturingRef.current) {
+        return;
+      }
+      const before = bufferRef.current.length;
+      const wasCapturing = capturingRef.current;
       handlePassiveScannerKeydown(
         e,
         {
@@ -116,6 +133,10 @@ export function usePassiveScannerInput({
           scheduleFinalizeAfterEnter,
         }
       );
+      const after = bufferRef.current.length;
+      if (!wasCapturing && capturingRef.current && before === 0 && after > 0) {
+        // First printable key started capture; keep focus from UI side-effects.
+      }
     },
     [
       captureWhenEditable,
@@ -131,17 +152,26 @@ export function usePassiveScannerInput({
   );
 
   useEffect(() => {
+    enabledRef.current = enabled;
     if (!enabled) {
-      reset();
+      if (capturingRef.current) {
+        pendingDisableRef.current = true;
+        return;
+      }
+      resetRef.current();
       return;
     }
-    reset();
-    return () => reset();
-  }, [enabled, reset]);
+    resetRef.current();
+    return () => {
+      if (capturingRef.current) {
+        pendingDisableRef.current = true;
+        return;
+      }
+      resetRef.current();
+    };
+  }, [enabled]);
 
   useEffect(() => {
-    if (!enabled) return;
-
     window.addEventListener('keydown', handleKeyDownCapture, { capture: true });
     return () => window.removeEventListener('keydown', handleKeyDownCapture, { capture: true });
   }, [enabled, handleKeyDownCapture]);

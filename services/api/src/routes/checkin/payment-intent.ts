@@ -6,7 +6,7 @@ import type { CustomerRow, LaneSessionRow, PaymentIntentRow } from '../../checki
 import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
 import { getHttpError, toDate, toNumber } from '../../checkin/utils';
 import { calculateAge } from '../../checkin/identity';
-import { assertCustomerLanguageSelected } from '../../checkin/session';
+import { insertAuditLog } from '../../audit/auditLog';
 
 export function registerCheckinPaymentIntentRoutes(fastify: FastifyInstance): void {
   /**

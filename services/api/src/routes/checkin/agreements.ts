@@ -1,22 +1,20 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, optionalAuth } from '../../auth/middleware';
 import { requireKioskTokenOrStaff } from '../../auth/kioskToken';
-import { verifyPin } from '../../auth/utils';
 import { AGREEMENT_LEGAL_BODY_HTML_BY_LANG } from '@club-ops/shared';
-import { calculateRenewalQuote, type PricingInput } from '../../pricing/engine';
 import { transaction } from '../../db';
-import type { CustomerRow, LaneSessionRow, LockerRow, PaymentIntentRow, RoomRow } from '../../checkin/types';
+import type { LaneSessionRow, LockerRow, PaymentIntentRow, RoomRow, RoomRentalType } from '../../checkin/types';
 import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
-import { assertAssignedResourcePersistedAndUnavailable } from '../../checkin/helpers';
-import { calculateAge } from '../../checkin/identity';
-import { getHttpError, parsePriceQuote, roundToCents, toDate, toNumber } from '../../checkin/utils';
+import { assertAssignedResourcePersistedAndUnavailable, selectRoomForNewCheckin } from '../../checkin/helpers';
+import { getHttpError } from '../../checkin/utils';
+import { getRoomTier } from '../../checkin/waitlist';
 import { generateAgreementPdf } from '../../utils/pdf-generator';
 import { stripSystemLateFeeNotes } from '../../utils/lateFeeNotes';
 import { roundUpToQuarterHour } from '../../time/rounding';
 import { broadcastInventoryUpdate } from '../../inventory/broadcast';
 import { insertAuditLog } from '../../audit/auditLog';
 import type {
-  CustomerConfirmationRequiredPayload,
+  AssignmentCreatedPayload,
   CustomerConfirmedPayload,
   CustomerDeclinedPayload,
 } from '@club-ops/shared';
@@ -328,6 +326,9 @@ export function registerCheckinAgreementRoutes(fastify: FastifyInstance): void {
 
           if (!session.customer_id) {
             throw { statusCode: 400, message: 'Session has no customer; cannot complete check-in' };
+          }
+          if (!assignedResourceId || !assignedResourceType) {
+            throw { statusCode: 500, message: 'Failed to assign a room or locker' };
           }
 
           // Assign inventory + mark OCCUPIED (server-authoritative, transactional)
@@ -879,6 +880,9 @@ export function registerCheckinAgreementRoutes(fastify: FastifyInstance): void {
 
           if (!session.customer_id) {
             throw { statusCode: 400, message: 'Session has no customer; cannot complete check-in' };
+          }
+          if (!assignedResourceId || !assignedResourceType) {
+            throw { statusCode: 500, message: 'Failed to assign a room or locker' };
           }
 
           // Assign inventory + mark OCCUPIED (server-authoritative, transactional)

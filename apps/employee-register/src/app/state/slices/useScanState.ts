@@ -45,6 +45,8 @@ export function useScanState({
     scanOverlayActive: overlay.scanOverlayActive,
     scanToastMessage: overlay.scanToastMessage,
     setScanToastMessage: overlay.setScanToastMessage,
+    scanReady: overlay.scanReady,
+    scanBlockedReason: overlay.scanBlockedReason,
     pendingScanResolution: resolution.pendingScanResolution,
     scanResolutionError: resolution.scanResolutionError,
     scanResolutionSubmitting: resolution.scanResolutionSubmitting,

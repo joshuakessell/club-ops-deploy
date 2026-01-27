@@ -5,8 +5,6 @@ import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
 import type { LaneSessionRow } from '../../checkin/types';
 import { getHttpError } from '../../checkin/utils';
 import { transaction } from '../../db';
-import { broadcastInventoryUpdate } from '../../inventory/broadcast';
-import { insertAuditLog } from '../../audit/auditLog';
 
 export function registerCheckinResetRoutes(fastify: FastifyInstance): void {
   /**

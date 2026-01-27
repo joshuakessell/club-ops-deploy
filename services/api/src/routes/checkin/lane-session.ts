@@ -220,7 +220,7 @@ export function registerCheckinLaneSessionRoutes(fastify: FastifyInstance): void
               throw { statusCode: 400, message: 'Cannot determine checkout time for renewal' };
             }
             const now = new Date();
-            const diffMs = Math.abs(blockEndsAtDate.getTime() - now.getTime());
+            const diffMs = Math.abs((blockEndsAtDate as Date).getTime() - now.getTime());
             if (diffMs > 60 * 60 * 1000) {
               throw {
                 statusCode: 400,

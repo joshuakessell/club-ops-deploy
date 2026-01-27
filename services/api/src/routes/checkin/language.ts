@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth, optionalAuth } from '../../auth/middleware';
+import { optionalAuth } from '../../auth/middleware';
 import { requireKioskTokenOrStaff } from '../../auth/kioskToken';
 import type { LaneSessionRow } from '../../checkin/types';
 import { transaction } from '../../db';

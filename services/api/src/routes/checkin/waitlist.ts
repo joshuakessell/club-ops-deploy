@@ -1,18 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, optionalAuth } from '../../auth/middleware';
-import { requireKioskTokenOrStaff } from '../../auth/kioskToken';
 import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
-import type { LaneSessionRow, RoomRentalType } from '../../checkin/types';
-import { toDate } from '../../checkin/utils';
+import type { LaneSessionRow, LockerRow, RoomRow } from '../../checkin/types';
+import { getHttpError } from '../../checkin/utils';
 import { computeWaitlistInfo, getRoomTier } from '../../checkin/waitlist';
-import { transaction } from '../../db';
-import { broadcastInventoryUpdate } from '../../inventory/broadcast';
+import { query, serializableTransaction, transaction } from '../../db';
 import { insertAuditLog } from '../../audit/auditLog';
-import {
-  assertAssignedResourcePersistedAndUnavailable,
-  selectRoomForNewCheckin,
-} from '../../checkin/helpers';
-import type { AssignmentCreatedPayload, AssignmentFailedPayload } from '@club-ops/shared';
+import type {
+  AssignmentCreatedPayload,
+  AssignmentFailedPayload,
+  CustomerConfirmationRequiredPayload,
+} from '@club-ops/shared';
 
 export function registerCheckinWaitlistRoutes(fastify: FastifyInstance): void {
   /**
@@ -57,7 +55,7 @@ export function registerCheckinWaitlistRoutes(fastify: FastifyInstance): void {
           // Compute upgrade fee if currentTier is provided
           let upgradeFee: number | null = null;
           if (currentTier) {
-            const { getUpgradeFee } = await import('../pricing/engine.js');
+            const { getUpgradeFee } = await import('../../pricing/engine');
             upgradeFee = getUpgradeFee(currentTier as any, desiredTier as any) || null;
           }
 

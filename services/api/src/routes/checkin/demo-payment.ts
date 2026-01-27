@@ -4,7 +4,6 @@ import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
 import type { LaneSessionRow, PaymentIntentRow } from '../../checkin/types';
 import { getHttpError } from '../../checkin/utils';
 import { transaction } from '../../db';
-import { insertAuditLog } from '../../audit/auditLog';
 
 export function registerCheckinDemoPaymentRoutes(fastify: FastifyInstance): void {
   /**

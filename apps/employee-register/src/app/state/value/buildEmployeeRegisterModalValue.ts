@@ -50,6 +50,8 @@ export function buildEmployeeRegisterModalValue(params: EmployeeRegisterModalPar
     scanOverlayActive: scanState.scanOverlayActive,
     scanToastMessage: scanState.scanToastMessage,
     setScanToastMessage: scanState.setScanToastMessage,
+    scanReady: scanState.scanReady,
+    scanBlockedReason: scanState.scanBlockedReason,
     pendingScanResolution: scanState.pendingScanResolution,
     scanResolutionError: scanState.scanResolutionError,
     scanResolutionSubmitting: scanState.scanResolutionSubmitting,

@@ -1,9 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../auth/middleware';
-import { insertAuditLog } from '../../audit/auditLog';
 import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
-import type { LaneSessionRow } from '../../checkin/types';
-import { getHttpError } from '../../checkin/utils';
+import type { CustomerRow, LaneSessionRow } from '../../checkin/types';
 import { transaction } from '../../db';
 
 export function registerCheckinNoteRoutes(fastify: FastifyInstance): void {

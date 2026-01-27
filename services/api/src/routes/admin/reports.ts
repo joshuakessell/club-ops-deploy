@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAdmin, requireAuth } from '../../auth/middleware';
+import { query } from '../../db';
 
 export function registerAdminReportRoutes(fastify: FastifyInstance): void {
   /**

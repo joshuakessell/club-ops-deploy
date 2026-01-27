@@ -3,7 +3,13 @@ import { PanelHeader } from '../../views/PanelHeader';
 import { PanelShell } from '../../views/PanelShell';
 
 export function ScanPanel() {
-  const { currentSessionId, customerName, selectHomeTab } = useEmployeeRegisterState();
+  const {
+    currentSessionId,
+    customerName,
+    selectHomeTab,
+    scanReady,
+    scanBlockedReason,
+  } = useEmployeeRegisterState();
 
   return (
     <PanelShell align="center">
@@ -16,6 +22,9 @@ export function ScanPanel() {
         title="Scan Now"
         subtitle="Scan a membership ID or driver license."
       />
+      <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8' }}>
+        {scanReady ? 'Scanner ready' : `Scanner paused: ${scanBlockedReason || 'Unavailable'}`}
+      </div>
       {currentSessionId && customerName ? (
         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.5rem' }}>
           <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>

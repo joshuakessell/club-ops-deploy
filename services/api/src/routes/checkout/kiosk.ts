@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import { query, serializableTransaction, transaction } from '../../db';
-import { ResolveKeySchema, CreateCheckoutRequestSchema } from '../../checkout/schemas';
+import { z } from 'zod';
+import { query, serializableTransaction } from '../../db';
+import {
+  ResolveKeySchema,
+  CreateCheckoutRequestSchema,
+  type ResolveKeyInput,
+  type CreateCheckoutRequestInput,
+} from '../../checkout/schemas';
 import type {
   CheckinBlockRow,
   CheckoutRequestRow,
@@ -10,9 +16,6 @@ import type {
   RoomRow,
 } from '../../checkout/types';
 import type { CheckoutRequestSummary, CheckoutRequestedPayload, ResolvedCheckoutKey } from '@club-ops/shared';
-import { RoomStatus } from '@club-ops/shared';
-import { buildSystemLateFeeNote } from '../../utils/lateFeeNotes';
-import { broadcastInventoryUpdate } from '../../inventory/broadcast';
 import { calculateLateFee } from '../../checkout/utils';
 
 export function registerCheckoutKioskRoutes(fastify: FastifyInstance): void {
