@@ -4,6 +4,8 @@ import { query, transaction } from '../db';
 import { verifyPin } from '../auth/utils';
 import { requireAuth } from '../auth/middleware';
 import { insertAuditLog } from '../audit/auditLog';
+import { buildTenderSummaryFromPayments } from '../money/tenderSummary';
+import { buildCloseoutSnapshot, type CashDrawerSessionRow } from '../money/closeout';
 
 /**
  * Schema for PIN verification request.
@@ -47,6 +49,16 @@ const HeartbeatSchema = z.object({
 
 type HeartbeatInput = z.infer<typeof HeartbeatSchema>;
 
+const CloseoutStartSchema = z.object({
+  registerSessionId: z.string().uuid(),
+});
+
+const CloseoutFinalizeSchema = z.object({
+  registerSessionId: z.string().uuid(),
+  countedCashCents: z.number().int().nonnegative(),
+  notes: z.string().optional().nullable(),
+});
+
 interface EmployeeRow {
   id: string;
   name: string;
@@ -63,6 +75,42 @@ interface RegisterSessionRow {
   last_heartbeat: Date;
   created_at: Date;
   signed_out_at: Date | null;
+}
+
+interface CloseoutPaymentRow {
+  id: string;
+  amount: number | string | null;
+  tip_cents?: number | null;
+  payment_method?: string | null;
+  quote_json?: unknown;
+}
+
+type CashDrawerSessionFullRow = CashDrawerSessionRow & {
+  status: 'OPEN' | 'CLOSED';
+  closed_at: Date | null;
+  closeout_snapshot_json?: unknown | null;
+};
+
+type Queryable = {
+  query<T>(queryText: string, params?: unknown[]): Promise<{ rows: T[] }>;
+};
+
+async function buildRegisterCloseoutSummary(
+  client: Queryable,
+  session: RegisterSessionRow,
+  closeoutAt: Date
+) {
+  const payments = await client.query<CloseoutPaymentRow>(
+    `SELECT id, amount, tip_cents, payment_method, quote_json
+     FROM payment_intents
+     WHERE status = 'PAID'
+       AND register_number = $1
+       AND paid_at >= $2
+       AND paid_at <= $3`,
+    [session.register_number, session.created_at, closeoutAt]
+  );
+
+  return buildTenderSummaryFromPayments(payments.rows);
 }
 
 /**
@@ -212,6 +260,205 @@ export async function registerRoutes(
           error: 'Internal Server Error',
           message: 'Failed to fetch register availability',
         });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/registers/closeout/start
+   *
+   * Compute expected totals snapshot for the open cash drawer session.
+   */
+  fastify.post<{ Body: z.infer<typeof CloseoutStartSchema> }>(
+    '/v1/registers/closeout/start',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      if (!request.staff) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      let body: z.infer<typeof CloseoutStartSchema>;
+      try {
+        body = CloseoutStartSchema.parse(request.body);
+      } catch (error) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+        });
+      }
+
+      try {
+        const result = await transaction(async (client) => {
+          const registerResult = await client.query<RegisterSessionRow>(
+            `SELECT * FROM register_sessions WHERE id = $1 AND signed_out_at IS NULL`,
+            [body.registerSessionId]
+          );
+          if (registerResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'Active register session not found' };
+          }
+
+          const registerSession = registerResult.rows[0]!;
+          if (registerSession.employee_id !== request.staff!.staffId) {
+            throw { statusCode: 403, message: 'Not authorized to close out this register' };
+          }
+
+          const drawerResult = await client.query<CashDrawerSessionFullRow>(
+            `SELECT id, register_session_id, opened_at, opening_float_cents, status, closed_at, closeout_snapshot_json
+             FROM cash_drawer_sessions
+             WHERE register_session_id = $1 AND status = 'OPEN'
+             ORDER BY opened_at DESC
+             LIMIT 1`,
+            [registerSession.id]
+          );
+          if (drawerResult.rows.length === 0) {
+            throw { statusCode: 409, message: 'No open cash drawer session for this register' };
+          }
+
+          const drawerSession = drawerResult.rows[0]!;
+          const closeoutAt = new Date();
+          const snapshot = await buildCloseoutSnapshot(client, drawerSession, closeoutAt);
+
+          return {
+            registerSessionId: registerSession.id,
+            drawerSessionId: drawerSession.id,
+            snapshot,
+          };
+        });
+
+        return reply.send(result);
+      } catch (error) {
+        if (error && typeof error === 'object' && 'statusCode' in error) {
+          const err = error as { statusCode: number; message?: string };
+          return reply.status(err.statusCode).send({ error: err.message || 'Request failed' });
+        }
+        request.log.error(error, 'Failed to start register closeout');
+        return reply.status(500).send({ error: 'Internal server error' });
+      }
+    }
+  );
+
+  /**
+   * POST /v1/registers/closeout/finalize
+   *
+   * Finalize a cash drawer closeout and persist the snapshot.
+   */
+  fastify.post<{ Body: z.infer<typeof CloseoutFinalizeSchema> }>(
+    '/v1/registers/closeout/finalize',
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      if (!request.staff) {
+        return reply.status(401).send({ error: 'Unauthorized' });
+      }
+
+      let body: z.infer<typeof CloseoutFinalizeSchema>;
+      try {
+        body = CloseoutFinalizeSchema.parse(request.body);
+      } catch (error) {
+        return reply.status(400).send({
+          error: 'Validation failed',
+          details: error instanceof z.ZodError ? error.errors : 'Invalid input',
+        });
+      }
+
+      try {
+        const result = await transaction(async (client) => {
+          const registerResult = await client.query<RegisterSessionRow>(
+            `SELECT * FROM register_sessions WHERE id = $1 AND signed_out_at IS NULL`,
+            [body.registerSessionId]
+          );
+          if (registerResult.rows.length === 0) {
+            throw { statusCode: 404, message: 'Active register session not found' };
+          }
+
+          const registerSession = registerResult.rows[0]!;
+          if (registerSession.employee_id !== request.staff!.staffId) {
+            throw { statusCode: 403, message: 'Not authorized to close out this register' };
+          }
+
+          const drawerResult = await client.query<CashDrawerSessionFullRow>(
+            `SELECT id, register_session_id, opened_at, opening_float_cents, status, closed_at, closeout_snapshot_json
+             FROM cash_drawer_sessions
+             WHERE register_session_id = $1
+             ORDER BY opened_at DESC
+             LIMIT 1
+             FOR UPDATE`,
+            [registerSession.id]
+          );
+
+          if (drawerResult.rows.length === 0) {
+            throw { statusCode: 409, message: 'No cash drawer session for this register' };
+          }
+
+          const drawerSession = drawerResult.rows[0]!;
+          if (drawerSession.status !== 'OPEN') {
+            if (drawerSession.closeout_snapshot_json) {
+              return {
+                registerSessionId: registerSession.id,
+                drawerSessionId: drawerSession.id,
+                alreadyClosed: true,
+                snapshot: drawerSession.closeout_snapshot_json,
+              };
+            }
+            throw { statusCode: 409, message: 'Cash drawer session already closed' };
+          }
+
+          const closeoutAt = new Date();
+          const snapshot = await buildCloseoutSnapshot(client, drawerSession, closeoutAt);
+          const overShortCents = body.countedCashCents - snapshot.expectedCashCents;
+          const closeoutSnapshot = {
+            ...snapshot,
+            countedCashCents: body.countedCashCents,
+            overShortCents,
+            closedByStaffId: request.staff!.staffId,
+            notes: body.notes ?? null,
+          };
+
+          await client.query(
+            `UPDATE cash_drawer_sessions
+             SET status = 'CLOSED',
+                 closed_by_staff_id = $1,
+                 closed_at = $2,
+                 counted_cash_cents = $3,
+                 expected_cash_cents = $4,
+                 over_short_cents = $5,
+                 notes = COALESCE($6, notes),
+                 closeout_snapshot_json = $7
+             WHERE id = $8`,
+            [
+              request.staff!.staffId,
+              closeoutAt,
+              body.countedCashCents,
+              snapshot.expectedCashCents,
+              overShortCents,
+              body.notes ?? null,
+              closeoutSnapshot,
+              drawerSession.id,
+            ]
+          );
+
+          await client.query(
+            `UPDATE register_sessions
+             SET closeout_summary_json = COALESCE(closeout_summary_json, $1::jsonb)
+             WHERE id = $2`,
+            [closeoutSnapshot, registerSession.id]
+          );
+
+          return {
+            registerSessionId: registerSession.id,
+            drawerSessionId: drawerSession.id,
+            alreadyClosed: false,
+            snapshot: closeoutSnapshot,
+          };
+        });
+
+        return reply.send(result);
+      } catch (error) {
+        if (error && typeof error === 'object' && 'statusCode' in error) {
+          const err = error as { statusCode: number; message?: string };
+          return reply.status(err.statusCode).send({ error: err.message || 'Request failed' });
+        }
+        request.log.error(error, 'Failed to finalize register closeout');
+        return reply.status(500).send({ error: 'Internal server error' });
       }
     }
   );
@@ -664,6 +911,7 @@ export async function registerRoutes(
 
       try {
         const result = await transaction(async (client) => {
+          const closeoutAt = new Date();
           // Find active register session for this device
           const sessionResult = await client.query<RegisterSessionRow>(
             `SELECT * FROM register_sessions
@@ -683,12 +931,15 @@ export async function registerRoutes(
             throw new Error('Register session does not belong to authenticated employee');
           }
 
+          const closeoutSummary = await buildRegisterCloseoutSummary(client, session, closeoutAt);
+
           // Sign out
           await client.query(
             `UPDATE register_sessions
-                       SET signed_out_at = NOW()
-                       WHERE id = $1`,
-            [session.id]
+                       SET signed_out_at = $1,
+                           closeout_summary_json = COALESCE(closeout_summary_json, $2::jsonb)
+                       WHERE id = $3`,
+            [closeoutAt, closeoutSummary, session.id]
           );
 
           // Close timeclock session if employee is no longer signed into any register or cleaning station
@@ -779,13 +1030,14 @@ export async function registerRoutes(
 
       try {
         const result = await transaction(async (client) => {
+          const closeoutAt = new Date();
           const sessionResult = await client.query<RegisterSessionRow>(
             `UPDATE register_sessions
-             SET signed_out_at = NOW()
+             SET signed_out_at = $2
              WHERE employee_id = $1
              AND signed_out_at IS NULL
              RETURNING *`,
-            [staff.staffId]
+            [staff.staffId, closeoutAt]
           );
 
           if (sessionResult.rows.length === 0) {
@@ -793,6 +1045,18 @@ export async function registerRoutes(
           }
 
           for (const session of sessionResult.rows) {
+            const closeoutSummary = await buildRegisterCloseoutSummary(
+              client,
+              session,
+              closeoutAt
+            );
+            await client.query(
+              `UPDATE register_sessions
+               SET closeout_summary_json = COALESCE(closeout_summary_json, $1::jsonb)
+               WHERE id = $2`,
+              [closeoutSummary, session.id]
+            );
+
             await insertAuditLog(client, {
               staffId: request.staff!.staffId,
               action: 'REGISTER_SIGN_OUT',

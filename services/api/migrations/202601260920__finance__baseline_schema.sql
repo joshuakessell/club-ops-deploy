@@ -21,6 +21,7 @@ CREATE TABLE public.payment_intents (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     lane_session_id uuid,
     amount numeric(10,2) NOT NULL,
+    tip_cents integer DEFAULT 0 NOT NULL,
     status public.payment_status DEFAULT 'DUE'::public.payment_status NOT NULL,
     quote_json jsonb NOT NULL,
     square_transaction_id character varying(255),

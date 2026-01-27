@@ -15,6 +15,7 @@ import { broadcastInventoryUpdate } from '../../inventory/broadcast';
 import { insertAuditLog } from '../../audit/auditLog';
 import { looksLikeUuid } from '../../checkout/utils';
 import { buildSystemLateFeeNote } from '../../utils/lateFeeNotes';
+import { computeOrderTotals, ensureOrderWithReceipt, toCents } from '../../money/orderAudit';
 
 export function registerCheckoutStaffRoutes(fastify: FastifyInstance): void {
   /**
@@ -148,13 +149,14 @@ export function registerCheckoutStaffRoutes(fastify: FastifyInstance): void {
           details: error instanceof z.ZodError ? error.errors : 'Invalid input',
         });
       }
-      void body;
 
       try {
         const result = await transaction(async (client) => {
           // 1. Verify request is claimed by this staff member
-          const requestResult = await client.query<CheckoutRequestRow>(
-            `SELECT id, claimed_by_staff_id, status, fee_paid
+          const requestResult = await client.query<
+            CheckoutRequestRow & { customer_id: string | null; occupancy_id: string | null }
+          >(
+            `SELECT id, claimed_by_staff_id, status, fee_paid, late_fee_amount, customer_id, occupancy_id
            FROM checkout_requests
            WHERE id = $1`,
             [request.params.requestId]
@@ -182,6 +184,99 @@ export function registerCheckoutStaffRoutes(fastify: FastifyInstance): void {
            RETURNING id, items_confirmed, fee_paid`,
             [request.params.requestId]
           );
+
+          const feeAmount = Number(checkoutRequest.late_fee_amount) || 0;
+          if (feeAmount > 0) {
+            const existingOrder = await client.query<{ id: string }>(
+              `SELECT id FROM orders WHERE metadata_json->>$1 = $2 LIMIT 1`,
+              ['checkoutRequestId', request.params.requestId]
+            );
+
+            if (existingOrder.rows.length === 0) {
+              const registerSession = await client.query<{
+                id: string;
+                register_number: number | null;
+              }>(
+                `SELECT id, register_number
+                 FROM register_sessions
+                 WHERE employee_id = $1
+                   AND signed_out_at IS NULL
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [staffId]
+              );
+              const activeRegister = registerSession.rows[0];
+              const resolvedRegisterNumber = body.registerNumber ?? activeRegister?.register_number ?? null;
+
+              const quoteJson = {
+                type: 'LATE_FEE',
+                lineItems: [
+                  {
+                    description: 'Late Fee',
+                    amount: feeAmount,
+                    kind: 'LATE_FEE',
+                  },
+                ],
+                total: feeAmount,
+                messages: body.note ? [body.note] : [],
+              };
+
+              const paymentIntent = await client.query<{
+                id: string;
+                amount: number | string;
+                payment_method?: string | null;
+                register_number?: number | null;
+                tip_cents?: number | null;
+              }>(
+                `INSERT INTO payment_intents
+                 (amount, status, quote_json, payment_method, register_number, tip_cents, paid_at)
+                 VALUES ($1, 'PAID', $2, $3, $4, $5, NOW())
+                 RETURNING id, amount, payment_method, register_number, tip_cents`,
+                [
+                  feeAmount,
+                  JSON.stringify(quoteJson),
+                  body.paymentMethod ?? null,
+                  resolvedRegisterNumber,
+                  body.tipCents ?? 0,
+                ]
+              );
+
+              const intent = paymentIntent.rows[0]!;
+              const feeCents = toCents(feeAmount) ?? 0;
+              const lineItems = [
+                {
+                  kind: 'LATE_FEE' as const,
+                  name: 'Late Fee',
+                  quantity: 1,
+                  unitPriceCents: feeCents,
+                  totalCents: feeCents,
+                },
+              ];
+              const totals = computeOrderTotals(lineItems, feeCents, intent.tip_cents ?? 0);
+
+              await ensureOrderWithReceipt(client, {
+                dedupeKey: { field: 'checkoutRequestId', value: request.params.requestId },
+                customerId: checkoutRequest.customer_id ?? null,
+                registerSessionId: activeRegister?.id ?? null,
+                createdByStaffId: staffId,
+                totals,
+                lineItems,
+                metadata: {
+                  checkoutRequestId: request.params.requestId,
+                  paymentIntentId: intent.id,
+                  paymentMethod: intent.payment_method ?? null,
+                  registerNumber: intent.register_number ?? null,
+                },
+                tender: {
+                  paymentIntentId: intent.id,
+                  paymentMethod: intent.payment_method ?? null,
+                  amountCents: feeCents,
+                  tipCents: intent.tip_cents ?? 0,
+                  registerNumber: intent.register_number ?? null,
+                },
+              });
+            }
+          }
 
           return updateResult.rows[0]!;
         });

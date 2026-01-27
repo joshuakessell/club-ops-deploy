@@ -446,6 +446,109 @@ export interface ManualCheckoutCompleteResponse extends ManualCheckoutResolveRes
   alreadyCheckedOut?: boolean;
 }
 
+export type CashDrawerSessionStatus = 'OPEN' | 'CLOSED';
+export type CashDrawerEventType = 'PAID_IN' | 'PAID_OUT' | 'DROP' | 'NO_SALE_OPEN' | 'ADJUSTMENT';
+export type StaffBreakStatus = 'OPEN' | 'CLOSED';
+export type StaffBreakType = 'MEAL' | 'REST' | 'OTHER';
+export type OrderStatus = 'OPEN' | 'PAID' | 'CANCELED' | 'REFUNDED' | 'PARTIALLY_REFUNDED';
+export type OrderLineItemKind = 'RETAIL' | 'ADDON' | 'UPGRADE' | 'LATE_FEE' | 'MANUAL';
+export type ExternalProviderEntityType =
+  | 'customer'
+  | 'payment'
+  | 'refund'
+  | 'order'
+  | 'shift'
+  | 'timeclock_session'
+  | 'cash_event'
+  | 'receipt';
+
+export interface CashDrawerSession {
+  id: string;
+  registerSessionId: string;
+  openedByStaffId: string;
+  openedAt: Date | string;
+  openingFloatCents: number;
+  closedByStaffId?: string | null;
+  closedAt?: Date | string | null;
+  countedCashCents?: number | null;
+  expectedCashCents?: number | null;
+  overShortCents?: number | null;
+  notes?: string | null;
+  status: CashDrawerSessionStatus;
+}
+
+export interface CashDrawerEvent {
+  id: string;
+  cashDrawerSessionId: string;
+  occurredAt: Date | string;
+  type: CashDrawerEventType;
+  amountCents?: number | null;
+  reason?: string | null;
+  createdByStaffId: string;
+  metadataJson?: Record<string, unknown> | null;
+}
+
+export interface StaffBreakSession {
+  id: string;
+  staffId: string;
+  timeclockSessionId: string;
+  startedAt: Date | string;
+  endedAt?: Date | string | null;
+  breakType: StaffBreakType;
+  status: StaffBreakStatus;
+  notes?: string | null;
+}
+
+export interface Order {
+  id: string;
+  customerId?: string | null;
+  registerSessionId?: string | null;
+  createdByStaffId?: string | null;
+  createdAt: Date | string;
+  status: OrderStatus;
+  subtotalCents: number;
+  discountCents: number;
+  taxCents: number;
+  tipCents: number;
+  totalCents: number;
+  currency: string;
+  metadataJson?: Record<string, unknown> | null;
+}
+
+export interface OrderLineItem {
+  id: string;
+  orderId: string;
+  kind: OrderLineItemKind;
+  sku?: string | null;
+  name: string;
+  quantity: number;
+  unitPriceCents: number;
+  discountCents: number;
+  taxCents: number;
+  totalCents: number;
+  metadataJson?: Record<string, unknown> | null;
+}
+
+export interface Receipt {
+  id: string;
+  orderId: string;
+  issuedAt: Date | string;
+  receiptNumber: string;
+  receiptJson: Record<string, unknown>;
+  pdfStorageKey?: string | null;
+  metadataJson?: Record<string, unknown> | null;
+}
+
+export interface ExternalProviderRef {
+  id: string;
+  provider: string;
+  entityType: ExternalProviderEntityType;
+  internalId: string;
+  externalId: string;
+  externalVersion?: string | null;
+  createdAt: Date | string;
+}
+
 /**
  * Register session updated event payload.
  * Emitted when a register session is created, signed out, force signed out, or expires.

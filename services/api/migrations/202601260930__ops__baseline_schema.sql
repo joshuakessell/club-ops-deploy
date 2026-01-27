@@ -85,6 +85,7 @@ CREATE TABLE public.register_sessions (
     last_heartbeat timestamp with time zone DEFAULT now() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     signed_out_at timestamp with time zone,
+    closeout_summary_json jsonb,
     CONSTRAINT register_sessions_register_number_check CHECK ((register_number = ANY (ARRAY[1, 2])))
 );
 ALTER TABLE ONLY public.checkout_requests

@@ -37,6 +37,13 @@ This section is the **single authoritative place** (within this repo) that defin
 - `waitlist`
 - `inventory_reservations`
 - `payment_intents`
+- `cash_drawer_sessions`
+- `cash_drawer_events`
+- `staff_break_sessions`
+- `orders`
+- `order_line_items`
+- `receipts`
+- `external_provider_refs`
 - `visits`
 - `checkin_blocks`
 - `rooms`
@@ -99,6 +106,7 @@ Other markdown files may describe workflows, but **must not redefine** these ent
 - **Key columns** (non-exhaustive):
   - `lane_session_id`: Optional link to the lane session that generated the intent.
   - `amount`: Amount due for the intent.
+  - `tip_cents`: Tip amount in cents (defaults to 0).
   - `status`: Payment lifecycle state (see `payment_status` enum in `db/schema.sql`).
   - `quote_json`: Immutable-ish quote snapshot used to compute/display totals.
   - `square_transaction_id`: Optional external reference (if recorded).
@@ -108,6 +116,127 @@ Other markdown files may describe workflows, but **must not redefine** these ent
 - **Invariants**:
   - This system does **not** assume external payment succeeded without an explicit “mark paid” action.
   - Status transitions are validated server-side and should be audited.
+
+### `cash_drawer_sessions`
+
+- **Purpose**: Tracks a cash drawer lifecycle tied to a register session, including opening float and closeout reconciliation.
+- **Primary key**: `cash_drawer_sessions.id` (UUID).
+- **Key columns** (non-exhaustive):
+  - `register_session_id`: Register session that owns this drawer session.
+  - `opened_by_staff_id`, `opened_at`, `opening_float_cents`: Opening attribution + float.
+  - `closed_by_staff_id`, `closed_at`: Closeout attribution (nullable until closed).
+  - `counted_cash_cents`, `expected_cash_cents`, `over_short_cents`: Closeout reconciliation fields (nullable until closed).
+  - `status`: `OPEN` or `CLOSED`.
+- **Relationships**:
+  - `cash_drawer_sessions.register_session_id` → `register_sessions.id`
+  - `cash_drawer_sessions.opened_by_staff_id` → `staff.id`
+  - `cash_drawer_sessions.closed_by_staff_id` → `staff.id` (nullable)
+- **Invariants**:
+  - When `status = 'OPEN'`, closeout fields should be null.
+  - When `status = 'CLOSED'`, `closed_at` and `closed_by_staff_id` should be set.
+
+### `cash_drawer_events`
+
+- **Purpose**: Event log for cash drawer actions (paid-in/out, drops, no-sale opens, adjustments).
+- **Primary key**: `cash_drawer_events.id` (UUID).
+- **Key columns** (non-exhaustive):
+  - `cash_drawer_session_id`: Owning drawer session.
+  - `occurred_at`: Timestamp of the event.
+  - `type`: `PAID_IN`, `PAID_OUT`, `DROP`, `NO_SALE_OPEN`, `ADJUSTMENT`.
+  - `amount_cents`: Amount for money-moving events (nullable for `NO_SALE_OPEN`).
+  - `created_by_staff_id`: Staff attribution.
+  - `metadata_json`: Optional structured metadata.
+- **Relationships**:
+  - `cash_drawer_events.cash_drawer_session_id` → `cash_drawer_sessions.id`
+  - `cash_drawer_events.created_by_staff_id` → `staff.id`
+- **Invariants**:
+  - `amount_cents` should be null only when `type = 'NO_SALE_OPEN'`.
+
+### `staff_break_sessions`
+
+- **Purpose**: Tracks employee break windows associated with a timeclock session.
+- **Primary key**: `staff_break_sessions.id` (UUID).
+- **Key columns** (non-exhaustive):
+  - `staff_id`: Employee taking the break.
+  - `timeclock_session_id`: Timeclock session the break belongs to.
+  - `started_at`, `ended_at`: Break window (end is nullable until closed).
+  - `break_type`: `MEAL`, `REST`, or `OTHER`.
+  - `status`: `OPEN` or `CLOSED`.
+- **Relationships**:
+  - `staff_break_sessions.staff_id` → `staff.id`
+  - `staff_break_sessions.timeclock_session_id` → `timeclock_sessions.id`
+- **Invariants**:
+  - When `status = 'OPEN'`, `ended_at` should be null.
+  - When `status = 'CLOSED'`, `ended_at` should be set.
+
+### `orders`
+
+- **Purpose**: Internal POS order header aggregating line items and totals.
+- **Primary key**: `orders.id` (UUID).
+- **Key columns** (non-exhaustive):
+  - `customer_id`: Optional customer association.
+  - `register_session_id`: Optional register session association.
+  - `created_by_staff_id`: Optional staff attribution.
+  - `status`: `OPEN`, `PAID`, `CANCELED`, `REFUNDED`, or `PARTIALLY_REFUNDED`.
+  - `subtotal_cents`, `discount_cents`, `tax_cents`, `tip_cents`, `total_cents`: Monetary totals in cents.
+  - `currency`: ISO-4217 currency code (default `USD`).
+  - `metadata_json`: Optional structured metadata.
+- **Relationships**:
+  - `orders.customer_id` → `customers.id`
+  - `orders.register_session_id` → `register_sessions.id`
+  - `orders.created_by_staff_id` → `staff.id`
+  - `order_line_items.order_id` → `orders.id`
+  - `receipts.order_id` → `orders.id`
+- **Invariants**:
+  - Totals are stored in cents; `total_cents` should match subtotal minus discounts plus tax/tip.
+
+### `order_line_items`
+
+- **Purpose**: Line items belonging to an order (retail, add-ons, upgrades, fees, etc.).
+- **Primary key**: `order_line_items.id` (UUID).
+- **Key columns** (non-exhaustive):
+  - `order_id`: Owning order.
+  - `kind`: `RETAIL`, `ADDON`, `UPGRADE`, `LATE_FEE`, or `MANUAL`.
+  - `sku`, `name`: Optional SKU and display name.
+  - `quantity`, `unit_price_cents`, `discount_cents`, `tax_cents`, `total_cents`.
+  - `metadata_json`: Optional structured metadata.
+- **Relationships**:
+  - `order_line_items.order_id` → `orders.id`
+- **Invariants**:
+  - Line totals should be computed from quantity, unit price, discounts, and tax.
+
+### `receipts`
+
+- **Purpose**: Immutable receipt snapshots for completed or issued orders.
+- **Primary key**: `receipts.id` (UUID).
+- **Key columns** (non-exhaustive):
+  - `order_id`: Owning order.
+  - `issued_at`: Receipt issue time.
+  - `receipt_number`: Unique human-readable identifier.
+  - `receipt_json`: Snapshot of receipt content at issue time.
+  - `pdf_storage_key`: Optional pointer to stored PDF.
+  - `metadata_json`: Optional structured metadata.
+- **Relationships**:
+  - `receipts.order_id` → `orders.id`
+- **Invariants**:
+  - `receipt_number` must be unique.
+  - `receipt_json` should be treated as immutable once issued.
+
+### `external_provider_refs`
+
+- **Purpose**: Maps internal entities to external provider identifiers (Square or other POS).
+- **Primary key**: `external_provider_refs.id` (UUID).
+- **Key columns** (non-exhaustive):
+  - `provider`: External system identifier (e.g., `square`).
+  - `entity_type`: Kind of internal entity (`customer`, `payment`, `refund`, `order`, `shift`, `timeclock_session`, `cash_event`, `receipt`).
+  - `internal_id`: UUID of the internal entity.
+  - `external_id`: Provider's identifier.
+  - `external_version`: Optional provider version/etag.
+- **Relationships**:
+  - None enforced (polymorphic reference).
+- **Invariants**:
+  - `(provider, entity_type, internal_id)` is unique.
+  - `(provider, entity_type, external_id)` is unique.
 
 ### `waitlist`
 

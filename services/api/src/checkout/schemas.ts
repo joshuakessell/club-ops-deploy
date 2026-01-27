@@ -22,6 +22,9 @@ export type CreateCheckoutRequestInput = z.infer<typeof CreateCheckoutRequestSch
 
 export const MarkFeePaidSchema = z.object({
   note: z.string().optional(),
+  paymentMethod: z.enum(['CASH', 'CREDIT']).optional(),
+  registerNumber: z.number().int().min(1).max(2).optional(),
+  tipCents: z.number().int().nonnegative().optional(),
 });
 
 export type MarkFeePaidInput = z.infer<typeof MarkFeePaidSchema>;
