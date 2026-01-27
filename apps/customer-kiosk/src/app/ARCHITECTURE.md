@@ -3,6 +3,7 @@
 - AppRoot: wiring only (providers + AppComposition). No feature logic or effects.
 - AppProviders: app-wide providers (error boundary).
 - AppComposition: top-level orchestration for the kiosk flow + bootstrap effects.
+- app/hooks: outsourced orchestration hooks (lane selection, session state, WS/polling, inventory, orientation).
 - screens: stateful flow screens (idle, language, selection, payment, agreement, completion).
 - components: shared UI building blocks and modals.
 - views: standardized view shells with co-located CSS (cards, modals, banners, buttons).

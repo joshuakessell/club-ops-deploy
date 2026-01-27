@@ -1,15 +1,3 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  getApiUrl,
-  safeParseWebSocketEvent,
-  SessionUpdatedPayloadSchema,
-  useLaneSession,
-  type CustomerConfirmationRequiredPayload,
-  type SessionUpdatedPayload,
-} from '@club-ops/shared';
-import { safeJsonParse, isRecord, readJson, getErrorMessage } from '@club-ops/ui';
-import { t, type Language } from '../i18n';
-import { getMembershipStatus, type SessionState } from '../utils/membership';
 import { AgreementFlow } from './AgreementFlow';
 import { SelectionFlow } from './SelectionFlow';
 import { IdleScreen } from '../screens/IdleScreen';
@@ -19,780 +7,82 @@ import { PaymentScreen } from '../screens/PaymentScreen';
 import { AgreementBypassScreen } from '../screens/AgreementBypassScreen';
 import { CompleteScreen } from '../screens/CompleteScreen';
 import { IdScanBlockedModal } from '../components/modals/IdScanBlockedModal';
-
-interface HealthStatus {
-  status: string;
-  timestamp: string;
-  uptime: number;
-}
-
-type AppView =
-  | 'idle'
-  | 'language'
-  | 'selection'
-  | 'payment'
-  | 'agreement'
-  | 'agreement-bypass'
-  | 'complete';
+import { WelcomeOverlay } from '../components/WelcomeOverlay';
+import { useKioskController } from './hooks/useKioskController';
 
 export function AppComposition() {
-  const [, setHealth] = useState<HealthStatus | null>(null);
-  const [, setWsConnected] = useState(false);
-  const [isPortrait, setIsPortrait] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    return window.innerHeight >= window.innerWidth;
-  });
-  const [session, setSession] = useState<SessionState>({
-    sessionId: null,
-    customerName: null,
-    membershipNumber: null,
-    allowedRentals: [],
-  });
-  const [view, setView] = useState<AppView>('idle');
-  const [selectedRental, setSelectedRental] = useState<string | null>(null);
-  const [showUpgradeDisclaimer, setShowUpgradeDisclaimer] = useState(false);
-  const [upgradeAction, setUpgradeAction] = useState<'waitlist' | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [checkinMode, setCheckinMode] = useState<'CHECKIN' | 'RENEWAL' | null>(null);
-  const [showRenewalDisclaimer, setShowRenewalDisclaimer] = useState(false);
-  const [showCustomerConfirmation, setShowCustomerConfirmation] = useState(false);
-  const [customerConfirmationData, setCustomerConfirmationData] =
-    useState<CustomerConfirmationRequiredPayload | null>(null);
-  const [inventory, setInventory] = useState<{
-    rooms: Record<string, number>;
-    lockers: number;
-  } | null>(null);
-  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
-  const [waitlistDesiredType, setWaitlistDesiredType] = useState<string | null>(null);
-  const [waitlistBackupType, setWaitlistBackupType] = useState<string | null>(null);
-  const [waitlistPosition, setWaitlistPosition] = useState<number | null>(null);
-  const [waitlistETA, setWaitlistETA] = useState<string | null>(null);
-  const [waitlistUpgradeFee, setWaitlistUpgradeFee] = useState<number | null>(null);
-  const [proposedRentalType, setProposedRentalType] = useState<string | null>(null);
-  const [proposedBy, setProposedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(null);
-  const [selectionConfirmed, setSelectionConfirmed] = useState(false);
-  const [selectionConfirmedBy, setSelectionConfirmedBy] = useState<'CUSTOMER' | 'EMPLOYEE' | null>(
-    null
+  const {
+    apiBase,
+    kioskAuthHeaders,
+    lane,
+    handleLaneSelection,
+    orientationOverlay,
+    inventory,
+    session,
+    view,
+    selectedRental,
+    proposedRentalType,
+    proposedBy,
+    selectionConfirmed,
+    selectionConfirmedBy,
+    waitlistDesiredType,
+    waitlistBackupType,
+    waitlistPosition,
+    waitlistETA,
+    waitlistUpgradeFee,
+    showWaitlistModal,
+    showUpgradeDisclaimer,
+    upgradeAction,
+    upgradeDisclaimerAcknowledged,
+    showRenewalDisclaimer,
+    showCustomerConfirmation,
+    customerConfirmationData,
+    membershipChoice,
+    showMembershipModal,
+    membershipModalIntent,
+    highlightedLanguage,
+    highlightedMembershipChoice,
+    highlightedWaitlistBackup,
+    checkinMode,
+    isSubmitting,
+    setIsSubmitting,
+    setView,
+    setProposedRentalType,
+    setProposedBy,
+    setSelectionConfirmed,
+    setSelectionConfirmedBy,
+    setWaitlistDesiredType,
+    setWaitlistBackupType,
+    setWaitlistPosition,
+    setWaitlistETA,
+    setWaitlistUpgradeFee,
+    setShowWaitlistModal,
+    setShowUpgradeDisclaimer,
+    setUpgradeAction,
+    setUpgradeDisclaimerAcknowledged,
+    setShowRenewalDisclaimer,
+    setShowCustomerConfirmation,
+    setCustomerConfirmationData,
+    setMembershipChoice,
+    setShowMembershipModal,
+    setMembershipModalIntent,
+    setHighlightedWaitlistBackup,
+    setSession,
+    showWelcomeOverlay,
+    dismissWelcomeOverlay,
+    handleLanguageSelection,
+    handleKioskAcknowledge,
+    handleIdScanIssueDismiss,
+  } = useKioskController();
+
+  const welcomeOverlayNode = (
+    <WelcomeOverlay
+      isOpen={showWelcomeOverlay}
+      language={session.customerPrimaryLanguage}
+      customerName={session.customerName}
+      onDismiss={dismissWelcomeOverlay}
+    />
   );
-  // Selection acknowledgement is tracked for gating/coordination (currently no direct UI).
-  const [, setSelectionAcknowledged] = useState(true);
-  const [upgradeDisclaimerAcknowledged, setUpgradeDisclaimerAcknowledged] = useState(false);
-  const welcomeOverlayTimeoutRef = useRef<number | null>(null);
-  const lastWelcomeSessionIdRef = useRef<string | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
-  const [showWelcomeOverlay, setShowWelcomeOverlay] = useState(false);
-  const [showMembershipModal, setShowMembershipModal] = useState(false);
-  const [membershipModalIntent, setMembershipModalIntent] = useState<'PURCHASE' | 'RENEW' | null>(
-    null
-  );
-  const [membershipChoice, setMembershipChoice] = useState<'ONE_TIME' | 'SIX_MONTH' | null>(null);
-  const [highlightedLanguage, setHighlightedLanguage] = useState<'EN' | 'ES' | null>(null);
-  const [highlightedMembershipChoice, setHighlightedMembershipChoice] = useState<
-    'ONE_TIME' | 'SIX_MONTH' | null
-  >(null);
-  const [highlightedWaitlistBackup, setHighlightedWaitlistBackup] = useState<string | null>(null);
-  const sessionRef = useRef<SessionState | null>(null);
-
-  // Inject pulse animation for proposal highlight
-  useEffect(() => {
-    const styleId = 'pulse-bright-keyframes';
-    if (!document.getElementById(styleId)) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.innerHTML = `
-        @keyframes pulse-bright {
-          0% { box-shadow: 0 0 0 0 rgba(255,255,255,0.35); }
-          50% { box-shadow: 0 0 0 12px rgba(255,255,255,0); }
-          100% { box-shadow: 0 0 0 0 rgba(255,255,255,0); }
-        }
-        .pulse-bright {
-          animation: pulse-bright 1s ease-in-out infinite;
-        }
-      `;
-      document.head.appendChild(style);
-    }
-  }, []);
-
-  useEffect(() => {
-    sessionIdRef.current = session.sessionId;
-    sessionRef.current = session;
-  }, [session]);
-
-  // Explicit membership choice step (non-members only): reset when session changes.
-  useEffect(() => {
-    setMembershipChoice(null);
-  }, [session.sessionId]);
-
-  // If the server has a membershipChoice persisted, reflect it locally so the kiosk flow
-  // can be coordinated with employee-register (e.g. staff-selected ONE_TIME).
-  useEffect(() => {
-    if (session.membershipChoice === 'ONE_TIME' && membershipChoice !== 'ONE_TIME') {
-      setMembershipChoice('ONE_TIME');
-      return;
-    }
-    if (session.membershipChoice === 'SIX_MONTH' && membershipChoice !== 'SIX_MONTH') {
-      setMembershipChoice('SIX_MONTH');
-      return;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session.sessionId, session.membershipChoice]);
-
-  // If the server indicates a 6-month membership intent is already selected, reflect it in the explicit choice step.
-  // (We intentionally do NOT auto-select ONE_TIME when intent is null.)
-  useEffect(() => {
-    const status = getMembershipStatus(session, Date.now());
-    const isMember = status === 'ACTIVE' || status === 'PENDING';
-    if (isMember) return;
-    if (session.membershipPurchaseIntent && membershipChoice !== 'SIX_MONTH') {
-      setMembershipChoice('SIX_MONTH');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    session.sessionId,
-    session.membershipPurchaseIntent,
-    session.membershipValidUntil,
-    session.membershipNumber,
-  ]);
-
-  // Get lane from URL pathname pattern or query param.
-  // Priority: /register-1 => lane-1, /register-2 => lane-2, etc.
-  // Secondary: ?lane=lane-2 query param
-  // Default: none (prompt for lane selection)
-  const [lane, setLane] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    const pathMatch = window.location.pathname.match(/\/register-(\d+)/);
-    if (pathMatch) {
-      return `lane-${pathMatch[1]}`;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-    const queryLane = params.get('lane');
-    if (queryLane && /^lane-\d+$/.test(queryLane)) {
-      return queryLane;
-    }
-
-    return null;
-  });
-
-  // Store in sessionStorage for persistence within this tab
-  useEffect(() => {
-    try {
-      if (lane) {
-        sessionStorage.setItem('lane', lane);
-      } else {
-        sessionStorage.removeItem('lane');
-      }
-    } catch {
-      // Ignore if sessionStorage unavailable
-    }
-  }, [lane]);
-
-  const buildRegisterPath = useCallback((laneId: 'lane-1' | 'lane-2') => {
-    const laneNumber = laneId.replace('lane-', '');
-    if (typeof window === 'undefined') return `/register-${laneNumber}`;
-    const currentPath = window.location.pathname || '/';
-    const basePath = currentPath.endsWith('/') ? currentPath : `${currentPath}/`;
-    return `${basePath}register-${laneNumber}`;
-  }, []);
-
-  const handleLaneSelection = useCallback(
-    (laneId: 'lane-1' | 'lane-2') => {
-      setLane(laneId);
-      if (typeof window === 'undefined') return;
-      const targetPath = buildRegisterPath(laneId);
-      window.history.replaceState({}, '', targetPath);
-    },
-    [buildRegisterPath]
-  );
-
-  useEffect(() => {
-    const handleOrientation = () => {
-      setIsPortrait(window.innerHeight >= window.innerWidth);
-    };
-    handleOrientation();
-    window.addEventListener('resize', handleOrientation);
-    window.addEventListener('orientationchange', handleOrientation);
-    return () => {
-      window.removeEventListener('resize', handleOrientation);
-      window.removeEventListener('orientationchange', handleOrientation);
-    };
-  }, []);
-
-  const orientationOverlay = !isPortrait ? (
-    <div className="orientation-blocker">
-      <div>
-        <h1>{t(session.customerPrimaryLanguage, 'orientation.title')}</h1>
-        <p>{t(session.customerPrimaryLanguage, 'orientation.body')}</p>
-      </div>
-    </div>
-  ) : null;
-
-  const API_BASE = getApiUrl('/api');
-  const rawEnv = import.meta.env as unknown as Record<string, unknown>;
-  const kioskToken =
-    typeof rawEnv.VITE_KIOSK_TOKEN === 'string' && rawEnv.VITE_KIOSK_TOKEN.trim()
-      ? rawEnv.VITE_KIOSK_TOKEN.trim()
-      : null;
-  const kioskAuthHeaders = useCallback(
-    (extra?: Record<string, string>) => {
-      return {
-        ...(extra ?? {}),
-        ...(kioskToken ? { 'x-kiosk-token': kioskToken } : {}),
-      };
-    },
-    [kioskToken]
-  );
-
-  const refreshInventory = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/v1/inventory/available`);
-      if (!res.ok) return;
-      const data: unknown = await res.json();
-      if (isRecord(data) && isRecord(data.rooms) && typeof data.lockers === 'number') {
-        setInventory({ rooms: data.rooms as Record<string, number>, lockers: data.lockers });
-      }
-    } catch {
-      // Best-effort; inventory will retry on interval.
-    }
-  }, [API_BASE]);
-
-  const resetToIdle = useCallback(() => {
-    setView('idle');
-    setSession({
-      sessionId: null,
-      customerName: null,
-      membershipNumber: null,
-      membershipValidUntil: null,
-      membershipPurchaseIntent: null,
-      allowedRentals: [],
-      blockEndsAt: undefined,
-      agreementBypassPending: undefined,
-      agreementSignedMethod: undefined,
-      idScanIssue: null,
-    });
-    setSelectedRental(null);
-    setShowUpgradeDisclaimer(false);
-    setUpgradeAction(null);
-    setShowRenewalDisclaimer(false);
-    setCheckinMode(null);
-    setShowWaitlistModal(false);
-    setWaitlistDesiredType(null);
-    setWaitlistBackupType(null);
-    setProposedRentalType(null);
-    setProposedBy(null);
-    setSelectionConfirmed(false);
-    setSelectionConfirmedBy(null);
-    setSelectionAcknowledged(false);
-    setUpgradeDisclaimerAcknowledged(false);
-    setHighlightedLanguage(null);
-    setHighlightedMembershipChoice(null);
-    setHighlightedWaitlistBackup(null);
-  }, []);
-
-  const applySessionUpdatedPayload = useCallback(
-    (payload: SessionUpdatedPayload) => {
-      const prevSession = sessionRef.current;
-      const hasKey = (key: string) => Object.prototype.hasOwnProperty.call(payload, key);
-      const assignedResourceType = hasKey('assignedResourceType')
-        ? payload.assignedResourceType
-        : prevSession?.assignedResourceType;
-      const assignedResourceNumber = hasKey('assignedResourceNumber')
-        ? payload.assignedResourceNumber
-        : prevSession?.assignedResourceNumber;
-      const checkoutAt = hasKey('checkoutAt') ? payload.checkoutAt : prevSession?.checkoutAt;
-
-      // Update session state with all fields
-      setSession((prev) => ({
-        ...prev,
-        sessionId: payload.sessionId || null,
-        customerName: payload.customerName,
-        membershipNumber: payload.membershipNumber || null,
-        membershipValidUntil: payload.customerMembershipValidUntil || null,
-        membershipChoice: payload.membershipChoice ?? null,
-        membershipPurchaseIntent: payload.membershipPurchaseIntent || null,
-        kioskAcknowledgedAt: payload.kioskAcknowledgedAt || null,
-        allowedRentals: payload.allowedRentals,
-        visitId: payload.visitId,
-        mode: payload.mode,
-        blockEndsAt: payload.blockEndsAt,
-        customerPrimaryLanguage: payload.customerPrimaryLanguage,
-        pastDueBlocked: payload.pastDueBlocked,
-        pastDueBalance: payload.pastDueBalance,
-        paymentStatus: payload.paymentStatus,
-        paymentTotal: payload.paymentTotal,
-        paymentLineItems: payload.paymentLineItems,
-        paymentFailureReason: payload.paymentFailureReason,
-        agreementSigned: payload.agreementSigned,
-        agreementBypassPending: payload.agreementBypassPending,
-        agreementSignedMethod: payload.agreementSignedMethod,
-        assignedResourceType,
-        assignedResourceNumber,
-        checkoutAt,
-        idScanIssue: payload.idScanIssue || null,
-      }));
-
-      // Set check-in mode from payload
-      if (payload.mode) {
-        setCheckinMode(payload.mode);
-      }
-
-      // Handle view transitions based on session state
-      // If kiosk acknowledged, stay idle (lane still locked until employee-register completes/reset).
-      if (payload.kioskAcknowledgedAt) {
-        setView('idle');
-        return;
-      }
-
-      if (payload.idScanIssue) {
-        setView('idle');
-        return;
-      }
-
-      // If we have assignment, show complete view (highest priority after kiosk-ack).
-      if (assignedResourceType && assignedResourceNumber) {
-        setView('complete');
-        return;
-      }
-
-      // Reset to idle if session is completed (employee completed transaction).
-      if (payload.status === 'COMPLETED') {
-        resetToIdle();
-        return;
-      }
-
-      // Language selection (first visit). This should happen before any other customer-facing step.
-      if (payload.sessionId && payload.status !== 'COMPLETED' && !payload.customerPrimaryLanguage) {
-        setView('language');
-        return;
-      }
-
-      // Past-due block screen (shows selection but disabled)
-      if (payload.pastDueBlocked) {
-        setView('selection');
-        return;
-      }
-
-      // Agreement bypass screen (physical signature path)
-      if (
-        payload.paymentStatus === 'PAID' &&
-        payload.agreementBypassPending &&
-        !payload.agreementSigned
-      ) {
-        setView('agreement-bypass');
-        return;
-      }
-
-      // Agreement screen (after payment is PAID, before assignment)
-      if (
-        payload.paymentStatus === 'PAID' &&
-        !payload.agreementSigned &&
-        (payload.mode === 'CHECKIN' || payload.mode === 'RENEWAL')
-      ) {
-        setView('agreement');
-        return;
-      }
-
-      // Payment pending screen (after selection confirmed, before payment)
-      if (payload.selectionConfirmed && payload.paymentStatus === 'DUE') {
-        setView('payment');
-        return;
-      }
-
-      // Selection view (default active session state)
-      if (payload.sessionId && payload.status !== 'COMPLETED') {
-        setView('selection');
-      }
-
-      // Update selection state
-      if (payload.proposedRentalType) {
-        setProposedRentalType(payload.proposedRentalType);
-        setProposedBy(payload.proposedBy || null);
-      }
-      if (payload.waitlistDesiredType !== undefined) {
-        setWaitlistDesiredType(payload.waitlistDesiredType || null);
-      }
-      if (payload.backupRentalType !== undefined) {
-        setWaitlistBackupType(payload.backupRentalType || null);
-      }
-      if (payload.selectionConfirmed !== undefined) {
-        setSelectionConfirmed(Boolean(payload.selectionConfirmed));
-        setSelectionConfirmedBy(payload.selectionConfirmedBy || null);
-      }
-    },
-    [resetToIdle]
-  );
-
-  const onWsMessage = useCallback(
-    (event: MessageEvent) => {
-      try {
-        const parsed: unknown = safeJsonParse(String(event.data));
-        const message = safeParseWebSocketEvent(parsed);
-        if (!message) return;
-        console.log('WebSocket message:', message);
-
-        if (message.type === 'SESSION_UPDATED') {
-          applySessionUpdatedPayload(message.payload);
-        } else if (message.type === 'SELECTION_PROPOSED') {
-          const payload = message.payload;
-          if (payload.sessionId === sessionIdRef.current) {
-            setProposedRentalType(payload.rentalType);
-            setProposedBy(payload.proposedBy);
-          }
-        } else if (message.type === 'SELECTION_LOCKED') {
-          const payload = message.payload;
-          if (payload.sessionId === sessionIdRef.current) {
-            setSelectionConfirmed(true);
-            setSelectionConfirmedBy(payload.confirmedBy);
-            setSelectedRental(payload.rentalType);
-            setSelectionAcknowledged(true);
-            setView('payment');
-          }
-        } else if (message.type === 'SELECTION_FORCED') {
-          const payload = message.payload;
-          if (payload.sessionId === sessionIdRef.current) {
-            setSelectionConfirmed(true);
-            setSelectionConfirmedBy('EMPLOYEE');
-            setSelectedRental(payload.rentalType);
-            setSelectionAcknowledged(true);
-            setView('payment');
-          }
-        } else if (message.type === 'SELECTION_ACKNOWLEDGED') {
-          setSelectionAcknowledged(true);
-        } else if (message.type === 'CHECKIN_OPTION_HIGHLIGHTED') {
-          const payload = message.payload;
-          if (payload.sessionId !== sessionIdRef.current) return;
-          if (payload.step === 'LANGUAGE') {
-            const opt = payload.option === 'EN' || payload.option === 'ES' ? payload.option : null;
-            setHighlightedLanguage(opt);
-          } else if (payload.step === 'MEMBERSHIP') {
-            const opt =
-              payload.option === 'ONE_TIME' || payload.option === 'SIX_MONTH'
-                ? payload.option
-                : null;
-            setHighlightedMembershipChoice(opt);
-          } else if (payload.step === 'WAITLIST_BACKUP') {
-            setHighlightedWaitlistBackup(payload.option);
-          }
-        } else if (message.type === 'CUSTOMER_CONFIRMATION_REQUIRED') {
-          const payload = message.payload;
-          setCustomerConfirmationData(payload);
-          setShowCustomerConfirmation(true);
-        } else if (message.type === 'ASSIGNMENT_CREATED') {
-          const payload = message.payload;
-          if (payload.sessionId === sessionIdRef.current) {
-            const assignedResourceType = payload.roomNumber
-              ? 'room'
-              : payload.lockerNumber
-                ? 'locker'
-                : undefined;
-            const assignedResourceNumber = payload.roomNumber ?? payload.lockerNumber;
-            if (assignedResourceType && assignedResourceNumber) {
-              setSession((prev) => ({
-                ...prev,
-                assignedResourceType,
-                assignedResourceNumber,
-              }));
-              setView('complete');
-            }
-          }
-        } else if (message.type === 'INVENTORY_UPDATED') {
-          const payload = message.payload;
-          // Update inventory counts for availability warnings
-          if (payload.inventory) {
-            const rooms: Record<string, number> = {};
-            if (payload.inventory.byType) {
-              Object.entries(payload.inventory.byType).forEach(([type, summary]) => {
-                rooms[type] = summary.clean;
-              });
-            }
-            setInventory({
-              rooms,
-              lockers: payload.inventory.lockers?.clean || 0,
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Failed to parse WebSocket message:', error);
-      }
-    },
-    [applySessionUpdatedPayload]
-  );
-
-  const { connected: wsConnected, lastMessage } = useLaneSession({
-    laneId: lane ?? undefined,
-    role: 'customer',
-    kioskToken: kioskToken ?? '',
-    enabled: Boolean(lane),
-  });
-
-  useEffect(() => {
-    if (!lastMessage) return;
-    onWsMessage(lastMessage);
-  }, [lastMessage, onWsMessage]);
-
-  useEffect(() => {
-    setWsConnected(wsConnected);
-  }, [wsConnected]);
-
-  // Polling fallback: if WS is down, fetch session snapshots until it recovers.
-  const pollingStartedRef = useRef(false);
-  const pollingDelayTimerRef = useRef<number | null>(null);
-  const pollingIntervalRef = useRef<number | null>(null);
-  useEffect(() => {
-    const laneId = lane;
-    if (!laneId) return;
-    if (pollingDelayTimerRef.current !== null) {
-      window.clearTimeout(pollingDelayTimerRef.current);
-      pollingDelayTimerRef.current = null;
-    }
-    if (pollingIntervalRef.current !== null) {
-      window.clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-    pollingStartedRef.current = false;
-
-    if (wsConnected) return;
-
-    // Give the WS a moment to connect before we start polling.
-    pollingDelayTimerRef.current = window.setTimeout(() => {
-      if (wsConnected) return;
-      if (!pollingStartedRef.current) {
-        pollingStartedRef.current = true;
-        console.info('[customer-kiosk] WS disconnected; entering polling fallback');
-      }
-
-      const pollOnce = async () => {
-        try {
-          const res = await fetch(
-            `${API_BASE}/v1/checkin/lane/${encodeURIComponent(laneId)}/session-snapshot`,
-            { headers: kioskAuthHeaders() }
-          );
-          if (!res.ok) return;
-          const data = await readJson<unknown>(res);
-          if (!isRecord(data)) return;
-          const sessionPayload = data['session'];
-          if (sessionPayload == null) {
-            resetToIdle();
-            return;
-          }
-          if (isRecord(sessionPayload)) {
-            const parsedPayload = SessionUpdatedPayloadSchema.safeParse(sessionPayload);
-            if (parsedPayload.success) {
-              applySessionUpdatedPayload(parsedPayload.data);
-            }
-          }
-        } catch {
-          // Best-effort; keep polling.
-        }
-      };
-
-      void pollOnce();
-      pollingIntervalRef.current = window.setInterval(() => {
-        void pollOnce();
-      }, 1500);
-    }, 1200);
-
-    return () => {
-      if (pollingDelayTimerRef.current !== null) {
-        window.clearTimeout(pollingDelayTimerRef.current);
-        pollingDelayTimerRef.current = null;
-      }
-      if (pollingIntervalRef.current !== null) {
-        window.clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-      pollingStartedRef.current = false;
-    };
-  }, [API_BASE, applySessionUpdatedPayload, kioskAuthHeaders, lane, resetToIdle, wsConnected]);
-
-  useEffect(() => {
-    if (!lane) return;
-    // Check API health (avoid JSON parse crashes on empty/non-JSON responses)
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/health`);
-        const data = await readJson<unknown>(res);
-        if (
-          !cancelled &&
-          isRecord(data) &&
-          typeof data.status === 'string' &&
-          typeof data.timestamp === 'string' &&
-          typeof data.uptime === 'number'
-        ) {
-          setHealth({ status: data.status, timestamp: data.timestamp, uptime: data.uptime });
-        }
-      } catch (err) {
-        console.error('Health check failed:', err);
-      }
-    })();
-
-    // Fetch initial inventory
-    void refreshInventory();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [API_BASE, lane, refreshInventory]);
-
-  // Keep inventory fresh if the initial fetch happened before the API was ready.
-  useEffect(() => {
-    if (!lane) return;
-    const intervalId = window.setInterval(() => {
-      void refreshInventory();
-    }, 10000);
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [lane, refreshInventory]);
-
-  // Show a brief welcome overlay when a new session becomes active
-  useEffect(() => {
-    const sessionId = session.sessionId;
-    if (!sessionId) return;
-    if (lastWelcomeSessionIdRef.current === sessionId) return;
-    if (view === 'idle') return;
-
-    lastWelcomeSessionIdRef.current = sessionId;
-    setShowWelcomeOverlay(true);
-
-    if (welcomeOverlayTimeoutRef.current !== null) {
-      window.clearTimeout(welcomeOverlayTimeoutRef.current);
-      welcomeOverlayTimeoutRef.current = null;
-    }
-    welcomeOverlayTimeoutRef.current = window.setTimeout(() => {
-      setShowWelcomeOverlay(false);
-      welcomeOverlayTimeoutRef.current = null;
-    }, 2000);
-  }, [session.sessionId, view]);
-
-  useEffect(() => {
-    return () => {
-      if (welcomeOverlayTimeoutRef.current !== null) {
-        window.clearTimeout(welcomeOverlayTimeoutRef.current);
-        welcomeOverlayTimeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  // Ensure agreement view redirects for non-CHECKIN/RENEWAL modes
-  useEffect(() => {
-    if (view === 'agreement' && checkinMode !== 'CHECKIN' && checkinMode !== 'RENEWAL') {
-      setView('complete');
-    }
-  }, [view, checkinMode]);
-
-  const WelcomeOverlay = () => {
-    if (!showWelcomeOverlay) return null;
-    const lang = session.customerPrimaryLanguage;
-    return (
-      <div
-        className="welcome-overlay"
-        onClick={() => setShowWelcomeOverlay(false)}
-        role="dialog"
-        aria-label={t(lang, 'a11y.welcomeDialog')}
-      >
-        <div className="welcome-overlay-content">
-          <div className="welcome-overlay-message">
-            {t(lang, 'welcome')}
-            {session.customerName ? `, ${session.customerName}` : ''}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Handle language selection
-  const handleLanguageSelection = async (language: Language) => {
-    if (!session.sessionId) {
-      return;
-    }
-    if (!lane) return;
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/set-language`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-        body: JSON.stringify({
-          language,
-          sessionId: session.sessionId,
-          customerName: session.customerName || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload: unknown = await response.json().catch(() => null);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to set language');
-      }
-
-      // Language will be updated via SESSION_UPDATED WebSocket event
-    } catch (error) {
-      console.error('Failed to set language:', error);
-      alert(t(session.customerPrimaryLanguage, 'error.setLanguage'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleKioskAcknowledge = useCallback(async () => {
-    if (!lane) return;
-    if (isSubmitting) return;
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/kiosk-ack`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-      });
-
-      if (!response.ok) {
-        const errorPayload = await readJson(response);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to acknowledge completion');
-      }
-
-      setView('idle');
-      // Session update will be delivered via WS/polling.
-    } catch (error) {
-      console.error('Failed to acknowledge completion:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [API_BASE, getErrorMessage, isSubmitting, kioskAuthHeaders, lane, readJson]);
-
-  const handleIdScanIssueDismiss = useCallback(async () => {
-    if (!lane) return;
-    if (isSubmitting) return;
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/reset`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...kioskAuthHeaders(),
-        },
-      });
-
-      if (!response.ok) {
-        const errorPayload = await readJson(response);
-        throw new Error(getErrorMessage(errorPayload) || 'Failed to reset');
-      }
-
-      resetToIdle();
-    } catch (error) {
-      console.error('Failed to reset after ID scan issue:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [API_BASE, getErrorMessage, isSubmitting, kioskAuthHeaders, lane, readJson, resetToIdle]);
-
-  const welcomeOverlayNode = <WelcomeOverlay />;
 
   if (!lane) {
     return (
@@ -805,7 +95,6 @@ export function AppComposition() {
 
   let screen: JSX.Element | null = null;
 
-  // Render based on view
   switch (view) {
     case 'idle':
       screen = (
@@ -855,7 +144,7 @@ export function AppComposition() {
     case 'agreement':
       screen = (
         <AgreementFlow
-          apiBase={API_BASE}
+          apiBase={apiBase}
           kioskAuthHeaders={kioskAuthHeaders}
           session={session}
           lane={lane}
@@ -876,7 +165,7 @@ export function AppComposition() {
           assignedResourceNumber={session.assignedResourceNumber}
           checkoutAt={session.checkoutAt}
           isSubmitting={isSubmitting}
-          onAcknowledge={handleKioskAcknowledge}
+          onAcknowledge={() => void handleKioskAcknowledge()}
           orientationOverlay={orientationOverlay}
           welcomeOverlay={welcomeOverlayNode}
         />
@@ -886,7 +175,7 @@ export function AppComposition() {
     case 'selection':
       screen = (
         <SelectionFlow
-          apiBase={API_BASE}
+          apiBase={apiBase}
           kioskAuthHeaders={kioskAuthHeaders}
           session={session}
           lane={lane}
@@ -955,7 +244,7 @@ export function AppComposition() {
         isOpen={!!session.idScanIssue}
         issue={session.idScanIssue ?? null}
         customerPrimaryLanguage={session.customerPrimaryLanguage}
-        onAcknowledge={handleIdScanIssueDismiss}
+        onAcknowledge={() => void handleIdScanIssueDismiss()}
         isSubmitting={isSubmitting}
       />
     </>

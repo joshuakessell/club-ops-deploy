@@ -23,7 +23,6 @@ export function useScanOverlayState({
   setCreateFromScanError,
   setShowCreateFromScanPrompt,
 }: Params) {
-  const [passiveScanProcessing, setPassiveScanProcessing] = useState(false);
   const passiveScanProcessingRef = useRef(false);
   const [scanOverlayMounted, setScanOverlayMounted] = useState(false);
   const [scanOverlayActive, setScanOverlayActive] = useState(false);
@@ -32,8 +31,6 @@ export function useScanOverlayState({
   const scanOverlayShownAtRef = useRef<number | null>(null);
   const passiveCaptureHandledRef = useRef(false);
   const SCAN_OVERLAY_MIN_VISIBLE_MS = 300;
-  const prevScanEnabledRef = useRef<boolean | null>(null);
-
   const passiveScanEnabled =
     homeTab === 'scan' &&
     !!session?.sessionToken &&
@@ -91,7 +88,6 @@ export function useScanOverlayState({
         const cleanedScanText = rawScanText.trim();
         if (!cleanedScanText) {
           passiveScanProcessingRef.current = false;
-          setPassiveScanProcessing(false);
           hideScanOverlay();
           return;
         }
@@ -103,7 +99,6 @@ export function useScanOverlayState({
         setScanToastMessage(null);
         const result = await onBarcodeCaptured(normalizedScanText || rawScanText);
         passiveScanProcessingRef.current = false;
-        setPassiveScanProcessing(false);
         hideScanOverlay();
         if (result.outcome === 'no_match') {
           if (result.canCreate) {
@@ -151,20 +146,17 @@ export function useScanOverlayState({
     getIdleTimeoutMs: computeScanIdleTimeout,
     onCaptureStart: () => {
       passiveScanProcessingRef.current = true;
-      setPassiveScanProcessing(true);
       passiveCaptureHandledRef.current = false;
       showScanOverlay();
     },
     onCaptureEnd: () => {
       if (!passiveCaptureHandledRef.current) {
         passiveScanProcessingRef.current = false;
-        setPassiveScanProcessing(false);
         hideScanOverlay();
       }
     },
     onCancel: () => {
       passiveScanProcessingRef.current = false;
-      setPassiveScanProcessing(false);
       passiveCaptureHandledRef.current = false;
       hideScanOverlay();
     },

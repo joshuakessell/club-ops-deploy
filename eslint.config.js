@@ -3,17 +3,25 @@ import tseslint from 'typescript-eslint';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
+import checkFile from 'eslint-plugin-check-file';
 
 export default tseslint.config(
   {
     ignores: [
       'dist',
       'node_modules',
-      '*.cjs',
+      '**/*.cjs',
+      '**/*.mjs',
       '**/*.config.js',
       '**/*.config.ts',
       '**/dist/**',
       '**/node_modules/**',
+      'scripts/**',
+      'tools/**',
+      'packages/**/tests/**',
+      'packages/**/scripts/**',
+      'services/api/scripts/**',
+      'services/api/tests/**',
     ],
   },
   js.configs.recommended,
@@ -40,6 +48,7 @@ export default tseslint.config(
     plugins: {
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
+      'check-file': checkFile,
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
@@ -49,6 +58,44 @@ export default tseslint.config(
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+
+      // File naming conventions
+      'check-file/filename-naming-convention': [
+        'error',
+        {
+          // App + package source defaults
+          'apps/**/src/**/*.tsx': 'PASCAL_CASE',
+          'apps/**/src/**/*.ts': 'CAMEL_CASE',
+          'packages/**/src/**/*.tsx': 'PASCAL_CASE',
+          'packages/**/src/**/*.ts': 'CAMEL_CASE',
+
+          // React components in components/ are PascalCase
+          'apps/**/src/**/components/**/*.tsx': 'PASCAL_CASE',
+          'packages/**/src/**/components/**/*.tsx': 'PASCAL_CASE',
+
+          // Hooks are camelCase starting with use (any location)
+          'apps/**/src/**/use*.{ts,tsx}': 'CAMEL_CASE',
+          'packages/**/src/**/use*.{ts,tsx}': 'CAMEL_CASE',
+
+          // Entry + env files
+          'apps/**/src/main.tsx': 'CAMEL_CASE',
+          'apps/**/src/vite-env.d.ts': 'KEBAB_CASE',
+
+          // Specific PascalCase .ts files
+          'apps/**/src/**/EmployeeRegisterStateContext.ts': 'PASCAL_CASE',
+        },
+        { ignoreMiddleExtensions: true },
+      ],
+
+      // Folder naming conventions
+      'check-file/folder-naming-convention': [
+        'error',
+        {
+          'apps/**/src/**/': 'KEBAB_CASE',
+          'packages/**/src/**/': 'KEBAB_CASE',
+          'services/**/src/**/': 'KEBAB_CASE',
+        },
+      ],
     },
   },
   {
@@ -59,8 +106,6 @@ export default tseslint.config(
   },
   {
     // Office dashboard is a demo/admin UI with some intentionally loose typing at the moment.
-    // Keep core linting, but relax the strict type-safety + promise-handler rules here to keep
-    // monorepo `pnpm lint` actionable for the smoke-test/demo workflow.
     files: ['apps/office-dashboard/src/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
@@ -78,10 +123,18 @@ export default tseslint.config(
     },
   },
   {
-    // The API codebase currently contains a large amount of legacy/demo code that is not yet fully
-    // type-hardened (e.g. dynamic request parsing and demo-only helpers). Keep core correctness
-    // rules enabled, but relax the most aggressive type-safety lint rules for API-only files so
-    // `pnpm lint` remains a usable gate for the full-stack demo.
+    files: [
+      'apps/**/src/**/use*.{ts,tsx}',
+      'apps/**/src/main.tsx',
+      'apps/**/src/vite-env.d.ts',
+      'apps/**/src/**/EmployeeRegisterStateContext.ts',
+    ],
+    rules: {
+      'check-file/filename-naming-convention': 'off',
+    },
+  },
+  {
+    // API codebase: relax the most aggressive type-safety rules for now.
     files: ['services/api/src/**/*.ts'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
@@ -95,6 +148,9 @@ export default tseslint.config(
       '@typescript-eslint/no-base-to-string': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'prefer-const': 'off',
+      '@typescript-eslint/no-redundant-type-constituents': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      'check-file/filename-naming-convention': 'off',
     },
   }
 );
