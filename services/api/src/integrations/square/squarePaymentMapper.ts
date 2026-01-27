@@ -1,7 +1,7 @@
 import type { MoneyAmount, PaymentRecord, PaymentStatus } from '../contracts/providers';
 
 type SquareMoney = {
-  amount?: number | string | null;
+  amount?: number | string | bigint | null;
   currency?: string | null;
 };
 
@@ -22,9 +22,10 @@ type SquarePayment = {
   referenceId?: string | null;
 };
 
-function toCents(value: number | string | null | undefined): number | null {
+function toCents(value: number | string | bigint | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value);
+  if (typeof value === 'bigint') return Number(value);
   const n = Number(value);
   return Number.isFinite(n) ? Math.trunc(n) : null;
 }

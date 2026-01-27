@@ -112,7 +112,7 @@ export class SquarePaymentsProvider implements PaymentsProvider {
         idempotencyKey,
         sourceId: params.sourceToken,
         amountMoney: {
-          amount: params.amount.amountCents,
+          amount: BigInt(Math.trunc(params.amount.amountCents)),
           currency: params.amount.currency,
         },
         locationId,

@@ -78,7 +78,7 @@ export function usePassiveScannerInput({
       pendingDisableRef.current = false;
       reset();
     }
-  }, [clearTimer, cooldownMs, minLength, onCapture, onCaptureEnd]);
+  }, [clearTimer, cooldownMs, minLength, onCapture, onCaptureEnd, reset]);
 
   const resolveIdleTimeout = useCallback(() => {
     if (getIdleTimeoutMs) {
@@ -169,7 +169,7 @@ export function usePassiveScannerInput({
       }
       resetRef.current();
     };
-  }, [enabled]);
+  }, [enabled, reset]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDownCapture, { capture: true });

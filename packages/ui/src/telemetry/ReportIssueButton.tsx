@@ -76,14 +76,15 @@ export function ReportIssueButton({
   const [screen, setScreen] = useState('unknown');
   const telemetry = getInstalledTelemetry();
 
-  if (!telemetry) return null;
-
   useEffect(() => {
+    if (!telemetry) return;
     if (!open) return;
     const route = getCurrentRoute();
     setScreen(route || 'unknown');
     setSeverity('info');
-  }, [open]);
+  }, [open, telemetry]);
+
+  if (!telemetry) return null;
 
   const isDescriptionValid = text.trim().length > 0;
 

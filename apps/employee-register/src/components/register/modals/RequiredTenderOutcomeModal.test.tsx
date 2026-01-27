@@ -18,11 +18,10 @@ describe('RequiredTenderOutcomeModal', () => {
     const m = within(dialog);
     expect(m.queryByRole('button', { name: 'Continue' })).toBeNull();
 
-    const creditButton = dialog.querySelector(
-      'button[data-choice="CREDIT_SUCCESS"]'
-    ) as HTMLButtonElement | null;
-    expect(creditButton).toBeTruthy();
-    if (!creditButton) throw new Error('Expected credit success button');
+    const creditButton = dialog.querySelector('button[data-choice="CREDIT_SUCCESS"]');
+    if (!(creditButton instanceof HTMLButtonElement)) {
+      throw new Error('Expected credit success button');
+    }
     fireEvent.click(creditButton);
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onConfirm).toHaveBeenCalledWith('CREDIT_SUCCESS');
