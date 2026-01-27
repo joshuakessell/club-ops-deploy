@@ -45,6 +45,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm -w install --frozen-lockfile --prod=false
+        env:
+          NODE_ENV: development
+          NPM_CONFIG_PRODUCTION: "false"
+          PNPM_PRODUCTION: "false"
 
       - name: Build (Turbo)
         run: pnpm turbo run build
