@@ -77,6 +77,7 @@ export function registerCheckinAddOnRoutes(fastify: FastifyInstance): void {
         const addLineItems = items.map((item) => ({
           description: item.quantity > 1 ? `${item.label} x${item.quantity}` : item.label,
           amount: roundToCents(item.quantity * item.unitPrice),
+          kind: 'ADDON',
         }));
         const addTotal = addLineItems.reduce((sum, item) => sum + item.amount, 0);
 

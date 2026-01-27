@@ -7,6 +7,33 @@ import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
 import { getHttpError, toDate, toNumber } from '../../checkin/utils';
 import { calculateAge } from '../../checkin/identity';
 import { insertAuditLog } from '../../audit/auditLog';
+import {
+  buildLineItemsFromQuote,
+  computeOrderTotals,
+  ensureOrderWithReceipt,
+  toCents,
+} from '../../money/orderAudit';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parsePaymentIntentQuote(raw: unknown): {
+  type?: string;
+  waitlistId?: string;
+  visitId?: string;
+  blockId?: string;
+} {
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      return isRecord(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return isRecord(raw) ? raw : {};
+}
 
 export function registerCheckinPaymentIntentRoutes(fastify: FastifyInstance): void {
   /**
@@ -200,7 +227,12 @@ export function registerCheckinPaymentIntentRoutes(fastify: FastifyInstance): vo
    */
   fastify.post<{
     Params: { id: string };
-    Body: { squareTransactionId?: string };
+    Body: {
+      squareTransactionId?: string;
+      paymentMethod?: 'CASH' | 'CREDIT';
+      registerNumber?: number;
+      tipCents?: number;
+    };
   }>(
     '/v1/payments/:id/mark-paid',
     {
@@ -213,15 +245,34 @@ export function registerCheckinPaymentIntentRoutes(fastify: FastifyInstance): vo
       const staffId = request.staff.staffId;
 
       const { id } = request.params;
-      const { squareTransactionId } = request.body;
+      const { squareTransactionId, paymentMethod, registerNumber, tipCents } = request.body ?? {};
+
+      const resolvedPaymentMethod =
+        paymentMethod === 'CASH' || paymentMethod === 'CREDIT'
+          ? paymentMethod
+          : squareTransactionId
+            ? 'CREDIT'
+            : undefined;
+      const resolvedRegisterNumber =
+        typeof registerNumber === 'number' && Number.isFinite(registerNumber)
+          ? Math.trunc(registerNumber)
+          : undefined;
+      const resolvedTipCents =
+        typeof tipCents === 'number' && Number.isFinite(tipCents) ? Math.trunc(tipCents) : undefined;
 
       try {
         const result = await transaction(async (client) => {
           // Get payment intent
-          const intentResult = await client.query<PaymentIntentRow>(
-            `SELECT * FROM payment_intents WHERE id = $1`,
-            [id]
-          );
+          const intentResult = await client.query<
+            PaymentIntentRow & {
+              payment_method?: string | null;
+              register_number?: number | null;
+              square_transaction_id?: string | null;
+              paid_at?: Date | null;
+              lane_session_id?: string | null;
+              tip_cents?: number | null;
+            }
+          >(`SELECT * FROM payment_intents WHERE id = $1`, [id]);
 
           if (intentResult.rows.length === 0) {
             throw { statusCode: 404, message: 'Payment intent not found' };
@@ -229,28 +280,154 @@ export function registerCheckinPaymentIntentRoutes(fastify: FastifyInstance): vo
 
           const intent = intentResult.rows[0]!;
 
+          const resolveOrderContext = async (
+            intentRow: typeof intent,
+            quote: {
+              type?: string;
+              waitlistId?: string;
+              visitId?: string;
+              blockId?: string;
+            }
+          ) => {
+            let customerId: string | null = null;
+            if (intentRow.lane_session_id) {
+              const laneSession = await client.query<{
+                id: string;
+                customer_id: string | null;
+              }>(`SELECT id, customer_id FROM lane_sessions WHERE id = $1`, [
+                intentRow.lane_session_id,
+              ]);
+              customerId = laneSession.rows[0]?.customer_id ?? null;
+            } else if (quote.type === 'UPGRADE' && quote.waitlistId) {
+              const waitlistCustomer = await client.query<{ customer_id: string | null }>(
+                `SELECT v.customer_id
+                 FROM waitlist w
+                 JOIN visits v ON v.id = w.visit_id
+                 WHERE w.id = $1`,
+                [quote.waitlistId]
+              );
+              customerId = waitlistCustomer.rows[0]?.customer_id ?? null;
+            } else if (quote.type === 'FINAL_EXTENSION' && quote.visitId) {
+              const visitCustomer = await client.query<{ customer_id: string | null }>(
+                `SELECT customer_id FROM visits WHERE id = $1`,
+                [quote.visitId]
+              );
+              customerId = visitCustomer.rows[0]?.customer_id ?? null;
+            }
+
+            let registerSessionId: string | null = null;
+            if (intentRow.register_number) {
+              const registerSession = await client.query<{ id: string }>(
+                `SELECT id
+                 FROM register_sessions
+                 WHERE register_number = $1
+                   AND (signed_out_at IS NULL OR signed_out_at >= NOW())
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [intentRow.register_number]
+              );
+              registerSessionId = registerSession.rows[0]?.id ?? null;
+            }
+
+            return { customerId, registerSessionId };
+          };
+
+          const ensureAuditTrail = async (
+            intentRow: typeof intent,
+            quote: {
+              type?: string;
+              waitlistId?: string;
+              visitId?: string;
+              blockId?: string;
+            }
+          ) => {
+            const amountCents = toCents(intentRow.amount);
+            const lineItems = buildLineItemsFromQuote(intentRow.quote_json, amountCents);
+            const totals = computeOrderTotals(lineItems.items, amountCents, intentRow.tip_cents ?? 0);
+            const { customerId, registerSessionId } = await resolveOrderContext(intentRow, quote);
+
+            await ensureOrderWithReceipt(client, {
+              dedupeKey: { field: 'paymentIntentId', value: intentRow.id },
+              customerId,
+              registerSessionId,
+              createdByStaffId: staffId,
+              totals,
+              lineItems: lineItems.items,
+              metadata: {
+                paymentIntentId: intentRow.id,
+                paymentType: quote.type ?? null,
+                paymentMethod: intentRow.payment_method ?? null,
+                registerNumber: intentRow.register_number ?? null,
+              },
+              tender: {
+                paymentIntentId: intentRow.id,
+                paymentMethod: intentRow.payment_method ?? null,
+                amountCents: amountCents ?? null,
+                tipCents: intentRow.tip_cents ?? 0,
+                registerNumber: intentRow.register_number ?? null,
+                providerPaymentId:
+                  intentRow.square_transaction_id ?? squareTransactionId ?? null,
+              },
+            });
+          };
+
           if (intent.status === 'PAID') {
+            const quote = parsePaymentIntentQuote(intent.quote_json);
+            if (squareTransactionId || intent.square_transaction_id) {
+              await client.query(
+                `INSERT INTO external_provider_refs (provider, entity_type, internal_id, external_id)
+                 VALUES ('square', 'payment', $1, $2)
+                 ON CONFLICT DO NOTHING`,
+                [intent.id, squareTransactionId || intent.square_transaction_id]
+              );
+            }
+            await ensureAuditTrail(intent, quote);
+
             return { paymentIntentId: intent.id, status: 'PAID', alreadyPaid: true };
           }
 
           // Mark as paid
-          await client.query(
+          const updatedIntent = await client.query<
+            PaymentIntentRow & {
+              payment_method?: string | null;
+              register_number?: number | null;
+              square_transaction_id?: string | null;
+              paid_at?: Date | null;
+              lane_session_id?: string | null;
+              tip_cents?: number | null;
+            }
+          >(
             `UPDATE payment_intents
            SET status = 'PAID',
                paid_at = NOW(),
-               square_transaction_id = $1,
+               square_transaction_id = COALESCE($1, square_transaction_id),
+               payment_method = COALESCE($2, payment_method),
+               register_number = COALESCE($3, register_number),
+               tip_cents = COALESCE($4, tip_cents),
                updated_at = NOW()
-           WHERE id = $2`,
-            [squareTransactionId || null, id]
+           WHERE id = $5
+           RETURNING *`,
+            [
+              squareTransactionId || null,
+              resolvedPaymentMethod ?? null,
+              resolvedRegisterNumber ?? null,
+              resolvedTipCents ?? null,
+              id,
+            ]
           );
+          const paidIntent = updatedIntent.rows[0]!;
+
+          if (squareTransactionId || paidIntent.square_transaction_id) {
+            await client.query(
+              `INSERT INTO external_provider_refs (provider, entity_type, internal_id, external_id)
+               VALUES ('square', 'payment', $1, $2)
+               ON CONFLICT DO NOTHING`,
+              [paidIntent.id, squareTransactionId || paidIntent.square_transaction_id]
+            );
+          }
 
           // Check payment intent type from quote_json
-          const quote = intent.quote_json as {
-            type?: string;
-            waitlistId?: string;
-            visitId?: string;
-            blockId?: string;
-          };
+          const quote = parsePaymentIntentQuote(paidIntent.quote_json);
           const paymentType = quote.type;
 
           // Handle upgrade payment completion
@@ -293,7 +470,7 @@ export function registerCheckinPaymentIntentRoutes(fastify: FastifyInstance): vo
             // Update lane session status
             const sessionResult = await client.query<LaneSessionRow>(
               `SELECT * FROM lane_sessions WHERE payment_intent_id = $1`,
-              [id]
+              [paidIntent.id]
             );
 
             if (sessionResult.rows.length > 0) {
@@ -309,15 +486,17 @@ export function registerCheckinPaymentIntentRoutes(fastify: FastifyInstance): vo
               );
 
               return {
-                paymentIntentId: intent.id,
+                paymentIntentId: paidIntent.id,
                 status: 'PAID',
                 laneSessionToBroadcast: { sessionId: session.id, laneId: session.lane_id },
               };
             }
           }
 
+          await ensureAuditTrail(paidIntent, quote);
+
           return {
-            paymentIntentId: intent.id,
+            paymentIntentId: paidIntent.id,
             status: 'PAID',
             laneSessionToBroadcast: null as null | { sessionId: string; laneId: string },
           };

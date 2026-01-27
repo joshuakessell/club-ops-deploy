@@ -29,6 +29,9 @@ import {
   sessionDocumentsRoutes,
   scheduleRoutes,
   timeoffRoutes,
+  cashDrawerRoutes,
+  breakRoutes,
+  orderRoutes,
 } from './routes';
 import { createBroadcaster, type Broadcaster } from './websocket/broadcaster';
 import { initializeDatabase, closeDatabase } from './db';
@@ -197,6 +200,9 @@ async function main() {
   await fastify.register(sessionDocumentsRoutes);
   await fastify.register(scheduleRoutes);
   await fastify.register(timeoffRoutes);
+  await fastify.register(cashDrawerRoutes);
+  await fastify.register(breakRoutes);
+  await fastify.register(orderRoutes);
 
   // WebSocket endpoint (authenticated; see websocket/wsRoute.ts)
   await registerWsRoute(fastify, broadcaster);

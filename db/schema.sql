@@ -96,6 +96,50 @@ CREATE TYPE public.block_type AS ENUM (
 
 
 --
+-- Name: break_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.break_status AS ENUM (
+    'OPEN',
+    'CLOSED'
+);
+
+
+--
+-- Name: break_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.break_type AS ENUM (
+    'MEAL',
+    'REST',
+    'OTHER'
+);
+
+
+--
+-- Name: cash_drawer_event_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.cash_drawer_event_type AS ENUM (
+    'PAID_IN',
+    'PAID_OUT',
+    'DROP',
+    'NO_SALE_OPEN',
+    'ADJUSTMENT'
+);
+
+
+--
+-- Name: cash_drawer_session_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.cash_drawer_session_status AS ENUM (
+    'OPEN',
+    'CLOSED'
+);
+
+
+--
 -- Name: checkout_request_status; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -104,6 +148,22 @@ CREATE TYPE public.checkout_request_status AS ENUM (
     'CLAIMED',
     'VERIFIED',
     'CANCELLED'
+);
+
+
+--
+-- Name: external_provider_entity_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.external_provider_entity_type AS ENUM (
+    'customer',
+    'payment',
+    'refund',
+    'order',
+    'shift',
+    'timeclock_session',
+    'cash_event',
+    'receipt'
 );
 
 
@@ -150,6 +210,32 @@ CREATE TYPE public.lane_session_status AS ENUM (
     'AWAITING_SIGNATURE',
     'COMPLETED',
     'CANCELLED'
+);
+
+
+--
+-- Name: order_line_item_kind; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.order_line_item_kind AS ENUM (
+    'RETAIL',
+    'ADDON',
+    'UPGRADE',
+    'LATE_FEE',
+    'MANUAL'
+);
+
+
+--
+-- Name: order_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.order_status AS ENUM (
+    'OPEN',
+    'PAID',
+    'CANCELED',
+    'REFUNDED',
+    'PARTIALLY_REFUNDED'
 );
 
 
@@ -309,6 +395,43 @@ CREATE TABLE public.audit_log (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     staff_id uuid,
     metadata jsonb
+);
+
+
+--
+-- Name: cash_drawer_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cash_drawer_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    cash_drawer_session_id uuid NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() NOT NULL,
+    type public.cash_drawer_event_type NOT NULL,
+    amount_cents integer,
+    reason text,
+    created_by_staff_id uuid NOT NULL,
+    metadata_json jsonb
+);
+
+
+--
+-- Name: cash_drawer_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cash_drawer_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    register_session_id uuid NOT NULL,
+    opened_by_staff_id uuid NOT NULL,
+    opened_at timestamp with time zone DEFAULT now() NOT NULL,
+    opening_float_cents integer NOT NULL,
+    closed_by_staff_id uuid,
+    closed_at timestamp with time zone,
+    counted_cash_cents integer,
+    expected_cash_cents integer,
+    over_short_cents integer,
+    notes text,
+    status public.cash_drawer_session_status DEFAULT 'OPEN'::public.cash_drawer_session_status NOT NULL,
+    closeout_snapshot_json jsonb
 );
 
 
@@ -504,6 +627,21 @@ CREATE TABLE public.employee_shifts (
 
 
 --
+-- Name: external_provider_refs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.external_provider_refs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    provider text NOT NULL,
+    entity_type public.external_provider_entity_type NOT NULL,
+    internal_id uuid NOT NULL,
+    external_id text NOT NULL,
+    external_version text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: inventory_reservations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -619,6 +757,46 @@ CREATE TABLE public.lockers (
 
 
 --
+-- Name: order_line_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.order_line_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    kind public.order_line_item_kind NOT NULL,
+    sku text,
+    name text NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents integer NOT NULL,
+    discount_cents integer DEFAULT 0 NOT NULL,
+    tax_cents integer DEFAULT 0 NOT NULL,
+    total_cents integer NOT NULL,
+    metadata_json jsonb
+);
+
+
+--
+-- Name: orders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    customer_id uuid,
+    register_session_id uuid,
+    created_by_staff_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    status public.order_status DEFAULT 'OPEN'::public.order_status NOT NULL,
+    subtotal_cents integer NOT NULL,
+    discount_cents integer NOT NULL,
+    tax_cents integer NOT NULL,
+    tip_cents integer DEFAULT 0 NOT NULL,
+    total_cents integer NOT NULL,
+    currency character varying(3) DEFAULT 'USD'::character varying NOT NULL,
+    metadata_json jsonb
+);
+
+
+--
 -- Name: payment_intents; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -626,12 +804,28 @@ CREATE TABLE public.payment_intents (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     lane_session_id uuid,
     amount numeric(10,2) NOT NULL,
+    tip_cents integer DEFAULT 0 NOT NULL,
     status public.payment_status DEFAULT 'DUE'::public.payment_status NOT NULL,
     quote_json jsonb NOT NULL,
     square_transaction_id character varying(255),
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     paid_at timestamp with time zone
+);
+
+
+--
+-- Name: receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.receipts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    issued_at timestamp with time zone DEFAULT now() NOT NULL,
+    receipt_number text NOT NULL,
+    receipt_json jsonb NOT NULL,
+    pdf_storage_key text,
+    metadata_json jsonb
 );
 
 
@@ -647,6 +841,7 @@ CREATE TABLE public.register_sessions (
     last_heartbeat timestamp with time zone DEFAULT now() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     signed_out_at timestamp with time zone,
+    closeout_summary_json jsonb,
     CONSTRAINT register_sessions_register_number_check CHECK ((register_number = ANY (ARRAY[1, 2])))
 );
 
@@ -715,6 +910,22 @@ CREATE TABLE public.staff (
     active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: staff_break_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.staff_break_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    staff_id uuid NOT NULL,
+    timeclock_session_id uuid NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    ended_at timestamp with time zone,
+    break_type public.break_type NOT NULL,
+    status public.break_status DEFAULT 'OPEN'::public.break_status NOT NULL,
+    notes text
 );
 
 
@@ -976,6 +1187,22 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
+-- Name: cash_drawer_events cash_drawer_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_events
+    ADD CONSTRAINT cash_drawer_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cash_drawer_sessions cash_drawer_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_sessions
+    ADD CONSTRAINT cash_drawer_sessions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: charges charges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1056,6 +1283,30 @@ ALTER TABLE ONLY public.employee_shifts
 
 
 --
+-- Name: external_provider_refs external_provider_refs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_provider_refs
+    ADD CONSTRAINT external_provider_refs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: external_provider_refs external_provider_refs_provider_entity_type_external_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_provider_refs
+    ADD CONSTRAINT external_provider_refs_provider_entity_type_external_id_key UNIQUE (provider, entity_type, external_id);
+
+
+--
+-- Name: external_provider_refs external_provider_refs_provider_entity_type_internal_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_provider_refs
+    ADD CONSTRAINT external_provider_refs_provider_entity_type_internal_id_key UNIQUE (provider, entity_type, internal_id);
+
+
+--
 -- Name: inventory_reservations inventory_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1112,11 +1363,43 @@ ALTER TABLE ONLY public.lockers
 
 
 --
+-- Name: order_line_items order_line_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_line_items
+    ADD CONSTRAINT order_line_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: orders orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: payment_intents payment_intents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payment_intents
     ADD CONSTRAINT payment_intents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: receipts receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.receipts
+    ADD CONSTRAINT receipts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: receipts receipts_receipt_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.receipts
+    ADD CONSTRAINT receipts_receipt_number_key UNIQUE (receipt_number);
 
 
 --
@@ -1173,6 +1456,14 @@ ALTER TABLE ONLY public.staff
 
 ALTER TABLE ONLY public.staff
     ADD CONSTRAINT staff_qr_token_hash_key UNIQUE (qr_token_hash);
+
+
+--
+-- Name: staff_break_sessions staff_break_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_break_sessions
+    ADD CONSTRAINT staff_break_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1323,6 +1614,48 @@ CREATE INDEX idx_audit_log_staff_id ON public.audit_log USING btree (staff_id);
 --
 
 CREATE INDEX idx_audit_log_user ON public.audit_log USING btree (user_id);
+
+
+--
+-- Name: idx_cash_drawer_events_created_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_events_created_by ON public.cash_drawer_events USING btree (created_by_staff_id);
+
+
+--
+-- Name: idx_cash_drawer_events_occurred_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_events_occurred_at ON public.cash_drawer_events USING btree (occurred_at);
+
+
+--
+-- Name: idx_cash_drawer_events_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_events_session ON public.cash_drawer_events USING btree (cash_drawer_session_id);
+
+
+--
+-- Name: idx_cash_drawer_sessions_opened_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_sessions_opened_by ON public.cash_drawer_sessions USING btree (opened_by_staff_id);
+
+
+--
+-- Name: idx_cash_drawer_sessions_register_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_sessions_register_session ON public.cash_drawer_sessions USING btree (register_session_id);
+
+
+--
+-- Name: idx_cash_drawer_sessions_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_sessions_status ON public.cash_drawer_sessions USING btree (status);
 
 
 --
@@ -1697,6 +2030,48 @@ CREATE INDEX idx_lockers_status ON public.lockers USING btree (status);
 
 
 --
+-- Name: idx_order_line_items_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_order_line_items_order ON public.order_line_items USING btree (order_id);
+
+
+--
+-- Name: idx_orders_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_created_at ON public.orders USING btree (created_at);
+
+
+--
+-- Name: idx_orders_created_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_created_by ON public.orders USING btree (created_by_staff_id) WHERE (created_by_staff_id IS NOT NULL);
+
+
+--
+-- Name: idx_orders_customer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_customer ON public.orders USING btree (customer_id) WHERE (customer_id IS NOT NULL);
+
+
+--
+-- Name: idx_orders_register_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_register_session ON public.orders USING btree (register_session_id) WHERE (register_session_id IS NOT NULL);
+
+
+--
+-- Name: idx_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_status ON public.orders USING btree (status);
+
+
+--
 -- Name: idx_payment_intents_due; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1715,6 +2090,13 @@ CREATE INDEX idx_payment_intents_lane_session ON public.payment_intents USING bt
 --
 
 CREATE INDEX idx_payment_intents_status ON public.payment_intents USING btree (status);
+
+
+--
+-- Name: idx_receipts_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_receipts_order ON public.receipts USING btree (order_id);
 
 
 --
@@ -1799,6 +2181,27 @@ CREATE INDEX idx_staff_qr_token_hash ON public.staff USING btree (qr_token_hash)
 --
 
 CREATE INDEX idx_staff_role ON public.staff USING btree (role);
+
+
+--
+-- Name: idx_staff_break_sessions_staff; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_staff_break_sessions_staff ON public.staff_break_sessions USING btree (staff_id);
+
+
+--
+-- Name: idx_staff_break_sessions_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_staff_break_sessions_status ON public.staff_break_sessions USING btree (status);
+
+
+--
+-- Name: idx_staff_break_sessions_timeclock; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_staff_break_sessions_timeclock ON public.staff_break_sessions USING btree (timeclock_session_id);
 
 
 --
@@ -2155,6 +2558,46 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
+-- Name: cash_drawer_events cash_drawer_events_cash_drawer_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_events
+    ADD CONSTRAINT cash_drawer_events_cash_drawer_session_id_fkey FOREIGN KEY (cash_drawer_session_id) REFERENCES public.cash_drawer_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cash_drawer_events cash_drawer_events_created_by_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_events
+    ADD CONSTRAINT cash_drawer_events_created_by_staff_id_fkey FOREIGN KEY (created_by_staff_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cash_drawer_sessions cash_drawer_sessions_closed_by_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_sessions
+    ADD CONSTRAINT cash_drawer_sessions_closed_by_staff_id_fkey FOREIGN KEY (closed_by_staff_id) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
+-- Name: cash_drawer_sessions cash_drawer_sessions_opened_by_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_sessions
+    ADD CONSTRAINT cash_drawer_sessions_opened_by_staff_id_fkey FOREIGN KEY (opened_by_staff_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cash_drawer_sessions cash_drawer_sessions_register_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_sessions
+    ADD CONSTRAINT cash_drawer_sessions_register_session_id_fkey FOREIGN KEY (register_session_id) REFERENCES public.register_sessions(id) ON DELETE CASCADE;
+
+
+--
 -- Name: charges charges_checkin_block_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2395,11 +2838,51 @@ ALTER TABLE ONLY public.lockers
 
 
 --
+-- Name: order_line_items order_line_items_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_line_items
+    ADD CONSTRAINT order_line_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: orders orders_created_by_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_created_by_staff_id_fkey FOREIGN KEY (created_by_staff_id) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
+-- Name: orders orders_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: orders orders_register_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_register_session_id_fkey FOREIGN KEY (register_session_id) REFERENCES public.register_sessions(id) ON DELETE SET NULL;
+
+
+--
 -- Name: payment_intents payment_intents_lane_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payment_intents
     ADD CONSTRAINT payment_intents_lane_session_id_fkey FOREIGN KEY (lane_session_id) REFERENCES public.lane_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: receipts receipts_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.receipts
+    ADD CONSTRAINT receipts_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE;
 
 
 --
@@ -2416,6 +2899,22 @@ ALTER TABLE ONLY public.register_sessions
 
 ALTER TABLE ONLY public.rooms
     ADD CONSTRAINT rooms_assigned_to_customer_id_fkey FOREIGN KEY (assigned_to_customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: staff_break_sessions staff_break_sessions_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_break_sessions
+    ADD CONSTRAINT staff_break_sessions_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: staff_break_sessions staff_break_sessions_timeclock_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_break_sessions
+    ADD CONSTRAINT staff_break_sessions_timeclock_session_id_fkey FOREIGN KEY (timeclock_session_id) REFERENCES public.timeclock_sessions(id) ON DELETE CASCADE;
 
 
 --
