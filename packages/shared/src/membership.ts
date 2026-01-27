@@ -31,7 +31,8 @@ export function getCustomerMembershipStatus(
   input: MembershipStatusInput,
   now: Date = new Date()
 ): CustomerMembershipStatus {
-  const hasNumber = typeof input.membershipNumber === 'string' && input.membershipNumber.trim().length > 0;
+  const hasNumber =
+    typeof input.membershipNumber === 'string' && input.membershipNumber.trim().length > 0;
   if (!hasNumber) return 'NONE';
 
   const validUntil = input.membershipValidUntil;
@@ -42,5 +43,3 @@ export function getCustomerMembershipStatus(
 
   return now.getTime() <= endMs ? 'ACTIVE' : 'EXPIRED';
 }
-
-

@@ -310,7 +310,7 @@ export async function inventoryRoutes(fastify: FastifyInstance): Promise<void> {
   /**
    * GET /v1/inventory/detailed - Get detailed inventory with occupancy info
    *
-   * Returns all rooms and lockers with checkin_at/checkout_at from active sessions.
+   * Returns all rooms and lockers with checkin_at/checkout_at from active check-in blocks.
    * Auth required.
    */
   fastify.get(

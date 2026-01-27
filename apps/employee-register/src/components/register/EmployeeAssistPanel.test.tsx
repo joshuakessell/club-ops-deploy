@@ -26,22 +26,20 @@ function baseProps() {
     onConfirmMembershipSixMonth: vi.fn(),
     onHighlightRental: vi.fn(),
     onSelectRentalAsCustomer: vi.fn(),
+    onHighlightWaitlistBackup: vi.fn(),
+    onSelectWaitlistBackupAsCustomer: vi.fn(),
     onApproveRental: vi.fn(),
   };
 }
 
 describe('EmployeeAssistPanel', () => {
-  it('LANGUAGE step: first tap highlights, second tap confirms', () => {
+  it('LANGUAGE step: tap highlights and confirms immediately', () => {
     const props = baseProps();
     render(<EmployeeAssistPanel {...props} />);
 
     const english = screen.getByRole('button', { name: 'English' });
     fireEvent.click(english);
     expect(props.onHighlightLanguage).toHaveBeenCalledWith('EN');
-    expect(props.onConfirmLanguage).not.toHaveBeenCalled();
-
-    fireEvent.click(english);
-    expect(props.onHighlightLanguage).toHaveBeenCalledWith(null);
     expect(props.onConfirmLanguage).toHaveBeenCalledWith('EN');
   });
 
@@ -101,7 +99,7 @@ describe('EmployeeAssistPanel', () => {
     expect(screen.getByText(/\b2 remaining\b/)).toBeTruthy();
   });
 
-  it('RENTAL step: first tap highlights rental, second tap selects as customer', () => {
+  it('RENTAL step: first tap proposes, second tap confirms', () => {
     const props = {
       ...baseProps(),
       customerPrimaryLanguage: 'EN' as const,
@@ -112,13 +110,13 @@ describe('EmployeeAssistPanel', () => {
     const locker = screen.getByRole('button', { name: /Propose Locker/i });
     fireEvent.click(locker);
     expect(props.onHighlightRental).toHaveBeenCalledWith('LOCKER');
-    expect(props.onSelectRentalAsCustomer).not.toHaveBeenCalled();
+    expect(props.onApproveRental).not.toHaveBeenCalled();
 
     fireEvent.click(locker);
-    expect(props.onSelectRentalAsCustomer).toHaveBeenCalledWith('LOCKER');
+    expect(props.onApproveRental).toHaveBeenCalled();
   });
 
-  it('APPROVAL step: shows green OK and calls approve', () => {
+  it('skips approval when customer already selected a rental', () => {
     const props = {
       ...baseProps(),
       customerPrimaryLanguage: 'EN' as const,
@@ -129,10 +127,7 @@ describe('EmployeeAssistPanel', () => {
     };
     render(<EmployeeAssistPanel {...props} />);
 
-    expect(screen.getByText('Step: APPROVAL')).toBeTruthy();
-    const ok = screen.getByRole('button', { name: 'OK' });
-    fireEvent.click(ok);
-    expect(props.onApproveRental).toHaveBeenCalled();
+    expect(screen.getByText('Step: DONE')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'OK' })).toBeNull();
   });
 });
-

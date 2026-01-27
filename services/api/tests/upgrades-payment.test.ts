@@ -8,12 +8,20 @@ import { truncateAllTables } from './testDb.js';
 
 vi.mock('../src/auth/middleware.js', async () => {
   const { query } = await import('../src/db/index.js');
-  async function ensureDefaultStaff(): Promise<{ staffId: string; name: string; role: 'STAFF' | 'ADMIN' }> {
+  async function ensureDefaultStaff(): Promise<{
+    staffId: string;
+    name: string;
+    role: 'STAFF' | 'ADMIN';
+  }> {
     const existing = await query<{ id: string; name: string; role: 'STAFF' | 'ADMIN' }>(
       `SELECT id, name, role FROM staff WHERE active = true ORDER BY created_at ASC LIMIT 1`
     );
     if (existing.rows.length > 0) {
-      return { staffId: existing.rows[0]!.id, name: existing.rows[0]!.name, role: existing.rows[0]!.role };
+      return {
+        staffId: existing.rows[0]!.id,
+        name: existing.rows[0]!.name,
+        role: existing.rows[0]!.role,
+      };
     }
     const created = await query<{ id: string; name: string; role: 'STAFF' | 'ADMIN' }>(
       `INSERT INTO staff (name, role, pin_hash, active)
@@ -91,7 +99,9 @@ describe('Upgrade payment flow attaches charges', () => {
 
   it('creates upgrade payment intent with original charges and records upgrade charge on completion', async () => {
     // Seed customer + visit + lane session with original quote
-    const customer = await pool.query<{ id: string }>(`INSERT INTO customers (name) VALUES ('Customer One') RETURNING id`);
+    const customer = await pool.query<{ id: string }>(
+      `INSERT INTO customers (name) VALUES ('Customer One') RETURNING id`
+    );
     const visit = await pool.query<{ id: string }>(
       `INSERT INTO visits (customer_id, started_at, ended_at)
        VALUES ($1, NOW() - INTERVAL '1 hour', NULL)
@@ -117,7 +127,10 @@ describe('Upgrade payment flow attaches charges', () => {
       `INSERT INTO payment_intents (lane_session_id, amount, status, quote_json)
        VALUES ($1, 20, 'PAID', $2)
        RETURNING id`,
-      [laneSession.rows[0]!.id, JSON.stringify({ lineItems: [{ description: 'Locker', amount: 20 }] })]
+      [
+        laneSession.rows[0]!.id,
+        JSON.stringify({ lineItems: [{ description: 'Locker', amount: 20 }] }),
+      ]
     );
 
     await pool.query(`UPDATE lane_sessions SET payment_intent_id = $1 WHERE id = $2`, [
@@ -167,7 +180,9 @@ describe('Upgrade payment flow attaches charges', () => {
     expect(fulfillJson.originalTotal).toBe(20);
 
     // Mark upgrade intent paid and complete
-    await pool.query(`UPDATE payment_intents SET status = 'PAID' WHERE id = $1`, [fulfillJson.paymentIntentId]);
+    await pool.query(`UPDATE payment_intents SET status = 'PAID' WHERE id = $1`, [
+      fulfillJson.paymentIntentId,
+    ]);
 
     const completeRes = await app.inject({
       method: 'POST',
@@ -188,4 +203,3 @@ describe('Upgrade payment flow attaches charges', () => {
     expect(parseFloat(charge.rows[0]?.amount || '0')).toBeCloseTo(fulfillJson.upgradeFee);
   });
 });
-

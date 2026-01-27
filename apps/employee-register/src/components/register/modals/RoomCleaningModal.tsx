@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ModalFrame } from './ModalFrame';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 type DetailedRoom = {
   id: string;
@@ -16,7 +16,13 @@ export interface RoomCleaningModalProps {
   onSuccess: (message: string) => void;
 }
 
-export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSuccess }: RoomCleaningModalProps) {
+export function RoomCleaningModal({
+  isOpen,
+  sessionToken,
+  staffId,
+  onClose,
+  onSuccess,
+}: RoomCleaningModalProps) {
   const [rooms, setRooms] = useState<DetailedRoom[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +31,14 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const dirtyRooms = useMemo(
-    () => rooms.filter((r) => r.status === 'DIRTY').sort((a, b) => a.number.localeCompare(b.number)),
+    () =>
+      rooms.filter((r) => r.status === 'DIRTY').sort((a, b) => a.number.localeCompare(b.number)),
     [rooms]
   );
 
   const cleaningRooms = useMemo(
-    () => rooms.filter((r) => r.status === 'CLEANING').sort((a, b) => a.number.localeCompare(b.number)),
+    () =>
+      rooms.filter((r) => r.status === 'CLEANING').sort((a, b) => a.number.localeCompare(b.number)),
     [rooms]
   );
 
@@ -61,8 +69,17 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
         const data = (await res.json()) as { rooms?: Array<Record<string, unknown>> };
         const roomsRaw = Array.isArray(data.rooms) ? data.rooms : [];
         const relevant: DetailedRoom[] = roomsRaw
-          .filter((r) => typeof r?.id === 'string' && typeof r?.number === 'string' && typeof r?.status === 'string')
-          .map((r) => ({ id: r.id as string, number: r.number as string, status: r.status as string }))
+          .filter(
+            (r) =>
+              typeof r?.id === 'string' &&
+              typeof r?.number === 'string' &&
+              typeof r?.status === 'string'
+          )
+          .map((r) => ({
+            id: r.id as string,
+            number: r.number as string,
+            status: r.status as string,
+          }))
           .filter((r) => r.status === 'CLEANING' || r.status === 'DIRTY');
         setRooms(relevant);
       } catch (e) {
@@ -107,11 +124,7 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
       });
       if (!res.ok) throw new Error('Failed to update room statuses');
       onClose();
-      onSuccess(
-        targetStatus === 'CLEANING'
-          ? 'Cleaning started'
-          : 'Rooms marked CLEAN'
-      );
+      onSuccess(targetStatus === 'CLEANING' ? 'Cleaning started' : 'Rooms marked CLEAN');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update room statuses');
     } finally {
@@ -146,9 +159,18 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
       ) : dirtyRooms.length === 0 && cleaningRooms.length === 0 ? (
         <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No DIRTY or CLEANING rooms</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem' }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: '0.75rem',
+          }}
+        >
           <div>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}>
+            <div
+              className="er-text-sm"
+              style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}
+            >
               DIRTY (ready to begin cleaning)
             </div>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
@@ -172,7 +194,9 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
                       style={{ justifyContent: 'space-between', padding: '0.75rem' }}
                     >
                       <span style={{ fontWeight: 900 }}>Room {r.number}</span>
-                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>{selected ? 'Selected' : 'DIRTY'}</span>
+                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>
+                        {selected ? 'Selected' : 'DIRTY'}
+                      </span>
                     </button>
                   );
                 })
@@ -181,7 +205,10 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
           </div>
 
           <div>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}>
+            <div
+              className="er-text-sm"
+              style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}
+            >
               CLEANING (ready to finish cleaning)
             </div>
             <div style={{ display: 'grid', gap: '0.5rem' }}>
@@ -205,7 +232,9 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
                       style={{ justifyContent: 'space-between', padding: '0.75rem' }}
                     >
                       <span style={{ fontWeight: 900 }}>Room {r.number}</span>
-                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>{selected ? 'Selected' : 'CLEANING'}</span>
+                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>
+                        {selected ? 'Selected' : 'CLEANING'}
+                      </span>
                     </button>
                   );
                 })
@@ -216,7 +245,10 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
       )}
 
       {selectedRooms.length > 0 && (
-        <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12, marginTop: '0.75rem' }}>
+        <div
+          className="er-surface"
+          style={{ padding: '0.75rem', borderRadius: 12, marginTop: '0.75rem' }}
+        >
           <div className="er-text-sm" style={{ fontWeight: 900, marginBottom: '0.25rem' }}>
             Selected:
           </div>
@@ -226,7 +258,9 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}>
+      <div
+        style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}
+      >
         <button
           type="button"
           className="cs-liquid-button cs-liquid-button--secondary"
@@ -256,5 +290,3 @@ export function RoomCleaningModal({ isOpen, sessionToken, staffId, onClose, onSu
     </ModalFrame>
   );
 }
-
-

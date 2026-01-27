@@ -89,10 +89,7 @@ export function WaitlistPopover({
               <button
                 aria-label={`Begin upgrade for ${item.title}`}
                 onClick={() => onAction(item.id, item.customerName)}
-                className={[
-                  'cs-liquid-button',
-                  item.eligible ? '' : 'cs-liquid-button--secondary',
-                ]
+                className={['cs-liquid-button', item.eligible ? '' : 'cs-liquid-button--secondary']
                   .filter(Boolean)
                   .join(' ')}
                 style={{
@@ -136,4 +133,3 @@ export function WaitlistPopover({
     </div>
   );
 }
-

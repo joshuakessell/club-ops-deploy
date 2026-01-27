@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 
@@ -38,16 +38,7 @@ export function TimeclockView({ session }: TimeclockViewProps) {
   const [selectedSession, setSelectedSession] = useState<TimeclockSession | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
 
-  useEffect(() => {
-    fetchSessions();
-    // Refresh currently clocked in every 30 seconds
-    const interval = setInterval(() => {
-      fetchCurrentlyClockedIn();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [dateFrom, dateTo]);
-
-  const fetchCurrentlyClockedIn = async () => {
+  const fetchCurrentlyClockedIn = useCallback(async () => {
     try {
       const response = await fetch(
         `${API_BASE}/v1/admin/timeclock?from=${new Date().toISOString().split('T')[0]}`,
@@ -62,9 +53,9 @@ export function TimeclockView({ session }: TimeclockViewProps) {
     } catch (error) {
       console.error('Failed to fetch currently clocked in:', error);
     }
-  };
+  }, [session.sessionToken]);
 
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -84,7 +75,16 @@ export function TimeclockView({ session }: TimeclockViewProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dateFrom, dateTo, fetchCurrentlyClockedIn, session.sessionToken]);
+
+  useEffect(() => {
+    fetchSessions();
+    // Refresh currently clocked in every 30 seconds
+    const interval = setInterval(() => {
+      fetchCurrentlyClockedIn();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchCurrentlyClockedIn, fetchSessions]);
 
   const handleCloseSession = async (sessionId: string) => {
     try {

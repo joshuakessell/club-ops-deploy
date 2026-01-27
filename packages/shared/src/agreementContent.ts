@@ -82,4 +82,3 @@ export const AGREEMENT_LEGAL_BODY_HTML_BY_LANG: Record<AgreementLanguage, string
 
 <p style="margin-top: 18px;"><strong>RECONOCIMIENTO:</strong> He leído este Acuerdo, lo entiendo y acepto sus términos.</p>`,
 };
-

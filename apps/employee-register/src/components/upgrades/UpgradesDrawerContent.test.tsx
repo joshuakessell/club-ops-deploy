@@ -27,7 +27,9 @@ describe('UpgradesDrawerContent', () => {
     const onOffer = vi.fn();
     render(
       <UpgradesDrawerContent
-        waitlistEntries={[makeEntry({ status: 'ACTIVE', desiredTier: 'DOUBLE', customerName: 'Test Customer' })]}
+        waitlistEntries={[
+          makeEntry({ status: 'ACTIVE', desiredTier: 'DOUBLE', customerName: 'Test Customer' }),
+        ]}
         hasEligibleEntries={true}
         isEntryOfferEligible={() => true}
         onOffer={onOffer}
@@ -72,5 +74,3 @@ describe('UpgradesDrawerContent', () => {
     expect(startPayment).toHaveProperty('disabled', false);
   });
 });
-
-

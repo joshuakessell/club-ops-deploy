@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { transaction, query } from '../db';
 import { RoomStatus, RoomStatusSchema, validateTransition } from '@club-ops/shared';
 import type { Broadcaster } from '../websocket/broadcaster';
-import { broadcastInventoryUpdate } from './sessions';
+import { broadcastInventoryUpdate } from '../inventory/broadcast';
 import { insertAuditLog } from '../audit/auditLog';
 import { requireAuth } from '../auth/middleware';
 

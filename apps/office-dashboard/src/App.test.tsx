@@ -3,14 +3,41 @@ import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import App from './App';
 
+const routerFuture = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+};
+
 // Mock WebSocket
-global.WebSocket = vi.fn(() => ({
-  onopen: null,
-  onclose: null,
-  onmessage: null,
-  close: vi.fn(),
-  send: vi.fn(),
-})) as unknown as typeof WebSocket;
+const createMockWebSocket = () => {
+  const listeners = new Map<string, Set<EventListener>>();
+  return {
+    readyState: 1,
+    close: vi.fn(),
+    send: vi.fn(),
+    addEventListener: vi.fn((type: string, listener: EventListener) => {
+      const bucket = listeners.get(type) ?? new Set<EventListener>();
+      bucket.add(listener);
+      listeners.set(type, bucket);
+    }),
+    removeEventListener: vi.fn((type: string, listener: EventListener) => {
+      const bucket = listeners.get(type);
+      if (!bucket) return;
+      bucket.delete(listener);
+      if (bucket.size === 0) {
+        listeners.delete(type);
+      }
+    }),
+  };
+};
+
+const mockWebSocket = vi.fn(() => createMockWebSocket()) as unknown as typeof WebSocket;
+(mockWebSocket as any).CONNECTING = 0;
+(mockWebSocket as any).OPEN = 1;
+(mockWebSocket as any).CLOSING = 2;
+(mockWebSocket as any).CLOSED = 3;
+
+global.WebSocket = mockWebSocket;
 
 // Mock fetch
 global.fetch = vi.fn();
@@ -138,7 +165,7 @@ describe('App', () => {
   it('renders lock screen when not authenticated', async () => {
     await act(async () => {
       render(
-        <MemoryRouter>
+        <MemoryRouter future={routerFuture}>
           <App />
         </MemoryRouter>
       );
@@ -149,7 +176,7 @@ describe('App', () => {
 
   it('shows employee selection on the lock screen', async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={routerFuture}>
         <App />
       </MemoryRouter>
     );
@@ -169,7 +196,7 @@ describe('App', () => {
 
     await act(async () => {
       render(
-        <MemoryRouter initialEntries={['/']}>
+        <MemoryRouter future={routerFuture} initialEntries={['/']}>
           <App />
         </MemoryRouter>
       );

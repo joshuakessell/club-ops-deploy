@@ -149,7 +149,8 @@ export interface SessionUpdatedPayload {
    */
   kioskAcknowledgedAt?: string;
   allowedRentals: string[];
-  mode?: 'INITIAL' | 'RENEWAL';
+  mode?: 'CHECKIN' | 'RENEWAL';
+  renewalHours?: 2 | 6;
   blockEndsAt?: string;
   visitId?: string;
   /**
@@ -172,6 +173,10 @@ export interface SessionUpdatedPayload {
    * This enables faster and more reliable future lookup from ID scans without storing raw scan data.
    */
   customerHasEncryptedLookupMarker?: boolean;
+  /**
+   * ID scan validation issues (blocks check-in until resolved).
+   */
+  idScanIssue?: 'ID_EXPIRED' | 'UNDERAGE';
   pastDueBalance?: number;
   pastDueBlocked?: boolean;
   pastDueBypassed?: boolean;
@@ -184,7 +189,14 @@ export interface SessionUpdatedPayload {
     amount: number;
   }>;
   paymentFailureReason?: string;
+  ledgerLineItems?: Array<{
+    description: string;
+    amount: number;
+  }>;
+  ledgerTotal?: number;
   agreementSigned?: boolean;
+  agreementBypassPending?: boolean;
+  agreementSignedMethod?: 'DIGITAL' | 'MANUAL';
   assignedResourceType?: 'room' | 'locker';
   assignedResourceNumber?: string;
   checkoutAt?: string;
@@ -196,11 +208,12 @@ export interface SessionUpdatedPayload {
  */
 export interface CheckinOptionHighlightedPayload {
   sessionId: string;
-  step: 'LANGUAGE' | 'MEMBERSHIP';
+  step: 'LANGUAGE' | 'MEMBERSHIP' | 'WAITLIST_BACKUP';
   /**
    * Option identifier for the step:
    * - LANGUAGE: 'EN' | 'ES'
    * - MEMBERSHIP: 'ONE_TIME' | 'SIX_MONTH'
+   * - WAITLIST_BACKUP: rental type (e.g., 'LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL')
    *
    * null clears the highlight for the step.
    */
@@ -331,7 +344,7 @@ export interface Visit {
 export interface CheckinBlock {
   id: string;
   visitId: string;
-  blockType: 'INITIAL' | 'RENEWAL' | 'FINAL_EXTENSION';
+  blockType: 'INITIAL' | 'RENEWAL' | 'FINAL2H';
   startsAt: Date;
   endsAt: Date;
   rentalType: string;
@@ -435,6 +448,109 @@ export interface ManualCheckoutResolveResponse {
 
 export interface ManualCheckoutCompleteResponse extends ManualCheckoutResolveResponse {
   alreadyCheckedOut?: boolean;
+}
+
+export type CashDrawerSessionStatus = 'OPEN' | 'CLOSED';
+export type CashDrawerEventType = 'PAID_IN' | 'PAID_OUT' | 'DROP' | 'NO_SALE_OPEN' | 'ADJUSTMENT';
+export type StaffBreakStatus = 'OPEN' | 'CLOSED';
+export type StaffBreakType = 'MEAL' | 'REST' | 'OTHER';
+export type OrderStatus = 'OPEN' | 'PAID' | 'CANCELED' | 'REFUNDED' | 'PARTIALLY_REFUNDED';
+export type OrderLineItemKind = 'RETAIL' | 'ADDON' | 'UPGRADE' | 'LATE_FEE' | 'MANUAL';
+export type ExternalProviderEntityType =
+  | 'customer'
+  | 'payment'
+  | 'refund'
+  | 'order'
+  | 'shift'
+  | 'timeclock_session'
+  | 'cash_event'
+  | 'receipt';
+
+export interface CashDrawerSession {
+  id: string;
+  registerSessionId: string;
+  openedByStaffId: string;
+  openedAt: Date | string;
+  openingFloatCents: number;
+  closedByStaffId?: string | null;
+  closedAt?: Date | string | null;
+  countedCashCents?: number | null;
+  expectedCashCents?: number | null;
+  overShortCents?: number | null;
+  notes?: string | null;
+  status: CashDrawerSessionStatus;
+}
+
+export interface CashDrawerEvent {
+  id: string;
+  cashDrawerSessionId: string;
+  occurredAt: Date | string;
+  type: CashDrawerEventType;
+  amountCents?: number | null;
+  reason?: string | null;
+  createdByStaffId: string;
+  metadataJson?: Record<string, unknown> | null;
+}
+
+export interface StaffBreakSession {
+  id: string;
+  staffId: string;
+  timeclockSessionId: string;
+  startedAt: Date | string;
+  endedAt?: Date | string | null;
+  breakType: StaffBreakType;
+  status: StaffBreakStatus;
+  notes?: string | null;
+}
+
+export interface Order {
+  id: string;
+  customerId?: string | null;
+  registerSessionId?: string | null;
+  createdByStaffId?: string | null;
+  createdAt: Date | string;
+  status: OrderStatus;
+  subtotalCents: number;
+  discountCents: number;
+  taxCents: number;
+  tipCents: number;
+  totalCents: number;
+  currency: string;
+  metadataJson?: Record<string, unknown> | null;
+}
+
+export interface OrderLineItem {
+  id: string;
+  orderId: string;
+  kind: OrderLineItemKind;
+  sku?: string | null;
+  name: string;
+  quantity: number;
+  unitPriceCents: number;
+  discountCents: number;
+  taxCents: number;
+  totalCents: number;
+  metadataJson?: Record<string, unknown> | null;
+}
+
+export interface Receipt {
+  id: string;
+  orderId: string;
+  issuedAt: Date | string;
+  receiptNumber: string;
+  receiptJson: Record<string, unknown>;
+  pdfStorageKey?: string | null;
+  metadataJson?: Record<string, unknown> | null;
+}
+
+export interface ExternalProviderRef {
+  id: string;
+  provider: string;
+  entityType: ExternalProviderEntityType;
+  internalId: string;
+  externalId: string;
+  externalVersion?: string | null;
+  createdAt: Date | string;
 }
 
 /**

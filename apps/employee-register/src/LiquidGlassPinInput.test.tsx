@@ -47,4 +47,3 @@ describe('LiquidGlassPinInput', () => {
     expect(onChange).toHaveBeenCalled();
   });
 });
-

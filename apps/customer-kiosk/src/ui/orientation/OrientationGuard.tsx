@@ -19,7 +19,8 @@ export function OrientationGuard({
 
   const resolvedTitle = title ?? 'Rotate iPad';
   const resolvedMessage =
-    message ?? `This screen must be used in ${required === 'portrait' ? 'portrait' : 'landscape'} mode.`;
+    message ??
+    `This screen must be used in ${required === 'portrait' ? 'portrait' : 'landscape'} mode.`;
 
   const mismatchText = useMemo(
     () => `OrientationGuard: expected ${required}, got ${orientation}`,
@@ -50,4 +51,3 @@ export function OrientationGuard({
     </div>
   );
 }
-

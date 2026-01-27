@@ -87,7 +87,7 @@ describe('InventorySelector', () => {
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
     // Wait for data to load
-    await screen.findByRole('heading', { name: 'Inventory' });
+    await screen.findByRole('heading', { name: 'Rentals' });
 
     // Check that sections are rendered
     expect(screen.getByRole('button', { name: /standard/i })).toBeDefined();
@@ -101,7 +101,7 @@ describe('InventorySelector', () => {
 
     render(<InventorySelector {...mockProps} customerSelectedType="STANDARD" />);
 
-    await screen.findByRole('heading', { name: 'Inventory' });
+    await screen.findByRole('heading', { name: 'Rentals' });
     expect(screen.getByRole('button', { name: /standard/i })).toBeDefined();
 
     // Section should be expanded (we can check by looking for room numbers)
@@ -119,7 +119,7 @@ describe('InventorySelector', () => {
       <InventorySelector {...mockProps} customerSelectedType="STANDARD" onSelect={onSelect} />
     );
 
-    await screen.findByRole('heading', { name: 'Inventory' });
+    await screen.findByRole('heading', { name: 'Rentals' });
     await waitFor(() => {
       expect(onSelect).toHaveBeenCalledWith('room', 'room-1', '101', 'STANDARD');
     });
@@ -135,7 +135,13 @@ describe('InventorySelector', () => {
       json: () =>
         Promise.resolve({
           rooms: [
-            { id: 'room-avail', number: '101', status: 'CLEAN', assignedTo: null, checkoutAt: null },
+            {
+              id: 'room-avail',
+              number: '101',
+              status: 'CLEAN',
+              assignedTo: null,
+              checkoutAt: null,
+            },
             {
               id: 'room-occ',
               number: '102',
@@ -163,20 +169,20 @@ describe('InventorySelector', () => {
     );
 
     // Wait for the section content to render.
-    await screen.findByRole('heading', { name: 'Inventory' });
-    await screen.findByText('Room 101');
+    await screen.findByRole('heading', { name: 'Rentals' });
+    await screen.findByText(/^101$/);
 
     // Should not auto-select anything in lookup mode.
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(onSelect).not.toHaveBeenCalled();
 
     // Available item: clicking should do nothing (no select, no modal).
-    fireEvent.click(screen.getByText('Room 101'));
+    fireEvent.click(screen.getByText(/^101$/));
     expect(onSelect).not.toHaveBeenCalled();
     expect(screen.queryByRole('heading', { name: /room 102/i })).toBeNull();
 
     // Occupied item: clicking opens details modal with check-in/out timestamps.
-    fireEvent.click(screen.getByText('Room 102'));
+    fireEvent.click(screen.getByText(/^102$/));
     expect(await screen.findByRole('heading', { name: /room 102/i })).toBeDefined();
 
     const expectedCheckin = new Date(occupiedCheckin).toLocaleString();

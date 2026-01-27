@@ -3,6 +3,7 @@
 This file is the **canonical, human-maintained** map of the repository layout.
 
 ## Rules (for all contributors)
+
 - If you **add, remove, rename, or move** any top-level area (apps/packages/services/docs/db/scripts/tools/infra), you **must** update this file in the same change.
 - If you add a **new app/package/service** (or a new major sub-area under an existing one), you **must** add it here with a 1–2 line description.
 - Keep this doc **stable and skim-friendly**:
@@ -12,6 +13,7 @@ This file is the **canonical, human-maintained** map of the repository layout.
 ## Top-level layout
 
 ```
+agents.md                  # Agent CI/deploy rules + code-writing docs index
 CONTRIBUTING.md            # Engineering guide (scope, non-negotiables, quality gates)
 SPEC.md                    # Business invariants + pointers (keep short)
 openapi.yaml               # API contract (source of truth)
@@ -33,10 +35,8 @@ Customer- and staff-facing UIs (generally Vite + React).
 ```
 apps/
   customer-kiosk/          # Customer-facing kiosk UI
-  employee-register/       # Staff register UI (sign-in, register workflows)
+  employee-register/       # Staff register UI (sign-in, register workflows; state slices + value helpers under src/app/state)
   office-dashboard/        # Admin/office dashboard UI
-  checkout-kiosk/          # (Paused) legacy/paused kiosk app — do not modify unless requested
-  cleaning-station-kiosk/  # (Paused) legacy/paused kiosk app — do not modify unless requested
 ```
 
 ## packages/
@@ -69,4 +69,3 @@ docs/
   specs/                   # Feature specs (long-form); link from SPEC.md as needed
   demo/                    # Demo/smoke-test notes and reports
 ```
-

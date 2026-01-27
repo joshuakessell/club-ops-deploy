@@ -6,6 +6,7 @@ export type ExtractedIdIdentity = {
   lastName?: string;
   fullName?: string;
   dob?: string; // YYYY-MM-DD
+  idExpirationDate?: string; // YYYY-MM-DD
   idNumber?: string;
   issuer?: string;
   jurisdiction?: string;
@@ -175,10 +176,8 @@ export function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity
     lastName: fieldMap['DCS'] || undefined,
     firstName: fieldMap['DAC'] || undefined,
     fullName: fieldMap['DAA'] || undefined,
-    dob:
-      parseAamvaDateToISO(fieldMap['DBB']) ||
-      parseAamvaDateToISO(fieldMap['DBD']) ||
-      undefined,
+    dob: parseAamvaDateToISO(fieldMap['DBB']) || parseAamvaDateToISO(fieldMap['DBD']) || undefined,
+    idExpirationDate: parseAamvaDateToISO(fieldMap['DBA']) || undefined,
     idNumber: fieldMap['DAQ'] || undefined,
     jurisdiction: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
     issuer: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
@@ -207,14 +206,18 @@ export function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity
           : undefined;
 
     const out: ExtractedIdIdentity = { ...fromMap };
-    if (!out.firstName && isCleanParsedAamvaValue(parsed?.firstName)) out.firstName = parsed.firstName!.trim();
-    if (!out.lastName && isCleanParsedAamvaValue(parsed?.lastName)) out.lastName = parsed.lastName!.trim();
+    if (!out.firstName && isCleanParsedAamvaValue(parsed?.firstName))
+      out.firstName = parsed.firstName!.trim();
+    if (!out.lastName && isCleanParsedAamvaValue(parsed?.lastName))
+      out.lastName = parsed.lastName!.trim();
     if (!out.idNumber && isCleanParsedAamvaValue(parsed?.driversLicenseId))
       out.idNumber = parsed.driversLicenseId!.trim();
-    if (!out.jurisdiction && isCleanParsedAamvaValue(parsed?.state)) out.jurisdiction = parsed.state!.trim();
+    if (!out.jurisdiction && isCleanParsedAamvaValue(parsed?.state))
+      out.jurisdiction = parsed.state!.trim();
     if (!out.issuer && isCleanParsedAamvaValue(parsed?.state)) out.issuer = parsed.state!.trim();
     if (!out.dob && parsedDob) out.dob = parsedDob;
-    if (!out.fullName && out.firstName && out.lastName) out.fullName = `${out.firstName} ${out.lastName}`.trim();
+    if (!out.fullName && out.firstName && out.lastName)
+      out.fullName = `${out.firstName} ${out.lastName}`.trim();
     return out;
   } catch {
     return fromMap;
@@ -288,8 +291,7 @@ function jaroWinklerSimilarity(aRaw: string, bRaw: string): number {
   }
   const transpositions = t / 2;
 
-  const jaro =
-    (matches / aLen + matches / bLen + (matches - transpositions) / matches) / 3;
+  const jaro = (matches / aLen + matches / bLen + (matches - transpositions) / matches) / 3;
 
   // Winkler adjustment
   const prefixMax = 4;
@@ -331,7 +333,11 @@ export function scoreNameMatch(params: {
   return { score, firstMax, lastMax };
 }
 
-export function passesFuzzyThresholds(score: { score: number; firstMax: number; lastMax: number }): boolean {
+export function passesFuzzyThresholds(score: {
+  score: number;
+  firstMax: number;
+  lastMax: number;
+}): boolean {
   return (
     score.score >= FUZZY_MIN_OVERALL &&
     score.lastMax >= FUZZY_MIN_LAST &&
@@ -339,18 +345,67 @@ export function passesFuzzyThresholds(score: { score: number; firstMax: number; 
   );
 }
 
-export function calculateAge(dob: Date | string | null): number | undefined {
+export function calculateAge(dob: Date | string | null, now: Date = new Date()): number | undefined {
   const d = toDate(dob);
   if (!d) {
     return undefined;
   }
-  const today = new Date();
-  let age = today.getFullYear() - d.getFullYear();
-  const monthDiff = today.getMonth() - d.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < d.getDate())) {
+  let age = now.getFullYear() - d.getFullYear();
+  const monthDiff = now.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) {
     age--;
   }
   return age;
+}
+
+export type IdScanIssue = 'ID_EXPIRED' | 'UNDERAGE';
+
+function toDateOnly(value: Date | string | null | undefined): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) return undefined;
+    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const iso = trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
+    const d = new Date(`${iso}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return undefined;
+    return d;
+  }
+  return undefined;
+}
+
+export function getIdScanIssue(params: {
+  dob?: Date | string | null;
+  idExpirationDate?: Date | string | null;
+  now?: Date;
+}): IdScanIssue | undefined {
+  const now = params.now ?? new Date();
+  const age = calculateAge(params.dob ?? null, now);
+  if (age !== undefined && age < 18) {
+    return 'UNDERAGE';
+  }
+
+  const expiresOn = toDateOnly(params.idExpirationDate);
+  if (!expiresOn) return undefined;
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (expiresOn.getTime() < today.getTime()) {
+    return 'ID_EXPIRED';
+  }
+  return undefined;
+}
+
+export function getIdScanIssueMessage(issue: IdScanIssue): string {
+  switch (issue) {
+    case 'ID_EXPIRED':
+      return 'ID is expired. Please provide an unexpired ID.';
+    case 'UNDERAGE':
+      return 'Customer is under 18. Please provide an ID showing 18+.';
+    default:
+      return 'ID is not valid for check-in.';
+  }
 }
 
 /**

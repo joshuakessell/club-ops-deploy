@@ -267,11 +267,15 @@ export async function processUpgradeHoldsTick(
     });
     fastify.broadcaster?.broadcast({
       type: 'WAITLIST_UPDATED',
-      payload: { waitlistId: payload.waitlistId, status: 'OFFERED', roomId: payload.roomId, roomNumber: payload.roomNumber },
+      payload: {
+        waitlistId: payload.waitlistId,
+        status: 'OFFERED',
+        roomId: payload.roomId,
+        roomNumber: payload.roomNumber,
+      },
       timestamp: new Date().toISOString(),
     });
   }
 
   return { expired: result.expiredPayloads.length, held: result.heldPayloads.length };
 }
-

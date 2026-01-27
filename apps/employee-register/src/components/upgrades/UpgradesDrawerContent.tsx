@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { PanelHeader } from '../../views/PanelHeader';
 
 export type UpgradeWaitlistStatus = string;
 
@@ -50,16 +51,15 @@ export function UpgradesDrawerContent({
   return (
     <div
       className="er-surface"
-      style={{ padding: '1rem', borderRadius: 8, height: '100%', display: 'flex', flexDirection: 'column' }}
+      style={{
+        padding: '1rem',
+        borderRadius: 8,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
-      <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: '1rem' }}>
-        <div>
-          <h2 style={{ margin: 0, marginBottom: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
-            Upgrade Waitlist
-          </h2>
-        </div>
-        {headerRightSlot}
-      </div>
+      <PanelHeader title="Upgrade Waitlist" spacing="sm" action={headerRightSlot} />
 
       <div
         style={{
@@ -79,10 +79,12 @@ export function UpgradesDrawerContent({
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {([
-              ['OFFERED', offered],
-              ['ACTIVE', active],
-            ] as const).map(([status, entries]) => {
+            {(
+              [
+                ['OFFERED', offered],
+                ['ACTIVE', active],
+              ] as const
+            ).map(([status, entries]) => {
               if (entries.length === 0) return null;
 
               return (
@@ -102,7 +104,11 @@ export function UpgradesDrawerContent({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                     {entries.map((entry) => {
                       const customerLabel = entry.customerName || entry.displayIdentifier;
-                      const eligible = isEntryOfferEligible(entry.id, entry.status, entry.desiredTier);
+                      const eligible = isEntryOfferEligible(
+                        entry.id,
+                        entry.status,
+                        entry.desiredTier
+                      );
                       const canOpenCustomer = Boolean(entry.customerId && onOpenCustomerAccount);
 
                       return (
@@ -125,7 +131,14 @@ export function UpgradesDrawerContent({
                             }}
                           >
                             <div>
-                              <div style={{ fontWeight: 700, marginBottom: '0.25rem', display: 'flex', gap: '0.5rem' }}>
+                              <div
+                                style={{
+                                  fontWeight: 700,
+                                  marginBottom: '0.25rem',
+                                  display: 'flex',
+                                  gap: '0.5rem',
+                                }}
+                              >
                                 <button
                                   type="button"
                                   disabled={!canOpenCustomer}
@@ -141,7 +154,11 @@ export function UpgradesDrawerContent({
                                     fontWeight: 800,
                                     opacity: canOpenCustomer ? 1 : 0.6,
                                   }}
-                                  title={canOpenCustomer ? 'Open Customer Account' : 'Customer id not available'}
+                                  title={
+                                    canOpenCustomer
+                                      ? 'Open Customer Account'
+                                      : 'Customer id not available'
+                                  }
                                 >
                                   {customerLabel}
                                 </button>
@@ -151,10 +168,15 @@ export function UpgradesDrawerContent({
                                 <span>{entry.desiredTier}</span>
                               </div>
                               <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
-                                Assigned: {entry.displayIdentifier} • Backup: {entry.backupTier} • Current:{' '}
-                                {entry.currentRentalType} • Check-in:{' '}
-                                {entry.checkinAt ? new Date(entry.checkinAt).toLocaleTimeString() : '—'} • Checkout:{' '}
-                                {entry.checkoutAt ? new Date(entry.checkoutAt).toLocaleTimeString() : '—'}
+                                Assigned: {entry.displayIdentifier} • Backup: {entry.backupTier} •
+                                Current: {entry.currentRentalType} • Check-in:{' '}
+                                {entry.checkinAt
+                                  ? new Date(entry.checkinAt).toLocaleTimeString()
+                                  : '—'}{' '}
+                                • Checkout:{' '}
+                                {entry.checkoutAt
+                                  ? new Date(entry.checkoutAt).toLocaleTimeString()
+                                  : '—'}
                               </div>
                             </div>
                           </div>
@@ -164,7 +186,9 @@ export function UpgradesDrawerContent({
                               onClick={() => onOffer(entry.id, entry.desiredTier, customerLabel)}
                               className={[
                                 'cs-liquid-button',
-                                eligible ? 'cs-liquid-button--success' : 'cs-liquid-button--secondary',
+                                eligible
+                                  ? 'cs-liquid-button--success'
+                                  : 'cs-liquid-button--secondary',
                               ].join(' ')}
                               disabled={!eligible || isSubmitting}
                               style={{
@@ -216,5 +240,3 @@ export function UpgradesDrawerContent({
     </div>
   );
 }
-
-

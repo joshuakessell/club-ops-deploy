@@ -95,4 +95,3 @@ export function ModalFrame({
   // Render in a portal so it's not clipped/stacked under panels that use overflow/transform.
   return createPortal(modal, document.body);
 }
-

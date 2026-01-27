@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { StaffSession } from './LockScreen';
 import { ApiError, apiJson } from './api';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
+import { PanelContent } from './views/PanelContent';
+import { PanelHeader } from './views/PanelHeader';
+import { PanelShell } from './views/PanelShell';
 
 type TelemetryTrace = {
   trace_id: string;
@@ -75,10 +78,15 @@ function truncate(value: string | null, max = 120): string {
 
 function formatMeta(meta: unknown): string {
   if (meta == null) return '—';
+  if (typeof meta === 'string') return meta;
+  if (typeof meta === 'number' || typeof meta === 'boolean' || typeof meta === 'bigint') {
+    return String(meta);
+  }
+  if (typeof meta === 'symbol') return meta.toString();
   try {
     return JSON.stringify(meta, null, 2);
   } catch {
-    return String(meta);
+    return '[unserializable]';
   }
 }
 
@@ -97,6 +105,7 @@ export function TelemetryView({ session }: { session: StaffSession }) {
   const [page, setPage] = useState<TelemetryTraceResponse['page'] | null>(null);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [selectedIncidentId, setSelectedIncidentId] = useState<string>('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const [filters, setFilters] = useState({
     app: '',
@@ -174,6 +183,12 @@ export function TelemetryView({ session }: { session: StaffSession }) {
     return () => window.clearInterval(id);
   }, [autoRefresh, loadTraces]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(id);
+  }, [toast]);
+
   const loadTraceDetail = useCallback(
     async (traceId: string) => {
       if (!session.sessionToken) return;
@@ -231,6 +246,34 @@ export function TelemetryView({ session }: { session: StaffSession }) {
     }
   };
 
+  const handleCopyIncidentJson = useCallback(async () => {
+    if (!session.sessionToken || !selectedTraceId || !selectedIncidentId) return;
+    try {
+      setError(null);
+      const p = new URLSearchParams();
+      p.set('traceId', selectedTraceId);
+      p.set('incidentId', selectedIncidentId);
+      p.set('bundle', 'true');
+      p.set('format', 'json');
+      const url = getApiUrl(`/api/v1/admin/telemetry/export?${p.toString()}`);
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+      });
+      if (!res.ok) {
+        throw new ApiError(res.status, `Export failed (${res.status})`);
+      }
+      const jsonText = await res.text();
+      await navigator.clipboard.writeText(jsonText);
+      setToast({ message: 'Incident JSON copied to clipboard', type: 'success' });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Failed to copy incident JSON';
+      setError(msg);
+      setToast({ message: msg, type: 'error' });
+    }
+  }, [selectedIncidentId, selectedTraceId, session.sessionToken]);
+
   const incidentIds = useMemo(() => {
     if (!traceDetail?.spans) return [];
     const ids = new Set<string>();
@@ -244,7 +287,9 @@ export function TelemetryView({ session }: { session: StaffSession }) {
     if (!traceDetail?.spans) return [];
     return traceDetail.spans.filter((span) => {
       const meta = span.meta as Record<string, unknown> | null;
-      return meta && typeof meta === 'object' && (meta as { breadcrumb?: boolean }).breadcrumb === true;
+      return (
+        meta && typeof meta === 'object' && (meta as { breadcrumb?: boolean }).breadcrumb === true
+      );
     });
   }, [traceDetail?.spans]);
 
@@ -269,43 +314,45 @@ export function TelemetryView({ session }: { session: StaffSession }) {
 
   return (
     <div style={{ maxWidth: 1500, margin: '0 auto' }}>
-      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="panel-header">
-          <h2>Telemetry</h2>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-            <button className="cs-liquid-button" onClick={() => loadTraces()}>
-              Refresh
-            </button>
-            <button
-              className="cs-liquid-button"
-              disabled={!page?.nextCursor}
-              onClick={() => loadTraces({ cursor: page?.nextCursor, direction: 'next' })}
-            >
-              Older
-            </button>
-            <button
-              className="cs-liquid-button"
-              disabled={!page?.prevCursor}
-              onClick={() => loadTraces({ cursor: page?.prevCursor, direction: 'prev' })}
-            >
-              Newer
-            </button>
-            <label className="telemetry-toggle">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-              />
-              Auto-refresh (5s)
-            </label>
-            <button className="cs-liquid-button" onClick={() => handleDownload('json')}>
-              Export Trace JSON
-            </button>
-            <button className="cs-liquid-button" onClick={() => handleDownload('csv')}>
-              Export Trace CSV
-            </button>
-          </div>
-        </div>
+      <PanelShell spacing="md">
+        <PanelHeader
+          title="Telemetry"
+          actions={
+            <>
+              <button className="cs-liquid-button" onClick={() => loadTraces()}>
+                Refresh
+              </button>
+              <button
+                className="cs-liquid-button"
+                disabled={!page?.nextCursor}
+                onClick={() => loadTraces({ cursor: page?.nextCursor, direction: 'next' })}
+              >
+                Older
+              </button>
+              <button
+                className="cs-liquid-button"
+                disabled={!page?.prevCursor}
+                onClick={() => loadTraces({ cursor: page?.prevCursor, direction: 'prev' })}
+              >
+                Newer
+              </button>
+              <label className="telemetry-toggle">
+                <input
+                  type="checkbox"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                />
+                Auto-refresh (5s)
+              </label>
+              <button className="cs-liquid-button" onClick={() => handleDownload('json')}>
+                Export Trace JSON
+              </button>
+              <button className="cs-liquid-button" onClick={() => handleDownload('csv')}>
+                Export Trace CSV
+              </button>
+            </>
+          }
+        />
 
         <div className="metrics-filters cs-liquid-card" style={{ margin: '1rem 1.5rem' }}>
           <div className="filter-group">
@@ -376,7 +423,7 @@ export function TelemetryView({ session }: { session: StaffSession }) {
           </label>
         </div>
 
-        <div className="panel-content" style={{ padding: '1rem 1.5rem 1.5rem' }}>
+        <PanelContent padding="compact">
           {error && <div className="telemetry-error">{error}</div>}
           {loading && <div className="telemetry-loading">Loading…</div>}
           {!loading && !error && traces.length === 0 && (
@@ -429,17 +476,21 @@ export function TelemetryView({ session }: { session: StaffSession }) {
               </tbody>
             </table>
           )}
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
 
       {traceDetail && (
-        <section className="panel cs-liquid-card">
-          <div className="panel-header">
-            <h3>Trace Detail</h3>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              {incidentIds.length > 0 && (
+        <PanelShell>
+          <PanelHeader
+            title="Trace Detail"
+            titleAs="h3"
+            actions={
+              incidentIds.length > 0 ? (
                 <>
-                  <select value={selectedIncidentId} onChange={(e) => setSelectedIncidentId(e.target.value)}>
+                  <select
+                    value={selectedIncidentId}
+                    onChange={(e) => setSelectedIncidentId(e.target.value)}
+                  >
                     <option value="">Select incident</option>
                     {incidentIds.map((id) => (
                       <option key={id} value={id}>
@@ -450,9 +501,9 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                   <button
                     className="cs-liquid-button"
                     disabled={!selectedIncidentId}
-                    onClick={() => handleDownload('json', selectedIncidentId, true)}
+                    onClick={() => void handleCopyIncidentJson()}
                   >
-                    Export Incident JSON
+                    Copy Incident JSON
                   </button>
                   <button
                     className="cs-liquid-button"
@@ -462,11 +513,11 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                     Export Incident CSV
                   </button>
                 </>
-              )}
-            </div>
-          </div>
+              ) : null
+            }
+          />
 
-          <div className="panel-content" style={{ padding: '1rem 1.5rem 1.5rem' }}>
+          <PanelContent padding="compact">
             <div className="telemetry-details-grid" style={{ marginBottom: '1rem' }}>
               <div>
                 <div className="telemetry-label">Trace</div>
@@ -489,7 +540,8 @@ export function TelemetryView({ session }: { session: StaffSession }) {
               {breadcrumbs.length === 0 && <div className="telemetry-value">None</div>}
               {breadcrumbs.map((span) => (
                 <div key={span.id} className="telemetry-value" style={{ marginBottom: '4px' }}>
-                  {formatTimestamp(span.started_at)} — {span.span_type} — {span.name || span.message || '—'}
+                  {formatTimestamp(span.started_at)} — {span.span_type} —{' '}
+                  {span.name || span.message || '—'}
                 </div>
               ))}
             </div>
@@ -508,8 +560,10 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                             {(() => {
                               const meta = span.meta as Record<string, unknown> | null;
-                              const severity = typeof meta?.severity === 'string' ? meta.severity : 'info';
-                              const screen = typeof meta?.screen === 'string' ? meta.screen : 'unknown';
+                              const severity =
+                                typeof meta?.severity === 'string' ? meta.severity : 'info';
+                              const screen =
+                                typeof meta?.screen === 'string' ? meta.screen : 'unknown';
                               const levelClass =
                                 severity === 'error'
                                   ? 'telemetry-level-error'
@@ -518,7 +572,9 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                                     : 'telemetry-level-info';
                               return (
                                 <>
-                                  <span className={`telemetry-level ${levelClass}`}>{severity}</span>
+                                  <span className={`telemetry-level ${levelClass}`}>
+                                    {severity}
+                                  </span>
                                   <span className="telemetry-value">Screen: {screen}</span>
                                 </>
                               );
@@ -526,7 +582,8 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                           </div>
                         )}
                         <div className="telemetry-value">
-                          {formatTimestamp(span.started_at)} — {span.span_type} — {span.name || span.message || '—'}
+                          {formatTimestamp(span.started_at)} — {span.span_type} —{' '}
+                          {span.name || span.message || '—'}
                         </div>
                         <div className="telemetry-details-grid" style={{ marginTop: '0.5rem' }}>
                           <div>
@@ -555,13 +612,23 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                         {(Boolean(span.request_headers) || Boolean(span.response_headers)) && (
                           <div className="telemetry-meta">
                             <div className="telemetry-label">Headers</div>
-                            <pre>{formatMeta({ request: span.request_headers, response: span.response_headers })}</pre>
+                            <pre>
+                              {formatMeta({
+                                request: span.request_headers,
+                                response: span.response_headers,
+                              })}
+                            </pre>
                           </div>
                         )}
                         {(Boolean(span.request_body) || Boolean(span.response_body)) && (
                           <div className="telemetry-meta">
                             <div className="telemetry-label">Bodies</div>
-                            <pre>{formatMeta({ request: span.request_body, response: span.response_body })}</pre>
+                            <pre>
+                              {formatMeta({
+                                request: span.request_body,
+                                response: span.response_body,
+                              })}
+                            </pre>
                           </div>
                         )}
                         {span.stack && (
@@ -582,10 +649,27 @@ export function TelemetryView({ session }: { session: StaffSession }) {
                 ))}
               </div>
             )}
-          </div>
-        </section>
+          </PanelContent>
+        </PanelShell>
+      )}
+
+      {toast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '2rem',
+            right: '2rem',
+            padding: '1rem 1.5rem',
+            background: toast.type === 'success' ? '#10b981' : '#ef4444',
+            color: '#f9fafb',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
+            zIndex: 1000,
+          }}
+        >
+          {toast.message}
+        </div>
       )}
     </div>
   );
 }
-

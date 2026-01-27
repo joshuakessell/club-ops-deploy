@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModalFrame } from './ModalFrame';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 type Step = 'select' | 'confirm';
 
@@ -51,7 +51,10 @@ function formatLateDuration(minutesLate: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-function formatDeltaMinutesLabel(scheduledCheckoutAt: string | Date): { label: string; color: string } {
+function formatDeltaMinutesLabel(scheduledCheckoutAt: string | Date): {
+  label: string;
+  color: string;
+} {
   const scheduled = toDate(scheduledCheckoutAt);
   const diffMs = scheduled.getTime() - Date.now();
   const mins = Math.max(0, Math.ceil(Math.abs(diffMs) / 60000));
@@ -198,7 +201,13 @@ export function ManualCheckoutModal({
         return;
       }
       onClose();
-      onSuccess(data.alreadyCheckedOut ? 'Already checked out' : total > 1 ? `Checkout completed (${total})` : 'Checkout completed');
+      onSuccess(
+        data.alreadyCheckedOut
+          ? 'Already checked out'
+          : total > 1
+            ? `Checkout completed (${total})`
+            : 'Checkout completed'
+      );
     } catch (e) {
       setCandidatesError(e instanceof Error ? e.message : 'Failed to complete checkout');
     } finally {
@@ -223,7 +232,13 @@ export function ManualCheckoutModal({
 
   return (
     <>
-      <ModalFrame isOpen={isOpen} title="Checkout" onClose={attemptClose} maxWidth="760px" maxHeight="80vh">
+      <ModalFrame
+        isOpen={isOpen}
+        title="Checkout"
+        onClose={attemptClose}
+        maxWidth="760px"
+        maxHeight="80vh"
+      >
         {candidatesError && (
           <div
             style={{
@@ -246,7 +261,14 @@ export function ManualCheckoutModal({
               <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading checkout…</div>
             ) : (
               <>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.75rem',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                  }}
+                >
                   <div className="cs-liquid-search" style={{ flex: 1, minWidth: 280 }}>
                     <input
                       className="cs-liquid-input cs-liquid-search__input"
@@ -260,7 +282,13 @@ export function ManualCheckoutModal({
                       aria-label="Checkout number"
                     />
                     <div className="cs-liquid-search__icon">
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
                         <path
                           d="M7.33333 12.6667C10.2789 12.6667 12.6667 10.2789 12.6667 7.33333C12.6667 4.38781 10.2789 2 7.33333 2C4.38781 2 2 4.38781 2 7.33333C2 10.2789 4.38781 12.6667 7.33333 12.6667Z"
                           stroke="currentColor"
@@ -307,13 +335,16 @@ export function ManualCheckoutModal({
                             type="button"
                             className={[
                               'cs-liquid-button',
-                              selected ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                              selected
+                                ? 'cs-liquid-button--selected'
+                                : 'cs-liquid-button--secondary',
                             ].join(' ')}
                             aria-pressed={selected}
                             onClick={() => {
                               setTypedNumber('');
                               setSelectedOccupancyIds((prev) => {
-                                if (prev.includes(c.occupancyId)) return prev.filter((id) => id !== c.occupancyId);
+                                if (prev.includes(c.occupancyId))
+                                  return prev.filter((id) => id !== c.occupancyId);
                                 return [...prev, c.occupancyId];
                               });
                             }}
@@ -337,10 +368,25 @@ export function ManualCheckoutModal({
                                 gap: '1rem',
                               }}
                             >
-                              <div style={{ fontWeight: 900, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number} - {c.customerName} - {formatClockTime(scheduled)}
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  minWidth: 0,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number} -{' '}
+                                {c.customerName} - {formatClockTime(scheduled)}
                               </div>
-                              <div style={{ fontWeight: 900, whiteSpace: 'nowrap', color: delta.color }}>
+                              <div
+                                style={{
+                                  fontWeight: 900,
+                                  whiteSpace: 'nowrap',
+                                  color: delta.color,
+                                }}
+                              >
                                 {delta.label}
                               </div>
                             </div>
@@ -356,7 +402,14 @@ export function ManualCheckoutModal({
         ) : (
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'baseline' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                  alignItems: 'baseline',
+                }}
+              >
                 <div style={{ fontWeight: 900, fontSize: '1.15rem' }}>Confirm checkout</div>
                 <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900 }}>
                   {confirmIndex + 1} of {confirmQueue.length || 1}
@@ -372,15 +425,20 @@ export function ManualCheckoutModal({
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Resource</div>
                       <div style={{ fontWeight: 800 }}>
-                        {confirmCurrent.resourceType === 'ROOM' ? 'Room' : 'Locker'} {confirmCurrent.number}
+                        {confirmCurrent.resourceType === 'ROOM' ? 'Room' : 'Locker'}{' '}
+                        {confirmCurrent.number}
                       </div>
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Check-in</div>
-                      <div style={{ fontWeight: 800 }}>{toDate(confirmCurrent.checkinAt).toLocaleString()}</div>
+                      <div style={{ fontWeight: 800 }}>
+                        {toDate(confirmCurrent.checkinAt).toLocaleString()}
+                      </div>
                     </div>
                     <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Scheduled checkout</div>
+                      <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
+                        Scheduled checkout
+                      </div>
                       <div style={{ fontWeight: 800 }}>
                         {toDate(confirmCurrent.scheduledCheckoutAt).toLocaleString()}
                       </div>
@@ -391,7 +449,12 @@ export function ManualCheckoutModal({
                     </div>
                     <div>
                       <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Outcome</div>
-                      <div style={{ fontWeight: 900, color: confirmCurrent.banApplied ? '#f59e0b' : '#10b981' }}>
+                      <div
+                        style={{
+                          fontWeight: 900,
+                          color: confirmCurrent.banApplied ? '#f59e0b' : '#10b981',
+                        }}
+                      >
                         Fee ${confirmCurrent.fee.toFixed(2)}
                         {confirmCurrent.banApplied ? ' • 30-day ban' : ''}
                       </div>
@@ -400,7 +463,9 @@ export function ManualCheckoutModal({
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}>
+              <div
+                style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}
+              >
                 <div />
                 <button
                   type="button"
@@ -449,5 +514,3 @@ export function ManualCheckoutModal({
     </>
   );
 }
-
-

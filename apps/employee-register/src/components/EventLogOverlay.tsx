@@ -66,7 +66,12 @@ export default function EventLogOverlay() {
       <div style={header}>
         <strong>Event Log</strong>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} style={input} />
+          <input
+            placeholder="Search…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={input}
+          />
           <label style={pill}>
             <input
               type="checkbox"
@@ -84,7 +89,12 @@ export default function EventLogOverlay() {
             WS Out
           </label>
           <label style={pill}>
-            <input type="checkbox" checked={filterDB} onChange={(e) => setFilterDB(e.target.checked)} /> DB
+            <input
+              type="checkbox"
+              checked={filterDB}
+              onChange={(e) => setFilterDB(e.target.checked)}
+            />{' '}
+            DB
           </label>
           <button onClick={() => setPaused((p) => !p)} style={btn}>
             {paused ? 'Resume' : 'Pause'}
@@ -230,4 +240,3 @@ function safeStringify(v: unknown) {
     return String(v);
   }
 }
-

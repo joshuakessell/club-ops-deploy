@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode } from 'react';
 import { I18nProvider, t, type Language } from '../i18n';
 import { ScreenShell } from '../components/ScreenShell';
 
@@ -8,9 +8,9 @@ export interface CompleteScreenProps {
   assignedResourceNumber?: string;
   checkoutAt?: string;
   isSubmitting: boolean;
+  onAcknowledge: () => void;
   orientationOverlay: ReactNode;
   welcomeOverlay: ReactNode;
-  onComplete: () => void;
 }
 
 export function CompleteScreen({
@@ -18,20 +18,13 @@ export function CompleteScreen({
   assignedResourceType,
   assignedResourceNumber,
   checkoutAt,
+  isSubmitting,
+  onAcknowledge,
   orientationOverlay,
   welcomeOverlay,
-  onComplete,
 }: CompleteScreenProps) {
   const lang = customerPrimaryLanguage;
   const locale = lang ?? undefined;
-
-  // Fire completion callback exactly once (React StrictMode can double-invoke effects in dev).
-  const didCompleteRef = useRef(false);
-  useEffect(() => {
-    if (didCompleteRef.current) return;
-    didCompleteRef.current = true;
-    onComplete();
-  }, [onComplete]);
 
   const checkoutDate = checkoutAt ? new Date(checkoutAt) : null;
   const hasValidCheckoutDate = checkoutDate != null && !Number.isNaN(checkoutDate.getTime());
@@ -51,24 +44,58 @@ export function CompleteScreen({
           <main className="main-content">
             <div className="complete-screen">
               {assignedResourceType && assignedResourceNumber ? (
-                <div className="assignment-info cs-liquid-card">
-                  <div className="assignment-row">
-                    <div className="assignment-label">{t(lang, assignedResourceType)}</div>
-                    <div className="assignment-value">{assignedResourceNumber}</div>
-                  </div>
-
-                  {checkoutAt && (
-                    <div className="assignment-row assignment-row--checkout">
-                      <div className="assignment-label">{t(lang, 'checkoutAt')}</div>
-                      <div className="assignment-value assignment-value--time">
-                        {checkoutTimeText ?? new Date(checkoutAt).toLocaleString(locale)}
-                      </div>
-                      {checkoutDateText && <div className="assignment-subvalue">{checkoutDateText}</div>}
+                <>
+                  <div className="assignment-info cs-liquid-card">
+                    <div className="assignment-row">
+                      <div className="assignment-label">{t(lang, assignedResourceType)}</div>
+                      <div className="assignment-value">{assignedResourceNumber}</div>
                     </div>
-                  )}
-                </div>
+
+                    {checkoutAt && (
+                      <div className="assignment-row assignment-row--checkout">
+                        <div className="assignment-label">{t(lang, 'checkoutAt')}</div>
+                        <div className="assignment-value assignment-value--time">
+                          {checkoutTimeText ?? new Date(checkoutAt).toLocaleString(locale)}
+                        </div>
+                        {checkoutDateText && (
+                          <div className="assignment-subvalue">{checkoutDateText}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className={[
+                      'cs-liquid-button',
+                      'complete-ok-btn',
+                      isSubmitting ? 'cs-liquid-button--disabled' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={onAcknowledge}
+                    disabled={isSubmitting}
+                  >
+                    OK
+                  </button>
+                </>
               ) : (
-                <p>{t(lang, 'assignmentComplete')}</p>
+                <>
+                  <p>{t(lang, 'assignmentComplete')}</p>
+                  <button
+                    type="button"
+                    className={[
+                      'cs-liquid-button',
+                      'complete-ok-btn',
+                      isSubmitting ? 'cs-liquid-button--disabled' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={onAcknowledge}
+                    disabled={isSubmitting}
+                  >
+                    OK
+                  </button>
+                </>
               )}
             </div>
           </main>
@@ -77,4 +104,3 @@ export function CompleteScreen({
     </I18nProvider>
   );
 }
-

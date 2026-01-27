@@ -20,12 +20,20 @@ export interface CustomerProfileCardProps {
 function Detail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div style={{ minWidth: 0 }}>
-      <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.15rem', fontWeight: 800 }}>
+      <div
+        className="er-text-sm"
+        style={{ color: '#94a3b8', marginBottom: '0.15rem', fontWeight: 800 }}
+      >
         {label}
       </div>
       <div
         className="er-text-md"
-        style={{ fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+        style={{
+          fontWeight: 900,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
       >
         {value}
       </div>
@@ -48,7 +56,10 @@ function parseIsoDate(value: string | null | undefined): Date | null {
 
 export function CustomerProfileCard(props: CustomerProfileCardProps) {
   const membershipStatus = getCustomerMembershipStatus(
-    { membershipNumber: props.membershipNumber || null, membershipValidUntil: props.membershipValidUntil || null },
+    {
+      membershipNumber: props.membershipNumber || null,
+      membershipValidUntil: props.membershipValidUntil || null,
+    },
     new Date()
   );
   const isMember = membershipStatus === 'ACTIVE';
@@ -56,11 +67,22 @@ export function CustomerProfileCard(props: CustomerProfileCardProps) {
   const lastVisit = parseIsoDate(props.lastVisitAt || null);
 
   const languageLabel =
-    props.preferredLanguage === 'EN' ? 'English' : props.preferredLanguage === 'ES' ? 'Español' : '—';
+    props.preferredLanguage === 'EN'
+      ? 'English'
+      : props.preferredLanguage === 'ES'
+        ? 'Español'
+        : '—';
 
   return (
     <div className="cs-liquid-card" style={{ padding: '0.9rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'baseline' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          alignItems: 'baseline',
+        }}
+      >
         <div style={{ fontWeight: 950, fontSize: '1rem' }}>Customer Profile</div>
         {props.checkinStage ? (
           <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900 }}>
@@ -112,15 +134,17 @@ export function CustomerProfileCard(props: CustomerProfileCardProps) {
         >
           <div style={{ fontWeight: 900, marginBottom: '0.35rem' }}>Customer Waitlisted</div>
           <div className="er-text-sm" style={{ fontWeight: 800 }}>
-            Requested <strong>{props.waitlistDesiredTier}</strong>; backup <strong>{props.waitlistBackupType}</strong>.
+            Requested <strong>{props.waitlistDesiredTier}</strong>; backup{' '}
+            <strong>{props.waitlistBackupType}</strong>.
           </div>
         </div>
       ) : null}
 
       {props.footer ? (
-        <div style={{ marginTop: '0.85rem', display: 'flex', justifyContent: 'center' }}>{props.footer}</div>
+        <div style={{ marginTop: '0.85rem', display: 'flex', justifyContent: 'center' }}>
+          {props.footer}
+        </div>
       ) : null}
     </div>
   );
 }
-

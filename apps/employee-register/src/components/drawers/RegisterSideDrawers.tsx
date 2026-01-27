@@ -77,7 +77,7 @@ export function RegisterSideDrawers({
 
       <SlideOutDrawer
         side="right"
-        label="Inventory"
+        label="Rentals"
         isOpen={inventoryOpen}
         onOpenChange={(next) => {
           if (next) onUpgradesOpenChange(false);
@@ -94,5 +94,3 @@ export function RegisterSideDrawers({
     </>
   );
 }
-
-

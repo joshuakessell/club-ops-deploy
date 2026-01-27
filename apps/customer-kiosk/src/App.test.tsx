@@ -10,8 +10,14 @@ type MockWebSocket = {
   onopen: ((ev: Event) => unknown) | null;
   onclose: ((ev: CloseEvent) => unknown) | null;
   onmessage: ((ev: { data: string }) => unknown) | null;
-  addEventListener: (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => void;
-  removeEventListener: (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => void;
+  addEventListener: (
+    type: 'open' | 'close' | 'message' | 'error',
+    handler: (ev: unknown) => void
+  ) => void;
+  removeEventListener: (
+    type: 'open' | 'close' | 'message' | 'error',
+    handler: (ev: unknown) => void
+  ) => void;
   close: ReturnType<typeof vi.fn>;
   send: ReturnType<typeof vi.fn>;
 };
@@ -40,8 +46,8 @@ const WebSocketMock = vi.fn((url?: string) => {
     onmessage: null,
     addEventListener: vi.fn(
       (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => {
-      listeners[type].push(handler);
-    }
+        listeners[type].push(handler);
+      }
     ),
     removeEventListener: vi.fn(
       (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => {
@@ -69,10 +75,18 @@ const WebSocketMock = vi.fn((url?: string) => {
   createdWs.push(ws);
   return ws;
 }) as unknown as typeof WebSocket;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).OPEN = 1;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CONNECTING = 0;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CLOSING = 2;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CLOSED = 3;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).OPEN = 1;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CONNECTING = 0;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CLOSING = 2;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CLOSED = 3;
 Object.defineProperty(globalThis, 'WebSocket', { value: WebSocketMock, configurable: true });
 Object.defineProperty(window, 'WebSocket', { value: WebSocketMock, configurable: true });
 Object.defineProperty(global, 'WebSocket', { value: WebSocketMock, configurable: true });
@@ -88,6 +102,7 @@ describe('App', () => {
     Object.defineProperty(window, 'innerWidth', { value: 800, writable: true });
     Object.defineProperty(window, 'innerHeight', { value: 1200, writable: true });
     window.dispatchEvent(new Event('resize'));
+    window.history.replaceState({}, '', '/register-1');
     const storage = {
       getItem: vi.fn(() => null),
       setItem: vi.fn(),
@@ -158,6 +173,12 @@ describe('App', () => {
           json: () => Promise.resolve({ success: true }),
         } as unknown as Response);
       }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/confirm-selection')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
+      }
       return Promise.resolve({ json: () => Promise.resolve({}) } as unknown as Response);
     });
   });
@@ -187,6 +208,17 @@ describe('App', () => {
     // Should not show customer info
     expect(screen.queryByText(/Membership/i)).toBeNull();
     expect(screen.queryByText(/Rental/i)).toBeNull();
+  });
+
+  it('prompts for lane selection on the default URL', () => {
+    window.history.replaceState({}, '', '/');
+    sessionStorage.removeItem('lane');
+    act(() => {
+      render(<App />);
+    });
+    expect(screen.getByText('Select Lane')).toBeDefined();
+    expect(screen.getByText('Lane 1')).toBeDefined();
+    expect(screen.getByText('Lane 2')).toBeDefined();
   });
 
   it('never shows a payment decline reason (generic guidance only)', async () => {
@@ -558,7 +590,7 @@ describe('App', () => {
     });
   });
 
-  it('shows Pending approval overlay after non-member completes membership + rental selection', async () => {
+  it('auto-confirms selection after non-member completes membership + rental selection', async () => {
     // Override inventory to allow immediate rental selection (avoid waitlist path).
     (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL) => {
       const u =
@@ -571,7 +603,8 @@ describe('App', () => {
               : '';
       if (u.includes('/health')) {
         return Promise.resolve({
-          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+          json: () =>
+            Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
         } as unknown as Response);
       }
       if (u.includes('/v1/inventory/available')) {
@@ -587,10 +620,22 @@ describe('App', () => {
         } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/propose-selection')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) } as unknown as Response);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
+      }
+      if (u.includes('/v1/checkin/lane/') && u.includes('/confirm-selection')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
       }
       if (u.includes('/v1/checkin/lane/') && u.includes('/membership-purchase-intent')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) } as unknown as Response);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true }),
+        } as unknown as Response);
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
     });
@@ -628,7 +673,12 @@ describe('App', () => {
       (lockerBtn as HTMLButtonElement).click();
     });
 
-    expect(await screen.findByText('Waiting for approval')).toBeDefined();
+    await waitFor(() => {
+      const urls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+      expect(urls.some((u) => u.includes('/confirm-selection'))).toBe(true);
+    });
+
+    expect(screen.queryByText('Waiting for approval')).toBeNull();
   });
 
   it('shows whole-dollar prices next to rental options and never shows Join Waitlist for Upgrade', async () => {

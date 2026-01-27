@@ -59,7 +59,9 @@ describe('usePassiveScannerInput', () => {
     const onCapture = vi.fn();
     const onStart = vi.fn();
     const onEnd = vi.fn();
-    render(<Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />);
+    render(
+      <Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />
+    );
 
     keyOnWindow('A');
     expect(onStart).toHaveBeenCalledTimes(1);
@@ -96,7 +98,7 @@ describe('usePassiveScannerInput', () => {
     expect(onCapture).toHaveBeenCalledWith('ABCD\n1234');
   });
 
-  it('finalizes immediately on Tab terminator without including a tab character', () => {
+  it('finalizes on Tab terminator without including a tab character', async () => {
     const onCapture = vi.fn();
     render(<Harness enabled={true} onCapture={onCapture} />);
 
@@ -106,6 +108,7 @@ describe('usePassiveScannerInput', () => {
     keyOnWindow('4');
     keyOnWindow('Tab');
 
+    await vi.advanceTimersByTimeAsync(40);
     expect(onCapture).toHaveBeenCalledTimes(1);
     expect(onCapture).toHaveBeenCalledWith('1234');
   });
@@ -130,7 +133,9 @@ describe('usePassiveScannerInput', () => {
     const onCapture = vi.fn();
     const onStart = vi.fn();
     const onEnd = vi.fn();
-    render(<Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />);
+    render(
+      <Harness enabled={true} onCapture={onCapture} onCaptureStart={onStart} onCaptureEnd={onEnd} />
+    );
 
     keyOnWindow('A');
     expect(onStart).toHaveBeenCalledTimes(1);
@@ -142,4 +147,3 @@ describe('usePassiveScannerInput', () => {
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 });
-

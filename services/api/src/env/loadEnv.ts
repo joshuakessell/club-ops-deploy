@@ -27,7 +27,9 @@ export function loadEnvFromDotEnvIfPresent(): void {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith('#')) continue;
 
-      const withoutExport = trimmed.startsWith('export ') ? trimmed.slice('export '.length) : trimmed;
+      const withoutExport = trimmed.startsWith('export ')
+        ? trimmed.slice('export '.length)
+        : trimmed;
       const eq = withoutExport.indexOf('=');
       if (eq <= 0) continue;
 
@@ -41,4 +43,3 @@ export function loadEnvFromDotEnvIfPresent(): void {
     // If the .env is unreadable/malformed, fail "soft" and let normal env lookup continue.
   }
 }
-

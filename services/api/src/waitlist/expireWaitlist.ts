@@ -56,5 +56,3 @@ export async function expireWaitlistEntries(fastify: FastifyInstance): Promise<n
 
   return result.rows.length;
 }
-
-

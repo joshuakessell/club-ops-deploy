@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 let App: (typeof import('./App'))['default'];
 
 // Mock WebSocket
@@ -9,8 +9,14 @@ type MockWebSocket = {
   onopen: ((ev: Event) => unknown) | null;
   onclose: ((ev: CloseEvent) => unknown) | null;
   onmessage: ((ev: { data: string }) => unknown) | null;
-  addEventListener: (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => void;
-  removeEventListener: (type: 'open' | 'close' | 'message' | 'error', handler: (ev: unknown) => void) => void;
+  addEventListener: (
+    type: 'open' | 'close' | 'message' | 'error',
+    handler: (ev: unknown) => void
+  ) => void;
+  removeEventListener: (
+    type: 'open' | 'close' | 'message' | 'error',
+    handler: (ev: unknown) => void
+  ) => void;
   close: ReturnType<typeof vi.fn>;
   send: ReturnType<typeof vi.fn>;
 };
@@ -70,13 +76,33 @@ const WebSocketMock = vi.fn((url?: string) => {
   createdWs.push(ws);
   return ws;
 }) as unknown as typeof WebSocket;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).OPEN = 1;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CONNECTING = 0;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CLOSING = 2;
-(WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }).CLOSED = 3;
-Object.defineProperty(globalThis, 'WebSocket', { value: WebSocketMock, configurable: true, writable: true });
-Object.defineProperty(window, 'WebSocket', { value: WebSocketMock, configurable: true, writable: true });
-Object.defineProperty(global, 'WebSocket', { value: WebSocketMock, configurable: true, writable: true });
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).OPEN = 1;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CONNECTING = 0;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CLOSING = 2;
+(
+  WebSocketMock as unknown as { OPEN: number; CONNECTING: number; CLOSING: number; CLOSED: number }
+).CLOSED = 3;
+Object.defineProperty(globalThis, 'WebSocket', {
+  value: WebSocketMock,
+  configurable: true,
+  writable: true,
+});
+Object.defineProperty(window, 'WebSocket', {
+  value: WebSocketMock,
+  configurable: true,
+  writable: true,
+});
+Object.defineProperty(global, 'WebSocket', {
+  value: WebSocketMock,
+  configurable: true,
+  writable: true,
+});
 
 // Mock fetch
 global.fetch = vi.fn();
@@ -290,7 +316,9 @@ describe('App', () => {
     act(() => {
       render(<App />);
     });
-    expect(await screen.findByText('Scan Now', undefined, { timeout: STEP_TIMEOUT_MS })).toBeDefined();
+    expect(
+      await screen.findByText('Scan Now', undefined, { timeout: STEP_TIMEOUT_MS })
+    ).toBeDefined();
 
     // Wait until App has attached its onmessage handler, then simulate an agreement-signed update.
     // React StrictMode can create multiple WS instances; use the one that has the handler attached.
@@ -315,7 +343,9 @@ describe('App', () => {
         }),
       });
     });
-    expect(await screen.findByText('Customer Profile', undefined, { timeout: STEP_TIMEOUT_MS })).toBeDefined();
+    expect(
+      await screen.findByText('Customer Profile', undefined, { timeout: STEP_TIMEOUT_MS })
+    ).toBeDefined();
   });
 
   it('shows transaction completion modal (with PDF verify + complete) after assignment + agreement signed', async () => {
@@ -352,7 +382,8 @@ describe('App', () => {
       if (u.includes('/health')) {
         return Promise.resolve({
           ok: true,
-          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
+          json: () =>
+            Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
         } as unknown as Response);
       }
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
@@ -397,689 +428,5 @@ describe('App', () => {
 
     // Overlay should exist (blocks clicks on underlying UI)
     expect(document.querySelector('.er-txn-complete-modal__overlay')).not.toBeNull();
-  });
-
-  it('shows customer suggestions at 3+ characters and confirm triggers session', async () => {
-    localStorage.setItem(
-      'staff_session',
-      JSON.stringify({
-        staffId: 'staff-1',
-        sessionToken: 'test-token',
-        name: 'Test User',
-        role: 'STAFF',
-      })
-    );
-
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
-      (url: RequestInfo | URL, init?: RequestInit) => {
-        const u =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.toString()
-              : url instanceof Request
-                ? url.url
-                : '';
-
-        if (u.includes('/v1/registers/status')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                signedIn: true,
-                employee: { id: 'emp-1', name: 'Test Employee' },
-                registerNumber: 1,
-              }),
-          } as unknown as Response);
-        }
-
-        if (u.includes('/v1/customers/search')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                suggestions: [
-                  {
-                    id: 'c0ffee00-0000-4000-8000-000000000001',
-                    name: 'Alex Rivera',
-                    firstName: 'Alex',
-                    lastName: 'Rivera',
-                    dobMonthDay: '03/14',
-                    membershipNumber: '700001',
-                    disambiguator: '0001',
-                  },
-                ],
-              }),
-          } as unknown as Response);
-        }
-
-        if (u.includes('/v1/checkin/lane/lane-1/start')) {
-          expect(init?.method).toBe('POST');
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                sessionId: 'session-123',
-                customerName: 'Alex Rivera',
-                membershipNumber: '700001',
-              }),
-          } as unknown as Response);
-        }
-
-        if (u.includes('/health')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
-          } as unknown as Response);
-        }
-
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({}),
-        } as unknown as Response);
-      }
-    );
-
-    act(() => {
-      render(<App />);
-    });
-
-    const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
-    act(() => {
-      fireEvent.click(searchTab);
-    });
-
-    const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    act(() => {
-      fireEvent.change(searchInput, { target: { value: 'Ale' } });
-    });
-
-    // Allow debounced search to fire
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    });
-
-    const suggestion = await screen.findByText(/Rivera, Alex/);
-    act(() => {
-      fireEvent.click(suggestion);
-    });
-
-    await waitFor(() => {
-      expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
-    });
-  });
-
-  it('Customer Account: if customer is already checked in (409), shows inline status (no modal)', async () => {
-    localStorage.setItem(
-      'staff_session',
-      JSON.stringify({
-        staffId: 'staff-1',
-        sessionToken: 'test-token',
-        name: 'Test User',
-        role: 'STAFF',
-      })
-    );
-
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL, init?: RequestInit) => {
-      const u =
-        typeof url === 'string'
-          ? url
-          : url instanceof URL
-            ? url.toString()
-            : url instanceof Request
-              ? url.url
-              : '';
-
-      if (u.includes('/v1/registers/status')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              signedIn: true,
-              employee: { id: 'emp-1', name: 'Test Employee' },
-              registerNumber: 1,
-            }),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/v1/customers/search')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              suggestions: [
-                {
-                  id: 'c0ffee00-0000-4000-8000-000000000001',
-                  name: 'Alex Rivera',
-                  firstName: 'Alex',
-                  lastName: 'Rivera',
-                  dobMonthDay: '03/14',
-                  membershipNumber: '700001',
-                  disambiguator: '0001',
-                },
-              ],
-            }),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/v1/checkin/lane/lane-1/start')) {
-        expect(init?.method).toBe('POST');
-        return Promise.resolve({
-          ok: false,
-          status: 409,
-          json: () =>
-            Promise.resolve({
-              code: 'ALREADY_CHECKED_IN',
-              activeCheckin: {
-                visitId: 'visit-1',
-                rentalType: 'LOCKER',
-                assignedResourceType: 'locker',
-                assignedResourceNumber: '012',
-                checkinAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-                checkoutAt: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
-                overdue: false,
-                waitlist: null,
-              },
-            }),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/health')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
-        } as unknown as Response);
-      }
-
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
-    });
-
-    act(() => {
-      render(<App />);
-    });
-
-    const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
-    act(() => {
-      fireEvent.click(searchTab);
-    });
-
-    const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    act(() => {
-      fireEvent.change(searchInput, { target: { value: 'Ale' } });
-    });
-
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    });
-
-    const suggestion = await screen.findByText(/Rivera, Alex/);
-    act(() => {
-      fireEvent.click(suggestion);
-    });
-
-    expect(await screen.findByText('Currently Checked In')).toBeDefined();
-    expect(screen.queryByText('Already Checked In')).toBeNull();
-    expect(screen.queryByText('Customer Profile')).toBeNull();
-  });
-
-  it('double tap on same proposal forces selection (to payment)', async () => {
-    localStorage.setItem(
-      'staff_session',
-      JSON.stringify({
-        staffId: 'staff-1',
-        sessionToken: 'test-token',
-        name: 'Test User',
-        role: 'STAFF',
-      })
-    );
-
-    const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
-
-    fetchMock.mockImplementation((url: RequestInfo | URL, _init?: RequestInit) => {
-      const u =
-        typeof url === 'string'
-          ? url
-          : url instanceof URL
-            ? url.toString()
-            : url instanceof Request
-              ? url.url
-              : '';
-
-      if (u.includes('/v1/registers/status')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              signedIn: true,
-              employee: { id: 'emp-1', name: 'Test Employee' },
-              registerNumber: 1,
-            }),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/v1/customers/search')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              suggestions: [
-                {
-                  id: 'c0ffee00-0000-4000-8000-000000000001',
-                  name: 'Alex Rivera',
-                  firstName: 'Alex',
-                  lastName: 'Rivera',
-                  dobMonthDay: '03/14',
-                  membershipNumber: '700001',
-                  disambiguator: '0001',
-                },
-              ],
-            }),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/v1/checkin/lane/lane-1/start')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              sessionId: 'session-123',
-              customerName: 'Alex Rivera',
-              membershipNumber: '700001',
-            }),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/v1/checkin/lane/lane-1/propose-selection')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({}),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/v1/checkin/lane/lane-1/confirm-selection')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              sessionId: 'session-123',
-              rentalType: 'STANDARD',
-              confirmedBy: 'EMPLOYEE',
-            }),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/v1/checkin/lane/lane-1/create-payment-intent')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              paymentIntentId: 'pi-123',
-              quote: { total: 10, lineItems: [], messages: [] },
-            }),
-        } as unknown as Response);
-      }
-
-      if (u.includes('/health')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
-        } as unknown as Response);
-      }
-
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
-    });
-
-    act(() => {
-      render(<App />);
-    });
-
-    const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
-    act(() => {
-      fireEvent.click(searchTab);
-    });
-    const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    act(() => {
-      fireEvent.change(searchInput, { target: { value: 'Ale' } });
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    });
-    const suggestion = await screen.findByText(/Rivera, Alex/);
-    act(() => {
-      fireEvent.click(suggestion);
-    });
-    await waitFor(() => {
-      expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
-    });
-
-    // The app auto-switches to Scan tab when a session becomes active.
-    await waitFor(() => {
-      expect(screen.getByText('Customer Profile')).toBeDefined();
-    });
-
-    // Simulate kiosk prerequisites already resolved (language + membership choice) so we land on RENTAL step.
-    // React StrictMode can create multiple WS instances; use the one that has the handler attached.
-    let wsWithHandler: MockWebSocket | null = null;
-    await waitFor(() => {
-      expect(createdWs.length).toBeGreaterThan(0);
-      wsWithHandler = createdWs.find((w) => w.url.includes('lane=lane-1')) ?? createdWs[0] ?? null;
-      expect(wsWithHandler).not.toBeNull();
-    });
-
-    act(() => {
-      wsWithHandler?.onmessage?.({
-        data: JSON.stringify({
-          type: 'SESSION_UPDATED',
-          timestamp: new Date().toISOString(),
-          payload: {
-            sessionId: 'session-123',
-            customerName: 'Alex Rivera',
-            allowedRentals: ['LOCKER', 'STANDARD', 'DOUBLE', 'SPECIAL'],
-            customerPrimaryLanguage: 'EN',
-            membershipChoice: 'ONE_TIME',
-            selectionConfirmed: false,
-          },
-        }),
-      });
-    });
-
-    const proposeLocker = await screen.findByRole('button', { name: /Propose Locker/i });
-    act(() => {
-      fireEvent.click(proposeLocker); // first tap highlights
-    });
-    act(() => {
-      fireEvent.click(proposeLocker); // second tap selects as customer (approval step)
-    });
-
-    // Drive the app to APPROVAL step (normally via WS after /propose-selection).
-    act(() => {
-      wsWithHandler?.onmessage?.({
-        data: JSON.stringify({
-          type: 'SELECTION_PROPOSED',
-          timestamp: new Date().toISOString(),
-          payload: {
-            sessionId: 'session-123',
-            rentalType: 'LOCKER',
-            proposedBy: 'CUSTOMER',
-          },
-        }),
-      });
-    });
-
-    const ok = await screen.findByRole('button', { name: 'OK' });
-    act(() => {
-      fireEvent.click(ok);
-    });
-
-    // Approval triggers /confirm-selection and then payment intent creation.
-    await waitFor(() => {
-      const urls = fetchMock.mock.calls.map((c) => String(c[0]));
-      expect(urls.some((u) => u.includes('/v1/checkin/lane/lane-1/confirm-selection'))).toBe(true);
-      expect(urls.some((u) => u.includes('/v1/checkin/lane/lane-1/create-payment-intent'))).toBe(true);
-    });
-  });
-
-  it('keeps upgrades/waitlist accessible even when a check-in session is active', async () => {
-    localStorage.setItem(
-      'staff_session',
-      JSON.stringify({
-        staffId: 'staff-1',
-        sessionToken: 'test-token',
-        name: 'Test User',
-        role: 'STAFF',
-      })
-    );
-
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
-      (url: RequestInfo | URL, init?: RequestInit) => {
-        const u =
-          typeof url === 'string'
-            ? url
-            : url instanceof URL
-              ? url.toString()
-              : url instanceof Request
-                ? url.url
-                : '';
-
-        if (u.includes('/v1/registers/status')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                signedIn: true,
-                employee: { id: 'emp-1', name: 'Test Employee' },
-                registerNumber: 1,
-              }),
-          } as unknown as Response);
-        }
-
-        if (u.includes('/v1/customers/search')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                suggestions: [
-                  {
-                    id: 'c0ffee00-0000-4000-8000-000000000001',
-                    name: 'Alex Rivera',
-                    firstName: 'Alex',
-                    lastName: 'Rivera',
-                    membershipNumber: '700001',
-                    disambiguator: '0001',
-                  },
-                ],
-              }),
-          } as unknown as Response);
-        }
-
-        if (u.includes('/v1/checkin/lane/lane-1/start')) {
-          expect(init?.method).toBe('POST');
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                sessionId: 'session-123',
-                customerName: 'Alex Rivera',
-                membershipNumber: '700001',
-              }),
-          } as unknown as Response);
-        }
-
-        if (u.includes('/v1/waitlist')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                entries: [
-                  {
-                    id: 'wait-1',
-                    visitId: 'visit-1',
-                    checkinBlockId: 'block-1',
-                    desiredTier: 'DOUBLE',
-                    backupTier: 'STANDARD',
-                    status: 'ACTIVE',
-                    createdAt: new Date().toISOString(),
-                    checkinAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-                    checkoutAt: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
-                    displayIdentifier: '218',
-                    currentRentalType: 'STANDARD',
-                    customerName: 'Test Customer',
-                  },
-                ],
-              }),
-          } as unknown as Response);
-        }
-
-        if (u.includes('/v1/inventory/available')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({
-                rooms: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
-                rawRooms: { SPECIAL: 0, DOUBLE: 1, STANDARD: 0 },
-                waitlistDemand: { SPECIAL: 0, DOUBLE: 0, STANDARD: 0 },
-                lockers: 0,
-                total: 0,
-              }),
-          } as unknown as Response);
-        }
-
-        if (u.includes('/health')) {
-          return Promise.resolve({
-            ok: true,
-            json: () =>
-              Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
-          } as unknown as Response);
-        }
-
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({}),
-        } as unknown as Response);
-      }
-    );
-
-    act(() => {
-      render(<App />);
-    });
-
-    const searchTab = await screen.findByRole('button', { name: 'Search Customer' });
-    act(() => {
-      fireEvent.click(searchTab);
-    });
-
-    const searchInput = await screen.findByPlaceholderText('Start typing name...');
-    act(() => {
-      fireEvent.change(searchInput, { target: { value: 'Ale' } });
-    });
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    });
-    const suggestion = await screen.findByText(/Rivera, Alex/);
-    act(() => {
-      fireEvent.click(suggestion);
-    });
-    await waitFor(() => {
-      expect(screen.queryAllByText(/Alex Rivera/).length).toBeGreaterThan(0);
-    });
-
-    // Upgrades now live in the left drawer; they should remain accessible during an active session.
-    const upgradesTab = await screen.findByRole('button', { name: 'Upgrades' });
-    act(() => {
-      fireEvent.click(upgradesTab);
-    });
-
-    expect(await screen.findByText(/Upgrade Waitlist/i)).toBeDefined();
-    expect(screen.queryByText(/Active session present — waitlist actions are disabled/i)).toBeNull();
-
-    const offerUpgrade = await screen.findByRole('button', { name: 'Offer Upgrade' });
-    expect(offerUpgrade).toHaveProperty('disabled', false);
-  });
-
-  it('First Time Customer: if identity matches an existing customer, prompts and allows loading existing customer', async () => {
-    localStorage.setItem(
-      'staff_session',
-      JSON.stringify({
-        staffId: 'staff-1',
-        sessionToken: 'test-token',
-        name: 'Test User',
-        role: 'STAFF',
-      })
-    );
-
-    const calls: Array<{ url: string; body?: unknown }> = [];
-    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url: RequestInfo | URL, init?: RequestInit) => {
-      const u =
-        typeof url === 'string'
-          ? url
-          : url instanceof URL
-            ? url.toString()
-            : url instanceof Request
-              ? url.url
-              : '';
-
-      let body: unknown = undefined;
-      if (typeof init?.body === 'string') {
-        body = JSON.parse(init.body) as unknown;
-      }
-      calls.push({ url: u, body });
-
-      if (u.includes('/v1/registers/status')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              signedIn: true,
-              employee: { id: 'emp-1', name: 'Test Employee' },
-              registerNumber: 1,
-            }),
-        } as unknown as Response);
-      }
-      if (u.includes('/health')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ status: 'ok', timestamp: new Date().toISOString(), uptime: 0 }),
-        } as unknown as Response);
-      }
-      if (u.includes('/v1/customers/match-identity')) {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              matchCount: 1,
-              bestMatch: {
-                id: 'cust-1',
-                name: 'John Smith',
-                dob: '1988-01-02',
-                membershipNumber: null,
-              },
-            }),
-        } as unknown as Response);
-      }
-      if (u.includes('/v1/checkin/lane/lane-1/start')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ sessionId: 'sess-1', customerName: 'John Smith', membershipNumber: null }),
-        } as unknown as Response);
-      }
-
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as unknown as Response);
-    });
-
-    act(() => {
-      render(<App />);
-    });
-
-    // Open manual entry
-    fireEvent.click(await screen.findByText(/First Time Customer/i));
-
-    fireEvent.change(screen.getByLabelText(/First Name/i), { target: { value: 'John' } });
-    fireEvent.change(screen.getByLabelText(/Last Name/i), { target: { value: 'Smith' } });
-    fireEvent.change(screen.getByLabelText(/Date of Birth/i), { target: { value: '01021988' } });
-
-    const addBtn = screen.getByRole('button', { name: /Add Customer/i });
-    expect(addBtn).toHaveProperty('disabled', false);
-
-    fireEvent.click(addBtn);
-
-    // Prompt appears
-    expect(await screen.findByRole('heading', { name: /Existing customer found/i })).toBeDefined();
-    expect(screen.getByText(/John Smith/i)).toBeDefined();
-
-    // Choose existing customer
-    fireEvent.click(screen.getByRole('button', { name: /Existing Customer/i }));
-
-    await waitFor(() => {
-      const startCall = calls.find((c) => c.url.includes('/v1/checkin/lane/lane-1/start'));
-      expect(startCall).toBeDefined();
-      const b = startCall?.body;
-      expect(b).toBeDefined();
-      if (!b || typeof b !== 'object' || !('customerId' in b)) {
-        throw new Error('Expected start call body to include customerId');
-      }
-      expect((b as { customerId?: unknown }).customerId).toBe('cust-1');
-    });
   });
 });

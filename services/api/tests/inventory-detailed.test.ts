@@ -86,7 +86,12 @@ describe('GET /v1/inventory/detailed (includes overdue active stays)', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/inventory/detailed' });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body) as {
-      lockers?: Array<{ number?: string; occupancyId?: string; checkinAt?: string; checkoutAt?: string }>;
+      lockers?: Array<{
+        number?: string;
+        occupancyId?: string;
+        checkinAt?: string;
+        checkoutAt?: string;
+      }>;
     };
 
     const row = (body.lockers ?? []).find((l) => l.number === '040');
@@ -100,4 +105,3 @@ describe('GET /v1/inventory/detailed (includes overdue active stays)', () => {
     expect(new Date(row!.checkoutAt!).getTime()).toBeCloseTo(block.rows[0]!.ends_at.getTime(), -2);
   });
 });
-

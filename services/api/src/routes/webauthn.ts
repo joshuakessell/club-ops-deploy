@@ -228,7 +228,9 @@ export async function webauthnRoutes(fastify: FastifyInstance): Promise<void> {
       );
       const credentialRowId = credRow.rows[0]?.id;
       if (!credentialRowId) {
-        return reply.status(500).send({ error: 'Failed to load created credential for audit logging' });
+        return reply
+          .status(500)
+          .send({ error: 'Failed to load created credential for audit logging' });
       }
 
       // Log audit action

@@ -34,4 +34,3 @@ export function WaitlistNoticeModal({
     </ModalFrame>
   );
 }
-

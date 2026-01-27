@@ -1,4 +1,6 @@
 import { t, type Language } from '../../i18n';
+import { KioskModal } from '../../views/KioskModal';
+import { KioskModalActions } from '../../views/KioskModalActions';
 
 export interface RenewalDisclaimerModalProps {
   isOpen: boolean;
@@ -17,45 +19,39 @@ export function RenewalDisclaimerModal({
   onProceed,
   isSubmitting,
 }: RenewalDisclaimerModalProps) {
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content cs-liquid-card" onClick={(e) => e.stopPropagation()}>
-        <h2>{t(customerPrimaryLanguage, 'renewal.title')}</h2>
-        <div className="disclaimer-text">
-          <ul style={{ listStyle: 'disc', paddingLeft: '1.5rem', textAlign: 'left' }}>
-            <li style={{ marginBottom: '0.5rem' }}>
-              {t(customerPrimaryLanguage, 'renewal.bullet.extendsStay')}
-              {blockEndsAt && (
-                <span>
-                  {' '}
-                  {t(customerPrimaryLanguage, 'renewal.currentCheckout', {
-                    time: new Date(blockEndsAt).toLocaleString(),
-                  })}
-                </span>
-              )}
-            </li>
-            <li style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
-              {t(customerPrimaryLanguage, 'renewal.bullet.approachingMax')}
-            </li>
-            <li style={{ marginBottom: '0.5rem' }}>
-              {t(customerPrimaryLanguage, 'renewal.bullet.finalExtension')}
-            </li>
-            <li style={{ marginBottom: '0.5rem' }}>
-              {t(customerPrimaryLanguage, 'renewal.bullet.feeNotChargedNow')}
-            </li>
-          </ul>
-        </div>
+    <KioskModal
+      isOpen={isOpen}
+      title={t(customerPrimaryLanguage, 'renewal.title')}
+      onClose={onClose}
+    >
+      <ul className="ck-modal-list">
+        <li>
+          {t(customerPrimaryLanguage, 'renewal.bullet.extendsStay')}
+          {blockEndsAt && (
+            <span>
+              {' '}
+              {t(customerPrimaryLanguage, 'renewal.currentCheckout', {
+                time: new Date(blockEndsAt).toLocaleString(),
+              })}
+            </span>
+          )}
+        </li>
+        <li className="ck-modal-list__warning">
+          {t(customerPrimaryLanguage, 'renewal.bullet.approachingMax')}
+        </li>
+        <li>{t(customerPrimaryLanguage, 'renewal.bullet.finalExtension')}</li>
+        <li>{t(customerPrimaryLanguage, 'renewal.bullet.feeNotChargedNow')}</li>
+      </ul>
+      <KioskModalActions>
         <button
-          className="cs-liquid-button modal-ok-btn"
+          className="cs-liquid-button ck-modal-btn"
           onClick={() => void onProceed()}
           disabled={isSubmitting}
         >
           {t(customerPrimaryLanguage, 'common.ok')}
         </button>
-      </div>
-    </div>
+      </KioskModalActions>
+    </KioskModal>
   );
 }
-

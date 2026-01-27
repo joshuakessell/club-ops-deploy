@@ -1,4 +1,6 @@
 import { t, type Language } from '../../i18n';
+import { KioskModal } from '../../views/KioskModal';
+import { KioskModalActions } from '../../views/KioskModalActions';
 
 export interface UpgradeDisclaimerModalProps {
   isOpen: boolean;
@@ -15,47 +17,32 @@ export function UpgradeDisclaimerModal({
   onAcknowledge,
   isSubmitting,
 }: UpgradeDisclaimerModalProps) {
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content cs-liquid-card" onClick={(e) => e.stopPropagation()}>
-        <h2>{t(customerPrimaryLanguage, 'upgrade.title')}</h2>
-        <div className="disclaimer-text">
-          <p>
-            <strong>{t(customerPrimaryLanguage, 'upgrade.title')}</strong>
-          </p>
-          <ul
-            style={{
-              listStyle: 'disc',
-              paddingLeft: '1.5rem',
-              textAlign: 'left',
-              marginTop: '1rem',
-            }}
-          >
-            <li style={{ marginBottom: '0.5rem' }}>
-              {t(customerPrimaryLanguage, 'upgrade.bullet.feesApplyToRemaining')}
-            </li>
-            <li style={{ marginBottom: '0.5rem' }}>
-              {t(customerPrimaryLanguage, 'upgrade.bullet.noExtension')}
-            </li>
-            <li style={{ marginBottom: '0.5rem', fontWeight: 600, color: '#ef4444' }}>
-              {t(customerPrimaryLanguage, 'upgrade.bullet.noRefunds')}
-            </li>
-            <li style={{ marginBottom: '0.5rem' }}>
-              {t(customerPrimaryLanguage, 'upgrade.bullet.chargedWhenAccepted')}
-            </li>
-          </ul>
-        </div>
+    <KioskModal
+      isOpen={isOpen}
+      title={t(customerPrimaryLanguage, 'upgrade.title')}
+      onClose={onClose}
+    >
+      <p>
+        <strong>{t(customerPrimaryLanguage, 'upgrade.title')}</strong>
+      </p>
+      <ul className="ck-modal-list ck-modal-list--spaced">
+        <li>{t(customerPrimaryLanguage, 'upgrade.bullet.feesApplyToRemaining')}</li>
+        <li>{t(customerPrimaryLanguage, 'upgrade.bullet.noExtension')}</li>
+        <li className="ck-modal-list__danger">
+          {t(customerPrimaryLanguage, 'upgrade.bullet.noRefunds')}
+        </li>
+        <li>{t(customerPrimaryLanguage, 'upgrade.bullet.chargedWhenAccepted')}</li>
+      </ul>
+      <KioskModalActions>
         <button
-          className="cs-liquid-button modal-ok-btn"
+          className="cs-liquid-button ck-modal-btn"
           onClick={() => void onAcknowledge()}
           disabled={isSubmitting}
         >
           {t(customerPrimaryLanguage, 'common.ok')}
         </button>
-      </div>
-    </div>
+      </KioskModalActions>
+    </KioskModal>
   );
 }
-

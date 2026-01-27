@@ -20,4 +20,3 @@ export function parseLaneIdOptional(value: unknown): string | undefined {
   const parsed = LaneIdSchema.safeParse(trimmed);
   return parsed.success ? parsed.data : undefined;
 }
-

@@ -29,7 +29,11 @@ interface LockerSeed {
  */
 const seedRooms: RoomSeed[] = ROOMS.map((r: { number: number; tier: string }) => {
   const type: RoomType =
-    r.tier === 'DOUBLE' ? RoomType.DOUBLE : r.tier === 'SPECIAL' ? RoomType.SPECIAL : RoomType.STANDARD;
+    r.tier === 'DOUBLE'
+      ? RoomType.DOUBLE
+      : r.tier === 'SPECIAL'
+        ? RoomType.SPECIAL
+        : RoomType.STANDARD;
   return {
     number: String(r.number),
     type,
@@ -62,7 +66,9 @@ async function seed() {
       [desiredRoomNumbers]
     );
     if (parseInt(deletedRooms.rows[0]?.count || '0', 10) > 0) {
-      console.log(`🧹 Removed ${deletedRooms.rows[0]!.count} invalid legacy room(s) from inventory`);
+      console.log(
+        `🧹 Removed ${deletedRooms.rows[0]!.count} invalid legacy room(s) from inventory`
+      );
     }
 
     for (const roomSeed of seedRooms) {
@@ -105,7 +111,9 @@ async function seed() {
       [desiredLockerNumbers]
     );
     if (parseInt(deletedLockers.rows[0]?.count || '0', 10) > 0) {
-      console.log(`🧹 Removed ${deletedLockers.rows[0]!.count} invalid legacy locker(s) from inventory`);
+      console.log(
+        `🧹 Removed ${deletedLockers.rows[0]!.count} invalid legacy locker(s) from inventory`
+      );
     }
 
     for (const lockerSeed of seedLockers) {

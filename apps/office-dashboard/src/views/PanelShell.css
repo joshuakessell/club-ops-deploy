@@ -1,0 +1,10 @@
+.panel {
+  overflow: hidden;
+  position: relative;
+  /* Background, border, border-radius, box-shadow handled by cs-liquid-card */
+  /* Keep only layout properties */
+}
+
+.panel--spaced {
+  margin-bottom: 1.5rem;
+}

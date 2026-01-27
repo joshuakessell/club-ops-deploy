@@ -1,28 +1,6 @@
-import { useState, useEffect } from 'react';
-import {
-  Box,
-  Container,
-  Typography,
-  Button,
-  TextField,
-  Card,
-  CardContent,
-  Avatar,
-  CircularProgress,
-  Alert,
-  Fade,
-  Paper,
-  Stack,
-} from '@mui/material';
-import {
-  Person,
-  Lock,
-  Login as LoginIcon,
-  BusinessCenter,
-  Schedule,
-  Assessment,
-} from '@mui/icons-material';
-import { getApiUrl } from '@/lib/apiBase';
+import { useState, useEffect, type FormEvent } from 'react';
+import { LiquidGlassPinInput } from '@club-ops/ui';
+import { getApiUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 
@@ -39,14 +17,11 @@ interface LockScreenProps {
   deviceId: string;
 }
 
-// Employee definitions
 interface Employee {
   id: string;
   name: string;
   role: 'STAFF' | 'ADMIN';
-  accessLevel: 'limited' | 'full';
   description: string;
-  icon: React.ReactNode;
 }
 
 export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
@@ -57,7 +32,6 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingEmployees, setIsLoadingEmployees] = useState(true);
 
-  // Fetch employees from API
   useEffect(() => {
     const loadEmployees = async () => {
       try {
@@ -69,12 +43,10 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
               id: staff.id,
               name: staff.name,
               role: staff.role,
-              accessLevel: staff.role === 'ADMIN' ? 'full' : 'limited',
               description:
                 staff.role === 'ADMIN'
                   ? 'Admin — Monitor, Waitlist, Reports, Customer Tools'
                   : 'Staff — Schedule, Messages (stub)',
-              icon: staff.role === 'ADMIN' ? <Assessment /> : <Schedule />,
             })
           );
           setEmployees(staffList);
@@ -104,8 +76,8 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
     setError(null);
   };
 
-  const handlePinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePinSubmit = async (e?: FormEvent) => {
+    e?.preventDefault();
 
     if (!selectedEmployee || !pin.trim()) {
       setError('Please enter your PIN');
@@ -123,7 +95,7 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
           staffLookup: selectedEmployee.name,
           deviceId,
           pin: pin.trim(),
-          deviceType: deviceType, // Pass device type for proper session creation
+          deviceType: deviceType,
         }),
       });
 
@@ -142,7 +114,6 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
 
       const session: StaffSession = await response.json();
 
-      // Use the session data from the server (authenticated and verified)
       onLogin(session);
       setPin('');
       setSelectedEmployee(null);
@@ -158,206 +129,86 @@ export function LockScreen({ onLogin, deviceType, deviceId }: LockScreenProps) {
   };
 
   return (
-    <Box
-        sx={{
-          minHeight: '100vh',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 3,
-        }}
-      >
-        <Container maxWidth="sm">
-          <Fade in timeout={500}>
-            <Paper
-              elevation={24}
-              sx={{
-                borderRadius: 4,
-                overflow: 'hidden',
-                background: 'white',
-              }}
-            >
-              {!selectedEmployee ? (
-                <Box sx={{ p: 4 }}>
-                  {/* Header */}
-                  <Box sx={{ textAlign: 'center', mb: 4 }}>
-                    <Box
-                      sx={{
-                        width: 64,
-                        height: 64,
-                        borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 16px',
-                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.4)',
-                      }}
-                    >
-                      <BusinessCenter sx={{ fontSize: 32, color: 'white' }} />
-                    </Box>
-                    <Typography variant="h4" sx={{ mb: 1, color: '#1a1a1a', fontWeight: 700 }}>
-                      Club Operations
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      Select your account to continue
-                    </Typography>
-                  </Box>
+    <div className="lock-screen">
+      <div className="lock-screen-content cs-liquid-card">
+        {!selectedEmployee ? (
+          <div className="lock-screen-step">
+            <div className="lock-screen-header">
+              <h1>Club Operations</h1>
+              <p>Select your account to continue</p>
+            </div>
 
-                  {/* Employee Selection */}
-                  {isLoadingEmployees ? (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                      <CircularProgress />
-                      <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-                        Loading staff...
-                      </Typography>
-                    </Box>
-                  ) : employees.length === 0 ? (
-                    <Alert severity="error">
-                      No active staff members found. Please contact an administrator.
-                    </Alert>
-                  ) : (
-                    <Stack spacing={2}>
-                      {employees.map((employee) => (
-                        <Card
-                          key={employee.id}
-                          sx={{
-                            cursor: 'pointer',
-                            border: '2px solid transparent',
-                            '&:hover': {
-                              borderColor: 'primary.main',
-                            },
-                          }}
-                          onClick={() => handleEmployeeSelect(employee)}
-                        >
-                          <CardContent>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Avatar
-                                sx={{
-                                  bgcolor:
-                                    employee.role === 'ADMIN' ? 'primary.main' : 'secondary.main',
-                                  width: 48,
-                                  height: 48,
-                                }}
-                              >
-                                {employee.icon}
-                              </Avatar>
-                              <Box sx={{ flex: 1 }}>
-                                <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                                  {employee.name}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                                  {employee.description}
-                                </Typography>
-                              </Box>
-                              <LoginIcon sx={{ color: 'text.secondary' }} />
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </Stack>
-                  )}
-                </Box>
-              ) : (
-                <Box sx={{ p: 4 }}>
-                  {/* Back Button */}
-                  <Button
-                    startIcon={<Person />}
-                    onClick={handleBack}
-                    sx={{ mb: 3, color: 'text.secondary' }}
+            {error && <div className="lock-screen-error">{error}</div>}
+
+            {isLoadingEmployees ? (
+              <div className="lock-screen-loading">
+                Loading staff...
+              </div>
+            ) : employees.length === 0 ? (
+              <div className="lock-screen-empty">
+                No active staff members found. Please contact an administrator.
+              </div>
+            ) : (
+              <div className="lock-screen-employee-list">
+                {employees.map((employee) => (
+                  <button
+                    key={employee.id}
+                    type="button"
+                    className="lock-screen-employee cs-liquid-button cs-liquid-button--secondary"
+                    onClick={() => handleEmployeeSelect(employee)}
+                    disabled={isLoading}
                   >
-                    Back to Employee Selection
-                  </Button>
-
-                  {/* Selected Employee Info */}
-                  <Box sx={{ textAlign: 'center', mb: 4 }}>
-                    <Avatar
-                      sx={{
-                        bgcolor:
-                          selectedEmployee.role === 'ADMIN' ? 'primary.main' : 'secondary.main',
-                        width: 80,
-                        height: 80,
-                        margin: '0 auto 16px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                      }}
-                    >
-                      {selectedEmployee.icon}
-                    </Avatar>
-                    <Typography variant="h5" sx={{ mb: 1, fontWeight: 600 }}>
-                      {selectedEmployee.name}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      {selectedEmployee.description}
-                    </Typography>
-                  </Box>
-
-                  {/* PIN Entry Form */}
-                  <form onSubmit={handlePinSubmit}>
-                    <Stack spacing={3}>
-                      {error && (
-                        <Alert severity="error" onClose={() => setError(null)}>
-                          {error}
-                        </Alert>
-                      )}
-
-                      <TextField
-                        fullWidth
-                        type="password"
-                        label="Enter PIN"
-                        value={pin}
-                        onChange={(e) => {
-                          // Only allow numeric input
-                          const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                          setPin(value);
-                        }}
-                        disabled={isLoading}
-                        autoFocus
-                        inputProps={{
-                          maxLength: 6,
-                          inputMode: 'numeric',
-                          pattern: '[0-9]*',
-                        }}
-                        InputProps={{
-                          startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary' }} />,
-                        }}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 2,
-                          },
-                          '& input': {
-                            textAlign: 'center',
-                            fontSize: '1.5rem',
-                            letterSpacing: '0.5rem',
-                            fontFamily: 'monospace',
-                          },
-                        }}
-                      />
-
-                      <Button
-                        type="submit"
-                        fullWidth
-                        variant="contained"
-                        size="large"
-                        disabled={isLoading || pin.trim().length !== 6}
-                        startIcon={isLoading ? <CircularProgress size={20} /> : <LoginIcon />}
-                        sx={{
-                          py: 1.5,
-                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                          '&:hover': {
-                            background: 'linear-gradient(135deg, #5568d3 0%, #6a4190 100%)',
-                          },
-                        }}
+                    <div className="lock-screen-employee-row">
+                      <span className="lock-screen-employee-name">{employee.name}</span>
+                      <span
+                        className={`lock-screen-employee-role lock-screen-employee-role--${employee.role === 'ADMIN' ? 'admin' : 'staff'}`}
                       >
-                        {isLoading ? 'Signing In...' : 'Sign In'}
-                      </Button>
-                    </Stack>
-                  </form>
-                </Box>
-              )}
-            </Paper>
-          </Fade>
-        </Container>
-      </Box>
+                        {employee.role === 'ADMIN' ? 'Admin' : 'Staff'}
+                      </span>
+                    </div>
+                    <span className="lock-screen-employee-desc">{employee.description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="lock-screen-step">
+            <div className="lock-screen-header">
+              <h1>Enter PIN</h1>
+              <p>Employee: {selectedEmployee.name}</p>
+            </div>
+
+            {error && <div className="lock-screen-error">{error}</div>}
+
+            <LiquidGlassPinInput
+              length={6}
+              value={pin}
+              onChange={(next) => {
+                setPin(next);
+                if (error) setError(null);
+              }}
+              onSubmit={() => void handlePinSubmit()}
+              submitLabel={isLoading ? 'Signing in...' : 'Sign In'}
+              submitDisabled={isLoading}
+              disabled={isLoading}
+              className="lock-screen-pin"
+              displayAriaLabel="Staff PIN"
+            />
+
+            <div className="lock-screen-actions">
+              <button
+                type="button"
+                className="cs-liquid-button cs-liquid-button--secondary"
+                onClick={handleBack}
+                disabled={isLoading}
+              >
+                Back to staff selection
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

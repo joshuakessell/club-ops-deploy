@@ -28,5 +28,3 @@ describe('customer-kiosk i18n', () => {
     expect(t('EN', 'selection.welcomeWithName', { name: 'Josh' })).toBe('Welcome, Josh');
   });
 });
-
-

@@ -1,0 +1,136 @@
+.ck-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.3s ease;
+}
+
+.ck-modal-content {
+  padding: 2rem;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: slideUp 0.3s var(--cs-ease-decelerate);
+  /* Background, border, border-radius, box-shadow handled by cs-liquid-card */
+  /* Keep only sizing/layout properties */
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ck-modal-title {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.ck-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  line-height: 1.6;
+}
+
+.ck-modal-body p {
+  font-size: clamp(0.875rem, 1.5vw, 1rem);
+  color: var(--text);
+}
+
+.ck-modal-list {
+  list-style: disc;
+  padding-left: 1.5rem;
+  text-align: left;
+}
+
+.ck-modal-list--spaced {
+  margin-top: 1rem;
+}
+
+.ck-modal-list li {
+  margin-bottom: 0.5rem;
+}
+
+.ck-modal-list__warning {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.ck-modal-list__danger {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.ck-modal-info-box {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #1e293b;
+  border-radius: 6px;
+}
+
+.ck-modal-info-title {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.ck-modal-info-warning {
+  color: #f59e0b;
+  margin-top: 0.5rem;
+}
+
+.ck-modal-spaced {
+  margin-top: 1rem;
+}
+
+.ck-modal-note {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  margin-top: 0.5rem;
+}
+
+.ck-modal-section {
+  margin-top: 1.5rem;
+}
+
+.ck-modal-section-title {
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.ck-modal-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ck-modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+
+.ck-modal-btn {
+  width: 100%;
+  padding: 1rem;
+  font-size: clamp(1rem, 2vw, 1.125rem);
+  font-weight: 600;
+  min-height: 56px;
+}

@@ -95,4 +95,3 @@ export function sanitizeTelemetryEventInput(input: unknown): TelemetryEventRow |
     meta: sanitizeMeta(e.meta),
   };
 }
-

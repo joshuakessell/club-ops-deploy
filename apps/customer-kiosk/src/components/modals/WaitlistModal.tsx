@@ -1,5 +1,7 @@
 import { t, type Language } from '../../i18n';
 import { getRentalDisplayName } from '../../utils/display';
+import { KioskModal } from '../../views/KioskModal';
+import { KioskModalActions } from '../../views/KioskModalActions';
 
 export interface WaitlistModalProps {
   isOpen: boolean;
@@ -14,6 +16,7 @@ export interface WaitlistModalProps {
   eta: string | null;
   upgradeFee: number | null;
   isSubmitting: boolean;
+  highlightedBackupRental?: string | null;
   onBackupSelection: (rental: string) => void;
   onClose: () => void;
 }
@@ -28,105 +31,95 @@ export function WaitlistModal({
   eta,
   upgradeFee,
   isSubmitting,
+  highlightedBackupRental = null,
   onBackupSelection,
   onClose,
 }: WaitlistModalProps) {
-  if (!isOpen) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content cs-liquid-card" onClick={(e) => e.stopPropagation()}>
-        <h2>{t(customerPrimaryLanguage, 'waitlist.modalTitle')}</h2>
-        <div className="disclaimer-text">
+    <KioskModal
+      isOpen={isOpen}
+      title={t(customerPrimaryLanguage, 'waitlist.modalTitle')}
+      onClose={onClose}
+    >
+      <p>
+        {t(customerPrimaryLanguage, 'waitlist.currentlyUnavailable', {
+          rental: getRentalDisplayName(desiredType, customerPrimaryLanguage),
+        })}
+      </p>
+      {position !== null && (
+        <div className="ck-modal-info-box">
+          <p className="ck-modal-info-title">{t(customerPrimaryLanguage, 'waitlist.infoTitle')}</p>
           <p>
-            {t(customerPrimaryLanguage, 'waitlist.currentlyUnavailable', {
-              rental: getRentalDisplayName(desiredType, customerPrimaryLanguage),
-            })}
+            {t(customerPrimaryLanguage, 'waitlist.position')}: <strong>#{position}</strong>
           </p>
-          {position !== null && (
-            <div
-              style={{
-                marginTop: '1rem',
-                padding: '0.75rem',
-                background: '#1e293b',
-                borderRadius: '6px',
-              }}
-            >
-              <p style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
-                {t(customerPrimaryLanguage, 'waitlist.infoTitle')}
-              </p>
-              <p>
-                {t(customerPrimaryLanguage, 'waitlist.position')}: <strong>#{position}</strong>
-              </p>
-              {eta ? (
-                <p>
-                  {t(customerPrimaryLanguage, 'waitlist.estimatedReady')}:{' '}
-                  <strong>{new Date(eta).toLocaleString()}</strong>
-                </p>
-              ) : (
-                <p>
-                  {t(customerPrimaryLanguage, 'waitlist.estimatedReady')}:{' '}
-                  <strong>{t(customerPrimaryLanguage, 'waitlist.unknown')}</strong>
-                </p>
-              )}
-              {upgradeFee !== null && upgradeFee > 0 && (
-                <p style={{ color: '#f59e0b', marginTop: '0.5rem' }}>
-                  {t(customerPrimaryLanguage, 'waitlist.upgradeFee')}:{' '}
-                  <strong>${upgradeFee.toFixed(2)}</strong>
-                </p>
-              )}
-            </div>
+          {eta ? (
+            <p>
+              {t(customerPrimaryLanguage, 'waitlist.estimatedReady')}:{' '}
+              <strong>{new Date(eta).toLocaleString()}</strong>
+            </p>
+          ) : (
+            <p>
+              {t(customerPrimaryLanguage, 'waitlist.estimatedReady')}:{' '}
+              <strong>{t(customerPrimaryLanguage, 'waitlist.unknown')}</strong>
+            </p>
           )}
-          <p style={{ marginTop: '1rem' }}>
-            {t(customerPrimaryLanguage, 'waitlist.instructions')}
-          </p>
-          <p style={{ fontSize: '0.875rem', color: '#94a3b8', marginTop: '0.5rem' }}>
-            {t(customerPrimaryLanguage, 'waitlist.noteChargedBackup')}
-          </p>
+          {upgradeFee !== null && upgradeFee > 0 && (
+            <p className="ck-modal-info-warning">
+              {t(customerPrimaryLanguage, 'waitlist.upgradeFee')}:{' '}
+              <strong>${upgradeFee.toFixed(2)}</strong>
+            </p>
+          )}
         </div>
-        <div style={{ marginTop: '1.5rem' }}>
-          <p style={{ fontWeight: 600, marginBottom: '0.75rem' }}>
-            {t(customerPrimaryLanguage, 'waitlist.selectBackup')}
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {allowedRentals
-              .filter((rental) => rental !== desiredType)
-              .map((rental) => {
-                const availableCount =
-                  inventory?.rooms[rental] ||
-                  (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
-                  0;
-                const isAvailable = availableCount > 0;
+      )}
+      <p className="ck-modal-spaced">{t(customerPrimaryLanguage, 'waitlist.instructions')}</p>
+      <p className="ck-modal-note">{t(customerPrimaryLanguage, 'waitlist.noteChargedBackup')}</p>
+      <div className="ck-modal-section">
+        <p className="ck-modal-section-title">
+          {t(customerPrimaryLanguage, 'waitlist.selectBackup')}
+        </p>
+        <div className="ck-modal-stack">
+          {allowedRentals
+            .filter((rental) => rental !== desiredType)
+            .map((rental) => {
+              const availableCount =
+                inventory?.rooms[rental] ||
+                (rental === 'LOCKER' || rental === 'GYM_LOCKER' ? inventory?.lockers : 0) ||
+                0;
+              const isAvailable = availableCount > 0;
 
-                return (
-                  <button
-                    key={rental}
-                    className="cs-liquid-button modal-ok-btn"
-                    onClick={() => onBackupSelection(rental)}
-                    disabled={!isAvailable || isSubmitting}
-                    style={{
-                      opacity: isAvailable ? 1 : 0.5,
-                      cursor: isAvailable && !isSubmitting ? 'pointer' : 'not-allowed',
-                    }}
-                  >
-                    {getRentalDisplayName(rental, customerPrimaryLanguage)}
-                    {!isAvailable &&
-                      ` ${t(customerPrimaryLanguage, 'waitlist.unavailableSuffix')}`}
-                  </button>
-                );
-              })}
-          </div>
+              return (
+                <button
+                  key={rental}
+                  className={[
+                    'cs-liquid-button',
+                    'ck-modal-btn',
+                    highlightedBackupRental === rental ? 'ck-option-highlight' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  onClick={() => onBackupSelection(rental)}
+                  disabled={!isAvailable || isSubmitting}
+                  style={{
+                    opacity: isAvailable ? 1 : 0.5,
+                    cursor: isAvailable && !isSubmitting ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {getRentalDisplayName(rental, customerPrimaryLanguage)}
+                  {!isAvailable && ` ${t(customerPrimaryLanguage, 'waitlist.unavailableSuffix')}`}
+                </button>
+              );
+            })}
         </div>
+      </div>
+      <KioskModalActions>
         <button
-          className="cs-liquid-button cs-liquid-button--secondary modal-ok-btn"
+          className="cs-liquid-button cs-liquid-button--secondary ck-modal-btn"
           onClick={onClose}
           disabled={isSubmitting}
-          style={{ marginTop: '1rem' }}
         >
           {t(customerPrimaryLanguage, 'common.cancel')}
         </button>
-      </div>
-    </div>
+      </KioskModalActions>
+    </KioskModal>
   );
 }
-

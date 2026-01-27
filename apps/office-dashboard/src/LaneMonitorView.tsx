@@ -4,6 +4,9 @@ import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
+import { PanelContent } from './views/PanelContent';
+import { PanelHeader } from './views/PanelHeader';
+import { PanelShell } from './views/PanelShell';
 
 type LaneId = '1' | '2';
 
@@ -83,7 +86,9 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
         sessionToken: session.sessionToken,
       })
         .then((sessions) => {
-          setLaneSession((sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null);
+          setLaneSession(
+            (sessions.sessions || []).find((s) => String(s.laneId) === String(lane)) || null
+          );
         })
         .catch(console.error);
     }
@@ -105,47 +110,47 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
 
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto' }}>
-      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="panel-header">
-          <h2>Live Lane Monitor</h2>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div className="connection-status" style={{ border: 'none', padding: 0 }}>
-              <span className={`dot ${wsConnected ? 'dot-live' : 'dot-offline'}`}></span>
-              <span>{wsConnected ? 'Live' : 'Offline'}</span>
-            </div>
-            <select
-              value={lane}
-              onChange={(e) => setLane(e.target.value as LaneId)}
-              style={{
-                padding: '0.5rem 0.75rem',
-                background: 'var(--bg)',
-                border: '1px solid var(--border)',
-                borderRadius: 8,
-                color: 'var(--text)',
-                fontWeight: 600,
-              }}
-            >
-              <option value="1">Lane 1</option>
-              <option value="2">Lane 2</option>
-            </select>
-          </div>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+      <PanelShell spacing="md">
+        <PanelHeader
+          title="Live Lane Monitor"
+          actions={
+            <>
+              <div className="connection-status" style={{ border: 'none', padding: 0 }}>
+                <span className={`dot ${wsConnected ? 'dot-live' : 'dot-offline'}`}></span>
+                <span>{wsConnected ? 'Live' : 'Offline'}</span>
+              </div>
+              <select
+                value={lane}
+                onChange={(e) => setLane(e.target.value as LaneId)}
+                style={{
+                  padding: '0.5rem 0.75rem',
+                  background: 'var(--bg)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  color: 'var(--text)',
+                  fontWeight: 600,
+                }}
+              >
+                <option value="1">Lane 1</option>
+                <option value="2">Lane 2</option>
+              </select>
+            </>
+          }
+        />
+        <PanelContent padding="md">
           <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
             Mirrored summary of employee-register + customer-kiosk lane state. Last lane event:{' '}
             {lastLaneEvent ? new Date(lastLaneEvent).toLocaleString() : '—'}
           </div>
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
 
       <div
         style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem' }}
       >
-        <section className="panel cs-liquid-card">
-          <div className="panel-header">
-            <h2>Employee Register (Lane {lane})</h2>
-          </div>
-          <div className="panel-content" style={{ padding: '1.25rem' }}>
+        <PanelShell>
+          <PanelHeader title={`Employee Register (Lane ${lane})`} />
+          <PanelContent padding="md">
             {!register ? (
               <div style={{ color: 'var(--text-muted)' }}>Loading…</div>
             ) : (
@@ -184,14 +189,12 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
                 </tbody>
               </table>
             )}
-          </div>
-        </section>
+          </PanelContent>
+        </PanelShell>
 
-        <section className="panel cs-liquid-card">
-          <div className="panel-header">
-            <h2>Customer Kiosk (Lane {lane})</h2>
-          </div>
-          <div className="panel-content" style={{ padding: '1.25rem' }}>
+        <PanelShell>
+          <PanelHeader title={`Customer Kiosk (Lane ${lane})`} />
+          <PanelContent padding="md">
             {!laneSession ? (
               <div className="placeholder">
                 <span className="placeholder-icon">🧍</span>
@@ -237,8 +240,8 @@ export function LaneMonitorView({ session }: { session: StaffSession }) {
                 </tbody>
               </table>
             )}
-          </div>
-        </section>
+          </PanelContent>
+        </PanelShell>
       </div>
     </div>
   );

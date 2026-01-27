@@ -91,7 +91,9 @@ export function UpgradePaymentModal({
               )}
             </>
           ) : (
-            <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>All prior charges are settled.</div>
+            <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>
+              All prior charges are settled.
+            </div>
           )}
         </div>
 
@@ -114,7 +116,9 @@ export function UpgradePaymentModal({
             }}
           >
             <span>Upgrade Fee</span>
-            <span>${upgradeFee !== null && Number.isFinite(upgradeFee) ? upgradeFee.toFixed(2) : '—'}</span>
+            <span>
+              ${upgradeFee !== null && Number.isFinite(upgradeFee) ? upgradeFee.toFixed(2) : '—'}
+            </span>
           </div>
         </div>
 
@@ -188,7 +192,9 @@ export function UpgradePaymentModal({
             disabled={paymentStatus !== 'PAID' || isSubmitting || !canComplete}
             className={[
               'cs-liquid-button',
-              paymentStatus === 'PAID' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+              paymentStatus === 'PAID'
+                ? 'cs-liquid-button--selected'
+                : 'cs-liquid-button--secondary',
             ].join(' ')}
             style={{
               padding: '0.75rem 1.25rem',
@@ -202,5 +208,3 @@ export function UpgradePaymentModal({
     </ModalFrame>
   );
 }
-
-

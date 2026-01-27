@@ -109,11 +109,11 @@ export function getLaneSessionClient(options: LaneSessionClientOptions): WebSock
       existing.socket.readyState === WebSocket.OPEN ||
       existing.socket.readyState === WebSocket.CONNECTING
     ) {
-    if (!loggedReused.has(key)) {
-      loggedReused.add(key);
-      console.info('[realtime] LaneSessionClient reused', { key });
-    }
-    return existing.socket;
+      if (!loggedReused.has(key)) {
+        loggedReused.add(key);
+        console.info('[realtime] LaneSessionClient reused', { key });
+      }
+      return existing.socket;
     }
 
     // Stale socket: clear cache and create a new one below.
@@ -144,8 +144,23 @@ export function closeLaneSessionClient(laneId: string, role: LaneRole): void {
   if (!client) return;
 
   try {
-    // Best-effort close in any non-closed state.
-    client.socket.close();
+    if (client.socket.readyState === WebSocket.CONNECTING) {
+      // Avoid "closed before the connection is established" warnings.
+      client.socket.addEventListener(
+        'open',
+        () => {
+          try {
+            client.socket.close();
+          } catch {
+            // ignore
+          }
+        },
+        { once: true }
+      );
+    } else {
+      // Best-effort close in any non-closed state.
+      client.socket.close();
+    }
   } catch {
     // ignore
   }

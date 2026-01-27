@@ -38,5 +38,3 @@ describe('InventorySummaryBar', () => {
     expect(onOpen).toHaveBeenCalledWith('STANDARD');
   });
 });
-
-

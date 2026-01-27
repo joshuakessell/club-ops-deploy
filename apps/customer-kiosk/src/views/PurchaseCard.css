@@ -1,0 +1,37 @@
+.purchase-card {
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.purchase-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.purchase-card__title {
+  font-weight: 800;
+  font-size: clamp(1.05rem, 2.2vw, 1.25rem);
+}
+
+.purchase-card__status {
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 700;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  white-space: nowrap;
+}
+
+.purchase-card__subheader {
+  color: rgba(255, 255, 255, 0.86);
+  font-weight: 700;
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+}
+
+.purchase-card__message {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: clamp(0.95rem, 2vw, 1.1rem);
+  line-height: 1.35;
+}

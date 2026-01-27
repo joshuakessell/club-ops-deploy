@@ -19,6 +19,14 @@ export const es: Record<keyof typeof en, string> = {
   english: 'English',
   spanish: 'Español',
 
+  // Lane selection
+  'lane.selectTitle': 'Selecciona carril',
+  'lane.selectSubtitle': 'Elige tu registro para comenzar.',
+  'lane.lane1': 'Carril 1',
+  'lane.lane2': 'Carril 2',
+  'lane.register1': 'Registro 1',
+  'lane.register2': 'Registro 2',
+
   // Orientation
   'orientation.title': 'Pon la pantalla vertical',
   'orientation.body': 'Gira la pantalla para seguir.',
@@ -30,9 +38,13 @@ export const es: Record<keyof typeof en, string> = {
   'common.decline': 'No acepto',
   'common.you': 'Tú',
   'common.staff': 'Staff',
+  'idScan.expired.title': 'ID vencida',
+  'idScan.expired.body': 'Esta identificación está vencida. Presenta una identificación vigente.',
+  'idScan.underage.title': 'Menor de 18',
+  'idScan.underage.body':
+    'El cliente es menor de 18 años. Presenta una identificación que muestre que tiene 18 o más.',
   'kiosk.locked.title': 'Ve con el empleado',
-  'kiosk.locked.body':
-    'Este carril sigue en proceso. Ve con el empleado para terminar.',
+  'kiosk.locked.body': 'Este carril sigue en proceso. Ve con el empleado para terminar.',
 
   // Past due
   pastDueBlocked: 'Pasa a caja para arreglar tu saldo.',
@@ -131,8 +143,7 @@ export const es: Record<keyof typeof en, string> = {
   'waitlist.estimatedReady': 'Aprox. listo',
   'waitlist.unknown': 'Sin dato',
   'waitlist.upgradeFee': 'Costo de mejora',
-  'waitlist.instructions':
-    'Para anotarte, elige una opción de respaldo disponible.',
+  'waitlist.instructions': 'Para anotarte, elige una opción de respaldo disponible.',
   'waitlist.noteChargedBackup':
     'Se cobra el respaldo. Si sale una mejora, puedes aceptarla (aplica costo).',
   'waitlist.selectBackup': 'Elige respaldo:',
@@ -168,12 +179,10 @@ export const es: Record<keyof typeof en, string> = {
 
   // Errors
   'error.loadAgreement': 'No se pudo cargar el acuerdo. Intenta de nuevo.',
-  'error.noActiveSession':
-    'No hay sesión activa. Espera a que el staff inicie una sesión.',
+  'error.noActiveSession': 'No hay sesión activa. Espera a que el staff inicie una sesión.',
   'error.processSelection': 'No se pudo procesar. Intenta de nuevo.',
   'error.process': 'No se pudo procesar. Intenta de nuevo.',
-  'error.rentalNotAvailable':
-    'No está disponible. Elige una opción disponible.',
+  'error.rentalNotAvailable': 'No está disponible. Elige una opción disponible.',
   'error.signAgreement': 'No se pudo firmar. Intenta de nuevo.',
   'error.setLanguage': 'No se pudo cambiar el idioma. Intenta de nuevo.',
   'error.confirmSelection': 'No se pudo confirmar. Intenta de nuevo.',
@@ -192,5 +201,3 @@ export const es: Record<keyof typeof en, string> = {
   membership: 'Membresía',
   noOptionsAvailable: 'No hay opciones disponibles',
 };
-
-

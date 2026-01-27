@@ -1,38 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { handleScannerKeydown } from './scanner/scannerKeydown';
+import type { ScannerInputOptions } from './scanner/scannerInputTypes';
 
-export type ScannerCapture = {
-  /** Raw captured scan string (may include newlines). */
-  raw: string;
-};
-
-type Options = {
-  enabled: boolean;
-  /**
-   * Called exactly once per capture, with the accumulated scan string.
-   * The hook automatically resets its internal buffer after calling.
-   */
-  onCapture: (capture: ScannerCapture) => void;
-  /** Called when Escape is pressed (optional). */
-  onCancel?: () => void;
-  /** Idle timeout used to terminate scans that don't send a suffix key. */
-  idleTimeoutMs?: number;
-  /**
-   * Grace period after an Enter key to decide whether it was a terminator (end-of-scan)
-   * or a line break within a multi-line scan (PDF417). If another character arrives within
-   * this window, we treat Enter as a newline. Otherwise we finalize the scan.
-   */
-  enterGraceMs?: number;
-};
+export type { ScannerCapture } from './scanner/scannerInputTypes';
 
 /**
  * Robust keyboard-wedge scanner capture.
- *
- * Key points:
- * - Uses a hidden textarea that auto-focuses, and re-focuses on blur.
- * - Accumulates printable characters quickly.
- * - Treats Enter as a newline (preserves PDF417 multi-line output) and relies on idle timeout to finalize.
- * - Treats Tab as an immediate terminator (common suffix).
- * - Uses a global keydown listener in capture phase to prevent scan keystrokes from leaking into other UI.
  */
 export function useScannerInput({
   enabled,
@@ -40,7 +13,7 @@ export function useScannerInput({
   onCancel,
   idleTimeoutMs = 75,
   enterGraceMs = 35,
-}: Options) {
+}: ScannerInputOptions) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const bufferRef = useRef('');
   const timerRef = useRef<number | null>(null);
@@ -125,55 +98,17 @@ export function useScannerInput({
     if (!enabled) return;
 
     const onKeyDownCapture = (e: KeyboardEvent) => {
-      // While scan mode is active, prevent keystrokes from affecting any other UI.
-      // We still intentionally handle a minimal set of keys for capture/cancel.
-      const key = e.key;
-
-      // Always stop propagation while enabled.
-      e.stopPropagation();
-
-      // Ignore meta-modified shortcuts (but still prevent them).
-      if (e.metaKey || e.ctrlKey || e.altKey) {
-        e.preventDefault();
-        return;
-      }
-
-      if (key === 'Escape') {
-        e.preventDefault();
-        reset();
-        onCancel?.();
-        return;
-      }
-
-      if (key === 'Tab') {
-        e.preventDefault();
-        // Common scanner suffix; finalize immediately without including a tab char.
-        finalize();
-        return;
-      }
-
-      if (key === 'Enter') {
-        e.preventDefault();
-        // Enter can be an internal newline (PDF417) or an end-of-scan terminator (common suffix).
-        // We append newline and give a short grace window; if more chars arrive, it's multi-line.
-        bufferRef.current += '\n';
-        lastWasEnterRef.current = true;
-        scheduleFinalizeAfterEnter();
-        return;
-      }
-
-      // Printable characters (scanner output) - accept as-is.
-      if (key.length === 1) {
-        e.preventDefault();
-        // If we previously saw Enter, this means it was an internal newline; keep scanning.
-        lastWasEnterRef.current = false;
-        bufferRef.current += key;
-        scheduleFinalize();
-        return;
-      }
-
-      // Ignore other keys (arrows, function keys, etc.) but prevent them from bubbling.
-      e.preventDefault();
+      handleScannerKeydown(
+        e,
+        { bufferRef, lastWasEnterRef },
+        {
+          finalize,
+          onCancel,
+          reset,
+          scheduleFinalize,
+          scheduleFinalizeAfterEnter,
+        }
+      );
     };
 
     window.addEventListener('keydown', onKeyDownCapture, { capture: true });

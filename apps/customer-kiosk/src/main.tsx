@@ -1,18 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import {
-  installTelemetry,
-  ReportIssueButton,
-  setCurrentRouteProvider,
-  TelemetryErrorBoundary,
-} from '@club-ops/ui';
+import { installTelemetry, setCurrentRouteProvider, TelemetryErrorBoundary } from '@club-ops/ui';
 import App from './App';
 import '@club-ops/ui/styles/index.css';
 import './styles.css';
+import './styles.screens.css';
 import { OrientationGuard } from './ui/orientation/OrientationGuard';
 import './ui/orientation/orientation.css';
 import { FatalEnvScreen } from './components/FatalEnvScreen';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const root = document.getElementById('root');
 if (!root) throw new Error('Root element not found');
@@ -53,14 +49,6 @@ if (!kioskToken) {
     return Number.isFinite(n) ? n : fallback;
   };
 
-  const reportEnabled =
-    import.meta.env.DEV ||
-    readBool((rawEnv.VITE_TELEMETRY_REPORT_BUTTON as string | undefined) ?? '', false);
-  const reportFlushBreadcrumbsOnInfo = readBool(
-    rawEnv.VITE_TELEMETRY_REPORT_FLUSH_BREADCRUMBS_ON_INFO,
-    false
-  );
-
   setCurrentRouteProvider(() => {
     if (typeof window === 'undefined') return 'unknown';
     return `${window.location.pathname || '/'}${window.location.search || ''}`;
@@ -87,9 +75,6 @@ if (!kioskToken) {
           message="This screen must be used in portrait mode."
         >
           <App />
-          {reportEnabled && (
-            <ReportIssueButton flushBreadcrumbsOnInfo={reportFlushBreadcrumbsOnInfo} />
-          )}
         </OrientationGuard>
       </TelemetryErrorBoundary>
     </StrictMode>

@@ -454,6 +454,9 @@ paths:
                 visitId:
                   type: string
                   format: uuid
+                renewalHours:
+                  type: integer
+                  enum: [2, 6]
               anyOf:
                 - required: [customerId]
                 - required: [idScanValue]
@@ -500,6 +503,9 @@ paths:
                       overdue:
                         type: boolean
                         nullable: true
+                      currentTotalHours:
+                        type: number
+                        nullable: true
                       waitlist:
                         type: object
                         nullable: true
@@ -538,7 +544,7 @@ paths:
                   type: string
                   format: uuid
                   nullable: true
-                  description: Optional employee-selected customer id to resolve MULTIPLE_MATCHES (STATE_ID scans only)
+                  description: Optional employee-selected customer id to override scan resolution (STATE_ID scans only)
       responses:
         '200':
           description: Scan resolved (matched or no-match)
@@ -549,7 +555,7 @@ paths:
                 properties:
                   result:
                     type: string
-                    enum: [MATCHED, NO_MATCH, MULTIPLE_MATCHES, ERROR]
+                    enum: [MATCHED, NO_MATCH, ERROR]
                   scanType:
                     type: string
                     enum: [STATE_ID, MEMBERSHIP]
@@ -561,30 +567,6 @@ paths:
                   membershipCandidate:
                     type: string
                     nullable: true
-                  candidates:
-                    type: array
-                    nullable: true
-                    description: Present only when result=MULTIPLE_MATCHES (STATE_ID scans)
-                    items:
-                      type: object
-                      required: [id, name, dob, membershipNumber, matchScore]
-                      properties:
-                        id:
-                          type: string
-                          format: uuid
-                        name:
-                          type: string
-                        dob:
-                          type: string
-                          nullable: true
-                          description: YYYY-MM-DD or null
-                        membershipNumber:
-                          type: string
-                          nullable: true
-                        matchScore:
-                          type: number
-                          minimum: 0
-                          maximum: 1
                   customer:
                     type: object
                     nullable: true
@@ -728,6 +710,9 @@ paths:
                 dob:
                   type: string
                   description: Date of birth YYYY-MM-DD
+                idNumber:
+                  type: string
+                  description: License or ID number
       responses:
         '200':
           description: Match result
@@ -1770,7 +1755,7 @@ paths:
   /v1/visits/{id}/renew:
     post:
       tags: [Visits]
-      summary: Renew visit (add 6-hour block)
+      summary: Renew visit (add 2-hour or 6-hour block)
       security:
         - bearerAuth: []
       parameters:
@@ -1797,6 +1782,9 @@ paths:
                 lockerId:
                   type: string
                   format: uuid
+                renewalHours:
+                  type: integer
+                  enum: [2, 6]
                 lane:
                   type: string
       responses:

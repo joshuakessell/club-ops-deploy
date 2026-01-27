@@ -11,9 +11,10 @@ export interface SessionState {
   kioskAcknowledgedAt?: string | null;
   allowedRentals: string[];
   visitId?: string;
-  mode?: 'INITIAL' | 'RENEWAL';
+  mode?: 'CHECKIN' | 'RENEWAL';
   blockEndsAt?: string; // ISO timestamp of when current block ends
   customerPrimaryLanguage?: Language | null;
+  idScanIssue?: 'ID_EXPIRED' | 'UNDERAGE';
   pastDueBlocked?: boolean;
   pastDueBalance?: number;
   paymentStatus?: 'DUE' | 'PAID';
@@ -21,6 +22,8 @@ export interface SessionState {
   paymentLineItems?: Array<{ description: string; amount: number }>;
   paymentFailureReason?: string;
   agreementSigned?: boolean;
+  agreementBypassPending?: boolean;
+  agreementSignedMethod?: 'DIGITAL' | 'MANUAL';
   assignedResourceType?: 'room' | 'locker';
   assignedResourceNumber?: string;
   checkoutAt?: string;
@@ -32,11 +35,13 @@ export function getMembershipStatus(
 ): 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'NON_MEMBER' {
   if (session.membershipPurchaseIntent) return 'PENDING';
   const base = getCustomerMembershipStatus(
-    { membershipNumber: session.membershipNumber, membershipValidUntil: session.membershipValidUntil },
+    {
+      membershipNumber: session.membershipNumber,
+      membershipValidUntil: session.membershipValidUntil,
+    },
     new Date(nowMs)
   );
   if (base === 'ACTIVE') return 'ACTIVE';
   if (base === 'EXPIRED') return 'EXPIRED';
   return 'NON_MEMBER';
 }
-

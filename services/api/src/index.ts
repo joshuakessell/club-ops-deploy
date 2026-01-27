@@ -9,15 +9,13 @@ import {
   authRoutes,
   webauthnRoutes,
   customerRoutes,
-  sessionRoutes,
-  laneRoutes,
   inventoryRoutes,
   roomsRoutes,
   keysRoutes,
   cleaningRoutes,
   adminRoutes,
   adminTelemetryRoutes,
-  agreementRoutes,
+  agreementsRoutes,
   upgradeRoutes,
   waitlistRoutes,
   metricsRoutes,
@@ -31,6 +29,9 @@ import {
   sessionDocumentsRoutes,
   scheduleRoutes,
   timeoffRoutes,
+  cashDrawerRoutes,
+  breakRoutes,
+  orderRoutes,
 } from './routes';
 import { createBroadcaster, type Broadcaster } from './websocket/broadcaster';
 import { initializeDatabase, closeDatabase } from './db';
@@ -158,7 +159,9 @@ async function main() {
       // Seed demo data if DEMO_MODE is enabled
       if (process.env.DEMO_MODE === 'true') {
         if (SEED_ON_STARTUP) {
-          fastify.log.info('DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...');
+          fastify.log.info(
+            'DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...'
+          );
           await seedDemoData();
         } else {
           fastify.log.info(
@@ -177,15 +180,13 @@ async function main() {
   await fastify.register(authRoutes);
   await fastify.register(webauthnRoutes);
   await fastify.register(customerRoutes);
-  await fastify.register(sessionRoutes);
-  await fastify.register(laneRoutes);
   await fastify.register(inventoryRoutes);
   await fastify.register(roomsRoutes);
   await fastify.register(keysRoutes);
   await fastify.register(cleaningRoutes);
   await fastify.register(adminRoutes);
   await fastify.register(adminTelemetryRoutes);
-  await fastify.register(agreementRoutes);
+  await fastify.register(agreementsRoutes);
   await fastify.register(upgradeRoutes);
   await fastify.register(waitlistRoutes);
   await fastify.register(metricsRoutes);
@@ -199,6 +200,9 @@ async function main() {
   await fastify.register(sessionDocumentsRoutes);
   await fastify.register(scheduleRoutes);
   await fastify.register(timeoffRoutes);
+  await fastify.register(cashDrawerRoutes);
+  await fastify.register(breakRoutes);
+  await fastify.register(orderRoutes);
 
   // WebSocket endpoint (authenticated; see websocket/wsRoute.ts)
   await registerWsRoute(fastify, broadcaster);
@@ -229,8 +233,6 @@ async function main() {
     fastify.log.info(`WebSocket available at ws://${HOST}:${PORT}/ws`);
     fastify.log.info('Available endpoints:');
     fastify.log.info('  GET  /health');
-    fastify.log.info('  POST /v1/sessions');
-    fastify.log.info('  GET  /v1/sessions/active');
     fastify.log.info('  GET  /v1/inventory/summary');
     fastify.log.info('  GET  /v1/inventory/available');
     fastify.log.info('  POST /v1/keys/resolve');

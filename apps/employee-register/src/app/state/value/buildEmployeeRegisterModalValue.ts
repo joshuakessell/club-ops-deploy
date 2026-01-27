@@ -1,0 +1,136 @@
+import type { MutableRefObject } from 'react';
+import type { useAddOnSaleState } from '../slices/useAddOnSaleState';
+import type { useDocumentsState } from '../slices/useDocumentsState';
+import type { useMembershipPromptState } from '../slices/useMembershipPromptState';
+import type { useNotesState } from '../slices/useNotesState';
+import type { usePastDueState } from '../slices/usePastDueState';
+import type { usePaymentActions } from '../slices/usePaymentActions';
+import type { useScanState } from '../slices/useScanState';
+import type { useSelectionActions } from '../slices/useSelectionActions';
+import type { useToastState } from '../slices/useToastState';
+import type { useWaitlistUpgradeState } from '../slices/useWaitlistUpgradeState';
+
+type PastDueLineItem = { description: string; amount: number };
+
+type EmployeeRegisterModalParams = {
+  scanState: ReturnType<typeof useScanState>;
+  pastDueState: ReturnType<typeof usePastDueState>;
+  pastDueLineItems: PastDueLineItem[];
+  membershipPromptState: ReturnType<typeof useMembershipPromptState>;
+  addOnState: ReturnType<typeof useAddOnSaleState>;
+  paymentActions: ReturnType<typeof usePaymentActions>;
+  waitlistState: ReturnType<typeof useWaitlistUpgradeState>;
+  notesState: ReturnType<typeof useNotesState>;
+  toastState: ReturnType<typeof useToastState>;
+  setPaymentDeclineError: (value: string | null) => void;
+  currentSessionIdRef: MutableRefObject<string | null>;
+  documentsState: ReturnType<typeof useDocumentsState>;
+  selectionActions: ReturnType<typeof useSelectionActions>;
+};
+
+export function buildEmployeeRegisterModalValue(params: EmployeeRegisterModalParams) {
+  const {
+    scanState,
+    pastDueState,
+    pastDueLineItems,
+    membershipPromptState,
+    addOnState,
+    paymentActions,
+    waitlistState,
+    notesState,
+    toastState,
+    setPaymentDeclineError,
+    currentSessionIdRef,
+    documentsState,
+    selectionActions,
+  } = params;
+
+  return {
+    scanOverlayMounted: scanState.scanOverlayMounted,
+    scanOverlayActive: scanState.scanOverlayActive,
+    scanToastMessage: scanState.scanToastMessage,
+    setScanToastMessage: scanState.setScanToastMessage,
+    scanReady: scanState.scanReady,
+    scanBlockedReason: scanState.scanBlockedReason,
+    pendingScanResolution: scanState.pendingScanResolution,
+    scanResolutionError: scanState.scanResolutionError,
+    scanResolutionSubmitting: scanState.scanResolutionSubmitting,
+    setPendingScanResolution: scanState.setPendingScanResolution,
+    setScanResolutionError: scanState.setScanResolutionError,
+    resolvePendingScanSelection: scanState.resolvePendingScanSelection,
+    showCreateFromScanPrompt: scanState.showCreateFromScanPrompt,
+    pendingCreateFromScan: scanState.pendingCreateFromScan,
+    createFromScanError: scanState.createFromScanError,
+    createFromScanSubmitting: scanState.createFromScanSubmitting,
+    idScanIssue: scanState.idScanIssue,
+    setIdScanIssue: scanState.setIdScanIssue,
+    setShowCreateFromScanPrompt: scanState.setShowCreateFromScanPrompt,
+    setPendingCreateFromScan: scanState.setPendingCreateFromScan,
+    setCreateFromScanError: scanState.setCreateFromScanError,
+    setCreateFromScanSubmitting: scanState.setCreateFromScanSubmitting,
+    handleCreateFromNoMatch: scanState.handleCreateFromNoMatch,
+    showPastDueModal: pastDueState.showPastDueModal,
+    setShowPastDueModal: pastDueState.setShowPastDueModal,
+    handlePastDuePayment: pastDueState.handlePastDuePayment,
+    pastDueLineItems,
+    showManagerBypassModal: pastDueState.showManagerBypassModal,
+    setShowManagerBypassModal: pastDueState.setShowManagerBypassModal,
+    managerList: pastDueState.managerList,
+    managerId: pastDueState.managerId,
+    managerPin: pastDueState.managerPin,
+    setManagerId: pastDueState.setManagerId,
+    setManagerPin: pastDueState.setManagerPin,
+    handleManagerBypass: pastDueState.handleManagerBypass,
+    showMembershipIdPrompt: membershipPromptState.showMembershipIdPrompt,
+    membershipIdMode: membershipPromptState.membershipIdMode,
+    membershipIdInput: membershipPromptState.membershipIdInput,
+    membershipIdError: membershipPromptState.membershipIdError,
+    membershipIdSubmitting: membershipPromptState.membershipIdSubmitting,
+    setShowMembershipIdPrompt: membershipPromptState.setShowMembershipIdPrompt,
+    setMembershipIdMode: membershipPromptState.setMembershipIdMode,
+    setMembershipIdInput: membershipPromptState.setMembershipIdInput,
+    setMembershipIdError: membershipPromptState.setMembershipIdError,
+    handleCompleteMembershipPurchase: membershipPromptState.handleCompleteMembershipPurchase,
+    showAddOnSaleModal: addOnState.showAddOnSaleModal,
+    setShowAddOnSaleModal: addOnState.setShowAddOnSaleModal,
+    openAddOnSaleModal: addOnState.openAddOnSaleModal,
+    closeAddOnSaleModal: addOnState.closeAddOnSaleModal,
+    addOnCart: addOnState.addOnCart,
+    addAddOnItem: addOnState.addAddOnItem,
+    removeAddOnItem: addOnState.removeAddOnItem,
+    handleAddOnSaleToCheckin: paymentActions.handleAddOnSaleToCheckin,
+    upgradeContext: waitlistState.upgradeContext,
+    showUpgradePaymentModal: waitlistState.showUpgradePaymentModal,
+    setShowUpgradePaymentModal: waitlistState.setShowUpgradePaymentModal,
+    upgradeOriginalCharges: waitlistState.upgradeOriginalCharges,
+    upgradeOriginalTotal: waitlistState.upgradeOriginalTotal,
+    upgradeFee: waitlistState.upgradeFee,
+    upgradePaymentStatus: waitlistState.upgradePaymentStatus,
+    upgradePaymentIntentId: waitlistState.upgradePaymentIntentId,
+    handleUpgradePaymentFlow: waitlistState.handleUpgradePaymentFlow,
+    handleUpgradePaymentDecline: waitlistState.handleUpgradePaymentDecline,
+    showAddNoteModal: notesState.showAddNoteModal,
+    setShowAddNoteModal: notesState.setShowAddNoteModal,
+    newNoteText: notesState.newNoteText,
+    setNewNoteText: notesState.setNewNoteText,
+    handleAddNote: notesState.handleAddNote,
+    successToastMessage: toastState.successToastMessage,
+    setSuccessToastMessage: toastState.setSuccessToastMessage,
+    bottomToasts: toastState.bottomToasts,
+    dismissBottomToast: toastState.dismissBottomToast,
+    setPaymentDeclineError,
+    currentSessionIdRef,
+    documentsModalOpen: documentsState.documentsModalOpen,
+    setDocumentsModalOpen: documentsState.setDocumentsModalOpen,
+    documentsLoading: documentsState.documentsLoading,
+    documentsError: documentsState.documentsError,
+    documentsForSession: documentsState.documentsForSession,
+    setDocumentsError: documentsState.setDocumentsError,
+    fetchDocumentsBySession: documentsState.fetchDocumentsBySession,
+    downloadAgreementPdf: documentsState.downloadAgreementPdf,
+    handleStartAgreementBypass: selectionActions.handleStartAgreementBypass,
+    handleConfirmPhysicalAgreement: selectionActions.handleConfirmPhysicalAgreement,
+    handleCompleteTransaction: paymentActions.handleCompleteTransaction,
+    handleDemoPayment: paymentActions.handleDemoPayment,
+  };
+}

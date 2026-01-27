@@ -2,6 +2,8 @@
 -- PostgreSQL database dump
 --
 
+\restrict CFrzBp80k6cGa6pb5iAAwgv8pu1egAkcf5tM9wfKrHnKSswkf0SRvkA8Y2Aogze
+
 -- Dumped from database version 16.11
 -- Dumped by pg_dump version 16.11
 
@@ -15,6 +17,20 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
 
 --
 -- Name: audit_action; Type: TYPE; Schema: public; Owner: -
@@ -69,28 +85,6 @@ CREATE TYPE public.audit_action AS ENUM (
 
 
 --
--- Name: shift_status; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.shift_status AS ENUM (
-    'SCHEDULED',
-    'UPDATED',
-    'CANCELED'
-);
-
-
---
--- Name: time_off_request_status; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.time_off_request_status AS ENUM (
-    'PENDING',
-    'APPROVED',
-    'DENIED'
-);
-
-
---
 -- Name: block_type; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -102,13 +96,46 @@ CREATE TYPE public.block_type AS ENUM (
 
 
 --
--- Name: checkin_type; Type: TYPE; Schema: public; Owner: -
+-- Name: break_status; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.checkin_type AS ENUM (
-    'INITIAL',
-    'RENEWAL',
-    'UPGRADE'
+CREATE TYPE public.break_status AS ENUM (
+    'OPEN',
+    'CLOSED'
+);
+
+
+--
+-- Name: break_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.break_type AS ENUM (
+    'MEAL',
+    'REST',
+    'OTHER'
+);
+
+
+--
+-- Name: cash_drawer_event_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.cash_drawer_event_type AS ENUM (
+    'PAID_IN',
+    'PAID_OUT',
+    'DROP',
+    'NO_SALE_OPEN',
+    'ADJUSTMENT'
+);
+
+
+--
+-- Name: cash_drawer_session_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.cash_drawer_session_status AS ENUM (
+    'OPEN',
+    'CLOSED'
 );
 
 
@@ -121,6 +148,42 @@ CREATE TYPE public.checkout_request_status AS ENUM (
     'CLAIMED',
     'VERIFIED',
     'CANCELLED'
+);
+
+
+--
+-- Name: external_provider_entity_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.external_provider_entity_type AS ENUM (
+    'customer',
+    'payment',
+    'refund',
+    'order',
+    'shift',
+    'timeclock_session',
+    'cash_event',
+    'receipt'
+);
+
+
+--
+-- Name: inventory_reservation_kind; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.inventory_reservation_kind AS ENUM (
+    'LANE_SELECTION',
+    'UPGRADE_HOLD'
+);
+
+
+--
+-- Name: inventory_resource_type; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.inventory_resource_type AS ENUM (
+    'room',
+    'locker'
 );
 
 
@@ -147,6 +210,32 @@ CREATE TYPE public.lane_session_status AS ENUM (
     'AWAITING_SIGNATURE',
     'COMPLETED',
     'CANCELLED'
+);
+
+
+--
+-- Name: order_line_item_kind; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.order_line_item_kind AS ENUM (
+    'RETAIL',
+    'ADDON',
+    'UPGRADE',
+    'LATE_FEE',
+    'MANUAL'
+);
+
+
+--
+-- Name: order_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.order_status AS ENUM (
+    'OPEN',
+    'PAID',
+    'CANCELED',
+    'REFUNDED',
+    'PARTIALLY_REFUNDED'
 );
 
 
@@ -202,13 +291,13 @@ CREATE TYPE public.room_type AS ENUM (
 
 
 --
--- Name: session_status; Type: TYPE; Schema: public; Owner: -
+-- Name: shift_status; Type: TYPE; Schema: public; Owner: -
 --
 
-CREATE TYPE public.session_status AS ENUM (
-    'ACTIVE',
-    'COMPLETED',
-    'CANCELLED'
+CREATE TYPE public.shift_status AS ENUM (
+    'SCHEDULED',
+    'UPDATED',
+    'CANCELED'
 );
 
 
@@ -219,6 +308,17 @@ CREATE TYPE public.session_status AS ENUM (
 CREATE TYPE public.staff_role AS ENUM (
     'STAFF',
     'ADMIN'
+);
+
+
+--
+-- Name: time_off_request_status; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public.time_off_request_status AS ENUM (
+    'PENDING',
+    'APPROVED',
+    'DENIED'
 );
 
 
@@ -235,26 +335,6 @@ CREATE TYPE public.waitlist_status AS ENUM (
 );
 
 
---
--- Name: inventory_resource_type; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.inventory_resource_type AS ENUM (
-    'room',
-    'locker'
-);
-
-
---
--- Name: inventory_reservation_kind; Type: TYPE; Schema: public; Owner: -
---
-
-CREATE TYPE public.inventory_reservation_kind AS ENUM (
-    'LANE_SELECTION',
-    'UPGRADE_HOLD'
-);
-
-
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -266,7 +346,6 @@ SET default_table_access_method = heap;
 CREATE TABLE public.agreement_signatures (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     agreement_id uuid NOT NULL,
-    checkin_id uuid,
     customer_name character varying(255) NOT NULL,
     membership_number character varying(50),
     signed_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -316,6 +395,43 @@ CREATE TABLE public.audit_log (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     staff_id uuid,
     metadata jsonb
+);
+
+
+--
+-- Name: cash_drawer_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cash_drawer_events (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    cash_drawer_session_id uuid NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() NOT NULL,
+    type public.cash_drawer_event_type NOT NULL,
+    amount_cents integer,
+    reason text,
+    created_by_staff_id uuid NOT NULL,
+    metadata_json jsonb
+);
+
+
+--
+-- Name: cash_drawer_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cash_drawer_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    register_session_id uuid NOT NULL,
+    opened_by_staff_id uuid NOT NULL,
+    opened_at timestamp with time zone DEFAULT now() NOT NULL,
+    opening_float_cents integer NOT NULL,
+    closed_by_staff_id uuid,
+    closed_at timestamp with time zone,
+    counted_cash_cents integer,
+    expected_cash_cents integer,
+    over_short_cents integer,
+    notes text,
+    status public.cash_drawer_session_status DEFAULT 'OPEN'::public.cash_drawer_session_status NOT NULL,
+    closeout_snapshot_json jsonb
 );
 
 
@@ -449,11 +565,100 @@ CREATE TABLE public.customers (
     banned_until timestamp with time zone,
     id_scan_hash character varying(255),
     id_scan_value text,
-    primary_language text CHECK ((primary_language = ANY (ARRAY['EN'::text, 'ES'::text]))),
+    id_expiration_date date,
+    primary_language text,
     notes text,
     past_due_balance numeric(10,2) DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT customers_primary_language_check CHECK ((primary_language = ANY (ARRAY['EN'::text, 'ES'::text])))
+);
+
+
+--
+-- Name: devices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.devices (
+    device_id character varying(255) NOT NULL,
+    display_name character varying(255) NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: employee_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_documents (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    employee_id uuid NOT NULL,
+    doc_type text NOT NULL,
+    filename text NOT NULL,
+    mime_type text NOT NULL,
+    storage_key text NOT NULL,
+    uploaded_by uuid NOT NULL,
+    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
+    notes text,
+    sha256_hash text,
+    CONSTRAINT employee_documents_doc_type_check CHECK ((doc_type = ANY (ARRAY['ID'::text, 'W4'::text, 'I9'::text, 'OFFER_LETTER'::text, 'NDA'::text, 'OTHER'::text])))
+);
+
+
+--
+-- Name: employee_shifts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_shifts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    employee_id uuid NOT NULL,
+    starts_at timestamp with time zone NOT NULL,
+    ends_at timestamp with time zone NOT NULL,
+    shift_code text NOT NULL,
+    role text,
+    status public.shift_status DEFAULT 'SCHEDULED'::public.shift_status NOT NULL,
+    notes text,
+    created_by uuid,
+    updated_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT employee_shifts_shift_code_check CHECK ((shift_code = ANY (ARRAY['A'::text, 'B'::text, 'C'::text])))
+);
+
+
+--
+-- Name: external_provider_refs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.external_provider_refs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    provider text NOT NULL,
+    entity_type public.external_provider_entity_type NOT NULL,
+    internal_id uuid NOT NULL,
+    external_id text NOT NULL,
+    external_version text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: inventory_reservations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.inventory_reservations (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    resource_type public.inventory_resource_type NOT NULL,
+    resource_id uuid NOT NULL,
+    kind public.inventory_reservation_kind NOT NULL,
+    lane_session_id uuid,
+    waitlist_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone,
+    released_at timestamp with time zone,
+    release_reason text,
+    CONSTRAINT inventory_reservations_lane_session_required CHECK (((kind <> 'LANE_SELECTION'::public.inventory_reservation_kind) OR (lane_session_id IS NOT NULL))),
+    CONSTRAINT inventory_reservations_waitlist_required CHECK (((kind <> 'UPGRADE_HOLD'::public.inventory_reservation_kind) OR (waitlist_id IS NOT NULL)))
 );
 
 
@@ -469,7 +674,16 @@ CREATE TABLE public.key_tags (
     tag_code character varying(255) NOT NULL,
     is_active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT key_tags_exactly_one_target_chk CHECK (((
+CASE
+    WHEN (room_id IS NULL) THEN 0
+    ELSE 1
+END +
+CASE
+    WHEN (locker_id IS NULL) THEN 0
+    ELSE 1
+END) = 1))
 );
 
 
@@ -498,16 +712,18 @@ CREATE TABLE public.lane_sessions (
     kiosk_acknowledged_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    checkin_mode character varying(20) DEFAULT 'INITIAL'::character varying,
+    checkin_mode character varying(20) DEFAULT 'CHECKIN'::character varying,
+    renewal_hours integer,
     customer_id uuid,
     proposed_rental_type public.rental_type,
     proposed_by character varying(20),
     selection_confirmed boolean DEFAULT false,
     selection_confirmed_by character varying(20),
     selection_locked_at timestamp with time zone,
-    CONSTRAINT lane_sessions_proposed_by_check CHECK (((proposed_by)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'EMPLOYEE'::character varying])::text[]))),
-    CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY ((ARRAY['CUSTOMER'::character varying, 'EMPLOYEE'::character varying])::text[]))),
-    CONSTRAINT lane_sessions_membership_choice_check CHECK (((membership_choice)::text = ANY ((ARRAY['ONE_TIME'::character varying, 'SIX_MONTH'::character varying])::text[])) OR membership_choice IS NULL)
+    CONSTRAINT lane_sessions_membership_choice_check CHECK ((((membership_choice)::text = ANY (ARRAY[('ONE_TIME'::character varying)::text, ('SIX_MONTH'::character varying)::text])) OR (membership_choice IS NULL))),
+    CONSTRAINT lane_sessions_renewal_hours_check CHECK (((renewal_hours = ANY (ARRAY[2, 6])) OR (renewal_hours IS NULL))),
+    CONSTRAINT lane_sessions_proposed_by_check CHECK (((proposed_by)::text = ANY (ARRAY[('CUSTOMER'::character varying)::text, ('EMPLOYEE'::character varying)::text]))),
+    CONSTRAINT lane_sessions_selection_confirmed_by_check CHECK (((selection_confirmed_by)::text = ANY (ARRAY[('CUSTOMER'::character varying)::text, ('EMPLOYEE'::character varying)::text])))
 );
 
 
@@ -542,30 +758,43 @@ CREATE TABLE public.lockers (
 
 
 --
--- Name: members; Type: TABLE; Schema: public; Owner: -
+-- Name: order_line_items; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.members (
+CREATE TABLE public.order_line_items (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    membership_number character varying(50) NOT NULL,
-    name character varying(255) NOT NULL,
-    email character varying(255),
-    phone character varying(50),
-    is_active boolean DEFAULT true NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    banned_until timestamp with time zone,
-    dob date,
-    membership_card_type character varying(20),
-    membership_valid_until date
+    order_id uuid NOT NULL,
+    kind public.order_line_item_kind NOT NULL,
+    sku text,
+    name text NOT NULL,
+    quantity integer NOT NULL,
+    unit_price_cents integer NOT NULL,
+    discount_cents integer DEFAULT 0 NOT NULL,
+    tax_cents integer DEFAULT 0 NOT NULL,
+    total_cents integer NOT NULL,
+    metadata_json jsonb
 );
 
 
 --
--- Name: TABLE members; Type: COMMENT; Schema: public; Owner: -
+-- Name: orders; Type: TABLE; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.members IS 'LEGACY: This table is deprecated. All operational workflows should use customers(id) instead of members(id). Foreign key dependencies have been migrated to customers. This table is kept temporarily for data validation and will be removed in a future migration.';
+CREATE TABLE public.orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    customer_id uuid,
+    register_session_id uuid,
+    created_by_staff_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    status public.order_status DEFAULT 'OPEN'::public.order_status NOT NULL,
+    subtotal_cents integer NOT NULL,
+    discount_cents integer NOT NULL,
+    tax_cents integer NOT NULL,
+    tip_cents integer DEFAULT 0 NOT NULL,
+    total_cents integer NOT NULL,
+    currency character varying(3) DEFAULT 'USD'::character varying NOT NULL,
+    metadata_json jsonb
+);
 
 
 --
@@ -576,12 +805,28 @@ CREATE TABLE public.payment_intents (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     lane_session_id uuid,
     amount numeric(10,2) NOT NULL,
+    tip_cents integer DEFAULT 0 NOT NULL,
     status public.payment_status DEFAULT 'DUE'::public.payment_status NOT NULL,
     quote_json jsonb NOT NULL,
     square_transaction_id character varying(255),
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     paid_at timestamp with time zone
+);
+
+
+--
+-- Name: receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.receipts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    issued_at timestamp with time zone DEFAULT now() NOT NULL,
+    receipt_number text NOT NULL,
+    receipt_json jsonb NOT NULL,
+    pdf_storage_key text,
+    metadata_json jsonb
 );
 
 
@@ -597,6 +842,7 @@ CREATE TABLE public.register_sessions (
     last_heartbeat timestamp with time zone DEFAULT now() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     signed_out_at timestamp with time zone,
+    closeout_summary_json jsonb,
     CONSTRAINT register_sessions_register_number_check CHECK ((register_number = ANY (ARRAY[1, 2])))
 );
 
@@ -653,31 +899,6 @@ ALTER SEQUENCE public.schema_migrations_id_seq OWNED BY public.schema_migrations
 
 
 --
--- Name: sessions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.sessions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    member_name character varying(255) NOT NULL,
-    room_id uuid,
-    locker_id uuid,
-    check_in_time timestamp with time zone DEFAULT now() NOT NULL,
-    check_out_time timestamp with time zone,
-    expected_duration integer DEFAULT 60 NOT NULL,
-    status public.session_status DEFAULT 'ACTIVE'::public.session_status NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    lane character varying(50),
-    membership_number character varying(50),
-    checkout_at timestamp with time zone,
-    agreement_signed boolean DEFAULT false NOT NULL,
-    checkin_type public.checkin_type,
-    visit_id uuid,
-    customer_id uuid
-);
-
-
---
 -- Name: staff; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -690,6 +911,22 @@ CREATE TABLE public.staff (
     active boolean DEFAULT true NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: staff_break_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.staff_break_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    staff_id uuid NOT NULL,
+    timeclock_session_id uuid NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    ended_at timestamp with time zone,
+    break_type public.break_type NOT NULL,
+    status public.break_status DEFAULT 'OPEN'::public.break_status NOT NULL,
+    notes text
 );
 
 
@@ -729,73 +966,97 @@ CREATE TABLE public.staff_webauthn_credentials (
 
 
 --
--- Name: employee_shifts; Type: TABLE; Schema: public; Owner: -
+-- Name: telemetry_events; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.employee_shifts (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    employee_id uuid NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
-    starts_at timestamp with time zone NOT NULL,
-    ends_at timestamp with time zone NOT NULL,
-    shift_code text NOT NULL CHECK (shift_code IN ('A', 'B', 'C')),
-    role text,
-    status public.shift_status DEFAULT 'SCHEDULED'::public.shift_status NOT NULL,
-    notes text,
-    created_by uuid REFERENCES public.staff(id) ON DELETE SET NULL,
-    updated_by uuid REFERENCES public.staff(id) ON DELETE SET NULL,
+CREATE TABLE public.telemetry_events (
+    id bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    app text NOT NULL,
+    level text NOT NULL,
+    kind text NOT NULL,
+    route text,
+    message text,
+    stack text,
+    request_id text,
+    session_id text,
+    device_id text,
+    lane text,
+    method text,
+    status integer,
+    url text,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT telemetry_events_level_check CHECK ((level = ANY (ARRAY['error'::text, 'warn'::text, 'info'::text])))
 );
 
-CREATE INDEX idx_employee_shifts_employee ON public.employee_shifts USING btree (employee_id);
-CREATE INDEX idx_employee_shifts_dates ON public.employee_shifts USING btree (starts_at, ends_at);
-CREATE INDEX idx_employee_shifts_status ON public.employee_shifts USING btree (status);
-CREATE INDEX idx_employee_shifts_shift_code ON public.employee_shifts USING btree (shift_code);
+
+--
+-- Name: telemetry_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.telemetry_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
 
 --
--- Name: timeclock_sessions; Type: TABLE; Schema: public; Owner: -
+-- Name: telemetry_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-CREATE TABLE public.timeclock_sessions (
+ALTER SEQUENCE public.telemetry_events_id_seq OWNED BY public.telemetry_events.id;
+
+
+--
+-- Name: telemetry_spans; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.telemetry_spans (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    employee_id uuid NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
-    shift_id uuid REFERENCES public.employee_shifts(id) ON DELETE SET NULL,
-    clock_in_at timestamp with time zone NOT NULL,
-    clock_out_at timestamp with time zone,
-    source text NOT NULL CHECK (source IN ('EMPLOYEE_REGISTER', 'OFFICE_DASHBOARD')),
-    created_by uuid REFERENCES public.staff(id) ON DELETE SET NULL,
-    notes text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    trace_id text NOT NULL,
+    app text DEFAULT 'unknown'::text NOT NULL,
+    device_id text DEFAULT 'unknown'::text NOT NULL,
+    session_id text DEFAULT 'unknown'::text NOT NULL,
+    span_type text NOT NULL,
+    name text,
+    level text DEFAULT 'info'::text NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    ended_at timestamp with time zone,
+    duration_ms integer,
+    route text,
+    method text,
+    status integer,
+    url text,
+    message text,
+    stack text,
+    request_headers jsonb,
+    response_headers jsonb,
+    request_body jsonb,
+    response_body jsonb,
+    request_key text,
+    incident_id text,
+    incident_reason text,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL
 );
-
-CREATE UNIQUE INDEX idx_timeclock_sessions_employee_open ON public.timeclock_sessions USING btree (employee_id) WHERE (clock_out_at IS NULL);
-CREATE INDEX idx_timeclock_sessions_employee ON public.timeclock_sessions USING btree (employee_id);
-CREATE INDEX idx_timeclock_sessions_shift ON public.timeclock_sessions USING btree (shift_id) WHERE (shift_id IS NOT NULL);
-CREATE INDEX idx_timeclock_sessions_dates ON public.timeclock_sessions USING btree (clock_in_at, clock_out_at);
-CREATE INDEX idx_timeclock_sessions_open ON public.timeclock_sessions USING btree (clock_out_at) WHERE (clock_out_at IS NULL);
 
 
 --
--- Name: employee_documents; Type: TABLE; Schema: public; Owner: -
+-- Name: telemetry_traces; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.employee_documents (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    employee_id uuid NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
-    doc_type text NOT NULL CHECK (doc_type IN ('ID', 'W4', 'I9', 'OFFER_LETTER', 'NDA', 'OTHER')),
-    filename text NOT NULL,
-    mime_type text NOT NULL,
-    storage_key text NOT NULL,
-    uploaded_by uuid NOT NULL REFERENCES public.staff(id) ON DELETE RESTRICT,
-    uploaded_at timestamp with time zone DEFAULT now() NOT NULL,
-    notes text,
-    sha256_hash text
+CREATE TABLE public.telemetry_traces (
+    trace_id text NOT NULL,
+    app text DEFAULT 'unknown'::text NOT NULL,
+    device_id text DEFAULT 'unknown'::text NOT NULL,
+    session_id text DEFAULT 'unknown'::text NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    incident_open boolean DEFAULT false NOT NULL,
+    incident_last_at timestamp with time zone,
+    meta jsonb DEFAULT '{}'::jsonb NOT NULL
 );
-
-CREATE INDEX idx_employee_documents_employee ON public.employee_documents USING btree (employee_id);
-CREATE INDEX idx_employee_documents_type ON public.employee_documents USING btree (doc_type);
-CREATE INDEX idx_employee_documents_uploaded_by ON public.employee_documents USING btree (uploaded_by);
 
 
 --
@@ -804,20 +1065,34 @@ CREATE INDEX idx_employee_documents_uploaded_by ON public.employee_documents USI
 
 CREATE TABLE public.time_off_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    employee_id uuid NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
+    employee_id uuid NOT NULL,
     day date NOT NULL,
     reason text,
     status public.time_off_request_status DEFAULT 'PENDING'::public.time_off_request_status NOT NULL,
-    decided_by uuid REFERENCES public.staff(id) ON DELETE SET NULL,
+    decided_by uuid,
     decided_at timestamp with time zone,
     decision_notes text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-CREATE UNIQUE INDEX idx_time_off_requests_employee_day ON public.time_off_requests USING btree (employee_id, day);
-CREATE INDEX idx_time_off_requests_status ON public.time_off_requests USING btree (status);
-CREATE INDEX idx_time_off_requests_day ON public.time_off_requests USING btree (day);
+
+--
+-- Name: timeclock_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.timeclock_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    employee_id uuid NOT NULL,
+    shift_id uuid,
+    clock_in_at timestamp with time zone NOT NULL,
+    clock_out_at timestamp with time zone,
+    source text NOT NULL,
+    created_by uuid,
+    notes text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT timeclock_sessions_source_check CHECK ((source = ANY (ARRAY['EMPLOYEE_REGISTER'::text, 'OFFICE_DASHBOARD'::text])))
+);
 
 
 --
@@ -860,24 +1135,6 @@ CREATE TABLE public.waitlist (
 
 
 --
--- Name: inventory_reservations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.inventory_reservations (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    resource_type public.inventory_resource_type NOT NULL,
-    resource_id uuid NOT NULL,
-    kind public.inventory_reservation_kind NOT NULL,
-    lane_session_id uuid,
-    waitlist_id uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    expires_at timestamp with time zone,
-    released_at timestamp with time zone,
-    release_reason text
-);
-
-
---
 -- Name: webauthn_challenges; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -897,6 +1154,13 @@ CREATE TABLE public.webauthn_challenges (
 --
 
 ALTER TABLE ONLY public.schema_migrations ALTER COLUMN id SET DEFAULT nextval('public.schema_migrations_id_seq'::regclass);
+
+
+--
+-- Name: telemetry_events id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_events ALTER COLUMN id SET DEFAULT nextval('public.telemetry_events_id_seq'::regclass);
 
 
 --
@@ -921,6 +1185,22 @@ ALTER TABLE ONLY public.agreements
 
 ALTER TABLE ONLY public.audit_log
     ADD CONSTRAINT audit_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cash_drawer_events cash_drawer_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_events
+    ADD CONSTRAINT cash_drawer_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: cash_drawer_sessions cash_drawer_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_sessions
+    ADD CONSTRAINT cash_drawer_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -988,6 +1268,54 @@ ALTER TABLE ONLY public.customers
 
 
 --
+-- Name: devices devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.devices
+    ADD CONSTRAINT devices_pkey PRIMARY KEY (device_id);
+
+
+--
+-- Name: employee_shifts employee_shifts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_shifts
+    ADD CONSTRAINT employee_shifts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: external_provider_refs external_provider_refs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_provider_refs
+    ADD CONSTRAINT external_provider_refs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: external_provider_refs external_provider_refs_provider_entity_type_external_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_provider_refs
+    ADD CONSTRAINT external_provider_refs_provider_entity_type_external_id_key UNIQUE (provider, entity_type, external_id);
+
+
+--
+-- Name: external_provider_refs external_provider_refs_provider_entity_type_internal_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.external_provider_refs
+    ADD CONSTRAINT external_provider_refs_provider_entity_type_internal_id_key UNIQUE (provider, entity_type, internal_id);
+
+
+--
+-- Name: inventory_reservations inventory_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: key_tags key_tags_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1036,19 +1364,19 @@ ALTER TABLE ONLY public.lockers
 
 
 --
--- Name: members members_membership_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: order_line_items order_line_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.members
-    ADD CONSTRAINT members_membership_number_key UNIQUE (membership_number);
+ALTER TABLE ONLY public.order_line_items
+    ADD CONSTRAINT order_line_items_pkey PRIMARY KEY (id);
 
 
 --
--- Name: members members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: orders orders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.members
-    ADD CONSTRAINT members_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_pkey PRIMARY KEY (id);
 
 
 --
@@ -1057,6 +1385,22 @@ ALTER TABLE ONLY public.members
 
 ALTER TABLE ONLY public.payment_intents
     ADD CONSTRAINT payment_intents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: receipts receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.receipts
+    ADD CONSTRAINT receipts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: receipts receipts_receipt_number_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.receipts
+    ADD CONSTRAINT receipts_receipt_number_key UNIQUE (receipt_number);
 
 
 --
@@ -1100,14 +1444,6 @@ ALTER TABLE ONLY public.schema_migrations
 
 
 --
--- Name: sessions sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sessions
-    ADD CONSTRAINT sessions_pkey PRIMARY KEY (id);
-
-
---
 -- Name: staff staff_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1121,6 +1457,14 @@ ALTER TABLE ONLY public.staff
 
 ALTER TABLE ONLY public.staff
     ADD CONSTRAINT staff_qr_token_hash_key UNIQUE (qr_token_hash);
+
+
+--
+-- Name: staff_break_sessions staff_break_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.staff_break_sessions
+    ADD CONSTRAINT staff_break_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -1148,6 +1492,30 @@ ALTER TABLE ONLY public.staff_webauthn_credentials
 
 
 --
+-- Name: telemetry_events telemetry_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_events
+    ADD CONSTRAINT telemetry_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: telemetry_spans telemetry_spans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_spans
+    ADD CONSTRAINT telemetry_spans_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: telemetry_traces telemetry_traces_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_traces
+    ADD CONSTRAINT telemetry_traces_pkey PRIMARY KEY (trace_id);
+
+
+--
 -- Name: visits visits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1161,14 +1529,6 @@ ALTER TABLE ONLY public.visits
 
 ALTER TABLE ONLY public.waitlist
     ADD CONSTRAINT waitlist_pkey PRIMARY KEY (id);
-
-
---
--- Name: inventory_reservations inventory_reservations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.inventory_reservations
-    ADD CONSTRAINT inventory_reservations_pkey PRIMARY KEY (id);
 
 
 --
@@ -1192,13 +1552,6 @@ ALTER TABLE ONLY public.webauthn_challenges
 --
 
 CREATE INDEX idx_agreement_signatures_agreement ON public.agreement_signatures USING btree (agreement_id);
-
-
---
--- Name: idx_agreement_signatures_checkin; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_agreement_signatures_checkin ON public.agreement_signatures USING btree (checkin_id);
 
 
 --
@@ -1265,6 +1618,48 @@ CREATE INDEX idx_audit_log_user ON public.audit_log USING btree (user_id);
 
 
 --
+-- Name: idx_cash_drawer_events_created_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_events_created_by ON public.cash_drawer_events USING btree (created_by_staff_id);
+
+
+--
+-- Name: idx_cash_drawer_events_occurred_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_events_occurred_at ON public.cash_drawer_events USING btree (occurred_at);
+
+
+--
+-- Name: idx_cash_drawer_events_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_events_session ON public.cash_drawer_events USING btree (cash_drawer_session_id);
+
+
+--
+-- Name: idx_cash_drawer_sessions_opened_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_sessions_opened_by ON public.cash_drawer_sessions USING btree (opened_by_staff_id);
+
+
+--
+-- Name: idx_cash_drawer_sessions_register_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_sessions_register_session ON public.cash_drawer_sessions USING btree (register_session_id);
+
+
+--
+-- Name: idx_cash_drawer_sessions_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_cash_drawer_sessions_status ON public.cash_drawer_sessions USING btree (status);
+
+
+--
 -- Name: idx_charges_block; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1272,17 +1667,17 @@ CREATE INDEX idx_charges_block ON public.charges USING btree (checkin_block_id) 
 
 
 --
--- Name: idx_charges_visit; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_charges_visit ON public.charges USING btree (visit_id);
-
-
---
 -- Name: idx_charges_payment_intent; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX idx_charges_payment_intent ON public.charges USING btree (payment_intent_id) WHERE (payment_intent_id IS NOT NULL);
+
+
+--
+-- Name: idx_charges_visit; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_charges_visit ON public.charges USING btree (visit_id);
 
 
 --
@@ -1447,13 +1842,6 @@ CREATE INDEX idx_customers_banned ON public.customers USING btree (banned_until)
 
 
 --
--- Name: idx_customers_id_hash; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_customers_id_hash ON public.customers USING btree (id_scan_hash) WHERE (id_scan_hash IS NOT NULL);
-
-
---
 -- Name: idx_customers_dob; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1461,10 +1849,87 @@ CREATE INDEX idx_customers_dob ON public.customers USING btree (dob) WHERE (dob 
 
 
 --
+-- Name: idx_customers_id_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_customers_id_hash ON public.customers USING btree (id_scan_hash) WHERE (id_scan_hash IS NOT NULL);
+
+
+--
 -- Name: idx_customers_membership; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_customers_membership ON public.customers USING btree (membership_number) WHERE (membership_number IS NOT NULL);
+
+
+--
+-- Name: idx_devices_enabled; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_devices_enabled ON public.devices USING btree (enabled) WHERE (enabled = true);
+
+
+--
+-- Name: idx_employee_documents_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_employee_documents_employee ON public.employee_documents USING btree (employee_id);
+
+
+--
+-- Name: idx_employee_documents_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_employee_documents_type ON public.employee_documents USING btree (doc_type);
+
+
+--
+-- Name: idx_employee_documents_uploaded_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_employee_documents_uploaded_by ON public.employee_documents USING btree (uploaded_by);
+
+
+--
+-- Name: idx_employee_shifts_dates; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_employee_shifts_dates ON public.employee_shifts USING btree (starts_at, ends_at);
+
+
+--
+-- Name: idx_employee_shifts_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_employee_shifts_employee ON public.employee_shifts USING btree (employee_id);
+
+
+--
+-- Name: idx_employee_shifts_shift_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_employee_shifts_shift_code ON public.employee_shifts USING btree (shift_code);
+
+
+--
+-- Name: idx_employee_shifts_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_employee_shifts_status ON public.employee_shifts USING btree (status);
+
+
+--
+-- Name: idx_inventory_reservations_active_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_inventory_reservations_active_expires_at ON public.inventory_reservations USING btree (expires_at) WHERE (released_at IS NULL);
+
+
+--
+-- Name: idx_inventory_reservations_waitlist_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_inventory_reservations_waitlist_active ON public.inventory_reservations USING btree (waitlist_id) WHERE (released_at IS NULL);
 
 
 --
@@ -1566,24 +2031,45 @@ CREATE INDEX idx_lockers_status ON public.lockers USING btree (status);
 
 
 --
--- Name: idx_members_active; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_order_line_items_order; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_members_active ON public.members USING btree (is_active) WHERE (is_active = true);
-
-
---
--- Name: idx_members_banned_until; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_members_banned_until ON public.members USING btree (banned_until) WHERE (banned_until IS NOT NULL);
+CREATE INDEX idx_order_line_items_order ON public.order_line_items USING btree (order_id);
 
 
 --
--- Name: idx_members_membership_number; Type: INDEX; Schema: public; Owner: -
+-- Name: idx_orders_created_at; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_members_membership_number ON public.members USING btree (membership_number);
+CREATE INDEX idx_orders_created_at ON public.orders USING btree (created_at);
+
+
+--
+-- Name: idx_orders_created_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_created_by ON public.orders USING btree (created_by_staff_id) WHERE (created_by_staff_id IS NOT NULL);
+
+
+--
+-- Name: idx_orders_customer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_customer ON public.orders USING btree (customer_id) WHERE (customer_id IS NOT NULL);
+
+
+--
+-- Name: idx_orders_register_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_register_session ON public.orders USING btree (register_session_id) WHERE (register_session_id IS NOT NULL);
+
+
+--
+-- Name: idx_orders_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_orders_status ON public.orders USING btree (status);
 
 
 --
@@ -1608,6 +2094,13 @@ CREATE INDEX idx_payment_intents_status ON public.payment_intents USING btree (s
 
 
 --
+-- Name: idx_receipts_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_receipts_order ON public.receipts USING btree (order_id);
+
+
+--
 -- Name: idx_register_sessions_device; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1628,7 +2121,6 @@ CREATE UNIQUE INDEX idx_register_sessions_device_active ON public.register_sessi
 CREATE INDEX idx_register_sessions_employee ON public.register_sessions USING btree (employee_id);
 
 
---
 --
 -- Name: idx_register_sessions_heartbeat; Type: INDEX; Schema: public; Owner: -
 --
@@ -1672,76 +2164,6 @@ CREATE INDEX idx_rooms_type ON public.rooms USING btree (type);
 
 
 --
--- Name: idx_sessions_active; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_active ON public.sessions USING btree (status) WHERE (status = 'ACTIVE'::public.session_status);
-
-
---
--- Name: idx_sessions_check_in; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_check_in ON public.sessions USING btree (check_in_time);
-
-
---
--- Name: idx_sessions_checkin_type; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_checkin_type ON public.sessions USING btree (checkin_type);
-
-
---
--- Name: idx_sessions_customer; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_customer ON public.sessions USING btree (customer_id);
-
-
---
--- Name: idx_sessions_lane; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_lane ON public.sessions USING btree (lane) WHERE (lane IS NOT NULL);
-
-
---
--- Name: idx_sessions_lane_active; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_lane_active ON public.sessions USING btree (lane, status) WHERE ((lane IS NOT NULL) AND (status = 'ACTIVE'::public.session_status));
-
-
---
--- Name: idx_sessions_locker; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_locker ON public.sessions USING btree (locker_id) WHERE (locker_id IS NOT NULL);
-
-
---
--- Name: idx_sessions_room; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_room ON public.sessions USING btree (room_id) WHERE (room_id IS NOT NULL);
-
-
---
--- Name: idx_sessions_status; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_status ON public.sessions USING btree (status);
-
-
---
--- Name: idx_sessions_visit; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_sessions_visit ON public.sessions USING btree (visit_id) WHERE (visit_id IS NOT NULL);
-
-
---
 -- Name: idx_staff_active; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1760,6 +2182,27 @@ CREATE INDEX idx_staff_qr_token_hash ON public.staff USING btree (qr_token_hash)
 --
 
 CREATE INDEX idx_staff_role ON public.staff USING btree (role);
+
+
+--
+-- Name: idx_staff_break_sessions_staff; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_staff_break_sessions_staff ON public.staff_break_sessions USING btree (staff_id);
+
+
+--
+-- Name: idx_staff_break_sessions_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_staff_break_sessions_status ON public.staff_break_sessions USING btree (status);
+
+
+--
+-- Name: idx_staff_break_sessions_timeclock; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_staff_break_sessions_timeclock ON public.staff_break_sessions USING btree (timeclock_session_id);
 
 
 --
@@ -1795,6 +2238,146 @@ CREATE INDEX idx_staff_sessions_staff_id ON public.staff_sessions USING btree (s
 --
 
 CREATE INDEX idx_staff_sessions_token ON public.staff_sessions USING btree (session_token) WHERE (revoked_at IS NULL);
+
+
+--
+-- Name: idx_telemetry_spans_incident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_spans_incident_id ON public.telemetry_spans USING btree (incident_id);
+
+
+--
+-- Name: idx_telemetry_spans_level; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_spans_level ON public.telemetry_spans USING btree (level);
+
+
+--
+-- Name: idx_telemetry_spans_request_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_spans_request_key ON public.telemetry_spans USING btree (request_key);
+
+
+--
+-- Name: idx_telemetry_spans_started_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_spans_started_at ON public.telemetry_spans USING btree (started_at DESC);
+
+
+--
+-- Name: idx_telemetry_spans_trace_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_spans_trace_id ON public.telemetry_spans USING btree (trace_id);
+
+
+--
+-- Name: idx_telemetry_spans_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_spans_type ON public.telemetry_spans USING btree (span_type);
+
+
+--
+-- Name: idx_telemetry_traces_app; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_traces_app ON public.telemetry_traces USING btree (app);
+
+
+--
+-- Name: idx_telemetry_traces_device; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_traces_device ON public.telemetry_traces USING btree (device_id);
+
+
+--
+-- Name: idx_telemetry_traces_incident_last; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_traces_incident_last ON public.telemetry_traces USING btree (incident_last_at DESC);
+
+
+--
+-- Name: idx_telemetry_traces_incident_open; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_traces_incident_open ON public.telemetry_traces USING btree (incident_open);
+
+
+--
+-- Name: idx_telemetry_traces_last_seen; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_traces_last_seen ON public.telemetry_traces USING btree (last_seen_at DESC);
+
+
+--
+-- Name: idx_telemetry_traces_session; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_telemetry_traces_session ON public.telemetry_traces USING btree (session_id);
+
+
+--
+-- Name: idx_time_off_requests_day; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_time_off_requests_day ON public.time_off_requests USING btree (day);
+
+
+--
+-- Name: idx_time_off_requests_employee_day; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_time_off_requests_employee_day ON public.time_off_requests USING btree (employee_id, day);
+
+
+--
+-- Name: idx_time_off_requests_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_time_off_requests_status ON public.time_off_requests USING btree (status);
+
+
+--
+-- Name: idx_timeclock_sessions_dates; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_timeclock_sessions_dates ON public.timeclock_sessions USING btree (clock_in_at, clock_out_at);
+
+
+--
+-- Name: idx_timeclock_sessions_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_timeclock_sessions_employee ON public.timeclock_sessions USING btree (employee_id);
+
+
+--
+-- Name: idx_timeclock_sessions_employee_open; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_timeclock_sessions_employee_open ON public.timeclock_sessions USING btree (employee_id) WHERE (clock_out_at IS NULL);
+
+
+--
+-- Name: idx_timeclock_sessions_open; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_timeclock_sessions_open ON public.timeclock_sessions USING btree (clock_out_at) WHERE (clock_out_at IS NULL);
+
+
+--
+-- Name: idx_timeclock_sessions_shift; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_timeclock_sessions_shift ON public.timeclock_sessions USING btree (shift_id) WHERE (shift_id IS NOT NULL);
 
 
 --
@@ -1844,27 +2427,6 @@ CREATE INDEX idx_waitlist_offered ON public.waitlist USING btree (status, create
 --
 
 CREATE INDEX idx_waitlist_status ON public.waitlist USING btree (status);
-
-
---
--- Name: idx_inventory_reservations_active_expires_at; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_inventory_reservations_active_expires_at ON public.inventory_reservations USING btree (expires_at) WHERE (released_at IS NULL);
-
-
---
--- Name: idx_inventory_reservations_waitlist_active; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_inventory_reservations_waitlist_active ON public.inventory_reservations USING btree (waitlist_id) WHERE (released_at IS NULL);
-
-
---
--- Name: uniq_inventory_reservations_active_resource; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX uniq_inventory_reservations_active_resource ON public.inventory_reservations USING btree (resource_type, resource_id) WHERE (released_at IS NULL);
 
 
 --
@@ -1924,6 +2486,55 @@ CREATE INDEX idx_webauthn_credentials_staff_id ON public.staff_webauthn_credenti
 
 
 --
+-- Name: telemetry_events_app_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_app_idx ON public.telemetry_events USING btree (app);
+
+
+--
+-- Name: telemetry_events_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_created_at_idx ON public.telemetry_events USING btree (created_at);
+
+
+--
+-- Name: telemetry_events_device_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_device_id_idx ON public.telemetry_events USING btree (device_id);
+
+
+--
+-- Name: telemetry_events_kind_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_kind_idx ON public.telemetry_events USING btree (kind);
+
+
+--
+-- Name: telemetry_events_level_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_level_idx ON public.telemetry_events USING btree (level);
+
+
+--
+-- Name: telemetry_events_request_id_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX telemetry_events_request_id_idx ON public.telemetry_events USING btree (request_id);
+
+
+--
+-- Name: uniq_inventory_reservations_active_resource; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX uniq_inventory_reservations_active_resource ON public.inventory_reservations USING btree (resource_type, resource_id) WHERE (released_at IS NULL);
+
+
+--
 -- Name: agreement_signatures agreement_signatures_agreement_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1940,19 +2551,51 @@ ALTER TABLE ONLY public.agreement_signatures
 
 
 --
--- Name: agreement_signatures agreement_signatures_checkin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.agreement_signatures
-    ADD CONSTRAINT agreement_signatures_checkin_id_fkey FOREIGN KEY (checkin_id) REFERENCES public.sessions(id) ON DELETE RESTRICT;
-
-
---
 -- Name: audit_log audit_log_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.audit_log
     ADD CONSTRAINT audit_log_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
+-- Name: cash_drawer_events cash_drawer_events_cash_drawer_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_events
+    ADD CONSTRAINT cash_drawer_events_cash_drawer_session_id_fkey FOREIGN KEY (cash_drawer_session_id) REFERENCES public.cash_drawer_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cash_drawer_events cash_drawer_events_created_by_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_events
+    ADD CONSTRAINT cash_drawer_events_created_by_staff_id_fkey FOREIGN KEY (created_by_staff_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cash_drawer_sessions cash_drawer_sessions_closed_by_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_sessions
+    ADD CONSTRAINT cash_drawer_sessions_closed_by_staff_id_fkey FOREIGN KEY (closed_by_staff_id) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
+-- Name: cash_drawer_sessions cash_drawer_sessions_opened_by_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_sessions
+    ADD CONSTRAINT cash_drawer_sessions_opened_by_staff_id_fkey FOREIGN KEY (opened_by_staff_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: cash_drawer_sessions cash_drawer_sessions_register_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.cash_drawer_sessions
+    ADD CONSTRAINT cash_drawer_sessions_register_session_id_fkey FOREIGN KEY (register_session_id) REFERENCES public.register_sessions(id) ON DELETE CASCADE;
 
 
 --
@@ -2076,6 +2719,46 @@ ALTER TABLE ONLY public.cleaning_events
 
 
 --
+-- Name: employee_documents employee_documents_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_documents
+    ADD CONSTRAINT employee_documents_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: employee_documents employee_documents_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_documents
+    ADD CONSTRAINT employee_documents_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.staff(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: employee_shifts employee_shifts_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_shifts
+    ADD CONSTRAINT employee_shifts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
+-- Name: employee_shifts employee_shifts_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_shifts
+    ADD CONSTRAINT employee_shifts_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: employee_shifts employee_shifts_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_shifts
+    ADD CONSTRAINT employee_shifts_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
 -- Name: lane_sessions fk_lane_sessions_payment_intent; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2084,17 +2767,35 @@ ALTER TABLE ONLY public.lane_sessions
 
 
 --
+-- Name: inventory_reservations inventory_reservations_lane_session_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_lane_session_fk FOREIGN KEY (lane_session_id) REFERENCES public.lane_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: inventory_reservations inventory_reservations_waitlist_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_reservations
+    ADD CONSTRAINT inventory_reservations_waitlist_fk FOREIGN KEY (waitlist_id) REFERENCES public.waitlist(id) ON DELETE CASCADE;
+
+
+--
+-- Name: key_tags key_tags_locker_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.key_tags
+    ADD CONSTRAINT key_tags_locker_id_fkey FOREIGN KEY (locker_id) REFERENCES public.lockers(id) ON DELETE CASCADE;
+
+
+--
 -- Name: key_tags key_tags_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.key_tags
     ADD CONSTRAINT key_tags_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.key_tags
-    ADD CONSTRAINT key_tags_locker_id_fkey FOREIGN KEY (locker_id) REFERENCES public.lockers(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.key_tags
-    ADD CONSTRAINT key_tags_exactly_one_target_chk CHECK ((((CASE WHEN (room_id IS NULL) THEN 0 ELSE 1 END) + (CASE WHEN (locker_id IS NULL) THEN 0 ELSE 1 END)) = 1));
 
 
 --
@@ -2138,11 +2839,51 @@ ALTER TABLE ONLY public.lockers
 
 
 --
+-- Name: order_line_items order_line_items_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.order_line_items
+    ADD CONSTRAINT order_line_items_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE;
+
+
+--
+-- Name: orders orders_created_by_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_created_by_staff_id_fkey FOREIGN KEY (created_by_staff_id) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
+-- Name: orders orders_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
+
+
+--
+-- Name: orders orders_register_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.orders
+    ADD CONSTRAINT orders_register_session_id_fkey FOREIGN KEY (register_session_id) REFERENCES public.register_sessions(id) ON DELETE SET NULL;
+
+
+--
 -- Name: payment_intents payment_intents_lane_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payment_intents
     ADD CONSTRAINT payment_intents_lane_session_id_fkey FOREIGN KEY (lane_session_id) REFERENCES public.lane_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: receipts receipts_order_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.receipts
+    ADD CONSTRAINT receipts_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE;
 
 
 --
@@ -2162,35 +2903,19 @@ ALTER TABLE ONLY public.rooms
 
 
 --
--- Name: sessions sessions_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: staff_break_sessions staff_break_sessions_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.sessions
-    ADD CONSTRAINT sessions_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE RESTRICT;
-
-
---
--- Name: sessions sessions_locker_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sessions
-    ADD CONSTRAINT sessions_locker_id_fkey FOREIGN KEY (locker_id) REFERENCES public.lockers(id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.staff_break_sessions
+    ADD CONSTRAINT staff_break_sessions_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE CASCADE;
 
 
 --
--- Name: sessions sessions_room_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: staff_break_sessions staff_break_sessions_timeclock_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.sessions
-    ADD CONSTRAINT sessions_room_id_fkey FOREIGN KEY (room_id) REFERENCES public.rooms(id) ON DELETE SET NULL;
-
-
---
--- Name: sessions sessions_visit_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.sessions
-    ADD CONSTRAINT sessions_visit_id_fkey FOREIGN KEY (visit_id) REFERENCES public.visits(id) ON DELETE SET NULL;
+ALTER TABLE ONLY public.staff_break_sessions
+    ADD CONSTRAINT staff_break_sessions_timeclock_session_id_fkey FOREIGN KEY (timeclock_session_id) REFERENCES public.timeclock_sessions(id) ON DELETE CASCADE;
 
 
 --
@@ -2207,6 +2932,54 @@ ALTER TABLE ONLY public.staff_sessions
 
 ALTER TABLE ONLY public.staff_webauthn_credentials
     ADD CONSTRAINT staff_webauthn_credentials_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: telemetry_spans telemetry_spans_trace_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.telemetry_spans
+    ADD CONSTRAINT telemetry_spans_trace_id_fkey FOREIGN KEY (trace_id) REFERENCES public.telemetry_traces(trace_id) ON DELETE CASCADE;
+
+
+--
+-- Name: time_off_requests time_off_requests_decided_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.time_off_requests
+    ADD CONSTRAINT time_off_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
+-- Name: time_off_requests time_off_requests_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.time_off_requests
+    ADD CONSTRAINT time_off_requests_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: timeclock_sessions timeclock_sessions_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.timeclock_sessions
+    ADD CONSTRAINT timeclock_sessions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.staff(id) ON DELETE SET NULL;
+
+
+--
+-- Name: timeclock_sessions timeclock_sessions_employee_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.timeclock_sessions
+    ADD CONSTRAINT timeclock_sessions_employee_id_fkey FOREIGN KEY (employee_id) REFERENCES public.staff(id) ON DELETE CASCADE;
+
+
+--
+-- Name: timeclock_sessions timeclock_sessions_shift_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.timeclock_sessions
+    ADD CONSTRAINT timeclock_sessions_shift_id_fkey FOREIGN KEY (shift_id) REFERENCES public.employee_shifts(id) ON DELETE SET NULL;
 
 
 --
@@ -2250,38 +3023,6 @@ ALTER TABLE ONLY public.waitlist
 
 
 --
--- Name: inventory_reservations inventory_reservations_lane_session_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.inventory_reservations
-    ADD CONSTRAINT inventory_reservations_lane_session_fk FOREIGN KEY (lane_session_id) REFERENCES public.lane_sessions(id) ON DELETE CASCADE;
-
-
---
--- Name: inventory_reservations inventory_reservations_waitlist_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.inventory_reservations
-    ADD CONSTRAINT inventory_reservations_waitlist_fk FOREIGN KEY (waitlist_id) REFERENCES public.waitlist(id) ON DELETE CASCADE;
-
-
---
--- Name: inventory_reservations inventory_reservations_lane_session_required; Type: CHECK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.inventory_reservations
-    ADD CONSTRAINT inventory_reservations_lane_session_required CHECK (((kind <> 'LANE_SELECTION'::public.inventory_reservation_kind) OR (lane_session_id IS NOT NULL)));
-
-
---
--- Name: inventory_reservations inventory_reservations_waitlist_required; Type: CHECK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.inventory_reservations
-    ADD CONSTRAINT inventory_reservations_waitlist_required CHECK (((kind <> 'UPGRADE_HOLD'::public.inventory_reservation_kind) OR (waitlist_id IS NOT NULL)));
-
-
---
 -- Name: webauthn_challenges webauthn_challenges_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2290,113 +3031,7 @@ ALTER TABLE ONLY public.webauthn_challenges
 
 
 --
--- Name: telemetry_events; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.telemetry_events (
-    id bigint NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    app text NOT NULL,
-    level text NOT NULL,
-    kind text NOT NULL,
-    route text,
-    message text,
-    stack text,
-    request_id text,
-    session_id text,
-    device_id text,
-    lane text,
-    method text,
-    status integer,
-    url text,
-    meta jsonb DEFAULT '{}'::jsonb NOT NULL
-);
-
-
---
--- Name: telemetry_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.telemetry_events_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
---
--- Name: telemetry_events_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
---
-
-ALTER SEQUENCE public.telemetry_events_id_seq OWNED BY public.telemetry_events.id;
-
-
---
--- Name: telemetry_events id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.telemetry_events ALTER COLUMN id SET DEFAULT nextval('public.telemetry_events_id_seq'::regclass);
-
-
---
--- Name: telemetry_events telemetry_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.telemetry_events
-    ADD CONSTRAINT telemetry_events_pkey PRIMARY KEY (id);
-
-
---
--- Name: telemetry_events_created_at_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX telemetry_events_created_at_idx ON public.telemetry_events USING btree (created_at);
-
-
---
--- Name: telemetry_events_app_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX telemetry_events_app_idx ON public.telemetry_events USING btree (app);
-
-
---
--- Name: telemetry_events_kind_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX telemetry_events_kind_idx ON public.telemetry_events USING btree (kind);
-
-
---
--- Name: telemetry_events_level_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX telemetry_events_level_idx ON public.telemetry_events USING btree (level);
-
-
---
--- Name: telemetry_events_request_id_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX telemetry_events_request_id_idx ON public.telemetry_events USING btree (request_id);
-
-
---
--- Name: telemetry_events_device_id_idx; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX telemetry_events_device_id_idx ON public.telemetry_events USING btree (device_id);
-
-
---
--- Name: telemetry_events telemetry_events_level_check; Type: CHECK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE public.telemetry_events
-    ADD CONSTRAINT telemetry_events_level_check CHECK ((level = ANY (ARRAY['error'::text, 'warn'::text, 'info'::text])));
-
-
---
 -- PostgreSQL database dump complete
 --
+
+\unrestrict CFrzBp80k6cGa6pb5iAAwgv8pu1egAkcf5tM9wfKrHnKSswkf0SRvkA8Y2Aogze

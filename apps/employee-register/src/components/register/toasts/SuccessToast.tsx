@@ -64,5 +64,3 @@ export function SuccessToast({ message, onDismiss, title = 'Success' }: SuccessT
     </div>
   );
 }
-
-

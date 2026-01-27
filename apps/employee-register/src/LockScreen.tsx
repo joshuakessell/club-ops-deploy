@@ -7,7 +7,7 @@ import {
   authenticationCredentialToJSON,
   verifyAuthentication,
 } from '@club-ops/ui';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 

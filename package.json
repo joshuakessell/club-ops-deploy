@@ -6,27 +6,33 @@
   "description": "Multi-application system for managing club check-ins, room inventory, cleaning workflows, and operational metrics",
   "scripts": {
     "kill-ports": "node scripts/kill-ports.cjs",
+
     "db:start": "pnpm --filter @club-ops/api db:start",
     "db:stop": "pnpm --filter @club-ops/api db:stop",
     "db:reset": "pnpm --filter @club-ops/api db:reset",
     "db:migrate": "pnpm --filter @club-ops/api db:migrate",
+    "db:migrate:baseline": "PGMIGRATE_INCLUDE_BASELINE=1 pnpm --filter @club-ops/api db:migrate",
     "db:seed": "pnpm --filter @club-ops/api seed",
-    "dev": "pnpm kill-ports && turbo run dev --filter=@club-ops/api --filter=@club-ops/customer-kiosk --filter=@club-ops/employee-register --filter=@club-ops/office-dashboard --filter=@club-ops/cleaning-station-kiosk --filter=@club-ops/checkout-kiosk",
-    "dev:cloud": "turbo run dev --filter=@club-ops/api --filter=@club-ops/customer-kiosk --filter=@club-ops/employee-register --filter=@club-ops/office-dashboard --filter=@club-ops/cleaning-station-kiosk --filter=@club-ops/checkout-kiosk",
-    "dev-test": "pnpm kill-ports && turbo run dev --filter=@club-ops/api --filter=@club-ops/customer-kiosk --filter=@club-ops/employee-register",
+
+    "dev": "pnpm kill-ports && turbo run dev --filter=@club-ops/api --filter=@club-ops/customer-kiosk --filter=@club-ops/employee-register --filter=@club-ops/office-dashboard",
+    "dev:fast": "turbo run dev --filter=@club-ops/api --filter=@club-ops/customer-kiosk --filter=@club-ops/employee-register --filter=@club-ops/office-dashboard",
+
     "build": "turbo run build",
-    "test": "pnpm kill-ports && turbo run test --filter=!@club-ops/checkout-kiosk --filter=!@club-ops/cleaning-station-kiosk",
-    "lint": "turbo run lint --filter=!@club-ops/checkout-kiosk --filter=!@club-ops/cleaning-station-kiosk",
-    "doctor": "node scripts/doctor.cjs",
-    "typecheck": "turbo run typecheck --filter=!@club-ops/checkout-kiosk --filter=!@club-ops/cleaning-station-kiosk",
+    "test": "pnpm kill-ports && turbo run test",
+    "lint": "turbo run lint",
+    "lint:strict": "eslint . --max-warnings 0",
+    "typecheck": "turbo run typecheck",
+
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+
+    "doctor": "node scripts/doctor.cjs",
     "spec:check": "node scripts/spec-compliance.mjs",
+
     "demo:seed": "turbo run build --filter=@club-ops/shared --filter=@club-ops/ui && DEMO_MODE=true pnpm db:reset && DEMO_MODE=true pnpm --filter @club-ops/api db:migrate && DEMO_MODE=true pnpm --filter @club-ops/api seed && DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts",
-    "demo": "node scripts/demo.mjs",
     "demo:dev": "pnpm demo:seed && DEMO_MODE=true pnpm dev",
-    "demo:dev:seedOnBoot": "pnpm demo:seed && DEMO_MODE=true SEED_ON_STARTUP=true pnpm dev",
     "demo:test": "turbo run build --filter=@club-ops/shared --filter=@club-ops/ui && DEMO_MODE=true pnpm db:reset && DEMO_MODE=true pnpm --filter @club-ops/api db:migrate && DEMO_MODE=true pnpm --filter @club-ops/api seed && DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts && DEMO_MODE=true pnpm --filter @club-ops/api exec vitest run tests/demo-seed.test.ts",
+
     "telemetry:export": "node tools/telemetry/export-telemetry.mjs"
   },
   "devDependencies": {
@@ -34,12 +40,14 @@
     "@types/node": "^20.10.0",
     "concurrently": "^8.2.2",
     "eslint": "^9.15.0",
+    "eslint-plugin-check-file": "^3.3.1",
+    "eslint-plugin-project-structure": "^3.14.2",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.12",
     "globals": "^15.11.0",
     "prettier": "^3.1.1",
     "tsx": "^4.6.2",
-    "turbo": "^2.7.5",
+    "turbo": "^2.7.6",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.0.0"
   },
@@ -57,10 +65,6 @@
       "allowedVersions": {
         "eslint": "9"
       }
-    },
-    "publicHoistPattern": [
-      "*eslint*",
-      "*typescript-eslint*"
-    ]
+    }
   }
 }

@@ -64,4 +64,3 @@ export function useOrientation(): OrientationState {
 
   return state;
 }
-

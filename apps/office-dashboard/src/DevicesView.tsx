@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
 
 const API_BASE = getApiUrl('/api');
 
@@ -25,7 +25,7 @@ export function DevicesView({ session }: DevicesViewProps) {
   const [adding, setAdding] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
 
-  const fetchDevices = async () => {
+  const fetchDevices = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/v1/admin/devices`, {
         headers: {
@@ -41,11 +41,11 @@ export function DevicesView({ session }: DevicesViewProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [session.sessionToken]);
 
   useEffect(() => {
     fetchDevices();
-  }, []);
+  }, [fetchDevices]);
 
   const enabledCount = devices.filter((d) => d.enabled).length;
   const canAddMore = enabledCount < 2;

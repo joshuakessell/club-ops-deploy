@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { StaffSession } from './LockScreen';
 import type { WebSocketEvent } from '@club-ops/shared';
 import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
-import { getApiUrl } from '@/lib/apiBase';
+import { getApiUrl } from '@club-ops/shared';
+import { RaisedCard } from './views/RaisedCard';
 
 const API_BASE = getApiUrl('/api');
 
@@ -153,7 +154,7 @@ export function AdminView({ session }: AdminViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.role, activeTab]);
 
-  const loadMetricsData = async () => {
+  const loadMetricsData = useCallback(async () => {
     if (!session.sessionToken) return;
 
     try {
@@ -193,21 +194,13 @@ export function AdminView({ session }: AdminViewProps) {
     } catch (error) {
       console.error('Failed to load metrics:', error);
     }
-  };
+  }, [dateFrom, dateTo, session.sessionToken, staffMembers]);
 
   useEffect(() => {
     if (session.role === 'ADMIN' && activeTab === 'metrics') {
       loadMetricsData();
     }
-  }, [
-    dateFrom,
-    dateTo,
-    selectedStaffId,
-    session.sessionToken,
-    session.role,
-    activeTab,
-    staffMembers.length,
-  ]);
+  }, [activeTab, loadMetricsData, session.role]);
 
   if (session.role !== 'ADMIN') {
     return (
@@ -297,7 +290,9 @@ export function AdminView({ session }: AdminViewProps) {
           className={[
             'cs-liquid-button',
             'cs-liquid-button--pill',
-            activeTab === 'operations' ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+            activeTab === 'operations'
+              ? 'cs-liquid-button--selected'
+              : 'cs-liquid-button--secondary',
           ].join(' ')}
         >
           Operations
@@ -335,38 +330,38 @@ export function AdminView({ session }: AdminViewProps) {
                 gap: '1rem',
               }}
             >
-              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
+              <RaisedCard padding="lg">
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.roomsOccupied ?? 0}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                   Rooms Occupied
                 </div>
-              </div>
-              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
+              </RaisedCard>
+              <RaisedCard padding="lg">
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.roomsUnoccupied ?? 0}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                   Rooms Unoccupied
                 </div>
-              </div>
-              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
+              </RaisedCard>
+              <RaisedCard padding="lg">
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.lockersOccupied ?? 0}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                   Lockers Occupied
                 </div>
-              </div>
-              <div className="csRaisedCard cs-liquid-card" style={{ padding: '1.5rem' }}>
+              </RaisedCard>
+              <RaisedCard padding="lg">
                 <div style={{ fontSize: '2rem', fontWeight: 700, color: '#f9fafb' }}>
                   {kpi?.lockersAvailable ?? 0}
                 </div>
                 <div style={{ fontSize: '0.875rem', color: '#9ca3af', marginTop: '0.5rem' }}>
                   Lockers Available
                 </div>
-              </div>
+              </RaisedCard>
             </div>
           </section>
 
@@ -397,7 +392,7 @@ export function AdminView({ session }: AdminViewProps) {
                         colSpan={5}
                         style={{ padding: '2rem', textAlign: 'center', color: '#9ca3af' }}
                       >
-                        No active room sessions
+                        No active room stays
                       </td>
                     </tr>
                   ) : (

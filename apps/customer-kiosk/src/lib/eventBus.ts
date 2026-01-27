@@ -31,4 +31,3 @@ export function onEvent(fn: Listener) {
 export function emitDbEvent(title: string, channel?: string, payload?: unknown) {
   emitEvent({ kind: 'db', title, channel, payload });
 }
-

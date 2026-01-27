@@ -8,9 +8,7 @@ A multi-application system for managing club check-ins, room inventory, cleaning
 club-operations-pos/
 ├── apps/
 │   ├── customer-kiosk/      # Tablet-based kiosk UI for check-ins
-│   ├── cleaning-station-kiosk/ # Staff tablet kiosk for cleaning workflow
 │   ├── employee-register/   # Employee-facing tablet app (with Square POS)
-│   ├── checkout-kiosk/      # Customer kiosk for self-service checkout initiation
 │   └── office-dashboard/    # Web app for administration
 ├── services/
 │   └── api/                 # Fastify REST API + WebSocket server
@@ -82,10 +80,8 @@ This starts:
 - **API Server**: http://localhost:3001
   - Health check: http://localhost:3001/health
 - **Customer Kiosk**: http://localhost:5173
-- **Cleaning Station Kiosk**: http://localhost:5174
 - **Employee Register**: http://localhost:5175
 - **Office Dashboard**: http://localhost:5176
-- **Checkout Kiosk**: http://localhost:5177
 
 ### WebSockets
 
@@ -112,22 +108,22 @@ pnpm build
 
 ### Commands
 
-| Command           | Description                                                     |
-| ----------------- | --------------------------------------------------------------- |
-| `pnpm install`    | Install all dependencies                                        |
-| `pnpm dev`        | Start all services in development mode                          |
-| `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check)          |
-| `pnpm doctor`     | Repo health scan (installs, builds shared/ui, runs checks)      |
-| `pnpm db:start`   | Start Postgres via `services/api/docker-compose.yml`            |
-| `pnpm db:stop`    | Stop Postgres                                                   |
-| `pnpm db:reset`   | Recreate Postgres volume and restart                            |
-| `pnpm db:migrate` | Run DB migrations                                               |
-| `pnpm db:seed`    | Seed DB with sample data                                        |
-| `pnpm build`      | Build all packages and apps (Turbo-orchestrated)                |
-| `pnpm test`       | Run all tests (Turbo-orchestrated)                              |
-| `pnpm lint`       | Lint all packages (Turbo-orchestrated)                          |
-| `pnpm typecheck`  | TypeScript type checking (Turbo-orchestrated)                   |
-| `pnpm format`     | Format code with Prettier                                       |
+| Command           | Description                                                |
+| ----------------- | ---------------------------------------------------------- |
+| `pnpm install`    | Install all dependencies                                   |
+| `pnpm dev`        | Start all services in development mode                     |
+| `pnpm kill-ports` | Free dev ports (API + app ports, plus DB status check)     |
+| `pnpm doctor`     | Repo health scan (installs, builds shared/ui, runs checks) |
+| `pnpm db:start`   | Start Postgres via `services/api/docker-compose.yml`       |
+| `pnpm db:stop`    | Stop Postgres                                              |
+| `pnpm db:reset`   | Recreate Postgres volume and restart                       |
+| `pnpm db:migrate` | Run DB migrations                                          |
+| `pnpm db:seed`    | Seed DB with sample data                                   |
+| `pnpm build`      | Build all packages and apps (Turbo-orchestrated)           |
+| `pnpm test`       | Run all tests (Turbo-orchestrated)                         |
+| `pnpm lint`       | Lint all packages (Turbo-orchestrated)                     |
+| `pnpm typecheck`  | TypeScript type checking (Turbo-orchestrated)              |
+| `pnpm format`     | Format code with Prettier                                  |
 
 ### Database Setup
 

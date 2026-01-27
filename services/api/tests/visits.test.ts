@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import Fastify, { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { visitRoutes } from '../src/routes/visits.js';
-import { agreementRoutes } from '../src/routes/agreements.js';
 import { createBroadcaster } from '../src/websocket/broadcaster.js';
 import { truncateAllTables } from './testDb.js';
 
@@ -36,7 +35,6 @@ describe('Visit and Renewal Flows', () => {
 
   const testCustomerId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const testRoomId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
-  const testAgreementId = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 
   beforeAll(async () => {
     const dbConfig = {
@@ -64,7 +62,6 @@ describe('Visit and Renewal Flows', () => {
 
     // Register routes
     await fastify.register(visitRoutes);
-    await fastify.register(agreementRoutes);
     await fastify.ready();
   });
 
@@ -101,14 +98,6 @@ describe('Visit and Renewal Flows', () => {
        ON CONFLICT (number) DO UPDATE SET id = EXCLUDED.id, type = EXCLUDED.type, status = EXCLUDED.status, floor = EXCLUDED.floor`,
       [testRoomId]
     );
-
-    // Insert active agreement with ON CONFLICT handling
-    await pool.query(
-      `INSERT INTO agreements (id, version, title, body_text, active)
-       VALUES ($1, 'placeholder-v1', 'Club Agreement', '', true)
-       ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version, title = EXCLUDED.title, body_text = EXCLUDED.body_text, active = EXCLUDED.active`,
-      [testAgreementId]
-    );
   });
 
   const runIfDbAvailable = (testFn: () => Promise<void>) => async () => {
@@ -117,6 +106,31 @@ describe('Visit and Renewal Flows', () => {
       return;
     }
     await testFn();
+  };
+
+  const alignBlocksToNow = async (visitId: string, endOffsetMinutes = 30) => {
+    const blocksResult = await pool.query<{
+      id: string;
+      block_type: string;
+    }>(
+      `SELECT id, block_type
+       FROM checkin_blocks
+       WHERE visit_id = $1
+       ORDER BY ends_at DESC`,
+      [visitId]
+    );
+
+    let nextEnd = new Date(Date.now() + endOffsetMinutes * 60 * 1000);
+    for (const block of blocksResult.rows) {
+      const durationHours = block.block_type === 'FINAL2H' ? 2 : 6;
+      const startsAt = new Date(nextEnd.getTime() - durationHours * 60 * 60 * 1000);
+      await pool.query(`UPDATE checkin_blocks SET starts_at = $1, ends_at = $2 WHERE id = $3`, [
+        startsAt,
+        nextEnd,
+        block.id,
+      ]);
+      nextEnd = startsAt;
+    }
   };
 
   it(
@@ -139,7 +153,6 @@ describe('Visit and Renewal Flows', () => {
       expect(data.block).toBeDefined();
       expect(data.block.blockType).toBe('INITIAL');
       expect(data.block.rentalType).toBe('STANDARD');
-      expect(data.sessionId).toBeDefined();
 
       // Verify block duration is 6 hours
       const startsAt = new Date(data.block.startsAt);
@@ -167,7 +180,13 @@ describe('Visit and Renewal Flows', () => {
 
       const initialData = JSON.parse(initialResponse.body);
       const visitId = initialData.visit.id;
-      const initialBlockEndsAt = new Date(initialData.block.endsAt);
+
+      await alignBlocksToNow(visitId);
+      const adjustedBlocks = await pool.query<{ ends_at: Date }>(
+        `SELECT ends_at FROM checkin_blocks WHERE visit_id = $1 ORDER BY ends_at DESC LIMIT 1`,
+        [visitId]
+      );
+      const adjustedEnd = adjustedBlocks.rows[0]!.ends_at;
 
       // Wait a bit to ensure "now" is different from initial checkout
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -190,7 +209,7 @@ describe('Visit and Renewal Flows', () => {
       const renewalEndsAt = new Date(renewalData.block.endsAt);
 
       // Renewal should start from previous checkout time (within 1 second tolerance)
-      expect(Math.abs(renewalStartsAt.getTime() - initialBlockEndsAt.getTime())).toBeLessThan(1000);
+      expect(Math.abs(renewalStartsAt.getTime() - adjustedEnd.getTime())).toBeLessThan(1000);
 
       // Renewal should end 6 hours after it starts
       const renewalDurationMs = renewalEndsAt.getTime() - renewalStartsAt.getTime();
@@ -199,12 +218,12 @@ describe('Visit and Renewal Flows', () => {
 
       // Renewal should NOT start from "now" - verify it's close to initial checkout time
       const now = new Date();
-      expect(Math.abs(renewalStartsAt.getTime() - initialBlockEndsAt.getTime())).toBeLessThan(1000);
+      expect(Math.abs(renewalStartsAt.getTime() - adjustedEnd.getTime())).toBeLessThan(1000);
     })
   );
 
   it(
-    'should enforce 14-hour maximum visit duration',
+    'should enforce 14-hour maximum visit duration with 2h/6h renewals',
     runIfDbAvailable(async () => {
       // Create initial visit (6 hours)
       const initialResponse = await fastify.inject({
@@ -220,6 +239,8 @@ describe('Visit and Renewal Flows', () => {
       const initialData = JSON.parse(initialResponse.body);
       const visitId = initialData.visit.id;
 
+      await alignBlocksToNow(visitId);
+
       // Create first renewal (6 hours, total 12 hours)
       const renewal1Response = await fastify.inject({
         method: 'POST',
@@ -227,138 +248,48 @@ describe('Visit and Renewal Flows', () => {
         payload: {
           rentalType: 'STANDARD',
           roomId: testRoomId,
+          renewalHours: 6,
         },
       });
 
       expect(renewal1Response.statusCode).toBe(201);
 
-      // Try to create second renewal (would be 18 hours total, should fail)
+      await alignBlocksToNow(visitId);
+
+      // Create second renewal (2 hours, total 14 hours)
       const renewal2Response = await fastify.inject({
         method: 'POST',
         url: `/v1/visits/${visitId}/renew`,
         payload: {
           rentalType: 'STANDARD',
           roomId: testRoomId,
+          renewalHours: 2,
         },
       });
 
-      expect(renewal2Response.statusCode).toBe(400);
-      const error = JSON.parse(renewal2Response.body);
-      expect(error.error).toContain('14-hour maximum');
-    })
-  );
+      expect(renewal2Response.statusCode).toBe(201);
+      const renewal2Data = JSON.parse(renewal2Response.body);
+      expect(renewal2Data.block.blockType).toBe('FINAL2H');
+      const renewal2StartsAt = new Date(renewal2Data.block.startsAt);
+      const renewal2EndsAt = new Date(renewal2Data.block.endsAt);
+      expect(renewal2EndsAt.getTime() - renewal2StartsAt.getTime()).toBe(2 * 60 * 60 * 1000);
 
-  it(
-    'should require agreement signature for INITIAL block',
-    runIfDbAvailable(async () => {
-      // Create initial visit
-      const visitResponse = await fastify.inject({
-        method: 'POST',
-        url: '/v1/visits',
-        payload: {
-          customerId: testCustomerId,
-          rentalType: 'STANDARD',
-          roomId: testRoomId,
-        },
-      });
+      await alignBlocksToNow(visitId);
 
-      const visitData = JSON.parse(visitResponse.body);
-      const visitId = visitData.visit.id;
-      const sessionId = visitData.sessionId;
-
-      // Sign agreement
-      const signResponse = await fastify.inject({
-        method: 'POST',
-        url: `/v1/checkins/${sessionId}/agreement-sign`,
-        payload: {
-          // 1x1 transparent PNG (base64) - valid signature payload for PDF generation
-          signaturePngBase64:
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          agreed: true,
-        },
-        headers: {
-          'x-device-type': 'customer-kiosk',
-          'x-device-id': 'test-device',
-        },
-      });
-
-      expect(signResponse.statusCode).toBe(200);
-
-      // Verify block is marked as agreement signed
-      const blockResult = await pool.query(
-        'SELECT agreement_signed FROM checkin_blocks WHERE visit_id = $1 ORDER BY created_at DESC LIMIT 1',
-        [visitId]
-      );
-      expect(blockResult.rows[0]?.agreement_signed).toBe(true);
-
-      // Verify signature is linked to block
-      const signatureResult = await pool.query(
-        'SELECT checkin_block_id FROM agreement_signatures WHERE checkin_id = $1',
-        [sessionId]
-      );
-      expect(signatureResult.rows[0]?.checkin_block_id).toBeDefined();
-    })
-  );
-
-  it(
-    'should require agreement signature for RENEWAL block',
-    runIfDbAvailable(async () => {
-      // Create initial visit
-      const initialResponse = await fastify.inject({
-        method: 'POST',
-        url: '/v1/visits',
-        payload: {
-          customerId: testCustomerId,
-          rentalType: 'STANDARD',
-          roomId: testRoomId,
-        },
-      });
-
-      const initialData = JSON.parse(initialResponse.body);
-      const visitId = initialData.visit.id;
-
-      // Create renewal
-      const renewalResponse = await fastify.inject({
+      // Try to create another 2-hour renewal (would exceed 14 hours total)
+      const renewal3Response = await fastify.inject({
         method: 'POST',
         url: `/v1/visits/${visitId}/renew`,
         payload: {
           rentalType: 'STANDARD',
           roomId: testRoomId,
+          renewalHours: 2,
         },
       });
 
-      const renewalData = JSON.parse(renewalResponse.body);
-      const renewalSessionId = renewalData.sessionId;
-
-      // Sign agreement for renewal
-      const signResponse = await fastify.inject({
-        method: 'POST',
-        url: `/v1/checkins/${renewalSessionId}/agreement-sign`,
-        payload: {
-          // 1x1 transparent PNG (base64) - valid signature payload for PDF generation
-          signaturePngBase64:
-            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-          agreed: true,
-        },
-        headers: {
-          'x-device-type': 'customer-kiosk',
-          'x-device-id': 'test-device',
-        },
-      });
-
-      expect(signResponse.statusCode).toBe(200);
-
-      // Verify renewal block is marked as agreement signed
-      const blockResult = await pool.query(
-        `SELECT agreement_signed
-       FROM checkin_blocks
-       WHERE visit_id = $1 AND block_type = 'RENEWAL'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-        [visitId]
-      );
-      expect(blockResult.rows[0]?.agreement_signed).toBe(true);
-      expect(blockResult.rows[0]?.agreement_signed).toBe(true);
+      expect(renewal3Response.statusCode).toBe(400);
+      const error = JSON.parse(renewal3Response.body);
+      expect(error.error).toContain('14-hour maximum');
     })
   );
 
@@ -391,9 +322,8 @@ describe('Visit and Renewal Flows', () => {
       // Current block may include up to 15 minutes of rounding; renewal adds 6 hours.
       expect(data.visits[0]?.totalHoursIfRenewed).toBeGreaterThanOrEqual(12);
       expect(data.visits[0]?.totalHoursIfRenewed).toBeLessThanOrEqual(12 + 15 / 60);
-      // canFinalExtend is true only if renewal + final2h would be <= 14 hours.
-      // With rounding, totalHoursIfRenewed can exceed 12 slightly, making final2h ineligible.
-      expect(data.visits[0]?.canFinalExtend).toBe(data.visits[0]?.totalHoursIfRenewed <= 12);
+      // canFinalExtend is true if a 2-hour renewal would still be within 14 hours.
+      expect(data.visits[0]?.canFinalExtend).toBe(true);
     })
   );
 });

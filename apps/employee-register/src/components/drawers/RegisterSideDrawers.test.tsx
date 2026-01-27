@@ -23,14 +23,14 @@ describe('RegisterSideDrawers', () => {
   it('renders both tabs', () => {
     render(<Harness />);
     expect(screen.getByRole('button', { name: 'Upgrades' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Inventory' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Rentals' })).toBeDefined();
   });
 
   it('clicking Upgrades opens upgrades and closes inventory', () => {
     render(<Harness />);
 
     const upgrades = screen.getByRole('button', { name: 'Upgrades' });
-    const inventory = screen.getByRole('button', { name: 'Inventory' });
+    const inventory = screen.getByRole('button', { name: 'Rentals' });
 
     fireEvent.click(upgrades);
     expect(upgrades.getAttribute('aria-expanded')).toBe('true');
@@ -41,5 +41,3 @@ describe('RegisterSideDrawers', () => {
     expect(upgrades.getAttribute('aria-expanded')).toBe('false');
   });
 });
-
-

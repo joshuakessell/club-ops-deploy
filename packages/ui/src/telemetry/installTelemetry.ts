@@ -3,7 +3,7 @@ import { getCurrentRoute } from './interactionTelemetry.js';
 import type { TelemetryClient, TelemetryContext, TelemetrySpanInput } from './types.js';
 
 export type InstallTelemetryOptions = {
-  app: 'customer-kiosk' | 'employee-register' | string;
+  app: string;
   endpoint?: string;
   isDev?: boolean;
   maxBatchSize?: number;
@@ -44,10 +44,26 @@ function truncate(s: string, maxLen: number): string {
 
 function safeString(value: unknown, maxLen: number): string | undefined {
   if (value == null) return undefined;
-  const s = typeof value === 'string' ? value : String(value);
-  const t = s.trim();
-  if (!t) return undefined;
-  return truncate(t, maxLen);
+  if (typeof value === 'string') {
+    const t = value.trim();
+    if (!t) return undefined;
+    return truncate(t, maxLen);
+  }
+  if (typeof value === 'number') return truncate(`${value}`, maxLen);
+  if (typeof value === 'boolean') return truncate(value ? 'true' : 'false', maxLen);
+  if (typeof value === 'bigint') return truncate(value.toString(), maxLen);
+  if (typeof value === 'symbol') return truncate(value.toString(), maxLen);
+  if (typeof value === 'function') return truncate(value.name || 'function', maxLen);
+  if (typeof value === 'object') {
+    try {
+      const json = JSON.stringify(value);
+      if (!json) return undefined;
+      return truncate(json, maxLen);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 }
 
 function safeErrorStack(err: unknown): string | undefined {
@@ -63,19 +79,19 @@ function safeErrorMessage(err: unknown): string | undefined {
 function safeJson(value: unknown, maxLen: number): string | undefined {
   try {
     const seen = new WeakSet<object>();
-    const json = JSON.stringify(value, (_k, v) => {
+    const json = JSON.stringify(value, (_k: string, v: unknown) => {
       if (v instanceof Error) {
         return { name: v.name, message: v.message, stack: v.stack };
       }
       if (typeof v === 'object' && v) {
-        if (seen.has(v as object)) return '[Circular]';
-        seen.add(v as object);
+        if (seen.has(v)) return '[Circular]';
+        seen.add(v);
       }
       return v;
     });
     return safeString(json, maxLen);
   } catch {
-    return safeString(String(value), maxLen);
+    return safeString(value, maxLen);
   }
 }
 
@@ -169,7 +185,7 @@ function redactBody(payload: unknown): unknown {
   return payload;
 }
 
-function serializeBody(value: unknown): { body: unknown | null; meta: Record<string, unknown> } {
+function serializeBody(value: unknown): { body: unknown; meta: Record<string, unknown> } {
   const meta: Record<string, unknown> = {};
   if (value == null) return { body: null, meta };
   let data: unknown = value;
@@ -296,7 +312,11 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
       pendingIncident = null;
     }
 
-    if (useBeacon && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    if (
+      useBeacon &&
+      typeof navigator !== 'undefined' &&
+      typeof navigator.sendBeacon === 'function'
+    ) {
       try {
         const blob = new Blob([payload], { type: 'application/json' });
         navigator.sendBeacon(endpoint, blob);
@@ -446,8 +466,8 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
         startedAt: span.startedAt ?? nowIso(),
         route: span.route ?? ctx.route,
         meta: span.meta ?? {},
-        incidentId: incidentActive ? incidentId ?? undefined : span.incidentId,
-        incidentReason: incidentActive ? incidentReason ?? undefined : span.incidentReason,
+        incidentId: incidentActive ? (incidentId ?? undefined) : span.incidentId,
+        incidentReason: incidentActive ? (incidentReason ?? undefined) : span.incidentReason,
       };
 
       if (isBreadcrumb) {
@@ -535,7 +555,7 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
 
   const onError = (...args: unknown[]) => {
     try {
-      const firstErr = args.find((a) => a instanceof Error) as Error | undefined;
+      const firstErr = args.find((a): a is Error => a instanceof Error);
       capture({
         spanType: 'console.error',
         level: 'error',
@@ -572,7 +592,7 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
   });
 
   window.addEventListener('unhandledrejection', (ev) => {
-    const reason = (ev as PromiseRejectionEvent).reason;
+    const reason: unknown = ev.reason;
     capture({
       spanType: 'ui.unhandledrejection',
       level: 'error',
@@ -588,10 +608,10 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     originalConsoleError(...args);
   };
 
-    console.warn = (...args: unknown[]) => {
+  console.warn = (...args: unknown[]) => {
     onWarn(...args);
-      originalConsoleWarn(...args);
-    };
+    originalConsoleWarn(...args);
+  };
 
   document.addEventListener('click', captureClick, true);
   window.addEventListener('popstate', handleRouteChange);
@@ -606,11 +626,7 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url =
-      typeof input === 'string'
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : input.url;
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
 
     if (shouldSkipUrl(url, endpoint)) {
       return originalFetch(input, init);
@@ -619,10 +635,13 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     const requestKey = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
     const method =
       safeString(init?.method, 16) ??
-      (typeof input === 'string' || input instanceof URL ? 'GET' : safeString(input.method, 16) ?? 'GET');
+      (typeof input === 'string' || input instanceof URL
+        ? 'GET'
+        : (safeString(input.method, 16) ?? 'GET'));
     const { path, queryKeys } = stripQuery(url);
     const headers = new Headers(
-      init?.headers ?? (typeof input === 'string' || input instanceof URL ? undefined : input.headers)
+      init?.headers ??
+        (typeof input === 'string' || input instanceof URL ? undefined : input.headers)
     );
 
     headers.set('x-request-key', requestKey);
@@ -647,7 +666,7 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
     }
 
     let requestHeaders: Record<string, unknown> | undefined;
-    let requestBody: unknown | undefined;
+    let requestBody: unknown = undefined;
     let requestMetaExtra: Record<string, unknown> = {};
 
     if (incidentActive) {
@@ -684,25 +703,31 @@ export function installTelemetry(opts: InstallTelemetryOptions): TelemetryClient
         responseMeta.incidentId = incidentId;
       }
 
-      let responseHeaders: Record<string, unknown> | undefined;
-      let responseBody: unknown | undefined;
+    let responseHeaders: Record<string, unknown> | undefined;
+    let responseBody: unknown = undefined;
       let responseMetaExtra: Record<string, unknown> = {};
 
       if (incidentActive) {
         responseHeaders = redactHeaders(res.headers);
-        if (shouldCaptureBody(path) && res.headers.get('content-type')?.includes('application/json')) {
-            const text = await res.clone().text().catch(() => '');
+        if (
+          shouldCaptureBody(path) &&
+          res.headers.get('content-type')?.includes('application/json')
+        ) {
+          const text = await res
+            .clone()
+            .text()
+            .catch(() => '');
           const serialized = serializeBody(text);
           responseBody = serialized.body ?? undefined;
           responseMetaExtra = serialized.meta;
         }
-        }
+      }
 
-        capture({
+      capture({
         spanType: 'net.response',
         level: res.status >= 500 ? 'error' : res.status >= 400 ? 'warn' : 'info',
-          method,
-          status: res.status,
+        method,
+        status: res.status,
         url: path,
         durationMs,
         responseHeaders,

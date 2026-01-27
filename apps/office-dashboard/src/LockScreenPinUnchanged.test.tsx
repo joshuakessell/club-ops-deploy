@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LockScreen } from './LockScreen';
 
-describe('Office Dashboard PIN flow (unchanged)', () => {
+describe('Office Dashboard PIN flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -25,7 +25,7 @@ describe('Office Dashboard PIN flow (unchanged)', () => {
     }) as any;
   });
 
-  it('still uses the password TextField input and does not render the LiquidGlass numpad', async () => {
+  it('renders the LiquidGlass numpad for PIN entry', async () => {
     const onLogin = vi.fn();
 
     const { container } = render(
@@ -36,12 +36,9 @@ describe('Office Dashboard PIN flow (unchanged)', () => {
     const manager = await screen.findByText('Manager Club');
     fireEvent.click(manager);
 
-    // Office dashboard still uses an <input type="password"> via MUI TextField
     await waitFor(() => {
-      expect(container.querySelector('input[type="password"]')).not.toBeNull();
+      expect(container.querySelector('.cs-liquid-numpad')).not.toBeNull();
     });
-    // And should NOT render our new shared numpad
-    expect(container.querySelector('.cs-liquid-numpad')).toBeNull();
+    expect(container.querySelector('input[type="password"]')).toBeNull();
   });
 });
-

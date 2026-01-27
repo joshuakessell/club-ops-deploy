@@ -10,4 +10,3 @@ export function getErrorMessage(value: unknown): string | undefined {
   if (typeof msg === 'string' && msg.trim()) return msg;
   return undefined;
 }
-

@@ -12,4 +12,3 @@ export function getRoomTier(roomNumber: string): RoomTier {
     return 'STANDARD';
   }
 }
-

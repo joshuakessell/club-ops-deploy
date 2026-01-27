@@ -180,7 +180,7 @@ export function registerTelemetryHttpHooks(fastify: FastifyInstance): void {
       method: ctx.method ?? undefined,
       status: reply.statusCode,
       url: ctx.url ?? undefined,
-      responseHeaders: shouldDeep ? ctx.responseHeaders ?? undefined : undefined,
+      responseHeaders: shouldDeep ? (ctx.responseHeaders ?? undefined) : undefined,
       responseBody: responseBodySanitized.body ?? undefined,
       requestKey: ctx.requestKey,
       meta: { ...metaBase, ...responseBodySanitized.meta },

@@ -46,4 +46,3 @@ export function stripSystemLateFeeNotes(notes: string | null | undefined): strin
 
   return kept ? kept : null;
 }
-

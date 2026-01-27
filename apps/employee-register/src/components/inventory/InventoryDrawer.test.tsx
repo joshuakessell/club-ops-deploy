@@ -86,23 +86,23 @@ describe('InventoryDrawer', () => {
     render(<InventoryDrawer lane="lane-1" sessionToken="test-token" />);
 
     // Wait for inventory to load and render.
-    await screen.findByText('Inventory');
+    await screen.findByText('Rentals');
 
     const standardBtn = screen.getByRole('button', { name: /Standard/i });
     const doubleBtn = screen.getByRole('button', { name: /Double/i });
 
     fireEvent.click(standardBtn);
-    expect(await screen.findByText('Room 101')).toBeDefined();
-    expect(screen.queryByText('Room 216')).toBeNull();
+    expect(await screen.findByText(/^101$/)).toBeDefined();
+    expect(screen.queryByText(/^216$/)).toBeNull();
 
     fireEvent.click(doubleBtn);
-    expect(await screen.findByText('Room 216')).toBeDefined();
-    expect(screen.queryByText('Room 101')).toBeNull();
+    expect(await screen.findByText(/^216$/)).toBeDefined();
+    expect(screen.queryByText(/^101$/)).toBeNull();
   });
 
   it('search filters by assignedMemberName (case-insensitive substring)', async () => {
     render(<InventoryDrawer lane="lane-1" sessionToken="test-token" />);
-    await screen.findByText('Inventory');
+    await screen.findByText('Rentals');
 
     const search = screen.getByLabelText('Inventory search');
     fireEvent.change(search, { target: { value: 'smith' } });
@@ -110,13 +110,13 @@ describe('InventoryDrawer', () => {
     const standardBtn = screen.getByRole('button', { name: /Standard/i });
     fireEvent.click(standardBtn);
 
-    expect(await screen.findByText('Room 101')).toBeDefined();
-    expect(screen.queryByText('Room 102')).toBeNull();
+    expect(await screen.findByText(/^101$/)).toBeDefined();
+    expect(screen.queryByText(/^102$/)).toBeNull();
   });
 
   it('search filters by number as well (typing 101 shows room 101)', async () => {
     render(<InventoryDrawer lane="lane-1" sessionToken="test-token" />);
-    await screen.findByText('Inventory');
+    await screen.findByText('Rentals');
 
     const search = screen.getByLabelText('Inventory search');
     fireEvent.change(search, { target: { value: '101' } });
@@ -124,9 +124,7 @@ describe('InventoryDrawer', () => {
     const standardBtn = screen.getByRole('button', { name: /Standard/i });
     fireEvent.click(standardBtn);
 
-    expect(await screen.findByText('Room 101')).toBeDefined();
-    expect(screen.queryByText('Room 102')).toBeNull();
+    expect(await screen.findByText(/^101$/)).toBeDefined();
+    expect(screen.queryByText(/^102$/)).toBeNull();
   });
 });
-
-

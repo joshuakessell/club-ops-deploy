@@ -4,6 +4,10 @@ import { useLaneSession } from '@club-ops/shared';
 import { safeJsonParse } from '@club-ops/ui';
 import type { StaffSession } from './LockScreen';
 import { apiJson, wsBaseUrl } from './api';
+import { PanelContent } from './views/PanelContent';
+import { PanelHeader } from './views/PanelHeader';
+import { PanelShell } from './views/PanelShell';
+import { RaisedCard } from './views/RaisedCard';
 
 type InventorySummaryResponse = {
   byType: Record<string, { clean: number; cleaning: number; dirty: number; total: number }>;
@@ -83,11 +87,9 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
         </div>
       )}
 
-      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="panel-header">
-          <h2>Inventory Summary</h2>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+      <PanelShell spacing="md">
+        <PanelHeader title="Inventory Summary" />
+        <PanelContent padding="md">
           <section
             className="stats-grid"
             style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 0 }}
@@ -109,14 +111,12 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
               <span className="stat-label">Lockers Available</span>
             </div>
           </section>
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
 
-      <section className="panel cs-liquid-card" style={{ marginBottom: '1.5rem' }}>
-        <div className="panel-header">
-          <h2>Low Availability Alerts</h2>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+      <PanelShell spacing="md">
+        <PanelHeader title="Low Availability Alerts" />
+        <PanelContent padding="md">
           {lowTiers.length === 0 ? (
             <div style={{ color: 'var(--text-muted)' }}>No tiers under 5 available.</div>
           ) : (
@@ -137,14 +137,12 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
               </tbody>
             </table>
           )}
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
 
-      <section className="panel cs-liquid-card">
-        <div className="panel-header">
-          <h2>Cash Totals (Demo)</h2>
-        </div>
-        <div className="panel-content" style={{ padding: '1.25rem' }}>
+      <PanelShell>
+        <PanelHeader title="Cash Totals (Demo)" />
+        <PanelContent padding="md">
           {!cash ? (
             <div style={{ color: 'var(--text-muted)' }}>Loading…</div>
           ) : (
@@ -177,7 +175,7 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
                   marginTop: '1.5rem',
                 }}
               >
-                <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+                <RaisedCard>
                   <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>By Payment Method</div>
                   <table className="rooms-table">
                     <tbody>
@@ -189,9 +187,9 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </RaisedCard>
 
-                <div className="csRaisedCard cs-liquid-card" style={{ padding: '1rem' }}>
+                <RaisedCard>
                   <div style={{ fontWeight: 700, marginBottom: '0.75rem' }}>By Register</div>
                   <table className="rooms-table">
                     <tbody>
@@ -203,12 +201,12 @@ export function ReportsDemoView({ session }: { session: StaffSession }) {
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </RaisedCard>
               </div>
             </>
           )}
-        </div>
-      </section>
+        </PanelContent>
+      </PanelShell>
     </div>
   );
 }

@@ -1,84 +1,7 @@
 import type { SessionUpdatedPayload } from '@club-ops/shared';
-import type { transaction } from '../db';
-
-type PoolClient = Parameters<Parameters<typeof transaction>[0]>[0];
-
-interface LaneSessionRow {
-  id: string;
-  lane_id: string;
-  status: string;
-  staff_id: string | null;
-  customer_id: string | null;
-  customer_display_name: string | null;
-  membership_number: string | null;
-  desired_rental_type: string | null;
-  waitlist_desired_type: string | null;
-  backup_rental_type: string | null;
-  assigned_resource_id: string | null;
-  assigned_resource_type: string | null;
-  price_quote_json: unknown;
-  disclaimers_ack_json: unknown;
-  payment_intent_id: string | null;
-  membership_purchase_intent?: 'PURCHASE' | 'RENEW' | null;
-  membership_purchase_requested_at?: Date | null;
-  membership_choice?: 'ONE_TIME' | 'SIX_MONTH' | null;
-  kiosk_acknowledged_at?: Date | null;
-  checkin_mode: string | null; // 'INITIAL' or 'RENEWAL'
-  proposed_rental_type: string | null;
-  proposed_by: string | null;
-  selection_confirmed: boolean;
-  selection_confirmed_by: string | null;
-  selection_locked_at: Date | null;
-  past_due_bypassed?: boolean;
-  past_due_bypassed_by_staff_id?: string | null;
-  past_due_bypassed_at?: Date | null;
-  last_payment_decline_reason?: string | null;
-  last_payment_decline_at?: Date | null;
-  last_past_due_decline_reason?: string | null;
-  last_past_due_decline_at?: Date | null;
-  created_at: Date;
-  updated_at: Date;
-}
-
-interface CustomerRow {
-  id: string;
-  name: string;
-  dob: Date | null;
-  membership_number: string | null;
-  membership_card_type: string | null;
-  membership_valid_until: Date | null;
-  banned_until: Date | null;
-  past_due_balance?: number;
-  primary_language?: string;
-  notes?: string;
-  id_scan_hash?: string | null;
-}
-
-interface PaymentIntentRow {
-  id: string;
-  lane_session_id: string;
-  amount: number | string;
-  status: string;
-  quote_json: unknown;
-  payment_method?: string;
-  failure_reason?: string;
-  failure_at?: Date | null;
-  register_number?: number | null;
-}
-
-function toNumber(value: unknown): number | undefined {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === 'number') return value;
-  const n = parseFloat(String(value));
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function toDate(value: unknown): Date | undefined {
-  if (value === null || value === undefined) return undefined;
-  if (value instanceof Date) return value;
-  const d = new Date(String(value));
-  return Number.isFinite(d.getTime()) ? d : undefined;
-}
+import { getIdScanIssue } from './identity';
+import type { CustomerRow, LaneSessionRow, PaymentIntentRow, PoolClient } from './types';
+import { toDate, toNumber } from './utils';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -109,6 +32,17 @@ function extractPaymentLineItems(
     normalized.push({ description, amount });
   }
   return normalized.length > 0 ? normalized : undefined;
+}
+
+function formatChargeDescription(type: string): string {
+  switch (type) {
+    case 'UPGRADE_FEE':
+      return 'Upgrade Fee';
+    case 'LATE_FEE':
+      return 'Late Fee';
+    default:
+      return type.replace(/_/g, ' ');
+  }
 }
 
 function isGymLockerEligible(membershipNumber: string | null | undefined): boolean {
@@ -173,7 +107,7 @@ export async function buildFullSessionUpdatedPayload(
   const customer = session.customer_id
     ? (
         await client.query<CustomerRow>(
-          `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, past_due_balance, primary_language, notes, id_scan_hash
+          `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, id_expiration_date, past_due_balance, primary_language, notes, id_scan_hash
              FROM customers
              WHERE id = $1
              LIMIT 1`,
@@ -215,6 +149,12 @@ export async function buildFullSessionUpdatedPayload(
   }
 
   const customerHasEncryptedLookupMarker = Boolean(customer?.id_scan_hash);
+  const idScanIssue = customer
+    ? getIdScanIssue({
+        dob: customer.dob,
+        idExpirationDate: customer.id_expiration_date ?? null,
+      })
+    : undefined;
 
   // Prefer a check-in block created by this lane session (when completed)
   const blockForSession = (
@@ -294,6 +234,65 @@ export async function buildFullSessionUpdatedPayload(
     extractPaymentLineItems(session.price_quote_json) ??
     extractPaymentLineItems(paymentIntent?.quote_json);
 
+  let ledgerLineItems: Array<{ description: string; amount: number }> | undefined;
+  let ledgerTotal: number | undefined;
+
+  if (session.checkin_mode === 'RENEWAL') {
+    const ledgerVisitId = blockForSession?.visit_id || activeVisitId;
+    if (ledgerVisitId) {
+      const ledgerItems: Array<{ description: string; amount: number }> = [];
+      let total = 0;
+
+      const paidIntents = await client.query<{
+        quote_json: unknown;
+        amount: number | string;
+      }>(
+        `SELECT pi.quote_json, pi.amount
+         FROM payment_intents pi
+         JOIN lane_sessions ls ON ls.id = pi.lane_session_id
+         JOIN checkin_blocks cb ON cb.session_id = ls.id
+         WHERE cb.visit_id = $1
+           AND pi.status = 'PAID'
+           AND pi.paid_at >= date_trunc('day', NOW())`,
+        [ledgerVisitId]
+      );
+
+      for (const intent of paidIntents.rows) {
+        const items = extractPaymentLineItems(intent.quote_json);
+        if (items && items.length > 0) {
+          for (const item of items) {
+            ledgerItems.push(item);
+            total += item.amount;
+          }
+          continue;
+        }
+        const amount = toNumber(intent.amount);
+        if (amount !== undefined) {
+          ledgerItems.push({ description: 'Check-in', amount });
+          total += amount;
+        }
+      }
+
+      const charges = await client.query<{ type: string; amount: number | string }>(
+        `SELECT type, amount
+         FROM charges
+         WHERE visit_id = $1
+           AND created_at >= date_trunc('day', NOW())`,
+        [ledgerVisitId]
+      );
+
+      for (const charge of charges.rows) {
+        const amount = toNumber(charge.amount);
+        if (amount === undefined) continue;
+        ledgerItems.push({ description: formatChargeDescription(charge.type), amount });
+        total += amount;
+      }
+
+      ledgerLineItems = ledgerItems;
+      ledgerTotal = total;
+    }
+  }
+
   const membershipValidUntilRaw = (customer as any)?.membership_valid_until as unknown;
   const customerMembershipValidUntil =
     membershipValidUntilRaw instanceof Date
@@ -308,10 +307,13 @@ export async function buildFullSessionUpdatedPayload(
     membershipNumber,
     customerMembershipValidUntil,
     membershipChoice: (session.membership_choice as 'ONE_TIME' | 'SIX_MONTH' | null) ?? null,
-    membershipPurchaseIntent: (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
-    kioskAcknowledgedAt: session.kiosk_acknowledged_at ? session.kiosk_acknowledged_at.toISOString() : undefined,
+    membershipPurchaseIntent:
+      (session.membership_purchase_intent as 'PURCHASE' | 'RENEW' | null) || undefined,
+    kioskAcknowledgedAt: session.kiosk_acknowledged_at
+      ? session.kiosk_acknowledged_at.toISOString()
+      : undefined,
     allowedRentals,
-    mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'INITIAL',
+    mode: session.checkin_mode === 'RENEWAL' ? 'RENEWAL' : 'CHECKIN',
     status: session.status,
     proposedRentalType: session.proposed_rental_type || undefined,
     proposedBy: (session.proposed_by as 'CUSTOMER' | 'EMPLOYEE' | null) || undefined,
@@ -323,6 +325,7 @@ export async function buildFullSessionUpdatedPayload(
     customerLastVisitAt,
     customerNotes: customer?.notes || undefined,
     customerHasEncryptedLookupMarker,
+    idScanIssue,
     pastDueBalance: pastDueBalance > 0 ? pastDueBalance : undefined,
     pastDueBlocked,
     pastDueBypassed,
@@ -333,6 +336,11 @@ export async function buildFullSessionUpdatedPayload(
     paymentLineItems,
     paymentFailureReason: paymentIntent?.failure_reason || undefined,
     agreementSigned: blockForSession ? !!blockForSession.agreement_signed : false,
+    agreementBypassPending: !!session.agreement_bypass_pending,
+    agreementSignedMethod:
+      session.agreement_signed_method === 'MANUAL' || session.agreement_signed_method === 'DIGITAL'
+        ? (session.agreement_signed_method as 'DIGITAL' | 'MANUAL')
+        : undefined,
     assignedResourceType: assignedResourceType || undefined,
     assignedResourceNumber,
     visitId: blockForSession?.visit_id || activeVisitId,
@@ -342,6 +350,12 @@ export async function buildFullSessionUpdatedPayload(
       ? blockForSession.ends_at.toISOString()
       : activeBlockEndsAt,
     checkoutAt: blockForSession?.ends_at ? blockForSession.ends_at.toISOString() : undefined,
+    renewalHours:
+      session.renewal_hours === 2 || session.renewal_hours === 6
+        ? (session.renewal_hours as 2 | 6)
+        : undefined,
+    ledgerLineItems,
+    ledgerTotal,
   };
 
   return { laneId, payload };

@@ -31,7 +31,10 @@ export function CheckoutVerificationModal({
     return () => window.clearInterval(id);
   }, []);
 
-  const scheduled = useMemo(() => new Date(request.scheduledCheckoutAt), [request.scheduledCheckoutAt]);
+  const scheduled = useMemo(
+    () => new Date(request.scheduledCheckoutAt),
+    [request.scheduledCheckoutAt]
+  );
   const delta = useMemo(() => computeCheckoutDelta(now, scheduled), [now, scheduled]);
   const deltaLabel = useMemo(() => formatCheckoutDelta(delta), [delta]);
 
@@ -76,7 +79,10 @@ export function CheckoutVerificationModal({
               3) Expected Check Out time
               4) Delta (remaining/late) with 15-min floor rounding
           */}
-          <div className="cs-liquid-card glass-effect" style={{ padding: '1rem', marginBottom: '1rem' }}>
+          <div
+            className="cs-liquid-card glass-effect"
+            style={{ padding: '1rem', marginBottom: '1rem' }}
+          >
             <div style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '0.01em' }}>
               {numberLabel} {number}
             </div>
@@ -96,7 +102,10 @@ export function CheckoutVerificationModal({
                 <>
                   {request.customerName}
                   {request.membershipNumber && (
-                    <span style={{ fontWeight: 700, color: '#94a3b8' }}> ({request.membershipNumber})</span>
+                    <span style={{ fontWeight: 700, color: '#94a3b8' }}>
+                      {' '}
+                      ({request.membershipNumber})
+                    </span>
                   )}
                 </>
               )}
@@ -132,9 +141,7 @@ export function CheckoutVerificationModal({
             borderRadius: '8px',
           }}
         >
-          <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>
-            Customer Checklist:
-          </div>
+          <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>Customer Checklist:</div>
           <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
             (Items customer marked as returned)
           </div>
@@ -170,10 +177,7 @@ export function CheckoutVerificationModal({
             <button
               onClick={onMarkFeePaid}
               disabled={checkoutFeePaid}
-              className={[
-                'cs-liquid-button',
-                checkoutFeePaid ? 'cs-liquid-button--selected' : '',
-              ]
+              className={['cs-liquid-button', checkoutFeePaid ? 'cs-liquid-button--selected' : '']
                 .filter(Boolean)
                 .join(' ')}
               style={{
@@ -197,8 +201,7 @@ export function CheckoutVerificationModal({
             style={{
               padding: '0.75rem',
               cursor:
-                !checkoutItemsConfirmed ||
-                (request.lateFeeAmount > 0 && !checkoutFeePaid)
+                !checkoutItemsConfirmed || (request.lateFeeAmount > 0 && !checkoutFeePaid)
                   ? 'not-allowed'
                   : 'pointer',
               fontWeight: 600,
@@ -223,4 +226,3 @@ export function CheckoutVerificationModal({
     </div>
   );
 }
-

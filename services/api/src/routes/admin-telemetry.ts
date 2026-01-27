@@ -140,7 +140,7 @@ function buildTraceWhere(input: z.infer<typeof TelemetryTraceQuerySchema>): {
     where.push(`${col} <= $${params.length}`);
   };
 
-  const sinceDate = input.since ? parseSince(input.since) ?? parseIsoDate(input.since) : null;
+  const sinceDate = input.since ? (parseSince(input.since) ?? parseIsoDate(input.since)) : null;
   const fromDate = input.from ? parseIsoDate(input.from) : sinceDate;
   const toDate = input.to ? parseIsoDate(input.to) : null;
 
@@ -195,7 +195,10 @@ function csvEscape(value: unknown): string {
   return needsQuotes ? `"${escaped}"` : escaped;
 }
 
-async function loadIncidentBundle(traceId: string, incidentId: string): Promise<TelemetrySpanRow[]> {
+async function loadIncidentBundle(
+  traceId: string,
+  incidentId: string
+): Promise<TelemetrySpanRow[]> {
   const incidentRes = await query<TelemetrySpanRow>(
     `
     SELECT *

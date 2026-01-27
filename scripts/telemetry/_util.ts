@@ -23,4 +23,3 @@ export function hasFlag(flag: string) {
 export function defaultArtifactsDir() {
   return path.resolve(process.cwd(), 'artifacts', 'telemetry');
 }
-

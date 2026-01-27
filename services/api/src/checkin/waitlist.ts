@@ -1,7 +1,5 @@
 import { getRoomTierFromNumber } from '@club-ops/shared';
-import type { transaction } from '../db';
-
-type PoolClient = Parameters<Parameters<typeof transaction>[0]>[0];
+import type { PoolClient } from './types';
 
 export function getRoomTier(roomNumber: string): 'SPECIAL' | 'DOUBLE' | 'STANDARD' {
   return getRoomTierFromNumber(parseInt(roomNumber, 10));
