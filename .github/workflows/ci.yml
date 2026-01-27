@@ -44,7 +44,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm -w install --frozen-lockfile --prod=false
 
       - name: Build (Turbo)
         run: pnpm turbo run build

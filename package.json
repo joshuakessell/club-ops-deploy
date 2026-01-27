@@ -65,10 +65,6 @@
       "allowedVersions": {
         "eslint": "9"
       }
-    },
-    "publicHoistPattern": [
-      "*eslint*",
-      "*typescript-eslint*"
-    ]
+    }
   }
 }
