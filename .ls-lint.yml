@@ -8,6 +8,7 @@ ls:
 
 ignore:
   - .git
+  - .github
   - node_modules
   - dist
   - build
@@ -17,3 +18,4 @@ ignore:
   - .vercel
   - .output
   - .cache
+  - services/api/migrations/_archive
