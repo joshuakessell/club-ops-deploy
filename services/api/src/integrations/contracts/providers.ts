@@ -51,6 +51,7 @@ export type PaymentStatus =
   | 'PARTIALLY_REFUNDED';
 
 export type PaymentRecord = {
+  provider: string;
   externalId: string;
   status: PaymentStatus;
   amount: MoneyAmount;
@@ -71,6 +72,7 @@ export type CreateCardPaymentParams = {
   amount: MoneyAmount;
   orderExternalId?: string;
   customerExternalId?: string;
+  internalPaymentId?: string;
   sourceToken?: string;
   metadata?: Record<string, unknown> | null;
 };

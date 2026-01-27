@@ -6,6 +6,7 @@ import type {
   PaymentsProvider,
 } from './contracts/providers';
 import { createMockProviders } from './mock';
+import { SquarePaymentsProvider } from './square/squarePaymentsProvider';
 
 export type IntegrationProviders = {
   providerId: ProviderId;
@@ -27,6 +28,16 @@ export function createIntegrationProviders(providerId = getProviderIdFromEnv()):
     const providers = createMockProviders();
     return { providerId, ...providers };
   }
+  if (providerId === 'square') {
+    const providers = createMockProviders();
+    return {
+      providerId,
+      customers: providers.customers,
+      orders: providers.orders,
+      labor: providers.labor,
+      payments: new SquarePaymentsProvider(),
+    };
+  }
 
-  throw new Error('Square provider not implemented yet');
+  throw new Error(`Unsupported INTEGRATIONS_PROVIDER: ${providerId}`);
 }

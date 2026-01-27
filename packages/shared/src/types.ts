@@ -173,6 +173,10 @@ export interface SessionUpdatedPayload {
    * This enables faster and more reliable future lookup from ID scans without storing raw scan data.
    */
   customerHasEncryptedLookupMarker?: boolean;
+  /**
+   * ID scan validation issues (blocks check-in until resolved).
+   */
+  idScanIssue?: 'ID_EXPIRED' | 'UNDERAGE';
   pastDueBalance?: number;
   pastDueBlocked?: boolean;
   pastDueBypassed?: boolean;

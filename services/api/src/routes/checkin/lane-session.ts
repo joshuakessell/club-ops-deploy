@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireKioskTokenOrStaff } from '../../auth/kioskToken';
 import { requireAuth, optionalAuth } from '../../auth/middleware';
-import { parseMembershipNumber } from '../../checkin/identity';
+import { getIdScanIssue, getIdScanIssueMessage, parseMembershipNumber } from '../../checkin/identity';
 import { buildFullSessionUpdatedPayload, getAllowedRentals } from '../../checkin/payload';
 import { StartLaneSessionBodySchema } from '../../checkin/schemas';
 import type { CustomerRow, LaneSessionRow } from '../../checkin/types';
@@ -67,10 +67,11 @@ export function registerCheckinLaneSessionRoutes(fastify: FastifyInstance): void
           let customerId: string | null = null;
           let customerName = 'Customer';
           let customerHasEncryptedLookupMarker = false;
+          let idScanIssue: 'ID_EXPIRED' | 'UNDERAGE' | undefined;
 
           if (requestedCustomerId) {
             const customerResult = await client.query<CustomerRow>(
-              `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until, id_scan_hash
+              `SELECT id, name, dob, id_expiration_date, membership_number, membership_card_type, membership_valid_until, banned_until, id_scan_hash
              FROM customers
              WHERE id = $1
              LIMIT 1`,
@@ -84,6 +85,10 @@ export function registerCheckinLaneSessionRoutes(fastify: FastifyInstance): void
             customerName = customer.name;
             membershipNumber = customer.membership_number || null;
             customerHasEncryptedLookupMarker = Boolean(customer.id_scan_hash);
+            idScanIssue = getIdScanIssue({
+              dob: customer.dob,
+              idExpirationDate: customer.id_expiration_date ?? null,
+            });
 
             const bannedUntil = toDate(customer.banned_until);
             if (bannedUntil && new Date() < bannedUntil) {
@@ -96,7 +101,7 @@ export function registerCheckinLaneSessionRoutes(fastify: FastifyInstance): void
             // Try to find existing customer by membership number
             if (membershipNumber) {
               const customerResult = await client.query<CustomerRow>(
-                `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, banned_until, id_scan_hash
+                `SELECT id, name, dob, id_expiration_date, membership_number, membership_card_type, membership_valid_until, banned_until, id_scan_hash
                FROM customers
                WHERE membership_number = $1
                LIMIT 1`,
@@ -108,6 +113,10 @@ export function registerCheckinLaneSessionRoutes(fastify: FastifyInstance): void
                 customerId = customer.id;
                 customerName = customer.name;
                 customerHasEncryptedLookupMarker = Boolean(customer.id_scan_hash);
+                idScanIssue = getIdScanIssue({
+                  dob: customer.dob,
+                  idExpirationDate: customer.id_expiration_date ?? null,
+                });
 
                 // Check if banned
                 const bannedUntil = toDate(customer.banned_until);
@@ -400,6 +409,7 @@ export function registerCheckinLaneSessionRoutes(fastify: FastifyInstance): void
             activeAssignedResourceNumber: activeAssignedResourceNumber || undefined,
             activeRentalType: activeRentalType || undefined,
             customerHasEncryptedLookupMarker,
+            idScanIssue,
           };
         });
 
@@ -408,6 +418,13 @@ export function registerCheckinLaneSessionRoutes(fastify: FastifyInstance): void
           buildFullSessionUpdatedPayload(client, result.sessionId)
         );
         fastify.broadcaster.broadcastSessionUpdated(payload, laneId);
+
+        if (result.idScanIssue) {
+          return reply.status(403).send({
+            error: getIdScanIssueMessage(result.idScanIssue),
+            code: result.idScanIssue,
+          });
+        }
 
         return reply.send(result);
       } catch (error: unknown) {

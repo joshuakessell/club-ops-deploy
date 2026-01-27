@@ -634,6 +634,21 @@
   color: var(--text-muted);
 }
 
+.inline-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text);
+  border-radius: 999px;
+  animation: cs-spin 0.8s linear infinite;
+}
+
+@keyframes cs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* KPI Cards */
 .kpi-grid {
   display: grid;

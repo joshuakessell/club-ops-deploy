@@ -8,3 +8,4 @@
 - views: standardized view shells with co-located CSS (cards, modals, banners, buttons).
 - utils/lib: pure helpers (formatting, membership state, data transforms).
 - i18n: localization strings and helpers.
+- Routing: this app does not use React Router; kiosk navigation is state/flow-driven without URL routes.

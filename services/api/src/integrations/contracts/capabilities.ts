@@ -1,6 +1,8 @@
 export type ProviderId = 'mock' | 'square';
 
 export type ProviderCapabilities = {
+  supportsCardPayments: boolean;
+  supportsCashPayments: boolean;
   customers: {
     search: boolean;
     lookupByExternalId: boolean;
@@ -28,6 +30,8 @@ export type ProviderCapabilities = {
 
 export const PROVIDER_CAPABILITIES: Record<ProviderId, ProviderCapabilities> = {
   mock: {
+    supportsCardPayments: true,
+    supportsCashPayments: true,
     customers: {
       search: true,
       lookupByExternalId: true,
@@ -53,6 +57,8 @@ export const PROVIDER_CAPABILITIES: Record<ProviderId, ProviderCapabilities> = {
     },
   },
   square: {
+    supportsCardPayments: true,
+    supportsCashPayments: false,
     customers: {
       search: true,
       lookupByExternalId: true,
@@ -60,10 +66,10 @@ export const PROVIDER_CAPABILITIES: Record<ProviderId, ProviderCapabilities> = {
     },
     payments: {
       card: true,
-      cash: true,
+      cash: false,
       listPayments: true,
-      listRefunds: true,
-      refund: true,
+      listRefunds: false,
+      refund: false,
     },
     orders: {
       create: true,

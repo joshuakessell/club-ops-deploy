@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useEmployeeRegisterState } from '../../app/state/useEmployeeRegisterState';
+import { RequiredTenderOutcomeModal } from '../../components/register/modals/RequiredTenderOutcomeModal';
 import { RetailSaleCard } from '../../components/retail/RetailSaleCard';
 import {
   RETAIL_CATALOG,
@@ -60,44 +61,30 @@ export function RetailPanel() {
         onAddItem={addItem}
         onRemoveItem={removeItem}
         footer={
-          showTenderOptions ? (
-            <div className="er-retail-tender-options">
-              <button
-                type="button"
-                className="cs-liquid-button cs-liquid-button--secondary"
-                onClick={() => handleSaleSuccess('Credit')}
-                disabled={cartItems.length === 0}
-              >
-                Credit Success
-              </button>
-              <button
-                type="button"
-                className="cs-liquid-button cs-liquid-button--danger"
-                onClick={() => setShowTenderOptions(true)}
-                disabled={cartItems.length === 0}
-              >
-                Credit Failure
-              </button>
-              <button
-                type="button"
-                className="cs-liquid-button cs-liquid-button--secondary"
-                onClick={() => handleSaleSuccess('Cash')}
-                disabled={cartItems.length === 0}
-              >
-                Cash Success
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="cs-liquid-button"
-              onClick={() => setShowTenderOptions(true)}
-              disabled={cartItems.length === 0}
-            >
-              Sale
-            </button>
-          )
+          <button
+            type="button"
+            className="cs-liquid-button"
+            onClick={() => setShowTenderOptions(true)}
+            disabled={cartItems.length === 0}
+          >
+            Sale
+          </button>
         }
+      />
+
+      <RequiredTenderOutcomeModal
+        isOpen={showTenderOptions}
+        totalAmount={total}
+        isSubmitting={false}
+        onConfirm={(choice) => {
+          if (choice === 'CREDIT_SUCCESS') handleSaleSuccess('Credit');
+          if (choice === 'CASH_SUCCESS') handleSaleSuccess('Cash');
+          if (choice === 'CREDIT_DECLINE') {
+            setSuccessToastMessage('Credit declined.');
+            setShowTenderOptions(true);
+          }
+        }}
+        onClose={() => setShowTenderOptions(false)}
       />
     </PanelShell>
   );

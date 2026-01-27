@@ -115,7 +115,7 @@ export function useScanOverlayState({
           return;
         }
         if (result.outcome === 'error') {
-          setScanToastMessage(result.message);
+          if (result.message) setScanToastMessage(result.message);
         }
       })();
     },

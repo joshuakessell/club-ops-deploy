@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { query } from '../db';
 import { requireAuth } from '../auth/middleware';
 import crypto from 'crypto';
+import { getIdScanIssue, getIdScanIssueMessage } from '../checkin/identity';
 
 const SearchQuerySchema = z.object({
   q: z.string().min(3),
@@ -198,6 +199,7 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
       firstName: z.string().min(1),
       lastName: z.string().min(1),
       dob: z.string().min(1),
+      idExpirationDate: z.string().optional(),
       fullName: z.string().optional(),
       // Optional prefill fields (not currently persisted in DB schema)
       addressLine1: z.string().optional(),
@@ -234,6 +236,17 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
       const dob = toDateOnly(body.dob);
       if (!dob) {
         return reply.status(400).send({ error: 'Invalid dob; expected YYYY-MM-DD' });
+      }
+      const idExpirationDate = body.idExpirationDate ? toDateOnly(body.idExpirationDate) : null;
+      if (body.idExpirationDate && !idExpirationDate) {
+        return reply.status(400).send({ error: 'Invalid idExpirationDate; expected YYYY-MM-DD' });
+      }
+      const idScanIssue = getIdScanIssue({ dob, idExpirationDate });
+      if (idScanIssue) {
+        return reply.status(403).send({
+          error: getIdScanIssueMessage(idScanIssue),
+          code: idScanIssue,
+        });
       }
 
       const name = (body.fullName?.trim() || `${body.firstName} ${body.lastName}`.trim()).slice(
@@ -274,9 +287,18 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
               `UPDATE customers
              SET id_scan_hash = COALESCE(id_scan_hash, $1),
                  id_scan_value = COALESCE(id_scan_value, $2),
+                 id_expiration_date = COALESCE(id_expiration_date, $4::date),
                  updated_at = NOW()
              WHERE id = $3`,
-              [idScanHash, idScanValue, row.id]
+              [idScanHash, idScanValue, row.id, idExpirationDate]
+            );
+          } else if (idExpirationDate) {
+            await query(
+              `UPDATE customers
+               SET id_expiration_date = $1::date,
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [idExpirationDate, row.id]
             );
           }
 
@@ -297,10 +319,10 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
           dob: Date | null;
           membership_number: string | null;
         }>(
-          `INSERT INTO customers (name, dob, id_scan_hash, id_scan_value, created_at, updated_at)
-         VALUES ($1, $2::date, $3, $4, NOW(), NOW())
+          `INSERT INTO customers (name, dob, id_expiration_date, id_scan_hash, id_scan_value, created_at, updated_at)
+         VALUES ($1, $2::date, $3::date, $4, $5, NOW(), NOW())
          RETURNING id, name, dob, membership_number`,
-          [name, dob, idScanHash, idScanValue]
+          [name, dob, idExpirationDate, idScanHash, idScanValue]
         );
 
         const row = inserted.rows[0]!;

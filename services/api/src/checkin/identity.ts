@@ -6,6 +6,7 @@ export type ExtractedIdIdentity = {
   lastName?: string;
   fullName?: string;
   dob?: string; // YYYY-MM-DD
+  idExpirationDate?: string; // YYYY-MM-DD
   idNumber?: string;
   issuer?: string;
   jurisdiction?: string;
@@ -176,6 +177,7 @@ export function extractAamvaIdentity(rawNormalized: string): ExtractedIdIdentity
     firstName: fieldMap['DAC'] || undefined,
     fullName: fieldMap['DAA'] || undefined,
     dob: parseAamvaDateToISO(fieldMap['DBB']) || parseAamvaDateToISO(fieldMap['DBD']) || undefined,
+    idExpirationDate: parseAamvaDateToISO(fieldMap['DBA']) || undefined,
     idNumber: fieldMap['DAQ'] || undefined,
     jurisdiction: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
     issuer: fieldMap['DAJ'] || fieldMap['DCI'] || undefined,
@@ -343,18 +345,67 @@ export function passesFuzzyThresholds(score: {
   );
 }
 
-export function calculateAge(dob: Date | string | null): number | undefined {
+export function calculateAge(dob: Date | string | null, now: Date = new Date()): number | undefined {
   const d = toDate(dob);
   if (!d) {
     return undefined;
   }
-  const today = new Date();
-  let age = today.getFullYear() - d.getFullYear();
-  const monthDiff = today.getMonth() - d.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < d.getDate())) {
+  let age = now.getFullYear() - d.getFullYear();
+  const monthDiff = now.getMonth() - d.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < d.getDate())) {
     age--;
   }
   return age;
+}
+
+export type IdScanIssue = 'ID_EXPIRED' | 'UNDERAGE';
+
+function toDateOnly(value: Date | string | null | undefined): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) {
+    if (!Number.isFinite(value.getTime())) return undefined;
+    return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    const iso = trimmed.length >= 10 ? trimmed.slice(0, 10) : trimmed;
+    const d = new Date(`${iso}T00:00:00Z`);
+    if (!Number.isFinite(d.getTime())) return undefined;
+    return d;
+  }
+  return undefined;
+}
+
+export function getIdScanIssue(params: {
+  dob?: Date | string | null;
+  idExpirationDate?: Date | string | null;
+  now?: Date;
+}): IdScanIssue | undefined {
+  const now = params.now ?? new Date();
+  const age = calculateAge(params.dob ?? null, now);
+  if (age !== undefined && age < 18) {
+    return 'UNDERAGE';
+  }
+
+  const expiresOn = toDateOnly(params.idExpirationDate);
+  if (!expiresOn) return undefined;
+  const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  if (expiresOn.getTime() < today.getTime()) {
+    return 'ID_EXPIRED';
+  }
+  return undefined;
+}
+
+export function getIdScanIssueMessage(issue: IdScanIssue): string {
+  switch (issue) {
+    case 'ID_EXPIRED':
+      return 'ID is expired. Please provide an unexpired ID.';
+    case 'UNDERAGE':
+      return 'Customer is under 18. Please provide an ID showing 18+.';
+    default:
+      return 'ID is not valid for check-in.';
+  }
 }
 
 /**

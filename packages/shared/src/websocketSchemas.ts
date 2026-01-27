@@ -77,6 +77,10 @@ export const SessionUpdatedPayloadSchema: z.ZodType<SessionUpdatedPayload, z.Zod
       customerLastVisitAt: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
       customerNotes: z.preprocess((v) => (v === null ? undefined : v), z.string().optional()),
       customerHasEncryptedLookupMarker: z.boolean().optional(),
+      idScanIssue: z.preprocess(
+        (v) => (v === null ? undefined : v),
+        z.enum(['ID_EXPIRED', 'UNDERAGE']).optional()
+      ),
       pastDueBalance: z.number().optional(),
       pastDueBlocked: z.boolean().optional(),
       pastDueBypassed: z.boolean().optional(),

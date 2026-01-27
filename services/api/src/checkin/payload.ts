@@ -1,4 +1,5 @@
 import type { SessionUpdatedPayload } from '@club-ops/shared';
+import { getIdScanIssue } from './identity';
 import type { CustomerRow, LaneSessionRow, PaymentIntentRow, PoolClient } from './types';
 import { toDate, toNumber } from './utils';
 
@@ -106,7 +107,7 @@ export async function buildFullSessionUpdatedPayload(
   const customer = session.customer_id
     ? (
         await client.query<CustomerRow>(
-          `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, past_due_balance, primary_language, notes, id_scan_hash
+          `SELECT id, name, dob, membership_number, membership_card_type, membership_valid_until, id_expiration_date, past_due_balance, primary_language, notes, id_scan_hash
              FROM customers
              WHERE id = $1
              LIMIT 1`,
@@ -148,6 +149,12 @@ export async function buildFullSessionUpdatedPayload(
   }
 
   const customerHasEncryptedLookupMarker = Boolean(customer?.id_scan_hash);
+  const idScanIssue = customer
+    ? getIdScanIssue({
+        dob: customer.dob,
+        idExpirationDate: customer.id_expiration_date ?? null,
+      })
+    : undefined;
 
   // Prefer a check-in block created by this lane session (when completed)
   const blockForSession = (
@@ -318,6 +325,7 @@ export async function buildFullSessionUpdatedPayload(
     customerLastVisitAt,
     customerNotes: customer?.notes || undefined,
     customerHasEncryptedLookupMarker,
+    idScanIssue,
     pastDueBalance: pastDueBalance > 0 ? pastDueBalance : undefined,
     pastDueBlocked,
     pastDueBypassed,
