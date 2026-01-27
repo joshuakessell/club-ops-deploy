@@ -29,7 +29,10 @@ jobs:
           cache: pnpm
 
       - name: Enable corepack
-        run: corepack enable
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.28.0 --activate
+          pnpm --version
 
       - name: Install
         run: pnpm -w install --frozen-lockfile
