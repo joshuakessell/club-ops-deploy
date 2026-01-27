@@ -44,7 +44,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm -r install --frozen-lockfile --prod=false
+        run: pnpm install --frozen-lockfile --prod=false
         env:
           NODE_ENV: development
           NPM_CONFIG_PRODUCTION: "false"
