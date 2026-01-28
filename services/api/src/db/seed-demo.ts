@@ -255,6 +255,78 @@ export async function seedDemoData(): Promise<void> {
       }
     }
 
+    // Seed break sessions for open timeclock sessions (if none exist yet)
+    const existingBreaks = await query<{ count: string }>(
+      `SELECT COUNT(*) as count FROM staff_break_sessions`
+    );
+    if (parseInt(existingBreaks.rows[0]?.count || '0', 10) === 0) {
+      const openTimeclockSessions = await query<{
+        id: string;
+        employee_id: string;
+        clock_in_at: Date;
+      }>(
+        `SELECT id, employee_id, clock_in_at
+         FROM timeclock_sessions
+         WHERE clock_out_at IS NULL
+         ORDER BY clock_in_at DESC
+         LIMIT 2`
+      );
+
+      if (openTimeclockSessions.rows.length > 0) {
+        const openBreakSession = openTimeclockSessions.rows[0]!;
+        await query(
+          `INSERT INTO staff_break_sessions
+           (staff_id, timeclock_session_id, started_at, break_type, status, notes)
+           VALUES ($1, $2, $3, 'MEAL', 'OPEN', $4)`,
+          [
+            openBreakSession.employee_id,
+            openBreakSession.id,
+            new Date(now.getTime() - 15 * 60 * 1000),
+            'Demo open break',
+          ]
+        );
+
+        const closedBreakSession = openTimeclockSessions.rows[1] ?? openBreakSession;
+        const breakStart = new Date(now.getTime() - 120 * 60 * 1000);
+        const breakEnd = new Date(now.getTime() - 90 * 60 * 1000);
+        await query(
+          `INSERT INTO staff_break_sessions
+           (staff_id, timeclock_session_id, started_at, ended_at, break_type, status, notes)
+           VALUES ($1, $2, $3, $4, 'REST', 'CLOSED', $5)`,
+          [
+            closedBreakSession.employee_id,
+            closedBreakSession.id,
+            breakStart,
+            breakEnd,
+            'Demo closed break',
+          ]
+        );
+      } else {
+        const recentClosedSession = await query<{
+          id: string;
+          employee_id: string;
+          clock_in_at: Date;
+        }>(
+          `SELECT id, employee_id, clock_in_at
+           FROM timeclock_sessions
+           WHERE clock_out_at IS NOT NULL
+           ORDER BY clock_out_at DESC
+           LIMIT 1`
+        );
+        if (recentClosedSession.rows.length > 0) {
+          const session = recentClosedSession.rows[0]!;
+          const breakStart = new Date(session.clock_in_at.getTime() + 60 * 60 * 1000);
+          const breakEnd = new Date(session.clock_in_at.getTime() + 90 * 60 * 1000);
+          await query(
+            `INSERT INTO staff_break_sessions
+             (staff_id, timeclock_session_id, started_at, ended_at, break_type, status, notes)
+             VALUES ($1, $2, $3, $4, 'OTHER', 'CLOSED', $5)`,
+            [session.employee_id, session.id, breakStart, breakEnd, 'Demo closed break']
+          );
+        }
+      }
+    }
+
     // Seed employee documents (1-2 per employee)
     const docTypes = ['ID', 'W4', 'I9', 'OFFER_LETTER', 'NDA'];
     const documentsCreated: string[] = [];
