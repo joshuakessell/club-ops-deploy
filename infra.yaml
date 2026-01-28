@@ -1,0 +1,298 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Club Ops API - ECR + RDS Postgres + App Runner + HTTP API Gateway
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: club-ops
+  EnvName:
+    Type: String
+    Default: demo
+
+  ImageTag:
+    Type: String
+    Default: latest
+
+  KioskToken:
+    Type: String
+    NoEcho: true
+    Description: Shared kiosk token used by kiosk clients (do not commit)
+
+  DbName:
+    Type: String
+    Default: clubops
+  DbUsername:
+    Type: String
+    Default: clubops
+  DbPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+
+Resources:
+  ApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${ProjectName}-api"
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${ProjectName}-${EnvName}-db-sg"
+      VpcId: !Ref "AWS::NoValue"
+    Metadata:
+      Comment: "This resource is intentionally not used; see DbSecurityGroup2 below."
+
+  DbSecurityGroup2:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${ProjectName}-${EnvName}-db-sg"
+      VpcId:
+        Fn::ImportValue: !Sub "${ProjectName}-${EnvName}-vpc-id"
+    Condition: UseImportedVpc
+    Metadata:
+      Comment: "If you do not have an exported VPC id, use the DefaultVPC path below."
+
+  DefaultVpc:
+    Type: AWS::EC2::VPC
+    Condition: CreateDefaultVpc
+    Properties:
+      CidrBlock: 10.30.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${EnvName}-vpc"
+
+  DefaultSubnetA:
+    Type: AWS::EC2::Subnet
+    Condition: CreateDefaultVpc
+    Properties:
+      VpcId: !Ref DefaultVpc
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: 10.30.1.0/24
+      MapPublicIpOnLaunch: true
+
+  DefaultSubnetB:
+    Type: AWS::EC2::Subnet
+    Condition: CreateDefaultVpc
+    Properties:
+      VpcId: !Ref DefaultVpc
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: 10.30.2.0/24
+      MapPublicIpOnLaunch: true
+
+  DefaultInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: CreateDefaultVpc
+
+  DefaultIgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: CreateDefaultVpc
+    Properties:
+      VpcId: !Ref DefaultVpc
+      InternetGatewayId: !Ref DefaultInternetGateway
+
+  DefaultRouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateDefaultVpc
+    Properties:
+      VpcId: !Ref DefaultVpc
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateDefaultVpc
+    DependsOn: DefaultIgwAttachment
+    Properties:
+      RouteTableId: !Ref DefaultRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref DefaultInternetGateway
+
+  DefaultSubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateDefaultVpc
+    Properties:
+      SubnetId: !Ref DefaultSubnetA
+      RouteTableId: !Ref DefaultRouteTable
+
+  DefaultSubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateDefaultVpc
+    Properties:
+      SubnetId: !Ref DefaultSubnetB
+      RouteTableId: !Ref DefaultRouteTable
+
+  EffectiveVpcId:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub "/${ProjectName}/${EnvName}/vpc-id"
+      Type: String
+      Value: !If [CreateDefaultVpc, !Ref DefaultVpc, !Ref "AWS::NoValue"]
+
+  DbSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub "${ProjectName}-${EnvName}-db-sg"
+      VpcId: !If [CreateDefaultVpc, !Ref DefaultVpc, !Ref "AWS::NoValue"]
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${EnvName}-db-sg"
+
+  DbIngressFromAnywhere:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DbSg
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      CidrIp: 0.0.0.0/0
+
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Condition: CreateDefaultVpc
+    Properties:
+      DBSubnetGroupDescription: !Sub "${ProjectName}-${EnvName}-db-subnets"
+      SubnetIds:
+        - !Ref DefaultSubnetA
+        - !Ref DefaultSubnetB
+
+  DbInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${ProjectName}-${EnvName}-db"
+      Engine: postgres
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: 20
+      StorageType: gp2
+      PubliclyAccessible: true
+      VPCSecurityGroups:
+        - !Ref DbSg
+      DBName: !Ref DbName
+      MasterUsername: !Ref DbUsername
+      MasterUserPassword: !Ref DbPassword
+      BackupRetentionPeriod: 0
+      DeletionProtection: false
+      MultiAZ: false
+      DBSubnetGroupName: !If [CreateDefaultVpc, !Ref DbSubnetGroup, !Ref "AWS::NoValue"]
+
+  ApiSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/${EnvName}/api"
+      SecretString: !Sub |
+        {
+          "KIOSK_TOKEN": "${KioskToken}"
+        }
+
+  DbUrlSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "${ProjectName}/${EnvName}/database-url"
+      SecretString: !Sub |
+        {
+          "DATABASE_URL": "postgres://${DbUsername}:${DbPassword}@${DbInstance.Endpoint.Address}:${DbInstance.Endpoint.Port}/${DbName}"
+        }
+
+  AppRunnerAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectName}-${EnvName}-apprunner-access"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apprunner.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: apprunner-ecr-secrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchCheckLayerAvailability
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref ApiSecret
+                  - !Ref DbUrlSecret
+
+  AppRunnerService:
+    Type: AWS::AppRunner::Service
+    DependsOn:
+      - DbInstance
+    Properties:
+      ServiceName: !Sub "${ProjectName}-${EnvName}-api"
+      SourceConfiguration:
+        AuthenticationConfiguration:
+          AccessRoleArn: !GetAtt AppRunnerAccessRole.Arn
+        AutoDeploymentsEnabled: true
+        ImageRepository:
+          ImageIdentifier: !Sub "${ApiRepository.RepositoryUri}:${ImageTag}"
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: "3000"
+            RuntimeEnvironmentSecrets:
+              KIOSK_TOKEN: !Sub "${ApiSecret}:KIOSK_TOKEN::"
+              DATABASE_URL: !Sub "${DbUrlSecret}:DATABASE_URL::"
+            RuntimeEnvironmentVariables:
+              HOST: "0.0.0.0"
+      InstanceConfiguration:
+        Cpu: "1 vCPU"
+        Memory: "2 GB"
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${ProjectName}-${EnvName}-http"
+      ProtocolType: HTTP
+
+  HttpApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+      IntegrationUri: !GetAtt AppRunnerService.ServiceUrl
+      PayloadFormatVersion: "1.0"
+
+  HttpApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "ANY /{proxy+}"
+      Target: !Sub "integrations/${HttpApiIntegration}"
+
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+
+Conditions:
+  CreateDefaultVpc: !Equals ["true", "true"]
+  UseImportedVpc: !Equals ["false", "true"]
+
+Outputs:
+  EcrRepositoryUri:
+    Value: !GetAtt ApiRepository.RepositoryUri
+
+  RdsEndpoint:
+    Value: !GetAtt DbInstance.Endpoint.Address
+
+  AppRunnerUrl:
+    Value: !GetAtt AppRunnerService.ServiceUrl
+
+  HttpApiUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com"

@@ -102,7 +102,7 @@ cp .env.example .env
 | `DB_PORT`        | 5433            | PostgreSQL port (host port, container uses 5432) |
 | `DB_NAME`        | club_operations | Database name                                    |
 | `DB_USER`        | clubops         | Database user                                    |
-| `DB_PASSWORD`    | clubops_dev     | Database password                                |
+| `DB_PASSWORD`    | "$PASSWORD"     | Database password                                |
 | `DB_SSL`         | false           | Enable SSL for database                          |
 | `DB_POOL_MAX`    | 20              | Max connections in pool                          |
 | `DB_LOG_QUERIES` | false           | Log all database queries                         |
