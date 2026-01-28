@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import pg from 'pg';
 
 const { Pool } = pg;
@@ -52,13 +53,18 @@ export function loadDatabaseConfig(): pg.PoolConfig {
   if (process.env.DATABASE_URL) {
     const parsed = parseDatabaseUrl(process.env.DATABASE_URL);
     const sslEnabled = process.env.DB_SSL === 'true';
+    const sslCaPath = process.env.DB_SSL_CA_PATH || process.env.PGSSLROOTCERT;
     return {
       connectionString: process.env.DATABASE_URL,
       ...(parsed.host ? { host: parsed.host } : {}),
       ...(typeof parsed.port === 'number' ? { port: parsed.port } : {}),
       ...(parsed.database ? { database: parsed.database } : {}),
       ...(parsed.user ? { user: parsed.user } : {}),
-      ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
+      ssl: sslEnabled
+        ? sslCaPath
+          ? { ca: fs.readFileSync(sslCaPath, 'utf8'), rejectUnauthorized: true }
+          : { rejectUnauthorized: false }
+        : undefined,
       max: parseInt(process.env.DB_POOL_MAX || '20', 10),
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -74,13 +80,20 @@ export function loadDatabaseConfig(): pg.PoolConfig {
     );
   }
 
+  const sslEnabled = process.env.DB_SSL === 'true';
+  const sslCaPath = process.env.DB_SSL_CA_PATH || process.env.PGSSLROOTCERT;
+
   return {
     host: process.env.DB_HOST!.trim(),
     port: parseInt(process.env.DB_PORT || '5432', 10),
     database: process.env.DB_NAME || 'club_operations',
     user: process.env.DB_USER || 'clubops',
     password: process.env.DB_PASSWORD || 'clubops_dev',
-    ssl: process.env.DB_SSL === 'true',
+    ssl: sslEnabled
+      ? sslCaPath
+        ? { ca: fs.readFileSync(sslCaPath, 'utf8'), rejectUnauthorized: true }
+        : { rejectUnauthorized: false }
+      : undefined,
     max: parseInt(process.env.DB_POOL_MAX || '20', 10),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
