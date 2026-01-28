@@ -44,7 +44,7 @@ import { registerWsRoute } from './websocket/wsRoute';
 
 loadEnvFromDotEnvIfPresent();
 
-const PORT = parseInt(process.env.PORT || '3001', 10);
+const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const SKIP_DB = process.env.SKIP_DB === 'true';
 const SEED_ON_STARTUP = process.env.SEED_ON_STARTUP === 'true';
