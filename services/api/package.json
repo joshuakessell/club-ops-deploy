@@ -13,7 +13,9 @@
     "db:reset": "node scripts/compose.mjs reset && pnpm exec tsx scripts/wait-for-db.ts",
     "db:migrate": "pnpm exec tsx scripts/wait-for-db.ts && pnpm exec tsx scripts/migrate.ts",
     "db:migrate:status": "pnpm exec tsx scripts/wait-for-db.ts && pnpm exec tsx src/db/migrate-status.ts",
-    "seed": "pnpm exec tsx scripts/wait-for-db.ts && pnpm exec tsx src/db/seed.ts"
+    "seed": "pnpm exec tsx scripts/wait-for-db.ts && pnpm exec tsx src/db/seed.ts",
+    "seed:demo": "DEMO_MODE=true pnpm exec tsx src/db/seed-demo.ts",
+    "seed:all": "pnpm -s run seed && pnpm -s run seed:demo"
   },
   "dependencies": {
     "@club-ops/shared": "workspace:*",

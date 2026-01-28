@@ -44,7 +44,7 @@ import { registerWsRoute } from './websocket/wsRoute';
 
 loadEnvFromDotEnvIfPresent();
 
-const PORT = parseInt(process.env.PORT || '3001', 10);
+const PORT = parseInt(process.env.PORT || '3000', 10);
 const HOST = process.env.HOST || '0.0.0.0';
 const SKIP_DB = process.env.SKIP_DB === 'true';
 const SEED_ON_STARTUP = process.env.SEED_ON_STARTUP === 'true';
@@ -61,6 +61,7 @@ if (!KIOSK_TOKEN) {
 declare module 'fastify' {
   interface FastifyInstance {
     broadcaster: Broadcaster;
+    dbHealthy: boolean;
   }
 }
 
@@ -107,6 +108,7 @@ async function main() {
 
   // Decorate fastify with broadcaster for access in routes
   fastify.decorate('broadcaster', broadcaster);
+  fastify.decorate('dbHealthy', SKIP_DB);
 
   // Set up periodic cleanup for abandoned register sessions (every 30 seconds)
   const cleanupInterval = setInterval(() => {
@@ -149,31 +151,6 @@ async function main() {
       }
     })();
   }, 5000);
-
-  // Initialize database connection (unless skipped for testing)
-  if (!SKIP_DB) {
-    try {
-      await initializeDatabase();
-      fastify.log.info('Database connection initialized');
-
-      // Seed demo data if DEMO_MODE is enabled
-      if (process.env.DEMO_MODE === 'true') {
-        if (SEED_ON_STARTUP) {
-          fastify.log.info(
-            'DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...'
-          );
-          await seedDemoData();
-        } else {
-          fastify.log.info(
-            'DEMO_MODE enabled; skipping demo seed on startup. Run `pnpm demo:seed` or set SEED_ON_STARTUP=true to seed during boot.'
-          );
-        }
-      }
-    } catch (err) {
-      fastify.log.error(err, 'Failed to initialize database');
-      process.exit(1);
-    }
-  }
 
   // Register routes
   await fastify.register(healthRoutes);
@@ -238,6 +215,33 @@ async function main() {
     fastify.log.info('  POST /v1/keys/resolve');
     fastify.log.info('  POST /v1/cleaning/batch');
     fastify.log.info('  GET  /v1/cleaning/batches');
+
+    if (!SKIP_DB) {
+      void (async () => {
+        try {
+          await initializeDatabase();
+          fastify.dbHealthy = true;
+          fastify.log.info('Database connection initialized');
+
+          // Seed demo data if DEMO_MODE is enabled
+          if (process.env.DEMO_MODE === 'true') {
+            if (SEED_ON_STARTUP) {
+              fastify.log.info(
+                'DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...'
+              );
+              await seedDemoData();
+            } else {
+              fastify.log.info(
+                'DEMO_MODE enabled; skipping demo seed on startup. Run `pnpm demo:seed` or set SEED_ON_STARTUP=true to seed during boot.'
+              );
+            }
+          }
+        } catch (err) {
+          fastify.dbHealthy = false;
+          fastify.log.error(err, 'Failed to initialize database');
+        }
+      })();
+    }
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
