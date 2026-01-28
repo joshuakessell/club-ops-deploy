@@ -27,6 +27,7 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy only built output + runtime assets
 COPY --from=build /repo/services/api/dist ./services/api/dist
 COPY --from=build /repo/services/api/migrations ./services/api/migrations
+COPY services/api/certs/rds-ca-bundle.pem /etc/ssl/certs/rds-ca-bundle.pem
 
 ENV PORT=3000
 EXPOSE 3000
