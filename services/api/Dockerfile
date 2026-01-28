@@ -31,5 +31,5 @@ COPY services/api/certs/rds-ca-bundle.pem /etc/ssl/certs/rds-ca-bundle.pem
 
 ENV PORT=3000
 EXPOSE 3000
-CMD ["pnpm", "-C", "services/api", "start"]
+CMD ["node", "services/api/dist/index.js"]
     
