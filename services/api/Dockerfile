@@ -3,10 +3,12 @@ WORKDIR /repo
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tsconfig.json tsconfig.base.json ./
 COPY packages ./packages
 COPY services/api ./services/api
 
 RUN pnpm install --frozen-lockfile
+RUN pnpm -C packages/shared build
 RUN pnpm -C services/api build
 
 FROM node:22-alpine AS runner
@@ -15,6 +17,7 @@ ENV NODE_ENV=production
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY tsconfig.json tsconfig.base.json ./
 COPY packages ./packages
 COPY services/api/package.json ./services/api/package.json
 
