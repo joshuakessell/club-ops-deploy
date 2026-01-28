@@ -10,6 +10,8 @@ import {
 import { RentalType, RoomStatus, RoomType, getRoomTierFromNumber } from '@club-ops/shared';
 import { computeSha256Hex, normalizeScanText } from '../../checkin/identity';
 import { query, transaction } from '../index';
+import { buildCloseoutSnapshot } from '../../money/closeout';
+import { buildReceiptNumber } from '../../money/orderAudit';
 
 export async function seedBusySaturdayDemo(now: Date): Promise<void> {
   const FIFTEEN_MIN_MS = 15 * 60 * 1000;
@@ -223,6 +225,13 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       await client.query('DELETE FROM inventory_reservations');
       await client.query('DELETE FROM waitlist');
       await client.query('DELETE FROM agreement_signatures');
+      await client.query('DELETE FROM external_provider_refs');
+      await client.query('DELETE FROM receipts');
+      await client.query('DELETE FROM order_line_items');
+      await client.query('DELETE FROM orders');
+      await client.query('DELETE FROM cash_drawer_events');
+      await client.query('DELETE FROM cash_drawer_sessions');
+      await client.query('DELETE FROM staff_break_sessions');
       await client.query('DELETE FROM charges');
       await client.query('DELETE FROM checkin_blocks');
       await client.query('DELETE FROM payment_intents');
@@ -618,6 +627,536 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           [lockerId]
         );
       }
+
+      // -------------------------------------------------------------------
+      // POS domain data: register sessions, cash drawers, orders, receipts, external refs
+      // -------------------------------------------------------------------
+      const staffRows = await client.query<{ id: string; name: string; role: string }>(
+        `SELECT id, name, role FROM staff WHERE active = true ORDER BY name`
+      );
+      if (staffRows.rows.length === 0) {
+        throw new Error('No active staff found for POS demo seed.');
+      }
+
+      const primaryStaff = staffRows.rows[0]!;
+      const secondaryStaff = staffRows.rows[1] ?? primaryStaff;
+      const adminStaff =
+        staffRows.rows.find((staffer) => staffer.role === 'ADMIN') ?? primaryStaff;
+
+      const openRegisterNumber = 1;
+      const closedRegisterNumber = 2;
+      const openRegisterDeviceId = 'demo-register-1';
+      const closedRegisterDeviceId = 'demo-register-2';
+
+      const existingOpenRegister = await client.query<{
+        id: string;
+        created_at: Date;
+      }>(
+        `SELECT id, created_at
+         FROM register_sessions
+         WHERE register_number = $1 AND signed_out_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [openRegisterNumber]
+      );
+
+      let openRegisterSessionId: string;
+      let openRegisterOpenedAt: Date;
+
+      if (existingOpenRegister.rows.length > 0) {
+        openRegisterSessionId = existingOpenRegister.rows[0]!.id;
+        openRegisterOpenedAt = existingOpenRegister.rows[0]!.created_at;
+      } else {
+        await client.query(
+          `UPDATE register_sessions
+           SET signed_out_at = NOW()
+           WHERE device_id = $1 AND signed_out_at IS NULL`,
+          [openRegisterDeviceId]
+        );
+        await client.query(`DELETE FROM register_sessions WHERE device_id = $1`, [
+          openRegisterDeviceId,
+        ]);
+
+        const openedAt = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        const insertOpenRegister = await client.query<{ id: string; created_at: Date }>(
+          `INSERT INTO register_sessions
+           (employee_id, device_id, register_number, last_heartbeat, created_at)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id, created_at`,
+          [primaryStaff.id, openRegisterDeviceId, openRegisterNumber, now, openedAt]
+        );
+        openRegisterSessionId = insertOpenRegister.rows[0]!.id;
+        openRegisterOpenedAt = insertOpenRegister.rows[0]!.created_at;
+      }
+
+      await client.query(`DELETE FROM register_sessions WHERE device_id = $1`, [
+        closedRegisterDeviceId,
+      ]);
+      const closedRegisterOpenedAt = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+      const closedRegisterSignedOutAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+      const insertClosedRegister = await client.query<{ id: string; created_at: Date }>(
+        `INSERT INTO register_sessions
+         (employee_id, device_id, register_number, last_heartbeat, created_at, signed_out_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, created_at`,
+        [
+          secondaryStaff.id,
+          closedRegisterDeviceId,
+          closedRegisterNumber,
+          closedRegisterSignedOutAt,
+          closedRegisterOpenedAt,
+          closedRegisterSignedOutAt,
+        ]
+      );
+
+      const closedRegisterSessionId = insertClosedRegister.rows[0]!.id;
+
+      const openDrawerId = randomUUID();
+      const openDrawerOpenedAt = new Date(openRegisterOpenedAt.getTime() + 10 * 60 * 1000);
+      const openDrawerFloatCents = 20000;
+      await client.query(
+        `INSERT INTO cash_drawer_sessions
+         (id, register_session_id, opened_by_staff_id, opened_at, opening_float_cents, status)
+         VALUES ($1, $2, $3, $4, $5, 'OPEN')`,
+        [
+          openDrawerId,
+          openRegisterSessionId,
+          primaryStaff.id,
+          openDrawerOpenedAt,
+          openDrawerFloatCents,
+        ]
+      );
+
+      const closedDrawerId = randomUUID();
+      const closedDrawerOpenedAt = new Date(closedRegisterOpenedAt.getTime() + 20 * 60 * 1000);
+      const closedDrawerClosedAt = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+      const closedDrawerFloatCents = 15000;
+      await client.query(
+        `INSERT INTO cash_drawer_sessions
+         (id, register_session_id, opened_by_staff_id, opened_at, opening_float_cents, closed_by_staff_id, closed_at, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'CLOSED')`,
+        [
+          closedDrawerId,
+          closedRegisterSessionId,
+          secondaryStaff.id,
+          closedDrawerOpenedAt,
+          closedDrawerFloatCents,
+          secondaryStaff.id,
+          closedDrawerClosedAt,
+        ]
+      );
+
+      async function insertDrawerEvent(params: {
+        sessionId: string;
+        occurredAt: Date;
+        type: 'PAID_IN' | 'PAID_OUT' | 'DROP' | 'NO_SALE_OPEN' | 'ADJUSTMENT';
+        amountCents?: number | null;
+        reason?: string | null;
+        staffId: string;
+        metadata?: Record<string, unknown> | null;
+      }): Promise<string> {
+        const eventId = randomUUID();
+        await client.query(
+          `INSERT INTO cash_drawer_events
+           (id, cash_drawer_session_id, occurred_at, type, amount_cents, reason, created_by_staff_id, metadata_json)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            eventId,
+            params.sessionId,
+            params.occurredAt,
+            params.type,
+            params.amountCents ?? null,
+            params.reason ?? null,
+            params.staffId,
+            params.metadata ?? null,
+          ]
+        );
+        return eventId;
+      }
+
+      await insertDrawerEvent({
+        sessionId: openDrawerId,
+        occurredAt: new Date(openDrawerOpenedAt.getTime() + 30 * 60 * 1000),
+        type: 'PAID_IN',
+        amountCents: 5000,
+        reason: 'Tip jar start',
+        staffId: primaryStaff.id,
+      });
+      await insertDrawerEvent({
+        sessionId: openDrawerId,
+        occurredAt: new Date(openDrawerOpenedAt.getTime() + 90 * 60 * 1000),
+        type: 'PAID_OUT',
+        amountCents: 2500,
+        reason: 'Supplies',
+        staffId: primaryStaff.id,
+      });
+      await insertDrawerEvent({
+        sessionId: openDrawerId,
+        occurredAt: new Date(openDrawerOpenedAt.getTime() + 120 * 60 * 1000),
+        type: 'NO_SALE_OPEN',
+        amountCents: null,
+        reason: 'Customer check',
+        staffId: primaryStaff.id,
+      });
+      await insertDrawerEvent({
+        sessionId: openDrawerId,
+        occurredAt: new Date(openDrawerOpenedAt.getTime() + 150 * 60 * 1000),
+        type: 'ADJUSTMENT',
+        amountCents: 300,
+        reason: 'Drawer audit',
+        staffId: primaryStaff.id,
+      });
+
+      const firstClosedEventId = await insertDrawerEvent({
+        sessionId: closedDrawerId,
+        occurredAt: new Date(closedDrawerOpenedAt.getTime() + 45 * 60 * 1000),
+        type: 'PAID_IN',
+        amountCents: 8000,
+        reason: 'Extra change',
+        staffId: secondaryStaff.id,
+      });
+      await insertDrawerEvent({
+        sessionId: closedDrawerId,
+        occurredAt: new Date(closedDrawerOpenedAt.getTime() + 120 * 60 * 1000),
+        type: 'PAID_OUT',
+        amountCents: 3200,
+        reason: 'Vendor payout',
+        staffId: secondaryStaff.id,
+      });
+      await insertDrawerEvent({
+        sessionId: closedDrawerId,
+        occurredAt: new Date(closedDrawerOpenedAt.getTime() + 180 * 60 * 1000),
+        type: 'DROP',
+        amountCents: 15000,
+        reason: 'Safe drop',
+        staffId: secondaryStaff.id,
+      });
+      await insertDrawerEvent({
+        sessionId: closedDrawerId,
+        occurredAt: new Date(closedDrawerOpenedAt.getTime() + 210 * 60 * 1000),
+        type: 'NO_SALE_OPEN',
+        amountCents: null,
+        reason: 'Receipt reprint',
+        staffId: secondaryStaff.id,
+      });
+
+      if (firstClosedEventId) {
+        await client.query(
+          `INSERT INTO external_provider_refs
+           (provider, entity_type, internal_id, external_id, external_version)
+           VALUES ('mock', 'cash_event', $1, $2, $3)`,
+          [firstClosedEventId, 'mock-cash-event-01', 'v1']
+        );
+      }
+
+      type OrderSeed = {
+        id: string;
+        createdAt: Date;
+        status: string;
+        registerSessionId: string | null;
+        customerId: string | null;
+        paymentMethod: 'CASH' | 'CREDIT';
+        totals: {
+          subtotalCents: number;
+          discountCents: number;
+          taxCents: number;
+          tipCents: number;
+          totalCents: number;
+          currency: string;
+        };
+        lineItems: Array<{
+          id: string;
+          kind: 'RETAIL' | 'ADDON' | 'UPGRADE' | 'LATE_FEE' | 'MANUAL';
+          sku: string | null;
+          name: string;
+          quantity: number;
+          unitPriceCents: number;
+          discountCents: number;
+          taxCents: number;
+          totalCents: number;
+        }>;
+      };
+
+      const lineItemCatalog: Array<{
+        kind: 'RETAIL' | 'ADDON' | 'UPGRADE' | 'LATE_FEE' | 'MANUAL';
+        sku: string;
+        name: string;
+        unitPriceCents: number;
+      }> = [
+        { kind: 'RETAIL', sku: 'RET-001', name: 'Bottled Water', unitPriceCents: 300 },
+        { kind: 'ADDON', sku: 'ADD-002', name: 'Towel Rental', unitPriceCents: 500 },
+        { kind: 'UPGRADE', sku: 'UPG-003', name: 'Room Upgrade', unitPriceCents: 2500 },
+        { kind: 'LATE_FEE', sku: 'LFE-004', name: 'Late Checkout Fee', unitPriceCents: 1500 },
+        { kind: 'MANUAL', sku: 'MAN-005', name: 'Manual Charge', unitPriceCents: 1200 },
+      ];
+
+      function randomDateBetween(start: Date, end: Date): Date {
+        const span = Math.max(end.getTime() - start.getTime(), 0);
+        return new Date(start.getTime() + rng() * span);
+      }
+
+      function buildLineItems(seed: number): OrderSeed['lineItems'] {
+        const itemCount = 1 + (seed % 3);
+        const items: OrderSeed['lineItems'] = [];
+        for (let i = 0; i < itemCount; i++) {
+          const catalog = lineItemCatalog[(seed + i) % lineItemCatalog.length]!;
+          const quantity = 1 + ((seed + i) % 2);
+          const base = catalog.unitPriceCents * quantity;
+          const discountCents = (seed + i) % 5 === 0 ? Math.round(base * 0.1) : 0;
+          const taxable = base - discountCents;
+          const taxCents = Math.round(taxable * 0.0825);
+          const totalCents = taxable + taxCents;
+          items.push({
+            id: randomUUID(),
+            kind: catalog.kind,
+            sku: catalog.sku,
+            name: catalog.name,
+            quantity,
+            unitPriceCents: catalog.unitPriceCents,
+            discountCents,
+            taxCents,
+            totalCents,
+          });
+        }
+        return items;
+      }
+
+      function buildOrderTotals(
+        items: OrderSeed['lineItems'],
+        tipCents: number
+      ): OrderSeed['totals'] {
+        const subtotalCents = items.reduce(
+          (sum, item) => sum + item.unitPriceCents * item.quantity,
+          0
+        );
+        const discountCents = items.reduce((sum, item) => sum + item.discountCents, 0);
+        const taxCents = items.reduce((sum, item) => sum + item.taxCents, 0);
+        const totalCents = subtotalCents - discountCents + taxCents + tipCents;
+        return {
+          subtotalCents,
+          discountCents,
+          taxCents,
+          tipCents,
+          totalCents,
+          currency: 'USD',
+        };
+      }
+
+      async function insertOrderSeed(params: {
+        seed: number;
+        createdAt: Date;
+        registerSessionId: string | null;
+        customerId: string | null;
+        staffId: string;
+      }): Promise<OrderSeed> {
+        const paymentMethod: OrderSeed['paymentMethod'] = params.seed % 3 === 0 ? 'CASH' : 'CREDIT';
+        const statusRoll = params.seed % 12;
+        const status =
+          statusRoll === 0
+            ? 'CANCELED'
+            : statusRoll === 1
+              ? 'REFUNDED'
+              : statusRoll === 2
+                ? 'PARTIALLY_REFUNDED'
+                : statusRoll === 3
+                  ? 'OPEN'
+                  : 'PAID';
+
+        const lineItems = buildLineItems(params.seed);
+        const tipCents = paymentMethod === 'CREDIT' && params.seed % 5 === 0 ? randInt(100, 900) : 0;
+        const totals = buildOrderTotals(lineItems, tipCents);
+        const orderId = randomUUID();
+
+        await client.query(
+          `INSERT INTO orders
+           (id, customer_id, register_session_id, created_by_staff_id, created_at, status, subtotal_cents, discount_cents, tax_cents, tip_cents, total_cents, currency, metadata_json)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+          [
+            orderId,
+            params.customerId,
+            params.registerSessionId,
+            params.staffId,
+            params.createdAt,
+            status,
+            totals.subtotalCents,
+            totals.discountCents,
+            totals.taxCents,
+            totals.tipCents,
+            totals.totalCents,
+            totals.currency,
+            {
+              tender: {
+                paymentMethod,
+                source: 'DEMO',
+              },
+            },
+          ]
+        );
+
+        for (const item of lineItems) {
+          await client.query(
+            `INSERT INTO order_line_items
+             (id, order_id, kind, sku, name, quantity, unit_price_cents, discount_cents, tax_cents, total_cents, metadata_json)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+            [
+              item.id,
+              orderId,
+              item.kind,
+              item.sku,
+              item.name,
+              item.quantity,
+              item.unitPriceCents,
+              item.discountCents,
+              item.taxCents,
+              item.totalCents,
+              null,
+            ]
+          );
+        }
+
+        const seedData: OrderSeed = {
+          id: orderId,
+          createdAt: params.createdAt,
+          status,
+          registerSessionId: params.registerSessionId,
+          customerId: params.customerId,
+          paymentMethod,
+          totals,
+          lineItems,
+        };
+
+        if (status === 'PAID' || status === 'REFUNDED' || status === 'PARTIALLY_REFUNDED') {
+          const receiptNumber = buildReceiptNumber({ id: orderId, created_at: params.createdAt });
+          const issuedAt = new Date(params.createdAt.getTime() + 5 * 60 * 1000);
+          const receiptJson = {
+            receiptNumber,
+            orderId,
+            issuedAt: issuedAt.toISOString(),
+            currency: totals.currency,
+            totals: {
+              subtotalCents: totals.subtotalCents,
+              discountCents: totals.discountCents,
+              taxCents: totals.taxCents,
+              tipCents: totals.tipCents,
+              totalCents: totals.totalCents,
+            },
+            lineItems: lineItems.map((item) => ({
+              id: item.id,
+              kind: item.kind,
+              sku: item.sku,
+              name: item.name,
+              quantity: item.quantity,
+              unitPriceCents: item.unitPriceCents,
+              discountCents: item.discountCents,
+              taxCents: item.taxCents,
+              totalCents: item.totalCents,
+            })),
+          };
+
+          const receiptId = randomUUID();
+          await client.query(
+            `INSERT INTO receipts
+             (id, order_id, issued_at, receipt_number, receipt_json)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [receiptId, orderId, issuedAt, receiptNumber, receiptJson]
+          );
+
+          if (params.seed % 5 === 0) {
+            await client.query(
+              `INSERT INTO external_provider_refs
+               (provider, entity_type, internal_id, external_id, external_version)
+               VALUES ('mock', 'receipt', $1, $2, $3)`,
+              [receiptId, `mock-receipt-${params.seed}`, 'v1']
+            );
+          }
+        }
+
+        if (params.seed % 4 === 0) {
+          await client.query(
+            `INSERT INTO external_provider_refs
+             (provider, entity_type, internal_id, external_id, external_version)
+             VALUES ('mock', 'order', $1, $2, $3)`,
+            [orderId, `mock-order-${params.seed}`, 'v1']
+          );
+        }
+
+        return seedData;
+      }
+
+      const openSessionStart = openDrawerOpenedAt;
+      const openSessionEnd = now;
+      const closedSessionStart = closedDrawerOpenedAt;
+      const closedSessionEnd = closedDrawerClosedAt;
+
+      const ordersForOpen = 24;
+      const ordersForClosed = 18;
+      const ordersUnassigned = 10;
+
+      for (let idx = 0; idx < ordersForOpen; idx++) {
+        const seed = idx + 1;
+        await insertOrderSeed({
+          seed,
+          createdAt: randomDateBetween(openSessionStart, openSessionEnd),
+          registerSessionId: openRegisterSessionId,
+          customerId: seed % 6 === 0 ? null : customerIds[(seed * 7) % customerIds.length]!,
+          staffId: seed % 2 === 0 ? primaryStaff.id : secondaryStaff.id,
+        });
+      }
+
+      for (let idx = 0; idx < ordersForClosed; idx++) {
+        const seed = idx + 101;
+        await insertOrderSeed({
+          seed,
+          createdAt: randomDateBetween(closedSessionStart, closedSessionEnd),
+          registerSessionId: closedRegisterSessionId,
+          customerId: seed % 5 === 0 ? null : customerIds[(seed * 5) % customerIds.length]!,
+          staffId: seed % 2 === 0 ? secondaryStaff.id : primaryStaff.id,
+        });
+      }
+
+      for (let idx = 0; idx < ordersUnassigned; idx++) {
+        const seed = idx + 201;
+        await insertOrderSeed({
+          seed,
+          createdAt: randomDateBetween(
+            new Date(now.getTime() - 20 * 60 * 60 * 1000),
+            new Date(now.getTime() - 6 * 60 * 60 * 1000)
+          ),
+          registerSessionId: null,
+          customerId: seed % 4 === 0 ? null : customerIds[(seed * 3) % customerIds.length]!,
+          staffId: adminStaff.id,
+        });
+      }
+
+      const closeoutSnapshot = await buildCloseoutSnapshot(
+        client,
+        {
+          id: closedDrawerId,
+          register_session_id: closedRegisterSessionId,
+          opened_at: closedDrawerOpenedAt,
+          opening_float_cents: closedDrawerFloatCents,
+        },
+        closedDrawerClosedAt
+      );
+
+      const countedCashCents = closeoutSnapshot.expectedCashCents - 250;
+      const overShortCents = countedCashCents - closeoutSnapshot.expectedCashCents;
+
+      await client.query(
+        `UPDATE cash_drawer_sessions
+         SET expected_cash_cents = $1,
+             counted_cash_cents = $2,
+             over_short_cents = $3,
+             closeout_snapshot_json = $4
+         WHERE id = $5`,
+        [
+          closeoutSnapshot.expectedCashCents,
+          countedCashCents,
+          overShortCents,
+          closeoutSnapshot,
+          closedDrawerId,
+        ]
+      );
     });
 
     // Post-seed assertions + concise summary (throw on failure)

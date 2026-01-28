@@ -5,7 +5,7 @@ const {
   DB_PORT = '5433',
   // Keep defaults aligned with `src/db/index.ts` so local dev + tests behave consistently.
   DB_USER = 'clubops',
-  DB_PASSWORD = 'clubops_dev',
+  DB_PASSWORD = "$PASSWORD",
   DB_NAME = 'club_operations',
 } = process.env;
 

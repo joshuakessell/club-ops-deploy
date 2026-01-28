@@ -51,24 +51,32 @@ function parseDatabaseUrl(urlString: string): {
 export function loadDatabaseConfig(): pg.PoolConfig {
   if (process.env.DATABASE_URL) {
     const parsed = parseDatabaseUrl(process.env.DATABASE_URL);
+    const sslEnabled = process.env.DB_SSL === 'true';
     return {
       connectionString: process.env.DATABASE_URL,
       ...(parsed.host ? { host: parsed.host } : {}),
       ...(typeof parsed.port === 'number' ? { port: parsed.port } : {}),
       ...(parsed.database ? { database: parsed.database } : {}),
       ...(parsed.user ? { user: parsed.user } : {}),
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      ssl: sslEnabled ? { rejectUnauthorized: false } : undefined,
       max: parseInt(process.env.DB_POOL_MAX || '20', 10),
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
     };
   }
 
+  const hasExplicitHost =
+    typeof process.env.DB_HOST === 'string' && process.env.DB_HOST.trim().length > 0;
+
+  if (!hasExplicitHost) {
+    throw new Error(
+      'Database is not configured. Set DATABASE_URL or DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD.'
+    );
+  }
+
   return {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5433', 10),
+    host: process.env.DB_HOST!.trim(),
+    port: parseInt(process.env.DB_PORT || '5432', 10),
     database: process.env.DB_NAME || 'club_operations',
     user: process.env.DB_USER || 'clubops',
     password: process.env.DB_PASSWORD || 'clubops_dev',

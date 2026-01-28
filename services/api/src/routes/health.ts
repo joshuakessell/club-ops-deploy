@@ -7,9 +7,14 @@ interface HealthResponse {
 }
 
 export async function healthRoutes(fastify: FastifyInstance): Promise<void> {
-  fastify.get<{ Reply: HealthResponse }>('/health', async (_request, _reply) => {
+  fastify.get<{ Reply: HealthResponse }>('/health', async (_request, reply) => {
+    const isHealthy = fastify.dbHealthy;
+    if (!isHealthy) {
+      reply.code(503);
+    }
+
     return {
-      status: 'ok',
+      status: isHealthy ? 'ok' : 'error',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
     };
