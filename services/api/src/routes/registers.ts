@@ -95,6 +95,10 @@ type Queryable = {
   query<T>(queryText: string, params?: unknown[]): Promise<{ rows: T[] }>;
 };
 
+const allowRegisterDeviceOverride =
+  process.env.ALLOW_REGISTER_DEVICE_OVERRIDE === 'true' ||
+  (process.env.DEPLOY_ENV ?? '').toLowerCase() === 'dev';
+
 async function buildRegisterCloseoutSummary(
   client: Queryable,
   session: RegisterSessionRow,
@@ -606,6 +610,21 @@ export async function registerRoutes(
           if (body.registerNumber) {
             // Check if requested register is available
             if (occupiedNumbers.has(body.registerNumber)) {
+              if (allowRegisterDeviceOverride) {
+                const existingRegister = await client.query<RegisterSessionRow>(
+                  `SELECT * FROM register_sessions
+                   WHERE register_number = $1
+                     AND signed_out_at IS NULL`,
+                  [body.registerNumber]
+                );
+                const existing = existingRegister.rows[0];
+                if (existing && existing.employee_id === body.employeeId) {
+                  return {
+                    registerNumber: body.registerNumber,
+                    requiresConfirmation: true,
+                  };
+                }
+              }
               throw new Error(`Register ${body.registerNumber} is already occupied`);
             }
             registerNumber = body.registerNumber;
@@ -692,19 +711,33 @@ export async function registerRoutes(
             [body.registerNumber]
           );
 
+          let session: RegisterSessionRow;
           if (existingRegister.rows.length > 0) {
-            throw new Error(`Register ${body.registerNumber} is already occupied`);
+            const existing = existingRegister.rows[0]!;
+            if (allowRegisterDeviceOverride && existing.employee_id === body.employeeId) {
+              const sessionResult = await client.query<RegisterSessionRow>(
+                `UPDATE register_sessions
+                 SET device_id = $1,
+                     last_heartbeat = NOW()
+                 WHERE id = $2
+                 RETURNING *`,
+                [body.deviceId, existing.id]
+              );
+              session = sessionResult.rows[0]!;
+            } else {
+              throw new Error(`Register ${body.registerNumber} is already occupied`);
+            }
+          } else {
+            // Create register session
+            const sessionResult = await client.query<RegisterSessionRow>(
+              `INSERT INTO register_sessions (employee_id, device_id, register_number, last_heartbeat)
+             VALUES ($1, $2, $3, NOW())
+             RETURNING *`,
+              [body.employeeId, body.deviceId, body.registerNumber]
+            );
+
+            session = sessionResult.rows[0]!;
           }
-
-          // Create register session
-          const sessionResult = await client.query<RegisterSessionRow>(
-            `INSERT INTO register_sessions (employee_id, device_id, register_number, last_heartbeat)
-           VALUES ($1, $2, $3, NOW())
-           RETURNING *`,
-            [body.employeeId, body.deviceId, body.registerNumber]
-          );
-
-          const session = sessionResult.rows[0]!;
 
           // Create or update timeclock session for register sign-in
           const now = new Date();

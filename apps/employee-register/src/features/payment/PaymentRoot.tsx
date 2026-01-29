@@ -35,6 +35,7 @@ export function PaymentRoot() {
     ledgerTotal,
     pastDueBlocked,
     handleDemoPayment,
+    handleDemoSplitPayment,
     paymentDeclineError,
     setPaymentDeclineError,
     showAddOnSaleModal,
@@ -49,9 +50,19 @@ export function PaymentRoot() {
   const ledgerItems = Array.isArray(ledgerLineItems)
     ? (ledgerLineItems as Array<{ description: string; amount: number }>)
     : [];
-  const renewalLineItems = Array.isArray(paymentQuote?.lineItems)
+  const splitLineItemLabel = 'Card Payment';
+  const paymentLineItems = Array.isArray(paymentQuote?.lineItems)
     ? (paymentQuote.lineItems as Array<{ description: string; amount: number }>)
     : [];
+  const renewalLineItems = paymentLineItems.filter(
+    (item) => item.description !== splitLineItemLabel
+  );
+
+  const formatPaymentAmount = (amount: number) => {
+    const abs = Math.abs(amount);
+    const sign = amount < 0 ? '-' : '';
+    return `${sign}$${abs.toFixed(2)}`;
+  };
 
   const renewalDetails =
     laneSessionMode === 'RENEWAL' && paymentQuote ? (
@@ -96,6 +107,31 @@ export function PaymentRoot() {
           </div>
         </div>
       </div>
+    ) : null;
+
+  const paymentBreakdown =
+    paymentLineItems.length > 0 ? (
+      <div className="er-payment-breakdown">
+        <div className="er-payment-breakdown__label">Payment breakdown</div>
+        <div className="er-payment-breakdown__items">
+          {paymentLineItems.map((item, idx) => (
+            <div key={`${item.description}-${idx}`} className="er-payment-breakdown__row">
+              <span>{item.description}</span>
+              <span className="er-payment-breakdown__amount">
+                {formatPaymentAmount(item.amount)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null;
+
+  const modalDetails =
+    renewalDetails || paymentBreakdown ? (
+      <>
+        {renewalDetails}
+        {paymentBreakdown}
+      </>
     ) : null;
 
   return (
@@ -151,7 +187,7 @@ export function PaymentRoot() {
           <RequiredTenderOutcomeModal
             isOpen={true}
             totalAmount={paymentQuote.total}
-            details={renewalDetails}
+            details={modalDetails}
             isSubmitting={isSubmitting}
             onConfirm={(choice) => {
               if (choice === 'CREDIT_SUCCESS') void handleDemoPayment('CREDIT_SUCCESS');
@@ -159,6 +195,7 @@ export function PaymentRoot() {
               if (choice === 'CREDIT_DECLINE')
                 void handleDemoPayment('CREDIT_DECLINE', 'Card declined');
             }}
+            onSplitCardSuccess={(amount) => void handleDemoSplitPayment(amount)}
             extraActionLabel="Add On Sale"
             onExtraAction={() => openAddOnSaleModal()}
           />
