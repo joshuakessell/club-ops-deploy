@@ -29,6 +29,27 @@ export function computeSha256Hex(value: string): string {
   return crypto.createHash('sha256').update(value).digest('hex');
 }
 
+export function computeIdScanIdentityHash(params: {
+  firstName?: string | null;
+  lastName?: string | null;
+  fullName?: string | null;
+  dob?: Date | string | null;
+}): string | null {
+  const dobDate = toDateOnly(params.dob);
+  if (!dobDate) return null;
+  const dobIso = dobDate.toISOString().slice(0, 10);
+  const nameFromParts = `${params.firstName ?? ''} ${params.lastName ?? ''}`.trim();
+  const name = (nameFromParts || params.fullName || '').trim();
+  if (!name) return null;
+  const normalized = normalizePersonNameForMatch(name);
+  if (!normalized) return null;
+  const tokens = normalized.split(' ').filter(Boolean);
+  if (tokens.length < 2) return null;
+  const first = tokens[0]!;
+  const last = tokens[tokens.length - 1]!;
+  return computeSha256Hex(`${first}|${last}|${dobIso}`);
+}
+
 export function normalizeScanText(raw: string): string {
   // Normalize line endings and whitespace while preserving line breaks.
   // Honeywell scanners often emit already-decoded PDF417 text that may include \r\n or \r.

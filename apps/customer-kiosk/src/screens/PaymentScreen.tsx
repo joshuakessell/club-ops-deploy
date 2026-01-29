@@ -20,6 +20,12 @@ export function PaymentScreen({
   orientationOverlay,
   welcomeOverlay,
 }: PaymentScreenProps) {
+  const formatAmount = (amount: number) => {
+    const abs = Math.abs(amount);
+    const sign = amount < 0 ? '-' : '';
+    return `${sign}$${abs.toFixed(2)}`;
+  };
+
   return (
     <I18nProvider lang={customerPrimaryLanguage}>
       <ScreenShell backgroundVariant="steamroom1" showLogoWatermark={true} watermarkLayer="under">
@@ -40,7 +46,7 @@ export function PaymentScreen({
                             customerPrimaryLanguage
                           )}
                         </span>
-                        <span className="breakdown-amt">${li.amount.toFixed(2)}</span>
+                        <span className="breakdown-amt">{formatAmount(li.amount)}</span>
                       </div>
                     ))}
                   </div>

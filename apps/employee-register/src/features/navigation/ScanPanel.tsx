@@ -9,6 +9,9 @@ export function ScanPanel() {
     selectHomeTab,
     scanReady,
     scanBlockedReason,
+    scanInputRef,
+    scanInputHandlers,
+    scanInputEnabled,
   } = useEmployeeRegisterState();
 
   return (
@@ -21,6 +24,18 @@ export function ScanPanel() {
         spacing="sm"
         title="Scan Now"
         subtitle="Scan a membership ID or driver license."
+      />
+      <textarea
+        ref={scanInputRef}
+        className="er-scan-input"
+        aria-hidden="true"
+        tabIndex={-1}
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+        inputMode="none"
+        disabled={!scanInputEnabled}
+        {...scanInputHandlers}
       />
       <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8' }}>
         {scanReady ? 'Scanner ready' : `Scanner paused: ${scanBlockedReason || 'Unavailable'}`}

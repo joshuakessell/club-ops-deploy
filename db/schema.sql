@@ -566,6 +566,8 @@ CREATE TABLE public.customers (
     id_scan_hash character varying(255),
     id_scan_value text,
     id_expiration_date date,
+    id_number text,
+    id_state text,
     primary_language text,
     notes text,
     past_due_balance numeric(10,2) DEFAULT 0 NOT NULL,

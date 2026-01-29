@@ -265,6 +265,61 @@ export function usePaymentActions({
     }
   };
 
+  const handleDemoSplitPayment = async (cardAmount: number): Promise<boolean> => {
+    if (!session?.sessionToken || !currentSessionId) {
+      alert('Not authenticated');
+      return false;
+    }
+
+    const roundedAmount = Math.round(cardAmount * 100) / 100;
+    if (!Number.isFinite(roundedAmount) || roundedAmount <= 0) {
+      alert('Enter a valid card amount.');
+      return false;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_BASE}/v1/checkin/lane/${lane}/demo-take-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.sessionToken}`,
+        },
+        body: JSON.stringify({
+          outcome: 'CREDIT_SUCCESS',
+          splitCardAmount: roundedAmount,
+          registerNumber: registerSession?.registerNumber,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorPayload: unknown = await response.json().catch(() => null);
+        throw new Error(getErrorMessage(errorPayload) || 'Failed to process split payment');
+      }
+
+      const payload = await readJson<{
+        quote?: {
+          total: number;
+          lineItems: Array<{ description: string; amount: number }>;
+          messages: string[];
+        };
+      }>(response);
+
+      if (payload.quote) {
+        setPaymentQuote(payload.quote);
+      }
+
+      setPaymentDeclineError(null);
+      return true;
+    } catch (error) {
+      console.error('Failed to process split payment:', error);
+      alert(error instanceof Error ? error.message : 'Failed to process split payment');
+      return false;
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleCompleteTransaction = async () => {
     if (!session?.sessionToken) {
       alert('Not authenticated');
@@ -319,6 +374,7 @@ export function usePaymentActions({
   return {
     handleAddOnSaleToCheckin,
     handleDemoPayment,
+    handleDemoSplitPayment,
     handleCompleteTransaction,
   };
 }

@@ -196,6 +196,7 @@ export const es: Record<keyof typeof en, string> = {
   'lineItem.specialRoom': 'Habitación Especial',
   'lineItem.membershipFee': 'Tarifa de membresía',
   'lineItem.sixMonthMembership': 'Membresía de 6 meses',
+  'lineItem.cardPayment': 'Pago con tarjeta',
 
   // General
   membership: 'Membresía',

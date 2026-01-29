@@ -41,6 +41,8 @@ export function getPaymentLineItemDisplayDescription(
       return t(lang, 'lineItem.membershipFee');
     case '6 Month Membership':
       return t(lang, 'lineItem.sixMonthMembership');
+    case 'Card Payment':
+      return t(lang, 'lineItem.cardPayment');
     default:
       return description;
   }
