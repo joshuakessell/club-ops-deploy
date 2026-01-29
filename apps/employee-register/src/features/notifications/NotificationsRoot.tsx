@@ -28,7 +28,7 @@ export function NotificationsRoot() {
         >
           <div className="er-scan-processing-card cs-liquid-card">
             <span className="er-spinner" aria-hidden="true" />
-            <span className="er-scan-processing-text">Processing scan…</span>
+            <span className="er-scan-processing-text">Scanning…</span>
           </div>
         </div>
       )}

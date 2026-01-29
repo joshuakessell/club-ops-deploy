@@ -27,6 +27,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
       idNumber?: string;
       issuer?: string;
       jurisdiction?: string;
+      idState?: string;
       addressLine1?: string;
       city?: string;
       state?: string;
@@ -48,6 +49,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
       idNumber?: string;
       issuer?: string;
       jurisdiction?: string;
+      idState?: string;
     };
     candidates: MultipleMatchCandidate[];
   }>(null);
@@ -166,6 +168,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
               idNumber: extracted.idNumber,
               issuer: extracted.issuer,
               jurisdiction: extracted.jurisdiction,
+              idState: extracted.jurisdiction || extracted.issuer,
             },
             candidates: (data.candidates || []).slice(0, 10),
           });
@@ -186,6 +189,7 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
               idNumber: extracted.idNumber,
               issuer: extracted.issuer,
               jurisdiction: extracted.jurisdiction,
+              idState: extracted.jurisdiction || extracted.issuer,
             },
           });
           return {
@@ -285,6 +289,8 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
     const firstName = extracted.firstName || '';
     const lastName = extracted.lastName || '';
     const dob = extracted.dob || '';
+    const idNumber = extracted.idNumber || undefined;
+    const idState = extracted.idState || extracted.jurisdiction || extracted.issuer || undefined;
     if (!firstName || !lastName || !dob) {
       return { outcome: 'error', message: 'Missing required fields to create customer' };
     }
@@ -303,6 +309,8 @@ export function useScanResolutionState({ session, lane, startLaneSessionByCustom
           lastName,
           dob,
           idExpirationDate: extracted.idExpirationDate || undefined,
+          idNumber,
+          state: idState,
         }),
       });
 

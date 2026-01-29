@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { query } from '../db';
 import { requireAuth } from '../auth/middleware';
 import crypto from 'crypto';
-import { getIdScanIssue, getIdScanIssueMessage } from '../checkin/identity';
+import { computeIdScanIdentityHash, getIdScanIssue, getIdScanIssueMessage } from '../checkin/identity';
 
 const SearchQuerySchema = z.object({
   q: z.string().min(3),
@@ -200,6 +200,8 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
       lastName: z.string().min(1),
       dob: z.string().min(1),
       idExpirationDate: z.string().optional(),
+      idNumber: z.string().optional(),
+      state: z.string().optional(),
       fullName: z.string().optional(),
       // Optional prefill fields (not currently persisted in DB schema)
       addressLine1: z.string().optional(),
@@ -232,7 +234,15 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: 'Invalid scan input' });
       }
 
-      const idScanHash = body.idScanHash || computeSha256Hex(idScanValue);
+      const idScanHash =
+        computeIdScanIdentityHash({
+          firstName: body.firstName,
+          lastName: body.lastName,
+          fullName: body.fullName,
+          dob: body.dob,
+        }) ||
+        body.idScanHash ||
+        computeSha256Hex(idScanValue);
       const dob = toDateOnly(body.dob);
       if (!dob) {
         return reply.status(400).send({ error: 'Invalid dob; expected YYYY-MM-DD' });
@@ -282,15 +292,22 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
           }
 
           // Backfill missing identifiers if needed.
-          if (!row.id_scan_hash || !row.id_scan_value) {
+          const needsScanUpdate =
+            !row.id_scan_hash ||
+            !row.id_scan_value ||
+            row.id_scan_hash !== idScanHash ||
+            row.id_scan_value !== idScanValue;
+          if (needsScanUpdate || body.idNumber || body.state) {
             await query(
               `UPDATE customers
-             SET id_scan_hash = COALESCE(id_scan_hash, $1),
-                 id_scan_value = COALESCE(id_scan_value, $2),
+             SET id_scan_hash = CASE WHEN id_scan_hash IS NULL OR id_scan_hash <> $1 THEN $1 ELSE id_scan_hash END,
+                 id_scan_value = CASE WHEN id_scan_value IS NULL OR id_scan_value <> $2 THEN $2 ELSE id_scan_value END,
                  id_expiration_date = COALESCE(id_expiration_date, $4::date),
+                 id_number = CASE WHEN $5::text IS NOT NULL THEN $5 ELSE id_number END,
+                 id_state = CASE WHEN $6::text IS NOT NULL THEN $6 ELSE id_state END,
                  updated_at = NOW()
              WHERE id = $3`,
-              [idScanHash, idScanValue, row.id, idExpirationDate]
+              [idScanHash, idScanValue, row.id, idExpirationDate, body.idNumber || null, body.state || null]
             );
           } else if (idExpirationDate) {
             await query(
@@ -319,10 +336,11 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
           dob: Date | null;
           membership_number: string | null;
         }>(
-          `INSERT INTO customers (name, dob, id_expiration_date, id_scan_hash, id_scan_value, created_at, updated_at)
-         VALUES ($1, $2::date, $3::date, $4, $5, NOW(), NOW())
+          `INSERT INTO customers
+           (name, dob, id_expiration_date, id_number, id_state, id_scan_hash, id_scan_value, created_at, updated_at)
+         VALUES ($1, $2::date, $3::date, $4, $5, $6, $7, NOW(), NOW())
          RETURNING id, name, dob, membership_number`,
-          [name, dob, idExpirationDate, idScanHash, idScanValue]
+          [name, dob, idExpirationDate, body.idNumber || null, body.state || null, idScanHash, idScanValue]
         );
 
         const row = inserted.rows[0]!;
@@ -475,16 +493,16 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
       const idScanValue = body.idNumber?.trim() || null;
 
       try {
-        const inserted = await query<{
+      const inserted = await query<{
           id: string;
           name: string;
           dob: Date | null;
           membership_number: string | null;
         }>(
-          `INSERT INTO customers (name, dob, id_scan_value, created_at, updated_at)
-           VALUES ($1, $2::date, $3, NOW(), NOW())
+          `INSERT INTO customers (name, dob, id_scan_value, id_number, created_at, updated_at)
+           VALUES ($1, $2::date, $3, $4, NOW(), NOW())
            RETURNING id, name, dob, membership_number`,
-          [name, dob, idScanValue]
+          [name, dob, idScanValue, idScanValue]
         );
 
         const row = inserted.rows[0]!;

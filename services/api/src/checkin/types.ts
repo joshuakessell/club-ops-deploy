@@ -52,6 +52,8 @@ export interface CustomerRow {
   membership_card_type: string | null;
   membership_valid_until: Date | null;
   id_expiration_date?: Date | null;
+  id_number?: string | null;
+  id_state?: string | null;
   banned_until: Date | null;
   past_due_balance?: number;
   primary_language?: string;
