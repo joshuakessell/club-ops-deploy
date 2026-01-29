@@ -206,7 +206,7 @@ export async function customerRoutes(fastify: FastifyInstance): Promise<void> {
       // Optional prefill fields (not currently persisted in DB schema)
       addressLine1: z.string().optional(),
       city: z.string().optional(),
-      state: z.string().optional(),
+      addressState: z.string().optional(),
       postalCode: z.string().optional(),
     })
     .refine((v) => Boolean(v.idScanValue || v.rawScanText), {
