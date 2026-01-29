@@ -271,6 +271,36 @@
   gap: 0.75rem;
 }
 
+.er-payment-breakdown {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.er-payment-breakdown__label {
+  font-weight: 900;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.er-payment-breakdown__items {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.er-payment-breakdown__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-weight: 700;
+  color: #e5e7eb;
+}
+
+.er-payment-breakdown__amount {
+  font-variant-numeric: tabular-nums;
+}
+
 .er-renewal-ledger {
   display: grid;
   gap: 0.75rem;
@@ -316,13 +346,15 @@
 
 .er-required-modal__carousel {
   display: flex;
-  width: 300%;
+  width: 100%;
   transition: transform 0.35s ease;
   will-change: transform;
 }
 
 .er-required-modal__panel {
   width: 100%;
+  flex: 0 0 100%;
+  min-width: 100%;
   padding-right: 12px;
   box-sizing: border-box;
 }
@@ -339,6 +371,24 @@
   display: grid;
   gap: 12px;
   padding: 8px 4px;
+}
+
+.er-required-modal__split-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.er-required-modal__split-field {
+  display: grid;
+  gap: 6px;
+}
+
+.er-required-modal__split-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(226, 232, 240, 0.7);
 }
 
 .er-required-modal__split-title {
@@ -373,6 +423,11 @@
   font-weight: 600;
 }
 
+.er-required-modal__split-hint--error {
+  color: #fca5a5;
+  font-weight: 700;
+}
+
 .er-required-modal__split-total {
   font-size: 1.9rem;
   font-weight: 900;
@@ -381,7 +436,7 @@
 
 .er-required-modal__split-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
 }
 
@@ -532,6 +587,7 @@ html,
 body {
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* Fixed background image layer (keeps background still while UI scrolls) */

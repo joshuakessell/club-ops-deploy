@@ -95,6 +95,7 @@ export function usePastDueState({
         throw new Error(getErrorMessage(errorPayload) || 'Failed to bypass past-due');
       }
 
+      setShowPastDueModal(false);
       setShowManagerBypassModal(false);
       setManagerId('');
       setManagerPin('');

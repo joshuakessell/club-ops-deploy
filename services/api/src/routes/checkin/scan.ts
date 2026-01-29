@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { IdScanPayloadSchema, type IdScanPayload } from '@club-ops/shared';
 import { requireAuth } from '../../auth/middleware';
 import {
+  computeIdScanIdentityHash,
   computeSha256Hex,
   extractAamvaIdentity,
   getIdScanIssue,
@@ -113,7 +114,13 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
             idExpirationDate: extracted.idExpirationDate,
           });
           const idScanValue = normalized;
-          const idScanHash = computeSha256Hex(idScanValue);
+          const idScanHash =
+            computeIdScanIdentityHash({
+              firstName: extracted.firstName,
+              lastName: extracted.lastName,
+              fullName: extracted.fullName,
+              dob: extracted.dob,
+            }) ?? computeSha256Hex(idScanValue);
           const scannedIdNumber = extracted.idNumber?.trim() || null;
           const scannedIdNumberNormalized = normalizeIdNumberForMatch(scannedIdNumber);
           const issuerForHash = (extracted.issuer || extracted.jurisdiction || '').trim();
@@ -203,6 +210,14 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
               identityUpdates.push(`id_expiration_date = $${identityValues.length + 1}::date`);
               identityValues.push(extracted.idExpirationDate);
             }
+            if (extracted.idNumber) {
+              identityUpdates.push(`id_number = $${identityValues.length + 1}`);
+              identityValues.push(extracted.idNumber);
+            }
+            if (extracted.jurisdiction || extracted.issuer) {
+              identityUpdates.push(`id_state = $${identityValues.length + 1}`);
+              identityValues.push(extracted.jurisdiction || extracted.issuer || '');
+            }
             if (identityUpdates.length > 0) {
               identityValues.push(chosen.id);
               await client.query(
@@ -241,7 +256,7 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           }
 
           // Matching order:
-          // 1) customers.id_scan_hash OR customers.id_scan_value (raw scan)
+          // 1) customers.id_scan_hash (name + dob hash) OR customers.id_scan_value (raw scan)
           const byHashOrValue = await client.query<CustomerIdentityRow>(
             `SELECT id, name, dob, id_expiration_date, membership_number, banned_until, id_scan_hash, id_scan_value
              FROM customers
@@ -266,13 +281,20 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
               idScanHash,
               idScanValue,
             });
-            if (extracted.idExpirationDate) {
+            if (extracted.idExpirationDate || extracted.idNumber || extracted.jurisdiction || extracted.issuer) {
               await client.query(
                 `UPDATE customers
-                 SET id_expiration_date = $1::date,
+                 SET id_expiration_date = COALESCE($1::date, id_expiration_date),
+                     id_number = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE id_number END,
+                     id_state = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE id_state END,
                      updated_at = NOW()
-                 WHERE id = $2`,
-                [extracted.idExpirationDate, matched.id]
+                 WHERE id = $4`,
+                [
+                  extracted.idExpirationDate || null,
+                  extracted.idNumber || null,
+                  extracted.jurisdiction || extracted.issuer || null,
+                  matched.id,
+                ]
               );
             }
 
@@ -327,13 +349,20 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                 idScanHash,
                 idScanValue,
               });
-              if (extracted.idExpirationDate) {
+              if (extracted.idExpirationDate || extracted.idNumber || extracted.jurisdiction || extracted.issuer) {
                 await client.query(
                   `UPDATE customers
-                   SET id_expiration_date = $1::date,
+                   SET id_expiration_date = COALESCE($1::date, id_expiration_date),
+                       id_number = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE id_number END,
+                       id_state = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE id_state END,
                        updated_at = NOW()
-                   WHERE id = $2`,
-                  [extracted.idExpirationDate, matched.id]
+                   WHERE id = $4`,
+                  [
+                    extracted.idExpirationDate || null,
+                    extracted.idNumber || null,
+                    extracted.jurisdiction || extracted.issuer || null,
+                    matched.id,
+                  ]
                 );
               }
 
@@ -392,13 +421,20 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                   idScanHash,
                   idScanValue,
                 });
-                if (extracted.idExpirationDate) {
+                if (extracted.idExpirationDate || extracted.idNumber || extracted.jurisdiction || extracted.issuer) {
                   await client.query(
                     `UPDATE customers
-                     SET id_expiration_date = $1::date,
+                     SET id_expiration_date = COALESCE($1::date, id_expiration_date),
+                         id_number = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE id_number END,
+                         id_state = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE id_state END,
                          updated_at = NOW()
-                     WHERE id = $2`,
-                    [extracted.idExpirationDate, matched.id]
+                     WHERE id = $4`,
+                    [
+                      extracted.idExpirationDate || null,
+                      extracted.idNumber || null,
+                      extracted.jurisdiction || extracted.issuer || null,
+                      matched.id,
+                    ]
                   );
                 }
 
@@ -492,13 +528,20 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                     idScanHash,
                     idScanValue,
                   });
-                  if (extracted.idExpirationDate) {
+                  if (extracted.idExpirationDate || extracted.idNumber || extracted.jurisdiction || extracted.issuer) {
                     await client.query(
                       `UPDATE customers
-                       SET id_expiration_date = $1::date,
+                       SET id_expiration_date = COALESCE($1::date, id_expiration_date),
+                           id_number = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE id_number END,
+                           id_state = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE id_state END,
                            updated_at = NOW()
-                       WHERE id = $2`,
-                      [extracted.idExpirationDate, matched.id]
+                       WHERE id = $4`,
+                      [
+                        extracted.idExpirationDate || null,
+                        extracted.idNumber || null,
+                        extracted.jurisdiction || extracted.issuer || null,
+                        matched.id,
+                      ]
                     );
                   }
                   if (idScanIssue) {
@@ -639,17 +682,30 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
 
       try {
         const result = await transaction(async (client) => {
-          // Compute id_scan_hash from raw barcode (SHA-256 of normalized string)
-          let idScanHash: string | null = null;
+          // Compute id_scan_hash from normalized name + dob when available.
+          let idScanHash: string | null =
+            computeIdScanIdentityHash({
+              firstName: body.firstName,
+              lastName: body.lastName,
+              fullName: body.fullName,
+              dob: body.dob,
+            }) ?? null;
           let idScanValue: string | null = null;
           if (body.raw) {
             idScanValue = normalizeScanText(body.raw);
-            idScanHash = computeSha256Hex(idScanValue);
-          } else if (body.idNumber && (body.issuer || body.jurisdiction)) {
-            // Fallback: derive hash from issuer + idNumber
-            const issuer = body.issuer || body.jurisdiction || '';
-            const combined = `${issuer}:${body.idNumber}`;
-            idScanHash = computeSha256Hex(combined);
+          }
+          if (!idScanHash) {
+            if (idScanValue) {
+              idScanHash = computeSha256Hex(idScanValue);
+            } else if (body.idNumber && (body.issuer || body.jurisdiction)) {
+              // Fallback: derive hash from issuer + idNumber
+              const issuer = body.issuer || body.jurisdiction || '';
+              const combined = `${issuer}:${body.idNumber}`;
+              idScanHash = computeSha256Hex(combined);
+            }
+          }
+          if (!idScanValue && body.idNumber) {
+            idScanValue = body.idNumber.trim() || null;
           }
 
           // Determine customer name from parsed fields
@@ -689,6 +745,9 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
           // Upsert customer based on id_scan_hash
           let customerId: string | null = null;
 
+          const idNumber = body.idNumber?.trim() || null;
+          const idState = body.issuer || body.jurisdiction || null;
+
           if (idScanHash) {
             // Look for existing customer by hash
             const existingCustomer = await client.query<{
@@ -720,13 +779,20 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
                   [dob, customerId]
                 );
               }
-              if (idExpirationDate) {
+              if (idExpirationDate || idNumber || idState) {
                 await client.query(
                   `UPDATE customers
-                   SET id_expiration_date = $1::date,
+                   SET id_expiration_date = COALESCE($1::date, id_expiration_date),
+                       id_number = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE id_number END,
+                       id_state = CASE WHEN $3::text IS NOT NULL THEN $3 ELSE id_state END,
                        updated_at = NOW()
-                   WHERE id = $2`,
-                  [idExpirationDate.toISOString().slice(0, 10), customerId]
+                   WHERE id = $4`,
+                  [
+                    idExpirationDate ? idExpirationDate.toISOString().slice(0, 10) : null,
+                    idNumber,
+                    idState,
+                    customerId,
+                  ]
                 );
               }
 
@@ -734,8 +800,8 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
               if (idScanValue) {
                 await client.query(
                   `UPDATE customers
-                 SET id_scan_hash = COALESCE(id_scan_hash, $1),
-                     id_scan_value = COALESCE(id_scan_value, $2),
+                 SET id_scan_hash = CASE WHEN id_scan_hash IS NULL OR id_scan_hash <> $1 THEN $1 ELSE id_scan_hash END,
+                     id_scan_value = CASE WHEN id_scan_value IS NULL OR id_scan_value <> $2 THEN $2 ELSE id_scan_value END,
                      updated_at = NOW()
                  WHERE id = $3`,
                   [idScanHash, idScanValue, customerId]
@@ -744,13 +810,16 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
             } else {
               // Create new customer
               const newCustomer = await client.query<{ id: string }>(
-                `INSERT INTO customers (name, dob, id_expiration_date, id_scan_hash, id_scan_value, created_at, updated_at)
-               VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-               RETURNING id`,
+                `INSERT INTO customers
+                 (name, dob, id_expiration_date, id_number, id_state, id_scan_hash, id_scan_value, created_at, updated_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+                 RETURNING id`,
                 [
                   customerName,
                   dob,
                   idExpirationDate ? idExpirationDate.toISOString().slice(0, 10) : null,
+                  idNumber,
+                  idState,
                   idScanHash,
                   idScanValue,
                 ]
@@ -761,13 +830,16 @@ export function registerCheckinScanRoutes(fastify: FastifyInstance): void {
             // No hash available - create new customer (manual entry fallback)
             // This should be rare but allowed for manual entry
             const newCustomer = await client.query<{ id: string }>(
-              `INSERT INTO customers (name, dob, id_expiration_date, id_scan_value, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, NOW(), NOW())
-             RETURNING id`,
+              `INSERT INTO customers
+               (name, dob, id_expiration_date, id_number, id_state, id_scan_value, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+               RETURNING id`,
               [
                 customerName,
                 dob,
                 idExpirationDate ? idExpirationDate.toISOString().slice(0, 10) : null,
+                idNumber,
+                idState,
                 idScanValue,
               ]
             );

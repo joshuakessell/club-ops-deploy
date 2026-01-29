@@ -1,6 +1,6 @@
 import type { CheckoutRequestSummary } from '@club-ops/shared';
 import { computeCheckoutDelta, formatCheckoutDelta } from '@club-ops/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface CheckoutVerificationModalProps {
   request: CheckoutRequestSummary;
@@ -26,9 +26,51 @@ export function CheckoutVerificationModal({
   onCancel,
 }: CheckoutVerificationModalProps) {
   const [now, setNow] = useState(() => new Date());
+  const modalRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const root = modalRef.current;
+    if (!root) return;
+    const focusables = Array.from(
+      root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => el.offsetParent !== null);
+    (focusables[0] ?? root).focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && !root.contains(active)) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const nextFocusables = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null);
+      if (nextFocusables.length === 0) return;
+      const idx = active ? nextFocusables.indexOf(active) : -1;
+      const nextIdx = e.shiftKey
+        ? idx <= 0
+          ? nextFocusables.length - 1
+          : idx - 1
+        : idx === -1 || idx === nextFocusables.length - 1
+          ? 0
+          : idx + 1;
+      e.preventDefault();
+      nextFocusables[nextIdx]?.focus();
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
   const scheduled = useMemo(
@@ -67,6 +109,10 @@ export function CheckoutVerificationModal({
           maxHeight: '80vh',
           overflowY: 'auto',
         }}
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
       >
         <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>
           Checkout Verification
