@@ -16,6 +16,7 @@ export function RequiredTenderOutcomeModal({
   details,
   isSubmitting,
   onConfirm,
+  onSplitCardSuccess,
   onClose,
   extraActionLabel,
   onExtraAction,
@@ -25,6 +26,7 @@ export function RequiredTenderOutcomeModal({
   details?: ReactNode;
   isSubmitting: boolean;
   onConfirm: (choice: TenderOutcomeChoice) => void;
+  onSplitCardSuccess?: (cardAmount: number) => void;
   onClose?: () => void;
   extraActionLabel?: string;
   onExtraAction?: () => void;
@@ -32,6 +34,8 @@ export function RequiredTenderOutcomeModal({
   const [choice, setChoice] = useState<TenderOutcomeChoice | null>(null);
   const [step, setStep] = useState<SplitStep>('main');
   const [cardAmountInput, setCardAmountInput] = useState('');
+  const [splitTotal, setSplitTotal] = useState<number | null>(null);
+  const [splitCommitted, setSplitCommitted] = useState(false);
   const modalRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -39,7 +43,19 @@ export function RequiredTenderOutcomeModal({
     setChoice(null);
     setStep('main');
     setCardAmountInput('');
+    setSplitTotal(null);
+    setSplitCommitted(false);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (splitCommitted && splitTotal !== null && Number.isFinite(totalAmount)) {
+      if (totalAmount !== splitTotal) {
+        setSplitTotal(null);
+        setCardAmountInput('');
+      }
+    }
+  }, [isOpen, splitCommitted, splitTotal, totalAmount]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -96,10 +112,14 @@ export function RequiredTenderOutcomeModal({
   if (!isOpen) return null;
 
   const total = Number.isFinite(totalAmount) ? totalAmount : 0;
+  const splitBaseTotal = splitTotal ?? total;
   const cardAmount = parseCurrency(cardAmountInput);
-  const remaining = cardAmount === null ? total : Math.max(total - cardAmount, 0);
-  const cardAmountValid = cardAmount !== null && cardAmount > 0 && cardAmount < total;
+  const remaining =
+    cardAmount === null ? splitBaseTotal : Math.max(splitBaseTotal - cardAmount, 0);
+  const cardAmountValid =
+    cardAmount !== null && cardAmount > 0 && cardAmount < splitBaseTotal;
   const stepIndex = step === 'main' ? 0 : step === 'split-card' ? 1 : 2;
+  const displayTotal = step === 'split-cash' ? remaining : splitBaseTotal;
 
   return (
     <div className="er-required-modal__overlay" role="presentation">
@@ -131,7 +151,7 @@ export function RequiredTenderOutcomeModal({
         </div>
         <div className="er-required-modal__amount">
           <div className="er-required-modal__amount-label">Total due</div>
-          <div className="er-required-modal__amount-value">${total.toFixed(2)}</div>
+          <div className="er-required-modal__amount-value">${displayTotal.toFixed(2)}</div>
         </div>
         <div className="er-required-modal__pending">
           Pending
@@ -177,6 +197,7 @@ export function RequiredTenderOutcomeModal({
                 className="cs-liquid-button cs-liquid-button--secondary er-required-modal__split-button"
                 onClick={() => {
                   if (isSubmitting) return;
+                  setSplitTotal(total);
                   setStep('split-card');
                 }}
                 disabled={isSubmitting || total <= 0}
@@ -211,7 +232,7 @@ export function RequiredTenderOutcomeModal({
                 <input
                   type="text"
                   inputMode="decimal"
-                  placeholder={total.toFixed(2)}
+                  placeholder={splitBaseTotal.toFixed(2)}
                   value={cardAmountInput}
                   onChange={(e) => setCardAmountInput(e.target.value)}
                   disabled={isSubmitting}
@@ -227,8 +248,13 @@ export function RequiredTenderOutcomeModal({
                 <button
                   type="button"
                   className="cs-liquid-button cs-liquid-button--secondary"
-                  onClick={() => setStep('main')}
-                  disabled={isSubmitting}
+                  onClick={() => {
+                    if (splitCommitted) return;
+                    setSplitTotal(null);
+                    setCardAmountInput('');
+                    setStep('main');
+                  }}
+                  disabled={isSubmitting || splitCommitted}
                 >
                   Back
                 </button>
@@ -247,10 +273,14 @@ export function RequiredTenderOutcomeModal({
                   type="button"
                   className="cs-liquid-button"
                   onClick={() => {
-                    if (isSubmitting || !cardAmountValid) return;
+                    if (isSubmitting || !cardAmountValid || splitCommitted) return;
+                    if (cardAmount !== null) {
+                      setSplitCommitted(true);
+                      onSplitCardSuccess?.(cardAmount);
+                    }
                     setStep('split-cash');
                   }}
-                  disabled={isSubmitting || !cardAmountValid}
+                  disabled={isSubmitting || !cardAmountValid || splitCommitted}
                 >
                   Credit Success
                 </button>

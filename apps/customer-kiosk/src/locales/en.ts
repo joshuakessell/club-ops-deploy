@@ -204,6 +204,7 @@ export const en = {
   'lineItem.specialRoom': 'Special Room',
   'lineItem.membershipFee': 'Membership Fee',
   'lineItem.sixMonthMembership': '6 Month Membership',
+  'lineItem.cardPayment': 'Card Payment',
 
   // General
   membership: 'Membership',

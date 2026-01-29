@@ -2,8 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../../auth/middleware';
 import { buildFullSessionUpdatedPayload } from '../../checkin/payload';
 import type { LaneSessionRow, PaymentIntentRow } from '../../checkin/types';
-import { getHttpError } from '../../checkin/utils';
+import { getHttpError, parsePriceQuote, roundToCents, toNumber } from '../../checkin/utils';
 import { transaction } from '../../db';
+
+const SPLIT_CARD_LINE_ITEM = 'Card Payment';
 
 export function registerCheckinDemoPaymentRoutes(fastify: FastifyInstance): void {
   /**
@@ -17,6 +19,7 @@ export function registerCheckinDemoPaymentRoutes(fastify: FastifyInstance): void
       outcome: 'CASH_SUCCESS' | 'CREDIT_SUCCESS' | 'CREDIT_DECLINE';
       declineReason?: string;
       registerNumber?: number;
+      splitCardAmount?: number;
     };
   }>(
     '/v1/checkin/lane/:laneId/demo-take-payment',
@@ -29,7 +32,7 @@ export function registerCheckinDemoPaymentRoutes(fastify: FastifyInstance): void
       }
 
       const { laneId } = request.params;
-      const { outcome, declineReason, registerNumber } = request.body;
+      const { outcome, declineReason, registerNumber, splitCardAmount } = request.body;
 
       try {
         const result = await transaction(async (client) => {
@@ -65,6 +68,72 @@ export function registerCheckinDemoPaymentRoutes(fastify: FastifyInstance): void
           }
 
           const intent = intentResult.rows[0]!;
+
+          const normalizedSplitAmount =
+            outcome === 'CREDIT_SUCCESS' ? toNumber(splitCardAmount) : undefined;
+
+          if (outcome === 'CREDIT_SUCCESS' && normalizedSplitAmount !== undefined) {
+            if (intent.status !== 'DUE') {
+              throw { statusCode: 409, message: 'Payment intent is not payable' };
+            }
+
+            const baseQuote =
+              parsePriceQuote(session.price_quote_json) ?? parsePriceQuote(intent.quote_json);
+            if (!baseQuote) {
+              throw { statusCode: 400, message: 'No price quote available for session' };
+            }
+
+            const cardLineItems = baseQuote.lineItems.filter(
+              (item) => item.description === SPLIT_CARD_LINE_ITEM
+            );
+            const cardLineTotal = cardLineItems.reduce((sum, item) => sum + item.amount, 0);
+            const baseTotal = roundToCents(baseQuote.total - cardLineTotal);
+
+            const roundedSplit = roundToCents(normalizedSplitAmount);
+            if (roundedSplit <= 0 || roundedSplit >= baseTotal) {
+              throw { statusCode: 400, message: 'Split card amount must be less than the total' };
+            }
+
+            const remainingTotal = roundToCents(baseTotal - roundedSplit);
+            const nextLineItems = [
+              ...baseQuote.lineItems.filter((item) => item.description !== SPLIT_CARD_LINE_ITEM),
+              { description: SPLIT_CARD_LINE_ITEM, amount: -roundedSplit },
+            ];
+
+            const nextQuote = {
+              ...baseQuote.quote,
+              lineItems: nextLineItems,
+              total: remainingTotal,
+              messages: baseQuote.messages,
+            };
+
+            await client.query(
+              `UPDATE payment_intents
+             SET amount = $1,
+                 quote_json = $2,
+                 failure_reason = NULL,
+                 failure_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $3`,
+              [remainingTotal, JSON.stringify(nextQuote), intent.id]
+            );
+
+            await client.query(
+              `UPDATE lane_sessions
+             SET price_quote_json = $1,
+                 updated_at = NOW()
+             WHERE id = $2`,
+              [JSON.stringify(nextQuote), session.id]
+            );
+
+            return {
+              sessionId: session.id,
+              success: true,
+              paymentIntentId: intent.id,
+              status: intent.status,
+              quote: nextQuote,
+            };
+          }
 
           if (outcome === 'CASH_SUCCESS' || outcome === 'CREDIT_SUCCESS') {
             // Mark as paid
@@ -124,6 +193,7 @@ export function registerCheckinDemoPaymentRoutes(fastify: FastifyInstance): void
           success: result.success,
           paymentIntentId: result.paymentIntentId,
           status: result.status,
+          quote: 'quote' in result ? result.quote : undefined,
         });
       } catch (error: unknown) {
         request.log.error(error, 'Failed to take payment');
