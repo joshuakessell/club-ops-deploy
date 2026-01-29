@@ -61,6 +61,11 @@
   padding-right: var(--er-home-content-gap);
 }
 
+.er-checkout-shell {
+  flex: 1;
+  min-height: 0;
+}
+
 .er-home-tab-btn--checkout {
   font-size: 22px !important;
   letter-spacing: 0.01em;
