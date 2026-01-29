@@ -51,6 +51,9 @@ jobs:
 
       - name: Build (Turbo)
         run: pnpm turbo run build
+        env:
+          VITE_KIOSK_TOKEN: ${{ secrets.VITE_KIOSK_TOKEN }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
 
       - name: Typecheck (Turbo)
         run: pnpm turbo run typecheck
