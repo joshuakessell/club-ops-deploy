@@ -259,6 +259,7 @@ async function seed() {
     const seedDevices = [
       { deviceId: 'register-1', displayName: 'Register 1' },
       { deviceId: 'register-2', displayName: 'Register 2' },
+      { deviceId: 'register-3', displayName: 'Register 3' },
     ];
 
     for (const device of seedDevices) {

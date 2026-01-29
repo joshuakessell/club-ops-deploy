@@ -1,6 +1,6 @@
 const { spawn } = require('node:child_process');
 
-const API_URL = process.env.API_HEALTH_URL || 'http://localhost:3001/health';
+const API_URL = process.env.API_HEALTH_URL || 'http://localhost:3000/health';
 const MAX_ATTEMPTS = Number(process.env.API_WAIT_ATTEMPTS || 120);
 const WAIT_MS = Number(process.env.API_WAIT_MS || 500);
 

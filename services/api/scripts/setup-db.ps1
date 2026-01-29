@@ -49,14 +49,13 @@ Write-Host "✅ Database setup complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Database connection info:" -ForegroundColor Cyan
 Write-Host "  Host: localhost"
-Write-Host "  Port: 5433"
+Write-Host "  Port: 5432"
 Write-Host "  Database: club_operations"
 Write-Host "  User: clubops"
 Write-Host "  Password: clubops_dev"
 Write-Host ""
 Write-Host "To stop the database: pnpm db:stop" -ForegroundColor Gray
 Write-Host "To reset the database: pnpm db:reset" -ForegroundColor Gray
-
 
 
 

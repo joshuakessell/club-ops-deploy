@@ -11,7 +11,7 @@ import { PanelShell } from './views/PanelShell';
 type LaneId = '1' | '2';
 
 type RegisterSession = {
-  registerNumber: 1 | 2;
+  registerNumber: 1 | 2 | 3;
   active: boolean;
   sessionId: string | null;
   employee: { id: string; displayName: string; role: string } | null;

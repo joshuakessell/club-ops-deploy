@@ -103,11 +103,15 @@ describe('Register Routes', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { registers: Array<{ registerNumber: 1 | 2; occupied: boolean }> };
+    const body = res.json() as {
+      registers: Array<{ registerNumber: 1 | 2 | 3; occupied: boolean }>;
+    };
 
     const r1 = body.registers.find((r) => r.registerNumber === 1)!;
     const r2 = body.registers.find((r) => r.registerNumber === 2)!;
+    const r3 = body.registers.find((r) => r.registerNumber === 3)!;
     expect(r1.occupied).toBe(true);
     expect(r2.occupied).toBe(false);
+    expect(r3.occupied).toBe(false);
   });
 });
