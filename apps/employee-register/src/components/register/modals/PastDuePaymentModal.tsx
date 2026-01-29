@@ -29,6 +29,8 @@ export function PastDuePaymentModal({
       isOpen={isOpen}
       title={`Past Due Balance: $${quote.total.toFixed(2)}`}
       onClose={onClose}
+      closeOnOverlayClick={false}
+      showCloseButton={false}
     >
       <p style={{ marginBottom: '1.5rem', color: '#94a3b8' }}>
         Customer has a past due balance. Please process payment or bypass.
@@ -132,17 +134,6 @@ export function PastDuePaymentModal({
           Manager Bypass
         </button>
       </div>
-      <button
-        onClick={onClose}
-        className="cs-liquid-button cs-liquid-button--danger"
-        style={{
-          width: '100%',
-          padding: '0.75rem',
-          cursor: 'pointer',
-        }}
-      >
-        Cancel
-      </button>
     </ModalFrame>
   );
 }

@@ -373,6 +373,24 @@
   padding: 8px 4px;
 }
 
+.er-required-modal__split-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.er-required-modal__split-field {
+  display: grid;
+  gap: 6px;
+}
+
+.er-required-modal__split-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(226, 232, 240, 0.7);
+}
+
 .er-required-modal__split-title {
   font-size: 1.1rem;
   font-weight: 800;
@@ -405,6 +423,11 @@
   font-weight: 600;
 }
 
+.er-required-modal__split-hint--error {
+  color: #fca5a5;
+  font-weight: 700;
+}
+
 .er-required-modal__split-total {
   font-size: 1.9rem;
   font-weight: 900;
@@ -413,7 +436,7 @@
 
 .er-required-modal__split-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
 }
 
