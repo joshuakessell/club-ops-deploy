@@ -23,7 +23,7 @@ docker ps
 This starts a PostgreSQL 16 container with:
 
 - **Host**: localhost
-- **Port**: 5433 (mapped from container port 5432 to avoid conflicts on Windows)
+- **Port**: 5432
 - **Database**: club_operations
 - **User**: clubops
 - **Password**: clubops_dev
@@ -70,9 +70,9 @@ pnpm start
 
 The API server will be available at:
 
-- **REST API**: http://localhost:3001
-- **WebSocket**: ws://localhost:3001/ws
-- **Health Check**: http://localhost:3001/health
+- **REST API**: http://localhost:3000
+- **WebSocket**: ws://localhost:3000/ws
+- **Health Check**: http://localhost:3000/health
 
 ## Database Commands
 
@@ -96,10 +96,10 @@ cp .env.example .env
 
 | Variable         | Default         | Description                                      |
 | ---------------- | --------------- | ------------------------------------------------ |
-| `PORT`           | 3001            | API server port                                  |
+| `PORT`           | 3000            | API server port                                  |
 | `HOST`           | 0.0.0.0         | API server host                                  |
 | `DB_HOST`        | localhost       | PostgreSQL host                                  |
-| `DB_PORT`        | 5433            | PostgreSQL port (host port, container uses 5432) |
+| `DB_PORT`        | 5432            | PostgreSQL port                                  |
 | `DB_NAME`        | club_operations | Database name                                    |
 | `DB_USER`        | clubops         | Database user                                    |
 | `DB_PASSWORD`    | "$PASSWORD"     | Database password                                |
@@ -184,12 +184,12 @@ After seeding the database, you can test the cleaning workflow endpoints used by
 
 ```bash
 # Resolve a single key tag
-curl -X POST http://localhost:3001/v1/keys/resolve \
+curl -X POST http://localhost:3000/v1/keys/resolve \
   -H "Content-Type: application/json" \
   -d '{"tagCodes": ["ROOM-101"]}'
 
 # Resolve multiple key tags (batch scan)
-curl -X POST http://localhost:3001/v1/keys/resolve \
+curl -X POST http://localhost:3000/v1/keys/resolve \
   -H "Content-Type: application/json" \
   -d '{"tagCodes": ["ROOM-101", "ROOM-102", "ROOM-103"]}'
 ```
@@ -205,7 +205,7 @@ Expected response includes:
 
 ```bash
 # First, resolve tags to get room IDs
-RESPONSE=$(curl -s -X POST http://localhost:3001/v1/keys/resolve \
+RESPONSE=$(curl -s -X POST http://localhost:3000/v1/keys/resolve \
   -H "Content-Type: application/json" \
   -d '{"tagCodes": ["ROOM-101"]}')
 
@@ -213,7 +213,7 @@ RESPONSE=$(curl -s -X POST http://localhost:3001/v1/keys/resolve \
 ROOM_ID=$(echo $RESPONSE | jq -r '.rooms[0].roomId')
 
 # Update room status (DIRTY → CLEANING)
-curl -X POST http://localhost:3001/v1/cleaning/batch \
+curl -X POST http://localhost:3000/v1/cleaning/batch \
   -H "Content-Type: application/json" \
   -d "{
     \"roomIds\": [\"$ROOM_ID\"],
@@ -235,7 +235,7 @@ The batch endpoint:
 Connect to the WebSocket endpoint to see real-time updates:
 
 ```javascript
-const ws = new WebSocket('ws://localhost:3001/ws');
+const ws = new WebSocket('ws://localhost:3000/ws');
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
   console.log('WebSocket event:', data);
@@ -261,4 +261,4 @@ ws.onmessage = (event) => {
 
 ### Port 5432 already in use
 
-The Docker Compose configuration uses port 5433 on the host (mapped to container port 5432) to avoid conflicts with other PostgreSQL instances. If you need to use a different port, update both `docker-compose.yml` and the `DB_PORT` environment variable.
+If you need to use a different port, update the `DB_PORT` environment variable to match your PostgreSQL instance.

@@ -177,7 +177,7 @@ export function registerAdminDeviceRoutes(fastify: FastifyInstance): void {
 
               // Broadcast REGISTER_SESSION_UPDATED event
               const payload = {
-                registerNumber: session.register_number as 1 | 2,
+                registerNumber: session.register_number as 1 | 2 | 3,
                 active: false,
                 sessionId: null,
                 employee: null,

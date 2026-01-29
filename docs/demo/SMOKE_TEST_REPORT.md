@@ -111,7 +111,7 @@ FROM staff ORDER BY name;
 
 ### Results
 
-- ✅ **Postgres:** Running on port 5433
+- ✅ **Postgres:** Running on port 5432
 - ✅ **Migrations:** All migrations applied successfully
 - ✅ **Seed Data:**
   - Rooms: 10 total (7 Standard, 3 Double, 0 Special)
@@ -133,10 +133,10 @@ pnpm dev
 ### Services Started
 
 1. **API Server** (`services/api`)
-   - Port: 3001
+   - Port: 3000
    - Status: ✅ Running
    - Health Endpoint: `GET /health` → `{"status":"ok"}`
-   - WebSocket: `ws://localhost:3001/ws`
+   - WebSocket: `ws://localhost:3000/ws`
 
 2. **Customer Kiosk** (`apps/customer-kiosk`)
    - Port: 5173
@@ -322,8 +322,8 @@ The Club Operations POS system successfully passed the end-to-end smoke test for
 - **OS:** macOS (darwin 25.2.0)
 - **Node.js:** v25.2.1
 - **pnpm:** 10.27.0
-- **Postgres:** Running on port 5433
-- **API:** http://localhost:3001
+- **Postgres:** Running on port 5432
+- **API:** http://localhost:3000
 - **Apps:** Ports 5173, 5175, 5176
 
 ---

@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { LiquidGlassPinInput } from '@club-ops/ui';
+import {
+  RegisterButtons,
+  type RegisterAvailability,
+  type RegisterNumber,
+} from './components/sign-in/RegisterButtons';
 import { getApiUrl } from '@club-ops/shared';
-
 const API_BASE = getApiUrl('/api');
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -44,17 +47,6 @@ interface SignInModalProps {
 }
 
 type SignInStep = 'select-employee' | 'enter-pin' | 'assign-register' | 'confirm';
-
-type RegisterAvailability = {
-  registerNumber: 1 | 2;
-  occupied: boolean;
-  deviceId?: string;
-  employee?: {
-    id: string;
-    name: string;
-    role: string;
-  };
-};
 
 export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModalProps) {
   const [step, setStep] = useState<SignInStep>('select-employee');
@@ -163,7 +155,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     }
   };
 
-  const handleAssignRegister = async (requestedRegisterNumber?: 1 | 2) => {
+  const handleAssignRegister = async (requestedRegisterNumber?: RegisterNumber) => {
     if (!selectedEmployee) return;
 
     setIsLoading(true);
@@ -199,7 +191,7 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
     }
   };
 
-  const handleSelectRegister = async (num: 1 | 2) => {
+  const handleSelectRegister = async (num: RegisterNumber) => {
     await handleAssignRegister(num);
   };
 
@@ -352,34 +344,12 @@ export function SignInModal({ isOpen, onClose, onSignIn, deviceId }: SignInModal
             {!registers ? (
               <div className="sign-in-subtitle">Loading registers...</div>
             ) : (
-              <div className="register-buttons">
-                {([1, 2] as const).map((num) => {
-                  const reg = registers.find((r) => r.registerNumber === num);
-                  const occupied = reg?.occupied ?? false;
-                  const occupiedBySelectedEmployee = reg?.employee?.id === selectedEmployee?.id;
-                  const occupiedLabel = occupied
-                    ? occupiedBySelectedEmployee
-                      ? ' (Signed in)'
-                      : reg?.employee?.name
-                        ? ` (In use: ${reg.employee.name})`
-                        : ' (In use)'
-                    : '';
-                  const disabled = isLoading || occupied;
-
-                  return (
-                    <button
-                      key={num}
-                      className="register-button cs-liquid-button"
-                      onClick={() => void handleSelectRegister(num)}
-                      disabled={disabled}
-                      title={occupied ? `Register ${num} is occupied` : `Use Register ${num}`}
-                    >
-                      Register {num}
-                      {occupiedLabel}
-                    </button>
-                  );
-                })}
-              </div>
+              <RegisterButtons
+                registers={registers}
+                selectedEmployeeId={selectedEmployee?.id ?? null}
+                disabled={isLoading}
+                onSelect={(num) => void handleSelectRegister(num)}
+              />
             )}
             <div className="sign-in-actions">
               <button

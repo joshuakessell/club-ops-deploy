@@ -7,7 +7,7 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
   /**
    * GET /v1/admin/register-sessions
    *
-   * Returns array with exactly two entries (Register 1 and Register 2).
+   * Returns array with exactly three entries (Register 1-3).
    * Shows current status, employee info, device, and heartbeat data.
    */
   fastify.get(
@@ -17,7 +17,7 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
     },
     async (request, reply) => {
       try {
-        // Get active sessions for both registers
+        // Get active sessions for all registers
         const activeSessions = await query<{
           id: string;
           employee_id: string;
@@ -43,9 +43,9 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
         ORDER BY rs.register_number`
         );
 
-        // Build result array with exactly 2 entries
+        // Build result array with exactly 3 entries
         const result: Array<{
-          registerNumber: 1 | 2;
+          registerNumber: 1 | 2 | 3;
           active: boolean;
           sessionId: string | null;
           employee: {
@@ -59,7 +59,7 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
           secondsSinceHeartbeat: number | null;
         }> = [];
 
-        for (let regNum = 1; regNum <= 2; regNum++) {
+        for (let regNum = 1; regNum <= 3; regNum++) {
           const session = activeSessions.rows.find((s) => s.register_number === regNum);
           if (session) {
             const now = new Date();
@@ -69,7 +69,7 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
             );
 
             result.push({
-              registerNumber: regNum as 1 | 2,
+              registerNumber: regNum as 1 | 2 | 3,
               active: true,
               sessionId: session.id,
               employee: {
@@ -84,7 +84,7 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
             });
           } else {
             result.push({
-              registerNumber: regNum as 1 | 2,
+              registerNumber: regNum as 1 | 2 | 3,
               active: false,
               sessionId: null,
               employee: null,
@@ -120,10 +120,10 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
     async (request, reply) => {
       const registerNumber = parseInt(request.params.registerNumber, 10);
 
-      if (registerNumber !== 1 && registerNumber !== 2) {
+      if (registerNumber !== 1 && registerNumber !== 2 && registerNumber !== 3) {
         return reply.status(400).send({
           error: 'Invalid register number',
-          message: 'Register number must be 1 or 2',
+          message: 'Register number must be 1, 2, or 3',
         });
       }
 
@@ -159,7 +159,7 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
               ok: true,
               message: 'already signed out',
               register: {
-                registerNumber: registerNumber as 1 | 2,
+                registerNumber: registerNumber as 1 | 2 | 3,
                 active: false,
                 sessionId: null,
                 employee: null,
@@ -190,7 +190,7 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
 
           // Broadcast REGISTER_SESSION_UPDATED event
           const payload = {
-            registerNumber: registerNumber as 1 | 2,
+            registerNumber: registerNumber as 1 | 2 | 3,
             active: false,
             sessionId: null,
             employee: null,
@@ -205,7 +205,7 @@ export function registerAdminRegisterSessionRoutes(fastify: FastifyInstance): vo
           return {
             ok: true,
             register: {
-              registerNumber: registerNumber as 1 | 2,
+              registerNumber: registerNumber as 1 | 2 | 3,
               active: false,
               sessionId: null,
               employee: null,
