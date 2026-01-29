@@ -20,6 +20,8 @@ export function useLaneSession({
   lastMessage: MessageEvent | null;
   lastError: Event | null;
 } {
+  const MAX_CONSECUTIVE_FAILURES = 3;
+  const COOLDOWN_MS = 60_000;
   const [connected, setConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<MessageEvent | null>(null);
   const [lastError, setLastError] = useState<Event | null>(null);
@@ -27,8 +29,20 @@ export function useLaneSession({
   // Force a re-connect effect when we need to build a fresh socket and re-attach listeners.
   const [connectNonce, setConnectNonce] = useState(0);
   const retryCountRef = useRef(0);
+  const consecutiveFailureRef = useRef(0);
+  const hasEverConnectedRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedIntentionallyRef = useRef(false);
+
+  useEffect(() => {
+    consecutiveFailureRef.current = 0;
+    hasEverConnectedRef.current = false;
+    if (cooldownTimerRef.current) {
+      clearTimeout(cooldownTimerRef.current);
+      cooldownTimerRef.current = null;
+    }
+  }, [laneId, role, kioskToken]);
 
   // Ensure we don't keep background sockets alive when this hook is not mounted anymore,
   // or when the lane/role changes.
@@ -47,6 +61,10 @@ export function useLaneSession({
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
+      if (cooldownTimerRef.current) {
+        clearTimeout(cooldownTimerRef.current);
+        cooldownTimerRef.current = null;
+      }
       if (laneId !== undefined) {
         closeLaneSessionClient(laneId, role);
       }
@@ -58,6 +76,18 @@ export function useLaneSession({
     const scheduleReconnect = () => {
       if (!enabled) return;
       if (closedIntentionallyRef.current) return;
+      if (
+        !hasEverConnectedRef.current &&
+        consecutiveFailureRef.current >= MAX_CONSECUTIVE_FAILURES
+      ) {
+        if (cooldownTimerRef.current) return;
+        cooldownTimerRef.current = setTimeout(() => {
+          cooldownTimerRef.current = null;
+          consecutiveFailureRef.current = 0;
+          setConnectNonce((n) => n + 1);
+        }, COOLDOWN_MS);
+        return;
+      }
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
 
       const attempt = retryCountRef.current + 1;
@@ -80,12 +110,23 @@ export function useLaneSession({
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
+      if (cooldownTimerRef.current) {
+        clearTimeout(cooldownTimerRef.current);
+        cooldownTimerRef.current = null;
+      }
       retryCountRef.current = 0;
+      consecutiveFailureRef.current = 0;
+      hasEverConnectedRef.current = true;
       setConnected(true);
     };
     const onClose = (event: CloseEvent) => {
       void event;
       setConnected(false);
+      if (!hasEverConnectedRef.current) {
+        consecutiveFailureRef.current += 1;
+      } else {
+        consecutiveFailureRef.current = 0;
+      }
       scheduleReconnect();
     };
     const onMessage = (event: MessageEvent) => setLastMessage(event);
