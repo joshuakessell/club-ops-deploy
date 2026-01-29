@@ -106,17 +106,24 @@ export function useScanState({
   }, []);
 
   const computeIdleTimeout = useCallback((value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return 300;
+    const cleaned = value.replace(/\r/g, '\n');
+    const trimmed = cleaned.trim();
+    if (!trimmed) return 400;
+
     const looksAamva =
       trimmed.startsWith('@') ||
       trimmed.includes('ANSI ') ||
       trimmed.includes('AAMVA') ||
-      /\nDCS/.test(trimmed) ||
-      /\nDAQ/.test(trimmed);
-    if (!looksAamva) return 300;
-    if (trimmed.toUpperCase().includes('ZTZTAN')) return 200;
-    return 1400;
+      /\nDCS/.test(cleaned) ||
+      /\nDAQ/.test(cleaned);
+    const hasInternalWhitespace = /\s/.test(trimmed);
+    const looksLong = trimmed.length >= 24;
+
+    if (looksAamva || hasInternalWhitespace || looksLong) {
+      return 2400;
+    }
+
+    return 400;
   }, []);
 
   const handleCapture = useCallback(

@@ -16,7 +16,7 @@ export function CheckoutPanel() {
   if (!session?.sessionToken) return null;
 
   return (
-    <PanelShell align="top" scroll="hidden" card={false}>
+    <PanelShell align="top" scroll="hidden" card={false} className="er-checkout-shell">
       <ManualCheckoutPanel
         sessionToken={session.sessionToken}
         entryMode={checkoutEntryMode}

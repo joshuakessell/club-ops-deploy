@@ -233,7 +233,7 @@ export function ManualCheckoutPanel({
   }, [autoContinue, canContinue, entryMode, handleContinue, step]);
 
   return (
-    <PanelCard>
+    <PanelCard className="er-checkout-card">
       <PanelHeader title={title} spacing="none" />
 
       {candidatesError && (
@@ -330,7 +330,7 @@ export function ManualCheckoutPanel({
                   </button>
                 </div>
 
-                <div style={{ marginTop: '0.75rem' }}>
+                <div className="er-checkout-list">
                   <div className="er-card-subtitle" style={{ marginBottom: '0.5rem' }}>
                     Or select from occupied units
                   </div>
