@@ -59,6 +59,24 @@
   resize: none;
 }
 
+/* Checkout panel scrolling (home checkout tab) */
+.er-checkout-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  min-height: 0;
+}
+
+.er-checkout-list {
+  margin-top: 0.75rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 0.25rem;
+}
+
 /* Manual Entry Form */
 .manual-entry-form {
   margin-top: 1rem;
