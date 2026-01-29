@@ -20,7 +20,6 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-EXPOSE 3001 5173 5175 5176
+EXPOSE 3000 5173 5175 5176
 
 CMD ["bash"]
-

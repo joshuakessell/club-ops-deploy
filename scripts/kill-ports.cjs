@@ -2,7 +2,7 @@
 
 /**
  * Script to kill processes running on development ports
- * Ports: 3001 (API), 5173 (customer-kiosk), 5175 (employee-register), 5176 (office-dashboard)
+ * Ports: 3000 (API), 5173 (customer-kiosk), 5175 (employee-register), 5176 (office-dashboard)
  */
 
 const { exec } = require('child_process');
@@ -11,8 +11,8 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 const isWindows = process.platform === 'win32';
 
-const PORTS = [3001, 5173, 5175, 5176];
-const POSTGRES_PORT = 5433;
+const PORTS = [3000, 5173, 5175, 5176];
+const POSTGRES_PORT = 5432;
 
 async function killPortWindows(port) {
   try {

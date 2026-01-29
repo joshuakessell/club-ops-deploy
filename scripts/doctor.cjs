@@ -81,9 +81,9 @@ async function main() {
   console.log();
 
   console.log('== Run api tests (requires Postgres) ==');
-  const pgUp = await checkPortOpen(5433);
+  const pgUp = await checkPortOpen(5432);
   if (!pgUp) {
-    console.log('Postgres not reachable on localhost:5433. Skipping @club-ops/api tests.');
+    console.log('Postgres not reachable on localhost:5432. Skipping @club-ops/api tests.');
     console.log('To run them locally: pnpm db:start && pnpm db:migrate && pnpm db:seed');
   } else {
     run('pnpm --filter @club-ops/api test');

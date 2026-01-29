@@ -45,14 +45,13 @@ echo "✅ Database setup complete!"
 echo ""
 echo "Database connection info:"
 echo "  Host: localhost"
-echo "  Port: 5433"
+echo "  Port: 5432"
 echo "  Database: club_operations"
 echo "  User: clubops"
 echo "  Password: clubops_dev"
 echo ""
 echo "To stop the database: pnpm db:stop"
 echo "To reset the database: pnpm db:reset"
-
 
 
 

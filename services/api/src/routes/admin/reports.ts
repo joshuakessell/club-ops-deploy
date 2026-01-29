@@ -59,6 +59,7 @@ export function registerAdminReportRoutes(fastify: FastifyInstance): void {
         byPaymentMethod.CREDIT ??= 0;
         byRegisterOut['Register 1'] ??= 0;
         byRegisterOut['Register 2'] ??= 0;
+        byRegisterOut['Register 3'] ??= 0;
 
         const today = new Date();
         const yyyy = today.getFullYear();
