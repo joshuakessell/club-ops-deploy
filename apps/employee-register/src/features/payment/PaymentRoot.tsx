@@ -189,13 +189,14 @@ export function PaymentRoot() {
             totalAmount={paymentQuote.total}
             details={modalDetails}
             isSubmitting={isSubmitting}
+            focusLockEnabled={!showAddOnSaleModal && !showUpgradePaymentModal && !showPastDueModal}
             onConfirm={(choice) => {
               if (choice === 'CREDIT_SUCCESS') void handleDemoPayment('CREDIT_SUCCESS');
               if (choice === 'CASH_SUCCESS') void handleDemoPayment('CASH_SUCCESS');
               if (choice === 'CREDIT_DECLINE')
                 void handleDemoPayment('CREDIT_DECLINE', 'Card declined');
             }}
-            onSplitCardSuccess={(amount) => void handleDemoSplitPayment(amount)}
+            onSplitCardSuccess={(amount) => handleDemoSplitPayment(amount)}
             extraActionLabel="Add On Sale"
             onExtraAction={() => openAddOnSaleModal()}
           />

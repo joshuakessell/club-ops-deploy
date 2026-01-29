@@ -265,16 +265,16 @@ export function usePaymentActions({
     }
   };
 
-  const handleDemoSplitPayment = async (cardAmount: number) => {
+  const handleDemoSplitPayment = async (cardAmount: number): Promise<boolean> => {
     if (!session?.sessionToken || !currentSessionId) {
       alert('Not authenticated');
-      return;
+      return false;
     }
 
     const roundedAmount = Math.round(cardAmount * 100) / 100;
     if (!Number.isFinite(roundedAmount) || roundedAmount <= 0) {
       alert('Enter a valid card amount.');
-      return;
+      return false;
     }
 
     setIsSubmitting(true);
@@ -310,9 +310,11 @@ export function usePaymentActions({
       }
 
       setPaymentDeclineError(null);
+      return true;
     } catch (error) {
       console.error('Failed to process split payment:', error);
       alert(error instanceof Error ? error.message : 'Failed to process split payment');
+      return false;
     } finally {
       setIsSubmitting(false);
     }

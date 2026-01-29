@@ -222,7 +222,6 @@ export function AgreementScreen({
             className="signature-modal-overlay"
             role="dialog"
             aria-label={t(customerPrimaryLanguage, 'a11y.signatureDialog')}
-            onClick={() => setSignatureModalOpen(false)}
           >
             <div className="signature-modal cs-liquid-card" onClick={(e) => e.stopPropagation()}>
               <div className="signature-modal-header">
