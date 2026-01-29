@@ -139,14 +139,18 @@ export async function maybeAttachScanIdentifiers(params: {
   idScanHash: string;
   idScanValue: string;
 }): Promise<void> {
-  if (params.existingIdScanHash && params.existingIdScanValue) return;
+  const shouldUpdateHash =
+    !params.existingIdScanHash || params.existingIdScanHash !== params.idScanHash;
+  const shouldUpdateValue =
+    !params.existingIdScanValue || params.existingIdScanValue !== params.idScanValue;
+  if (!shouldUpdateHash && !shouldUpdateValue) return;
   await params.client.query(
     `UPDATE customers
-     SET id_scan_hash = COALESCE(id_scan_hash, $1),
-         id_scan_value = COALESCE(id_scan_value, $2),
+     SET id_scan_hash = CASE WHEN id_scan_hash IS NULL OR id_scan_hash <> $1 THEN $1 ELSE id_scan_hash END,
+         id_scan_value = CASE WHEN id_scan_value IS NULL OR id_scan_value <> $2 THEN $2 ELSE id_scan_value END,
          updated_at = NOW()
      WHERE id = $3
-       AND (id_scan_hash IS NULL OR id_scan_value IS NULL)`,
+      `,
     [params.idScanHash, params.idScanValue, params.customerId]
   );
 }

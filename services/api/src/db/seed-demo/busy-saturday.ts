@@ -8,7 +8,7 @@ import {
   SPECIAL_ROOM_NUMBERS,
 } from '@club-ops/shared';
 import { RentalType, RoomStatus, RoomType, getRoomTierFromNumber } from '@club-ops/shared';
-import { computeSha256Hex, normalizeScanText } from '../../checkin/identity';
+import { computeIdScanIdentityHash, computeSha256Hex, normalizeScanText } from '../../checkin/identity';
 import { query, transaction } from '../index';
 import { buildCloseoutSnapshot } from '../../money/closeout';
 import { buildReceiptNumber } from '../../money/orderAudit';
@@ -299,7 +299,12 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       const dlRawScan =
         '@\nANSI 636015090002DL00410289ZT03300007DLDCACDCBNONEDCDNONEDBA07152032DCSKESSELLDDENDACJOSHUADDFNDADCALEBDDGNDBD06042025DBB07151988DBC1DAYBRODAU072 inDAG3011 MAHANNA SPRINGS DR APT ADAIDALLASDAJTXDAK75235-8742DAQ21026653DCF35629580160034005135DCGUSADAZBRODCK10032599522DCLWDDAFDDB07162021DAW155DDK1\nZTZTAN';
       const dlNormalized = normalizeScanText(dlRawScan);
-      const dlHash = computeSha256Hex(dlNormalized);
+      const dlHash =
+        computeIdScanIdentityHash({
+          firstName: 'Joshua',
+          lastName: 'Kessell',
+          dob: '1988-07-15',
+        }) ?? computeSha256Hex(dlNormalized);
       await client.query(
         `UPDATE customers
          SET name = $1,

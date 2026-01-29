@@ -52,6 +52,9 @@ export function buildEmployeeRegisterModalValue(params: EmployeeRegisterModalPar
     setScanToastMessage: scanState.setScanToastMessage,
     scanReady: scanState.scanReady,
     scanBlockedReason: scanState.scanBlockedReason,
+    scanInputRef: scanState.scanInputRef,
+    scanInputHandlers: scanState.scanInputHandlers,
+    scanInputEnabled: scanState.scanInputEnabled,
     pendingScanResolution: scanState.pendingScanResolution,
     scanResolutionError: scanState.scanResolutionError,
     scanResolutionSubmitting: scanState.scanResolutionSubmitting,
@@ -132,5 +135,6 @@ export function buildEmployeeRegisterModalValue(params: EmployeeRegisterModalPar
     handleConfirmPhysicalAgreement: selectionActions.handleConfirmPhysicalAgreement,
     handleCompleteTransaction: paymentActions.handleCompleteTransaction,
     handleDemoPayment: paymentActions.handleDemoPayment,
+    handleDemoSplitPayment: paymentActions.handleDemoSplitPayment,
   };
 }

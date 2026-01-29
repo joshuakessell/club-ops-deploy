@@ -62,6 +62,9 @@ Other markdown files may describe workflows, but **must not redefine** these ent
   - `dob`: Date of birth (optional).
   - `membership_number`, `membership_card_type`, `membership_valid_until`: Optional membership metadata when known.
   - `id_scan_hash` / `id_scan_value`: Optional ID-scan derived identifiers used to resolve/merge identity.
+  - `id_expiration_date`: Optional ID expiration date (DATE).
+  - `id_number`: Optional license/ID number derived from scans or manual entry.
+  - `id_state`: Optional issuing state/jurisdiction derived from scans.
   - `banned_until`: If present and in the future, customer is currently banned.
   - `past_due_balance`: Monetary balance owed (numeric).
 - **Relationships**:
