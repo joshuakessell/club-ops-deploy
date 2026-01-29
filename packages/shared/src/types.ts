@@ -558,7 +558,7 @@ export interface ExternalProviderRef {
  * Emitted when a register session is created, signed out, force signed out, or expires.
  */
 export interface RegisterSessionUpdatedPayload {
-  registerNumber: 1 | 2;
+  registerNumber: 1 | 2 | 3;
   active: boolean;
   sessionId: string | null;
   employee: {

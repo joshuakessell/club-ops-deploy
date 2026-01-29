@@ -2,7 +2,7 @@ import { Client } from 'pg';
 
 const {
   DB_HOST = 'localhost',
-  DB_PORT = '5433',
+  DB_PORT = '5432',
   // Keep defaults aligned with `src/db/index.ts` so local dev + tests behave consistently.
   DB_USER = 'clubops',
   DB_PASSWORD = "$PASSWORD",

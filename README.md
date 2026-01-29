@@ -28,7 +28,7 @@ This repo runs cleanly on **macOS (Apple Silicon)** with **pnpm**.
 
 - **Node.js**: >= 18 (Node 20+ recommended)
 - **pnpm**: pinned via `packageManager` in the root `package.json` (Corepack optional; using `pnpm` directly is fine)
-- **Docker Desktop**: required for local Postgres (runs on host port **5433**)
+- **Docker Desktop**: required for local Postgres (runs on host port **5432**)
 
 **Note:** Do **not** use `sudo` for `pnpm` commands.
 
@@ -77,20 +77,20 @@ pnpm dev
 
 This starts:
 
-- **API Server**: http://localhost:3001
-  - Health check: http://localhost:3001/health
+- **API Server**: http://localhost:3000
+  - Health check: http://localhost:3000/health
 - **Customer Kiosk**: http://localhost:5173
 - **Employee Register**: http://localhost:5175
 - **Office Dashboard**: http://localhost:5176
 
 ### WebSockets
 
-The UIs connect directly to the API WebSocket on port 3001:
+The UIs connect directly to the API WebSocket on port 3000:
 
-- `ws://<host>:3001/ws`
-- Some lane-specific streams use `ws://<host>:3001/ws?lane=LANE_1` (or `LANE_2`)
+- `ws://<host>:3000/ws`
+- Some lane-specific streams use `ws://<host>:3000/ws?lane=LANE_1` (or `LANE_2`)
 
-In local dev, Vite also proxies `/ws` to the API for convenience, but the apps currently construct the explicit `ws://<host>:3001/ws` URL.
+In local dev, Vite also proxies `/ws` to the API for convenience, but the apps currently construct the explicit `ws://<host>:3000/ws` URL.
 
 ### Repo Scan
 
@@ -127,7 +127,7 @@ pnpm build
 
 ### Database Setup
 
-The API uses PostgreSQL running in Docker. The database is configured to use port **5433** (mapped from container port 5432) to avoid conflicts with local PostgreSQL installations.
+The API uses PostgreSQL running in Docker. The database is configured to use port **5432** by default.
 
 The DB scripts support both Docker Compose v2 (`docker compose`) and legacy Compose (`docker-compose`).
 
@@ -172,7 +172,7 @@ pnpm db:seed
 **Database Configuration:**
 
 - Host: `localhost`
-- Port: `5433`
+- Port: `5432`
 - Database: `club_operations`
 - User: `clubops`
 - Password: `clubops_dev`
@@ -249,7 +249,7 @@ If migrations have changed and you need to update `db/schema.sql`:
 # Option 1: Use pg_dump (if database is running)
 cd services/api
 pnpm db:start
-pg_dump -h localhost -p 5433 -U clubops -d club_operations --schema-only > ../../db/schema.sql
+pg_dump -h localhost -p 5432 -U clubops -d club_operations --schema-only > ../../db/schema.sql
 
 # Option 2: Manually consolidate from migrations
 # Review all files in services/api/migrations/ and create consolidated schema

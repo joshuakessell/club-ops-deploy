@@ -10,7 +10,7 @@ import { getApiUrl } from '@club-ops/shared';
 const API_BASE = getApiUrl('/api');
 
 interface RegisterSession {
-  registerNumber: 1 | 2;
+  registerNumber: 1 | 2 | 3;
   active: boolean;
   sessionId: string | null;
   employee: {
