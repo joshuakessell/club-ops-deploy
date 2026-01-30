@@ -18,7 +18,7 @@ html {
 }
 
 body {
-  background: var(--bg);
+  background: #000;
   color: var(--text);
   font-family:
     system-ui,
@@ -64,11 +64,11 @@ body {
 .cs-kiosk-bg--steamroom1,
 .cs-kiosk-bg--steamroom2,
 .cs-kiosk-bg--none {
-  background-image: url('./assets/background.png');
+  background-image: none;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-color: var(--cs-bg);
+  background-color: #000;
 }
 
 .cs-kiosk-watermark {
@@ -994,4 +994,3 @@ body {
   font-size: clamp(1.125rem, 2vw, 1.5rem);
   color: var(--text-muted);
 }
-

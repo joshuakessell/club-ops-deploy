@@ -2,7 +2,7 @@
 :root {
   --primary: var(--cs-secondary);
   --primary-dark: var(--cs-secondary-dark);
-  --bg: var(--cs-bg);
+  --bg: #000;
   --bg-card: var(--cs-bg-card);
   --text: var(--cs-text);
   --text-muted: var(--cs-text-muted);
@@ -595,7 +595,7 @@ body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background-image: url('./assets/background.png');
+  background-image: none;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
