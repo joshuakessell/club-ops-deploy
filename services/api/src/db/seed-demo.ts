@@ -2,6 +2,7 @@ import { loadEnvFromDotEnvIfPresent } from '../env/loadEnv';
 import { closeDatabase, query, transaction } from './index';
 import { randomUUID } from 'crypto';
 import { seedBusySaturdayDemo } from './seed-demo/busy-saturday';
+import { SeedProgress } from './seed-demo/progress';
 import { generateAgreementPdf } from '../utils/pdf-generator';
 
 loadEnvFromDotEnvIfPresent();
@@ -273,7 +274,9 @@ export async function seedDemoData(options: { forceReseed?: boolean } = {}): Pro
       console.log('⚠️  DEMO_FORCE_RESEED enabled: rebuilding demo dataset from scratch.');
     }
 
-    await seedBusySaturdayDemo(now);
+    const progress = new SeedProgress({ title: 'Demo seed' });
+    progress.setMessage('Seeding busy Saturday data');
+    await seedBusySaturdayDemo(now, progress);
 
     // -----------------------------------------------------------------------
     // Shifts / timeclock / documents (existing behavior)
@@ -294,11 +297,13 @@ export async function seedDemoData(options: { forceReseed?: boolean } = {}): Pro
     const shouldSeedShifts = parseInt(existingShifts.rows[0]?.count || '0', 10) === 0;
 
     if (!shouldSeedShifts) {
-      console.log('⚠️  Demo shifts already exist. Skipping shift/timeclock seed.');
+      progress.log('⚠️  Demo shifts already exist. Skipping shift/timeclock seed.');
+      progress.done('Demo seed complete');
       return;
     }
 
-    console.log('🌱 Seeding demo data (shifts, timeclock, documents)...');
+    progress.setMessage('Seeding shifts/timeclock');
+    progress.log('🌱 Seeding demo data (shifts, timeclock, documents)...');
 
     // Get all active staff
     const staffResult = await query<{ id: string; name: string; role: string }>(
@@ -306,7 +311,8 @@ export async function seedDemoData(options: { forceReseed?: boolean } = {}): Pro
     );
 
     if (staffResult.rows.length === 0) {
-      console.log('⚠️  No active staff found. Skipping demo seed.');
+      progress.log('⚠️  No active staff found. Skipping demo seed.');
+      progress.done('Demo seed complete');
       return;
     }
 
@@ -335,6 +341,7 @@ export async function seedDemoData(options: { forceReseed?: boolean } = {}): Pro
     const shiftsCreated: string[] = [];
     const timeclockSessionsCreated: string[] = [];
 
+    progress.addTotal(29);
     for (let dayOffset = -14; dayOffset <= 14; dayOffset++) {
       const baseDate = new Date(now);
       baseDate.setDate(baseDate.getDate() + dayOffset);
@@ -512,9 +519,12 @@ export async function seedDemoData(options: { forceReseed?: boolean } = {}): Pro
           }
         }
       }
+      progress.tick();
     }
 
     // Seed break sessions for open timeclock sessions (if none exist yet)
+    progress.setMessage('Seeding break sessions');
+    progress.addTotal(1);
     const existingBreaks = await query<{ count: string }>(
       `SELECT COUNT(*) as count FROM staff_break_sessions`
     );
@@ -585,11 +595,13 @@ export async function seedDemoData(options: { forceReseed?: boolean } = {}): Pro
         }
       }
     }
+    progress.tick();
 
     // Seed employee documents (1-2 per employee)
     const docTypes = ['ID', 'W4', 'I9', 'OFFER_LETTER', 'NDA'];
     const documentsCreated: string[] = [];
 
+    progress.setMessage('Seeding employee documents');
     for (const employee of staff) {
       const numDocs = Math.floor(Math.random() * 2) + 1; // 1 or 2 docs
 
@@ -598,6 +610,7 @@ export async function seedDemoData(options: { forceReseed?: boolean } = {}): Pro
         const filename = `${docType.toLowerCase()}_${employee.name.replace(/\s+/g, '_')}.pdf`;
         const storageKey = `${employee.id}/${randomUUID()}/${filename}`;
 
+        progress.addTotal(1);
         const docResult = await query<{ id: string }>(
           `INSERT INTO employee_documents 
            (employee_id, doc_type, filename, mime_type, storage_key, uploaded_by)
@@ -606,14 +619,19 @@ export async function seedDemoData(options: { forceReseed?: boolean } = {}): Pro
           [employee.id, docType, filename, storageKey, adminStaff.id]
         );
         documentsCreated.push(docResult.rows[0]!.id);
+        progress.tick();
       }
     }
 
+    progress.setMessage('Saving demo snapshot');
+    progress.addTotal(1);
     await transaction(async (client) => {
       await createDemoSnapshot(client);
     });
     await saveDemoState({ seedAnchor: now, lastShifted: now });
+    progress.tick();
 
+    progress.done('Demo seed complete');
     console.log(`✅ Demo data seeded successfully:`);
     console.log(`   - ${shiftsCreated.length} shifts created`);
     console.log(`   - ${timeclockSessionsCreated.length} timeclock sessions created`);

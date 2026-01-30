@@ -18,9 +18,23 @@ import { query, transaction } from '../index';
 import { buildCloseoutSnapshot } from '../../money/closeout';
 import { buildReceiptNumber } from '../../money/orderAudit';
 import { generateAgreementPdf } from '../../utils/pdf-generator';
+import type { ProgressReporter } from './progress';
 
-export async function seedBusySaturdayDemo(now: Date): Promise<void> {
+export async function seedBusySaturdayDemo(
+  now: Date,
+  progress?: ProgressReporter
+): Promise<void> {
   const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+  const log = (message: string) => {
+    if (progress) {
+      progress.log(message);
+      return;
+    }
+    console.log(message);
+  };
+  const tick = (message?: string, increment?: number) => progress?.tick(message, increment);
+  const addTotal = (amount: number) => progress?.addTotal(amount);
+  const setMessage = (message: string) => progress?.setMessage(message);
 
   function ceilToNext15Min(d: Date): Date {
     const ms = d.getTime();
@@ -42,7 +56,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
   // -----------------------------------------------------------------------
   // Busy Saturday Night demo seeding (stress-test-friendly dataset)
   // -----------------------------------------------------------------------
-    console.log('🌱 Seeding busy Saturday demo dataset (resetting customer data)...');
+    setMessage('Preparing demo dataset');
+    log('🌱 Seeding busy Saturday demo dataset (resetting customer data)...');
 
     // Keep employees unchanged
     const staffCountBefore = await query<{ count: string }>(
@@ -152,6 +167,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       ]);
 
       // 3) Upsert rooms + lockers (idempotent)
+      setMessage('Upserting rooms');
+      addTotal(ROOMS.length);
       for (const r of ROOMS) {
         const type: RoomType =
           r.tier === 'DOUBLE'
@@ -168,8 +185,11 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
                  updated_at = NOW()`,
           [String(r.number), type, Math.floor(r.number / 100)]
         );
+        tick();
       }
 
+      setMessage('Upserting lockers');
+      addTotal(LOCKER_NUMBERS.length);
       for (const n of LOCKER_NUMBERS) {
         await client.query(
           `INSERT INTO lockers (number, status)
@@ -178,12 +198,15 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
              SET updated_at = NOW()`,
           [n]
         );
+        tick();
       }
 
       // 4) Upsert key tags (needed for QR scans in checkout kiosk)
       const roomIdsForTags = await client.query<{ id: string; number: string }>(
         `SELECT id, number FROM rooms ORDER BY number`
       );
+      setMessage('Seeding room key tags');
+      addTotal(roomIdsForTags.rows.length);
       for (const row of roomIdsForTags.rows) {
         await client.query(
           `INSERT INTO key_tags (room_id, tag_type, tag_code, is_active)
@@ -195,11 +218,14 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
                  updated_at = NOW()`,
           [row.id, `ROOM-${row.number}`]
         );
+        tick();
       }
 
       const lockerIdsForTags = await client.query<{ id: string; number: string }>(
         `SELECT id, number FROM lockers ORDER BY number`
       );
+      setMessage('Seeding locker key tags');
+      addTotal(lockerIdsForTags.rows.length);
       for (const row of lockerIdsForTags.rows) {
         await client.query(
           `INSERT INTO key_tags (locker_id, tag_type, tag_code, is_active)
@@ -211,6 +237,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
                  updated_at = NOW()`,
           [row.id, `LOCKER-${row.number}`]
         );
+        tick();
       }
 
       // Reset assignments/statuses on inventory
@@ -229,24 +256,32 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       );
 
       // Wipe member/customer-related data (keep staff/employees)
-      await client.query('DELETE FROM checkout_requests');
-      await client.query('DELETE FROM late_checkout_events');
-      await client.query('DELETE FROM inventory_reservations');
-      await client.query('DELETE FROM waitlist');
-      await client.query('DELETE FROM agreement_signatures');
-      await client.query('DELETE FROM external_provider_refs');
-      await client.query('DELETE FROM receipts');
-      await client.query('DELETE FROM order_line_items');
-      await client.query('DELETE FROM orders');
-      await client.query('DELETE FROM cash_drawer_events');
-      await client.query('DELETE FROM cash_drawer_sessions');
-      await client.query('DELETE FROM staff_break_sessions');
-      await client.query('DELETE FROM charges');
-      await client.query('DELETE FROM checkin_blocks');
-      await client.query('DELETE FROM payment_intents');
-      await client.query('DELETE FROM lane_sessions');
-      await client.query('DELETE FROM visits');
-      await client.query('DELETE FROM customers');
+      setMessage('Clearing demo data');
+      const deleteStatements = [
+        'DELETE FROM checkout_requests',
+        'DELETE FROM late_checkout_events',
+        'DELETE FROM inventory_reservations',
+        'DELETE FROM waitlist',
+        'DELETE FROM agreement_signatures',
+        'DELETE FROM external_provider_refs',
+        'DELETE FROM receipts',
+        'DELETE FROM order_line_items',
+        'DELETE FROM orders',
+        'DELETE FROM cash_drawer_events',
+        'DELETE FROM cash_drawer_sessions',
+        'DELETE FROM staff_break_sessions',
+        'DELETE FROM charges',
+        'DELETE FROM checkin_blocks',
+        'DELETE FROM payment_intents',
+        'DELETE FROM lane_sessions',
+        'DELETE FROM visits',
+        'DELETE FROM customers',
+      ];
+      addTotal(deleteStatements.length);
+      for (const statement of deleteStatements) {
+        await client.query(statement);
+        tick();
+      }
 
       // Inventory maps (after any deletes)
       const roomsRes = await client.query<{ id: string; number: string; type: string }>(
@@ -391,6 +426,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           ]
         );
 
+        tick('Generating agreements');
         return blockId;
       }
 
@@ -404,6 +440,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       const baseNames = buildUniqueNameList(MEMBER_COUNT + EXTRA_GUEST_COUNT);
 
       // Create exactly 100 membership customers
+      setMessage('Creating member customers');
+      addTotal(MEMBER_COUNT);
       for (let i = 1; i <= 100; i++) {
         const idx = i - 1;
         const id = randomUUID();
@@ -420,9 +458,12 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
 
         customerIds.push(id);
         customerProfileById.set(id, { name, dob, membershipNumber });
+        tick();
       }
 
       // Extra guests (customers only; membership_number is NULL)
+      setMessage('Creating guest customers');
+      addTotal(EXTRA_GUEST_COUNT);
       for (let i = 1; i <= EXTRA_GUEST_COUNT; i++) {
         const idx = MEMBER_COUNT + (i - 1);
         const id = randomUUID();
@@ -436,6 +477,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         );
         customerIds.push(id);
         customerProfileById.set(id, { name, dob, membershipNumber: null });
+        tick();
       }
 
       // Seed a known DL hash for encrypted lookup testing (no change to total count).
@@ -449,6 +491,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           lastName: 'Kessell',
           dob: '1988-07-15',
         }) ?? computeSha256Hex(dlNormalized);
+      addTotal(1);
       await client.query(
         `UPDATE customers
          SET name = $1,
@@ -459,7 +502,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
          WHERE id = $5`,
         ['Joshua Kessell', new Date('1988-07-15'), dlHash, dlNormalized, dlTestCustomerId]
       );
-      console.log(`✓ Seeded DL hash test customer: Joshua Kessell (${dlTestCustomerId})`);
+      tick('Finalizing customer profiles');
+      log(`✓ Seeded DL hash test customer: Joshua Kessell (${dlTestCustomerId})`);
       customerProfileById.set(dlTestCustomerId, {
         name: 'Joshua Kessell',
         dob: new Date('1988-07-15'),
@@ -498,6 +542,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         },
       ];
       const demoCustomerIds = new Map<string, string>();
+      setMessage('Creating demo customers');
+      addTotal(demoCustomerSeeds.length);
       for (const seed of demoCustomerSeeds) {
         const id = randomUUID();
         await client.query(
@@ -509,6 +555,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         customerIds.push(id);
         customerProfileById.set(id, { name: seed.name, dob: seed.dob, membershipNumber: null });
         demoCustomerIds.set(seed.key, id);
+        tick();
       }
 
       // -------------------------------------------------------------------
@@ -522,6 +569,10 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
 
       const ACTIVE_ROOM_OCCUPANCY = 54;
       const ACTIVE_LOCKER_OCCUPANCY = ACTIVE_LOCKERS_TARGET;
+      const DEMO_CHECKIN_BLOCKS = 6;
+      const COMPLETED_TARGET = 320; // >= 200 required
+      addTotal(ACTIVE_ROOM_OCCUPANCY + ACTIVE_LOCKER_OCCUPANCY + COMPLETED_TARGET + DEMO_CHECKIN_BLOCKS);
+      setMessage('Generating agreements');
 
       const roomCustomerIds = customerIds.slice(0, ACTIVE_ROOM_OCCUPANCY);
       const lockerCustomerIds = customerIds.slice(
@@ -711,8 +762,6 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       // - Bias check-ins toward NOW (higher density in last ~4-6 hours)
       // - Most checkouts within 0..15 minutes early, some 30..120 minutes early
       // - Never overlap with the current active assignment for the same room/locker
-      const COMPLETED_TARGET = 320; // >= 200 required
-
       function completedCustomerIdFor(idx: number): string {
         // Prefer customers not currently used for active stays, but always fall back deterministically.
         if (extraCustomerIds.length > 0) return extraCustomerIds[idx % extraCustomerIds.length]!;
@@ -899,6 +948,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
 
       // Update inventory at NOW to reflect ALL active assignments
       // Set all occupied rooms to OCCUPIED with assigned customer
+      setMessage('Updating room occupancy');
+      addTotal(ACTIVE_ROOM_OCCUPANCY);
       for (let i = 0; i < ACTIVE_ROOM_OCCUPANCY; i++) {
         const customerId = roomCustomerIds[i]!;
         const roomNumber = occupiedRoomNumbers[i]!;
@@ -914,11 +965,13 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
            WHERE id = $3`,
           [RoomStatus.OCCUPIED, customerId, roomMeta.id]
         );
+        tick();
       }
 
       // Ensure the one free room is CLEAN and unassigned
       const freeRoomMeta = roomIdByNumber.get(String(freeRoomNumber));
       if (!freeRoomMeta) throw new Error(`Missing free room inventory row for ${freeRoomNumber}`);
+      addTotal(1);
       await client.query(
         `UPDATE rooms
          SET status = 'CLEAN',
@@ -928,8 +981,11 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
          WHERE id = $1`,
         [freeRoomMeta.id]
       );
+      tick();
 
       // Set all occupied lockers to OCCUPIED with assigned customer
+      setMessage('Updating locker occupancy');
+      addTotal(ACTIVE_LOCKER_OCCUPANCY);
       for (let i = 0; i < ACTIVE_LOCKER_OCCUPANCY; i++) {
         const customerId = lockerCustomerIds[i]!;
         const lockerNumber = occupiedLockerNumbers[i]!;
@@ -944,10 +1000,12 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
            WHERE id = $3`,
           [RoomStatus.OCCUPIED, customerId, lockerId]
         );
+        tick();
       }
 
       // Ensure free lockers are CLEAN and unassigned
       const freeLockerNumbers = LOCKER_NUMBERS.slice(ACTIVE_LOCKER_OCCUPANCY);
+      addTotal(freeLockerNumbers.length);
       for (const lockerNumber of freeLockerNumbers) {
         const lockerId = lockerIdByNumber.get(lockerNumber);
         if (!lockerId) throw new Error(`Missing free locker inventory row for ${lockerNumber}`);
@@ -959,6 +1017,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
            WHERE id = $1`,
           [lockerId]
         );
+        tick();
       }
 
       // -------------------------------------------------------------------
@@ -1107,6 +1166,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         return eventId;
       }
 
+      setMessage('Seeding cash drawer events');
+      addTotal(8);
       await insertDrawerEvent({
         sessionId: openDrawerId,
         occurredAt: new Date(openDrawerOpenedAt.getTime() + 30 * 60 * 1000),
@@ -1115,6 +1176,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         reason: 'Tip jar start',
         staffId: primaryStaff.id,
       });
+      tick();
       await insertDrawerEvent({
         sessionId: openDrawerId,
         occurredAt: new Date(openDrawerOpenedAt.getTime() + 90 * 60 * 1000),
@@ -1123,6 +1185,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         reason: 'Supplies',
         staffId: primaryStaff.id,
       });
+      tick();
       await insertDrawerEvent({
         sessionId: openDrawerId,
         occurredAt: new Date(openDrawerOpenedAt.getTime() + 120 * 60 * 1000),
@@ -1131,6 +1194,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         reason: 'Customer check',
         staffId: primaryStaff.id,
       });
+      tick();
       await insertDrawerEvent({
         sessionId: openDrawerId,
         occurredAt: new Date(openDrawerOpenedAt.getTime() + 150 * 60 * 1000),
@@ -1139,6 +1203,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         reason: 'Drawer audit',
         staffId: primaryStaff.id,
       });
+      tick();
 
       const firstClosedEventId = await insertDrawerEvent({
         sessionId: closedDrawerId,
@@ -1148,6 +1213,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         reason: 'Extra change',
         staffId: secondaryStaff.id,
       });
+      tick();
       await insertDrawerEvent({
         sessionId: closedDrawerId,
         occurredAt: new Date(closedDrawerOpenedAt.getTime() + 120 * 60 * 1000),
@@ -1156,6 +1222,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         reason: 'Vendor payout',
         staffId: secondaryStaff.id,
       });
+      tick();
       await insertDrawerEvent({
         sessionId: closedDrawerId,
         occurredAt: new Date(closedDrawerOpenedAt.getTime() + 180 * 60 * 1000),
@@ -1164,6 +1231,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         reason: 'Safe drop',
         staffId: secondaryStaff.id,
       });
+      tick();
       await insertDrawerEvent({
         sessionId: closedDrawerId,
         occurredAt: new Date(closedDrawerOpenedAt.getTime() + 210 * 60 * 1000),
@@ -1172,6 +1240,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         reason: 'Receipt reprint',
         staffId: secondaryStaff.id,
       });
+      tick();
 
       if (firstClosedEventId) {
         await client.query(
@@ -1424,6 +1493,11 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       const ordersForOpen = 24;
       const ordersForClosed = 18;
       const ordersUnassigned = 10;
+      const demoRetailCustomerId = demoCustomerIds.get('retailAddon');
+      const totalOrders =
+        ordersForOpen + ordersForClosed + ordersUnassigned + (demoRetailCustomerId ? 1 : 0);
+      setMessage('Seeding orders');
+      addTotal(totalOrders);
 
       for (let idx = 0; idx < ordersForOpen; idx++) {
         const seed = idx + 1;
@@ -1434,6 +1508,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           customerId: seed % 6 === 0 ? null : customerIds[(seed * 7) % customerIds.length]!,
           staffId: seed % 2 === 0 ? primaryStaff.id : secondaryStaff.id,
         });
+        tick();
       }
 
       for (let idx = 0; idx < ordersForClosed; idx++) {
@@ -1445,6 +1520,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           customerId: seed % 5 === 0 ? null : customerIds[(seed * 5) % customerIds.length]!,
           staffId: seed % 2 === 0 ? secondaryStaff.id : primaryStaff.id,
         });
+        tick();
       }
 
       for (let idx = 0; idx < ordersUnassigned; idx++) {
@@ -1459,9 +1535,9 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           customerId: seed % 4 === 0 ? null : customerIds[(seed * 3) % customerIds.length]!,
           staffId: adminStaff.id,
         });
+        tick();
       }
 
-      const demoRetailCustomerId = demoCustomerIds.get('retailAddon');
       if (demoRetailCustomerId) {
         await insertOrderSeed({
           seed: 305,
@@ -1470,6 +1546,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           customerId: demoRetailCustomerId,
           staffId: primaryStaff.id,
         });
+        tick();
       }
 
       const closeoutSnapshot = await buildCloseoutSnapshot(
@@ -1486,6 +1563,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       const countedCashCents = closeoutSnapshot.expectedCashCents - 250;
       const overShortCents = countedCashCents - closeoutSnapshot.expectedCashCents;
 
+      setMessage('Building closeout snapshot');
+      addTotal(1);
       await client.query(
         `UPDATE cash_drawer_sessions
          SET expected_cash_cents = $1,
@@ -1501,9 +1580,12 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           closedDrawerId,
         ]
       );
+      tick();
     });
 
     // Post-seed assertions + concise summary (throw on failure)
+    setMessage('Validating dataset');
+    addTotal(1);
     const staffCountAfter = await query<{ count: string }>(
       'SELECT COUNT(*)::text as count FROM staff'
     );
@@ -1767,7 +1849,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       );
     }
     if (within15Ratio < 0.85 || earlyRatio > 0.15) {
-      console.warn(
+      log(
         `⚠️  Checkout timing realism (non-fatal): within15=${within15Completed}/${totalCompleted} (${Math.round(
           within15Ratio * 100
         )}%), early>${15}m=${earlyCompleted}/${totalCompleted} (${Math.round(earlyRatio * 100)}%)`
@@ -1790,7 +1872,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
     const assignmentType = overdue.locker_id ? 'locker' : 'room';
     const overdueResource = resourceRow.locker_number || resourceRow.room_number || 'unknown';
 
-    console.log(
+    tick();
+    log(
       `✅ Busy Saturday seed complete (now=${now.toISOString()}): membership_customers=${membershipCustomerCount.rows[0]!.count}, customers=${customerCount.rows[0]!.count}, active blocks=${54 + ACTIVE_LOCKERS_TARGET} (54 rooms + ${ACTIVE_LOCKERS_TARGET} lockers), completed visits=${totalCompleted}, open STANDARD room=${openRooms.rows[0]!.number}, overdue block=${overdue.id} (${assignmentType} ${overdueResource})`
     );
 }
