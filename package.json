@@ -31,6 +31,8 @@
 
     "demo:seed": "turbo run build --filter=@club-ops/shared --filter=@club-ops/ui && DEMO_MODE=true pnpm db:reset && DEMO_MODE=true pnpm --filter @club-ops/api db:migrate && DEMO_MODE=true pnpm --filter @club-ops/api seed && DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts",
     "demo:dev": "pnpm demo:seed && DEMO_MODE=true pnpm dev",
+    "demo:full": "DEMO_MODE=true DEMO_FORCE_RESEED=true pnpm demo:seed && DEMO_MODE=true DEMO_RESET_ON_STARTUP=true SEED_ON_STARTUP=false pnpm dev",
+    "demo:reset": "DEMO_MODE=true DEMO_RESET_ON_STARTUP=true SEED_ON_STARTUP=false pnpm dev",
     "demo:test": "turbo run build --filter=@club-ops/shared --filter=@club-ops/ui && DEMO_MODE=true pnpm db:reset && DEMO_MODE=true pnpm --filter @club-ops/api db:migrate && DEMO_MODE=true pnpm --filter @club-ops/api seed && DEMO_MODE=true pnpm --filter @club-ops/api exec tsx src/db/seed-demo.ts && DEMO_MODE=true pnpm --filter @club-ops/api exec vitest run tests/demo-seed.test.ts",
 
     "telemetry:export": "node tools/telemetry/export-telemetry.mjs"

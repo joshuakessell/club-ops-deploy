@@ -1,13 +1,13 @@
 ## CI and Deployment Rules
 
-- All production deployments are triggered automatically by GitHub.
-- Vercel auto-deploys frontend apps on commit to main.
-- Render auto-deploys the API service on commit to main.
+- Production deployments are currently paused; local testing is the source of truth.
+- Vercel and Render are no longer used (services cancelled).
+- AWS deployment approach is in progress and should be documented here once finalized.
 
 Agents MUST NOT:
 
 - Add deploy scripts or platform-specific deployment code
-- Modify Vercel or Render behavior in code
+- Modify deployment platform behavior or infrastructure code without an explicit request
 - Add GitHub Actions that perform deployments
 
 Agents MUST:

@@ -1,11 +1,14 @@
 import { Client } from 'pg';
+import { loadEnvFromDotEnvIfPresent } from '../src/env/loadEnv';
+
+loadEnvFromDotEnvIfPresent();
 
 const {
   DB_HOST = 'localhost',
   DB_PORT = '5432',
   // Keep defaults aligned with `src/db/index.ts` so local dev + tests behave consistently.
   DB_USER = 'clubops',
-  DB_PASSWORD = "$PASSWORD",
+  DB_PASSWORD = 'club-ops-dev',
   DB_NAME = 'club_operations',
 } = process.env;
 

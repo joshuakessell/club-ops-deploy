@@ -227,14 +227,14 @@ async function main() {
           if (process.env.DEMO_MODE === 'true') {
             if (SEED_ON_STARTUP) {
               fastify.log.info(
-                'DEMO_MODE enabled, seeding demo data on startup (SEED_ON_STARTUP=true)...'
+                'DEMO_MODE enabled, rebuilding demo data on startup (SEED_ON_STARTUP=true)...'
               );
-              await seedDemoData();
             } else {
               fastify.log.info(
-                'DEMO_MODE enabled; skipping demo seed on startup. Run `pnpm demo:seed` or set SEED_ON_STARTUP=true to seed during boot.'
+                'DEMO_MODE enabled; restoring demo snapshot and shifting timestamps (fast startup).'
               );
             }
+            await seedDemoData({ forceReseed: SEED_ON_STARTUP });
           }
         } catch (err) {
           fastify.dbHealthy = false;
