@@ -32,29 +32,20 @@ export function PastDuePaymentModal({
       closeOnOverlayClick={false}
       showCloseButton={false}
     >
-      <p style={{ marginBottom: '1.5rem', color: '#94a3b8' }}>
+      <p className="er-text-muted u-mb-24">
         Customer has a past due balance. Please process payment or bypass.
       </p>
 
       {(quote.lineItems.length > 0 || quote.messages.length > 0) && (
-        <div
-          className="cs-liquid-card glass-effect"
-          style={{ padding: '0.75rem', marginBottom: '1rem', display: 'grid', gap: '0.5rem' }}
-        >
+        <div className="cs-liquid-card glass-effect er-pastdue-card">
           {quote.lineItems.length > 0 && (
-            <div style={{ display: 'grid', gap: '0.35rem' }}>
+            <div className="er-grid-gap-6">
               {quote.lineItems.map((li, idx) => (
                 <div
                   key={`${li.description}-${idx}`}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    gap: '0.75rem',
-                    color: '#e2e8f0',
-                    fontWeight: 700,
-                  }}
+                  className="u-flex u-justify-between u-gap-12 u-fw-700 er-text-soft"
                 >
-                  <span style={{ color: '#cbd5e1' }}>{li.description}</span>
+                  <span className="er-text-weak">{li.description}</span>
                   <span>${li.amount.toFixed(2)}</span>
                 </div>
               ))}
@@ -62,9 +53,9 @@ export function PastDuePaymentModal({
           )}
 
           {quote.messages.length > 0 && (
-            <div style={{ display: 'grid', gap: '0.25rem' }}>
+            <div className="u-grid u-gap-4">
               {quote.messages.map((m, idx) => (
-                <div key={idx} style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                <div key={idx} className="er-text-sm er-text-muted">
                   {m}
                 </div>
               ))}
@@ -73,24 +64,12 @@ export function PastDuePaymentModal({
         </div>
       )}
 
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.75rem',
-          marginBottom: '1rem',
-        }}
-      >
+      <div className="u-flex u-flex-col u-gap-12 u-mb-16">
         <button
           onClick={() => onPayInSquare('CREDIT_SUCCESS')}
           disabled={isSubmitting}
           className="cs-liquid-button"
-          style={{
-            padding: '0.75rem',
-            fontSize: '1rem',
-            fontWeight: 600,
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-          }}
+          className="cs-liquid-button er-modal-button"
         >
           Credit Success
         </button>
@@ -98,12 +77,7 @@ export function PastDuePaymentModal({
           onClick={() => onPayInSquare('CASH_SUCCESS')}
           disabled={isSubmitting}
           className="cs-liquid-button"
-          style={{
-            padding: '0.75rem',
-            fontSize: '1rem',
-            fontWeight: 600,
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-          }}
+          className="cs-liquid-button er-modal-button"
         >
           Cash Success
         </button>
@@ -111,12 +85,7 @@ export function PastDuePaymentModal({
           onClick={() => onPayInSquare('CREDIT_DECLINE', 'Card declined')}
           disabled={isSubmitting}
           className="cs-liquid-button cs-liquid-button--danger"
-          style={{
-            padding: '0.75rem',
-            fontSize: '1rem',
-            fontWeight: 600,
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-          }}
+          className="cs-liquid-button cs-liquid-button--danger er-modal-button"
         >
           Credit Decline
         </button>
@@ -124,12 +93,7 @@ export function PastDuePaymentModal({
           onClick={onManagerBypass}
           disabled={isSubmitting}
           className="cs-liquid-button cs-liquid-button--secondary"
-          style={{
-            padding: '0.75rem',
-            fontSize: '1rem',
-            fontWeight: 600,
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-          }}
+          className="cs-liquid-button cs-liquid-button--secondary er-modal-button"
         >
           Manager Bypass
         </button>

@@ -246,43 +246,16 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
   }, [allowedRentals, inventoryAvailable, waitlistDesiredTier]);
 
   return (
-    <div
-      className="cs-liquid-card"
-      style={{
-        padding: '0.9rem',
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
-          alignItems: 'baseline',
-        }}
-      >
-        <div style={{ fontWeight: 950, fontSize: '1rem' }}>Employee Assist</div>
-        <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-          Step: {step}
-        </div>
+    <div className="cs-liquid-card er-assist-card">
+      <div className="er-assist-header">
+        <div className="er-assist-title">Employee Assist</div>
+        <div className="er-text-sm er-text-muted u-fw-800">Step: {step}</div>
       </div>
 
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          marginTop: '0.75rem',
-          overflowY: 'auto',
-          paddingRight: '0.25rem',
-        }}
-      >
+      <div className="er-assist-body">
         {step === 'LANGUAGE' && (
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+          <div className="er-assist-section">
+            <div className="er-text-sm er-text-muted u-fw-800">
               {directSelect
                 ? 'Tap once to set the language.'
                 : 'Tap once to set the language (it will also highlight on the kiosk).'}
@@ -311,7 +284,11 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                     }
                     void onConfirmLanguage(opt.id);
                   }}
-                  style={{ width: '100%', padding: '0.9rem 1rem', fontWeight: 900 }}
+                  className={[
+                    'cs-liquid-button',
+                    isPending ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    'er-assist-button',
+                  ].join(' ')}
                 >
                   {opt.label}
                 </button>
@@ -321,8 +298,8 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         )}
 
         {step === 'MEMBERSHIP' && (
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+          <div className="er-assist-section">
+            <div className="er-text-sm er-text-muted u-fw-800">
               {directSelect
                 ? 'Tap once to select the membership option.'
                 : 'Tap once to highlight on kiosk, tap again to confirm.'}
@@ -367,7 +344,11 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                         () => onHighlightMembership(null)
                       );
                     }}
-                  style={{ width: '100%', padding: '0.9rem 1rem', fontWeight: 900 }}
+                  className={[
+                    'cs-liquid-button',
+                    isPending ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                    'er-assist-button',
+                  ].join(' ')}
                 >
                   {opt.label}
                 </button>
@@ -377,13 +358,13 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         )}
 
         {step === 'UPGRADE' && (
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+          <div className="er-assist-section">
+            <div className="er-text-sm er-text-muted u-fw-800">
               {directSelect
                 ? `Select a backup rental for ${waitlistDesiredTier}.`
                 : `Customer selected ${waitlistDesiredTier}. Choose a backup rental.`}
             </div>
-            <div style={{ display: 'grid', gap: '0.6rem' }}>
+            <div className="er-assist-grid-tight">
               {waitlistBackupButtons.map((btn) => {
                 const isPending = pending?.step === 'WAITLIST_BACKUP' && pending.option === btn.id;
                 const { label: countLabel, tone } = remainingCountLabel(btn.count);
@@ -420,25 +401,23 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                         () => onHighlightWaitlistBackup(null)
                       );
                     }}
-                    style={{
-                      width: '100%',
-                      padding: '0.85rem 1rem',
-                      fontWeight: 950,
-                      textAlign: 'left',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      gap: '0.75rem',
-                    }}
+                    className={[
+                      'cs-liquid-button',
+                      isPending ? 'cs-liquid-button--selected' : toneClass,
+                      'er-assist-option',
+                    ].join(' ')}
                   >
                     <span>{btn.label}</span>
                     <span
-                      className="er-text-sm"
-                      style={{
-                        fontWeight: 900,
-                        color: tone === 'none' ? '#ef4444' : tone === 'low' ? '#f59e0b' : '#94a3b8',
-                        whiteSpace: 'nowrap',
-                      }}
+                      className={[
+                        'er-text-sm',
+                        'er-assist-count',
+                        tone === 'none'
+                          ? 'er-assist-count--none'
+                          : tone === 'low'
+                            ? 'er-assist-count--low'
+                            : 'er-assist-count--ok',
+                      ].join(' ')}
                     >
                       {countLabel}
                     </span>
@@ -450,13 +429,13 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         )}
 
         {step === 'RENTAL' && (
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+          <div className="er-assist-section">
+            <div className="er-text-sm er-text-muted u-fw-800">
               {directSelect
                 ? 'Tap once to select a rental.'
                 : 'Tap once to propose on kiosk, tap again to confirm.'}
             </div>
-            <div style={{ display: 'grid', gap: '0.6rem' }}>
+            <div className="er-assist-grid-tight">
               {rentalButtons.map((btn) => {
                 const isPending = pending?.step === 'RENTAL' && pending.option === btn.id;
                 const { label: countLabel, tone } = remainingCountLabel(btn.count);
@@ -494,25 +473,23 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
                         }
                       );
                     }}
-                    style={{
-                      width: '100%',
-                      padding: '0.85rem 1rem',
-                      fontWeight: 950,
-                      textAlign: 'left',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      gap: '0.75rem',
-                    }}
+                    className={[
+                      'cs-liquid-button',
+                      isPending ? 'cs-liquid-button--selected' : toneClass,
+                      'er-assist-option',
+                    ].join(' ')}
                   >
                     <span>{btn.label}</span>
                     <span
-                      className="er-text-sm"
-                      style={{
-                        fontWeight: 900,
-                        color: tone === 'none' ? '#ef4444' : tone === 'low' ? '#f59e0b' : '#94a3b8',
-                        whiteSpace: 'nowrap',
-                      }}
+                      className={[
+                        'er-text-sm',
+                        'er-assist-count',
+                        tone === 'none'
+                          ? 'er-assist-count--none'
+                          : tone === 'low'
+                            ? 'er-assist-count--low'
+                            : 'er-assist-count--ok',
+                      ].join(' ')}
                     >
                       {countLabel}
                     </span>
@@ -524,7 +501,7 @@ export function EmployeeAssistPanel(props: EmployeeAssistPanelProps) {
         )}
 
         {step === 'DONE' && (
-          <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+          <div className="er-text-sm er-text-muted u-fw-800">
             Waiting for next customer action…
           </div>
         )}

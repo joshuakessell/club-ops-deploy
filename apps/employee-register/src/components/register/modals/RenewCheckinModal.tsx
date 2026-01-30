@@ -42,41 +42,30 @@ export function RenewCheckinModal(props: {
 
   return (
     <ModalFrame isOpen={isOpen} title="Renew Check-in" onClose={onClose} maxWidth="560px">
-      <div style={{ display: 'grid', gap: '0.75rem' }}>
-        <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+      <div className="u-grid u-gap-12">
+        <div className="er-text-sm er-text-muted u-fw-800">
           Renewals are available within 1 hour of checkout. Maximum stay is 14 hours.
         </div>
 
-        <div className="cs-liquid-card" style={{ padding: '0.85rem' }}>
-          <div style={{ display: 'grid', gap: '0.5rem' }}>
+        <div className="cs-liquid-card er-card-pad-14">
+          <div className="u-grid u-gap-8">
             <div>
-              <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+              <div className="er-text-sm er-text-muted u-fw-800">
                 Current checkout
               </div>
-              <div style={{ fontWeight: 900 }}>{formatLocal(activeCheckin?.checkoutAt)}</div>
+              <div className="u-fw-900">{formatLocal(activeCheckin?.checkoutAt)}</div>
             </div>
             <div>
-              <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+              <div className="er-text-sm er-text-muted u-fw-800">
                 Total hours today
               </div>
-              <div style={{ fontWeight: 900 }}>{totalHoursLabel}</div>
+              <div className="u-fw-900">{totalHoursLabel}</div>
             </div>
           </div>
         </div>
 
         {errorMessage ? (
-          <div
-            style={{
-              padding: '0.75rem',
-              background: 'rgba(239, 68, 68, 0.18)',
-              border: '1px solid rgba(239, 68, 68, 0.35)',
-              borderRadius: 12,
-              color: '#fecaca',
-              fontWeight: 800,
-            }}
-          >
-            {errorMessage}
-          </div>
+          <div className="er-modal-error">{errorMessage}</div>
         ) : null}
 
         <div className="er-renewal-modal__actions">

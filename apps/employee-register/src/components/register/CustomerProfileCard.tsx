@@ -19,24 +19,9 @@ export interface CustomerProfileCardProps {
 
 function Detail({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div style={{ minWidth: 0 }}>
-      <div
-        className="er-text-sm"
-        style={{ color: '#94a3b8', marginBottom: '0.15rem', fontWeight: 800 }}
-      >
-        {label}
-      </div>
-      <div
-        className="er-text-md"
-        style={{
-          fontWeight: 900,
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {value}
-      </div>
+    <div className="u-min-w-0">
+      <div className="er-text-sm er-text-muted u-fw-800 er-details-label">{label}</div>
+      <div className="er-text-md u-fw-900 u-truncate">{value}</div>
     </div>
   );
 }
@@ -74,32 +59,17 @@ export function CustomerProfileCard(props: CustomerProfileCardProps) {
         : '—';
 
   return (
-    <div className="cs-liquid-card" style={{ padding: '0.9rem' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
-          alignItems: 'baseline',
-        }}
-      >
-        <div style={{ fontWeight: 950, fontSize: '1rem' }}>Customer Profile</div>
+    <div className="cs-liquid-card er-profile-card">
+      <div className="er-profile-header">
+        <div className="er-profile-title">Customer Profile</div>
         {props.checkinStage ? (
-          <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900 }}>
+          <div className="er-text-sm er-text-muted u-fw-900">
             Check-in Stage: {props.checkinStage.number} — {props.checkinStage.label}
           </div>
         ) : null}
       </div>
 
-      <div
-        style={{
-          marginTop: '0.6rem',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-          gap: '0.65rem 0.9rem',
-          alignItems: 'start',
-        }}
-      >
+      <div className="er-profile-grid">
         <Detail label="Name" value={props.name || '—'} />
         <Detail label="Preferred Language" value={languageLabel} />
         <Detail label="DOB (MM/DD)" value={props.dobMonthDay || '—'} />
@@ -108,32 +78,22 @@ export function CustomerProfileCard(props: CustomerProfileCardProps) {
         <Detail label="Last Visit (MM/YY)" value={formatMmYy(lastVisit)} />
       </div>
 
-      <div style={{ marginTop: '0.6rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div className="er-profile-marker">
         <input
           type="checkbox"
           checked={Boolean(props.hasEncryptedLookupMarker)}
           readOnly
           aria-label="Encrypted Lookup Marker"
         />
-        <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+        <div className="er-text-sm er-text-muted u-fw-800">
           Encrypted Lookup Marker (DL hash)
         </div>
       </div>
 
       {props.waitlistDesiredTier && props.waitlistBackupType ? (
-        <div
-          className="cs-liquid-card"
-          style={{
-            marginTop: '0.75rem',
-            padding: '0.75rem',
-            background: '#fef3c7',
-            border: '2px solid #f59e0b',
-            borderRadius: '10px',
-            color: '#92400e',
-          }}
-        >
-          <div style={{ fontWeight: 900, marginBottom: '0.35rem' }}>Customer Waitlisted</div>
-          <div className="er-text-sm" style={{ fontWeight: 800 }}>
+        <div className="cs-liquid-card er-waitlist-card">
+          <div className="er-waitlist-title">Customer Waitlisted</div>
+          <div className="er-text-sm u-fw-800">
             Requested <strong>{props.waitlistDesiredTier}</strong>; backup{' '}
             <strong>{props.waitlistBackupType}</strong>.
           </div>
@@ -141,9 +101,7 @@ export function CustomerProfileCard(props: CustomerProfileCardProps) {
       ) : null}
 
       {props.footer ? (
-        <div style={{ marginTop: '0.85rem', display: 'flex', justifyContent: 'center' }}>
-          {props.footer}
-        </div>
+        <div className="er-profile-footer">{props.footer}</div>
       ) : null}
     </div>
   );

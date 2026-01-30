@@ -103,8 +103,8 @@ export function TransactionCompleteModal({
 
         {agreementPending && (
           <div className="er-txn-complete-modal__notice er-surface">
-            <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>Agreement Pending</div>
-            <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+            <div className="er-txn-complete-modal__heading">Agreement Pending</div>
+            <div className="er-txn-complete-modal__meta">
               {agreementBypassPending
                 ? 'Digital agreement bypass requested; awaiting physical signature.'
                 : 'Waiting for customer to sign the agreement on their device.'}
@@ -114,24 +114,24 @@ export function TransactionCompleteModal({
 
         {selectionSummary && (
           <div className="er-txn-complete-modal__assignment er-surface">
-            <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>Selection Summary</div>
+            <div className="er-txn-complete-modal__heading">Selection Summary</div>
             {selectionSummary.membershipChoice && (
-              <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+              <div className="er-txn-complete-modal__meta">
                 Membership: {selectionSummary.membershipChoice}
               </div>
             )}
             {selectionSummary.rentalType && (
-              <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+              <div className="er-txn-complete-modal__meta">
                 Rental: {selectionSummary.rentalType}
               </div>
             )}
             {selectionSummary.waitlistDesiredType && (
-              <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+              <div className="er-txn-complete-modal__meta">
                 Waitlist desired: {selectionSummary.waitlistDesiredType}
               </div>
             )}
             {selectionSummary.waitlistBackupType && (
-              <div style={{ fontSize: '0.95rem', color: '#94a3b8', fontWeight: 700 }}>
+              <div className="er-txn-complete-modal__meta">
                 Waitlist backup: {selectionSummary.waitlistBackupType}
               </div>
             )}
@@ -139,13 +139,13 @@ export function TransactionCompleteModal({
         )}
 
         <div className="er-txn-complete-modal__assignment er-surface">
-          <div style={{ fontWeight: 900, fontSize: '1.2rem' }}>
+          <div className="er-txn-complete-modal__assignment-title">
             {hasAssignment
               ? `Assigned: ${assignedLabel} ${assignedNumber}`
               : `Assignment: ${assignedLabel === 'Resource' ? 'Pending' : `${assignedLabel} pending`}`}
           </div>
           {checkoutAt && (
-            <div style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 700 }}>
+            <div className="er-txn-complete-modal__assignment-meta">
               Checkout: {new Date(checkoutAt).toLocaleString()}
             </div>
           )}

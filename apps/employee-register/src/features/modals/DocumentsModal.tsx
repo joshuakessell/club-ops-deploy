@@ -22,28 +22,17 @@ export function DocumentsModal() {
       maxWidth="720px"
       maxHeight="70vh"
     >
-      <div style={{ display: 'grid', gap: '0.75rem' }}>
-        <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+      <div className="u-grid u-gap-12">
+        <div className="er-docs-session">
           Session:{' '}
-          <span style={{ fontFamily: 'monospace' }}>{currentSessionIdRef.current || '—'}</span>
+          <span className="u-font-mono">{currentSessionIdRef.current || '—'}</span>
         </div>
 
         {documentsError && (
-          <div
-            style={{
-              padding: '0.75rem',
-              background: 'rgba(239, 68, 68, 0.18)',
-              border: '1px solid rgba(239, 68, 68, 0.35)',
-              borderRadius: 12,
-              color: '#fecaca',
-              fontWeight: 700,
-            }}
-          >
-            {documentsError}
-          </div>
+          <div className="er-modal-error">{documentsError}</div>
         )}
 
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="u-flex u-gap-8 u-flex-wrap">
           <button
             className="cs-liquid-button cs-liquid-button--secondary"
             disabled={documentsLoading || !currentSessionIdRef.current}
@@ -58,11 +47,11 @@ export function DocumentsModal() {
         </div>
 
         {documentsForSession === null ? (
-          <div style={{ color: '#94a3b8' }}>No data loaded yet.</div>
+          <div className="er-text-sm er-text-muted">No data loaded yet.</div>
         ) : documentsForSession.length === 0 ? (
-          <div style={{ color: '#94a3b8' }}>No documents found for this session.</div>
+          <div className="er-text-sm er-text-muted">No documents found for this session.</div>
         ) : (
-          <div style={{ display: 'grid', gap: '0.5rem' }}>
+          <div className="u-grid u-gap-8">
             {documentsForSession.map(
               (doc: {
                 id: string;
@@ -74,33 +63,23 @@ export function DocumentsModal() {
               }) => (
                 <div
                   key={doc.id}
-                  className="er-surface"
-                  style={{ padding: '0.75rem', borderRadius: 12, display: 'grid', gap: '0.35rem' }}
+                  className="er-surface er-docs-item"
                 >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      gap: '0.75rem',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div style={{ fontWeight: 900 }}>
+                  <div className="er-docs-item-header">
+                    <div className="u-fw-900">
                       {doc.doc_type}{' '}
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#94a3b8' }}>
+                      <span className="u-font-mono u-fw-700 er-text-muted">
                         {doc.id}
                       </span>
                     </div>
-                    <div style={{ color: '#94a3b8' }}>
-                      {new Date(doc.created_at).toLocaleString()}
-                    </div>
+                    <div className="er-text-muted">{new Date(doc.created_at).toLocaleString()}</div>
                   </div>
-                  <div style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+                  <div className="er-docs-meta">
                     PDF stored: {doc.has_pdf ? 'yes' : 'no'} • Signature stored:{' '}
                     {doc.has_signature ? 'yes' : 'no'}
                     {doc.signature_hash_prefix ? ` • sig hash: ${doc.signature_hash_prefix}…` : ''}
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <div className="u-flex u-gap-8 u-flex-wrap">
                     <button
                       className="cs-liquid-button"
                       disabled={!doc.has_pdf}

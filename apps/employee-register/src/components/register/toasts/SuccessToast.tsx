@@ -9,57 +9,26 @@ export function SuccessToast({ message, onDismiss, title = 'Success' }: SuccessT
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0, 0, 0, 0.55)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 2000,
-        padding: '1rem',
-      }}
+      className="er-toast-overlay"
       role="dialog"
       aria-label={title}
       onClick={onDismiss}
     >
       <div
-        className="cs-liquid-card"
-        style={{
-          width: 'min(520px, 92vw)',
-          background: '#10b981',
-          color: 'white',
-          padding: '1rem',
-          borderRadius: '12px',
-          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.45)',
-        }}
+        className="cs-liquid-card er-toast-card er-toast-card--success"
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'start',
-            marginBottom: '0.5rem',
-            gap: '1rem',
-          }}
-        >
-          <div style={{ fontWeight: 900 }}>{title}</div>
+        <div className="er-toast-header">
+          <div className="er-toast-title">{title}</div>
           <button
             onClick={onDismiss}
-            className="cs-liquid-button cs-liquid-button--secondary"
-            style={{
-              fontSize: '1.25rem',
-              cursor: 'pointer',
-              padding: '0.2rem 0.55rem',
-              lineHeight: 1,
-            }}
+            className="cs-liquid-button cs-liquid-button--secondary er-toast-dismiss"
             aria-label="Dismiss"
           >
             ×
           </button>
         </div>
-        <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>{message}</div>
+        <div className="er-toast-message">{message}</div>
       </div>
     </div>
   );

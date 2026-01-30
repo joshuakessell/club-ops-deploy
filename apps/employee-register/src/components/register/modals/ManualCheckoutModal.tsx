@@ -240,17 +240,7 @@ export function ManualCheckoutModal({
         maxHeight="80vh"
       >
         {candidatesError && (
-          <div
-            style={{
-              marginBottom: '0.75rem',
-              padding: '0.75rem',
-              background: 'rgba(239, 68, 68, 0.18)',
-              border: '1px solid rgba(239, 68, 68, 0.35)',
-              borderRadius: 12,
-              color: '#fecaca',
-              fontWeight: 700,
-            }}
-          >
+          <div className="er-modal-error u-mb-12">
             {candidatesError}
           </div>
         )}
@@ -258,18 +248,11 @@ export function ManualCheckoutModal({
         {step === 'select' ? (
           <>
             {entryMode === 'direct-confirm' ? (
-              <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading checkout…</div>
+              <div className="u-p-12 er-text-muted">Loading checkout…</div>
             ) : (
               <>
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '0.75rem',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div className="cs-liquid-search" style={{ flex: 1, minWidth: 280 }}>
+                <div className="u-flex u-gap-12 u-items-center u-flex-wrap">
+                  <div className="cs-liquid-search er-search-flex">
                     <input
                       className="cs-liquid-input cs-liquid-search__input"
                       placeholder="Type room/locker number…"
@@ -317,14 +300,14 @@ export function ManualCheckoutModal({
                   </button>
                 </div>
 
-                <div style={{ marginTop: '1rem' }}>
-                  <div style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Suggested</div>
+                <div className="u-mt-16">
+                  <div className="u-fw-800 u-mb-8">Suggested</div>
                   {loadingCandidates ? (
-                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading candidates…</div>
+                    <div className="u-p-12 er-text-muted">Loading candidates…</div>
                   ) : candidates.length === 0 ? (
-                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No candidates</div>
+                    <div className="u-p-12 er-text-muted">No candidates</div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div className="u-flex u-flex-col u-gap-8">
                       {candidates.map((c) => {
                         const selected = selectedOccupancyIds.includes(c.occupancyId);
                         const scheduled = toDate(c.scheduledCheckoutAt);
@@ -348,44 +331,25 @@ export function ManualCheckoutModal({
                                 return [...prev, c.occupancyId];
                               });
                             }}
-                            style={{
-                              justifyContent: 'space-between',
-                              padding: '0.75rem',
-                              borderColor: c.isOverdue ? 'rgba(239, 68, 68, 0.65)' : undefined,
-                              background: selected
-                                ? undefined
-                                : c.isOverdue
-                                  ? 'rgba(239, 68, 68, 0.08)'
-                                  : undefined,
-                            }}
+                            className={[
+                              'cs-liquid-button',
+                              selected
+                                ? 'cs-liquid-button--selected'
+                                : 'cs-liquid-button--secondary',
+                              'er-checkout-candidate',
+                              !selected && c.isOverdue ? 'er-checkout-candidate--overdue' : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' ')}
                           >
-                            <div
-                              style={{
-                                display: 'flex',
-                                width: '100%',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '1rem',
-                              }}
-                            >
-                              <div
-                                style={{
-                                  fontWeight: 900,
-                                  minWidth: 0,
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
+                            <div className="er-checkout-candidate-row">
+                              <div className="er-checkout-candidate-label">
                                 {c.resourceType === 'ROOM' ? 'Room' : 'Locker'} {c.number} -{' '}
                                 {c.customerName} - {formatClockTime(scheduled)}
                               </div>
                               <div
-                                style={{
-                                  fontWeight: 900,
-                                  whiteSpace: 'nowrap',
-                                  color: delta.color,
-                                }}
+                                className="u-fw-900 u-truncate"
+                                style={{ color: delta.color }}
                               >
                                 {delta.label}
                               </div>
@@ -401,59 +365,50 @@ export function ManualCheckoutModal({
           </>
         ) : (
           <>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: '0.75rem',
-                  alignItems: 'baseline',
-                }}
-              >
-                <div style={{ fontWeight: 900, fontSize: '1.15rem' }}>Confirm checkout</div>
-                <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 900 }}>
+            <div className="u-flex u-flex-col u-gap-12">
+              <div className="u-flex u-justify-between u-items-baseline u-gap-12">
+                <div className="u-fw-900 er-text-lg">Confirm checkout</div>
+                <div className="er-text-sm er-text-muted u-fw-900">
                   {confirmIndex + 1} of {confirmQueue.length || 1}
                 </div>
               </div>
               {confirmCurrent && (
-                <div className="er-surface" style={{ padding: '1rem', borderRadius: 12 }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="er-surface er-surface-card-lg">
+                  <div className="er-grid-2col">
                     <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Customer</div>
-                      <div style={{ fontWeight: 800 }}>{confirmCurrent.customerName}</div>
+                      <div className="er-text-sm er-text-muted">Customer</div>
+                      <div className="u-fw-800">{confirmCurrent.customerName}</div>
                     </div>
                     <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Resource</div>
-                      <div style={{ fontWeight: 800 }}>
+                      <div className="er-text-sm er-text-muted">Resource</div>
+                      <div className="u-fw-800">
                         {confirmCurrent.resourceType === 'ROOM' ? 'Room' : 'Locker'}{' '}
                         {confirmCurrent.number}
                       </div>
                     </div>
                     <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Check-in</div>
-                      <div style={{ fontWeight: 800 }}>
+                      <div className="er-text-sm er-text-muted">Check-in</div>
+                      <div className="u-fw-800">
                         {toDate(confirmCurrent.checkinAt).toLocaleString()}
                       </div>
                     </div>
                     <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
-                        Scheduled checkout
-                      </div>
-                      <div style={{ fontWeight: 800 }}>
+                      <div className="er-text-sm er-text-muted">Scheduled checkout</div>
+                      <div className="u-fw-800">
                         {toDate(confirmCurrent.scheduledCheckoutAt).toLocaleString()}
                       </div>
                     </div>
                     <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Late</div>
-                      <div style={{ fontWeight: 800 }}>{confirmCurrent.lateMinutes} min</div>
+                      <div className="er-text-sm er-text-muted">Late</div>
+                      <div className="u-fw-800">{confirmCurrent.lateMinutes} min</div>
                     </div>
                     <div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Outcome</div>
+                      <div className="er-text-sm er-text-muted">Outcome</div>
                       <div
-                        style={{
-                          fontWeight: 900,
-                          color: confirmCurrent.banApplied ? '#f59e0b' : '#10b981',
-                        }}
+                        className={[
+                          'u-fw-900',
+                          confirmCurrent.banApplied ? 'u-text-warning' : 'u-text-success',
+                        ].join(' ')}
                       >
                         Fee ${confirmCurrent.fee.toFixed(2)}
                         {confirmCurrent.banApplied ? ' • 30-day ban' : ''}
@@ -463,9 +418,7 @@ export function ManualCheckoutModal({
                 </div>
               )}
 
-              <div
-                style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem' }}
-              >
+              <div className="u-flex u-justify-between u-mt-4">
                 <div />
                 <button
                   type="button"
@@ -488,10 +441,10 @@ export function ManualCheckoutModal({
         maxWidth="520px"
         closeOnOverlayClick={false}
       >
-        <div style={{ marginBottom: '1rem', color: '#94a3b8' }}>
+        <div className="er-text-muted u-mb-16">
           You’re on the confirmation step. Do you want to cancel checkout?
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+        <div className="u-flex u-justify-end u-gap-8">
           <button
             type="button"
             className="cs-liquid-button cs-liquid-button--secondary"

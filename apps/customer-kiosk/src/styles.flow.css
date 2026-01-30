@@ -1,0 +1,134 @@
+/* Guided step UI + arrows */
+.ck-glow-text {
+  animation: ckGlowPulse 1.2s ease-in-out infinite;
+}
+
+.ck-step-wrap {
+  position: relative;
+  /* Provide an internal gutter so side arrows are never clipped/hidden by the card. */
+  padding-left: 48px;
+  padding-right: 48px;
+}
+
+.ck-step-active {
+  animation: ckCardPulse 1.15s ease-in-out infinite;
+}
+
+.ck-step-helper-text {
+  position: absolute;
+  left: 50%;
+  top: -10px;
+  transform: translate(-50%, -100%);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ck-arrow {
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.98);
+  font-weight: 900;
+  z-index: 50;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.35))
+    drop-shadow(0 0 22px rgba(255, 255, 255, 0.18));
+}
+
+/* Inward arrows for active SelectionScreen card */
+.ck-arrow--in {
+  position: absolute;
+  top: 50%;
+  font-size: 44px;
+}
+
+.ck-arrow--left {
+  left: 10px;
+  --toward: 1;
+  animation: ckBounceInX 0.9s ease-in-out infinite;
+}
+
+.ck-arrow--right {
+  right: 10px;
+  --toward: -1;
+  animation: ckBounceInX 0.9s ease-in-out infinite;
+}
+
+/* Agreement scroll shell + down arrows */
+.ck-agreement-scroll-shell {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: stretch;
+  gap: 10px;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.ck-arrow-slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+/* The scroll region must take the remaining height above the fixed action row. */
+.ck-agreement-scroll-region {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.ck-arrow--down {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44px;
+}
+
+.ck-arrow--bounce-y {
+  animation: ckBounceDown 0.9s ease-in-out infinite;
+}
+
+.ck-arrow--bounce-x {
+  animation: ckBounceRight 0.9s ease-in-out infinite;
+}
+
+.ck-arrow--checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  margin-right: 0;
+}
+
+/* SelectionScreen step arrow: positioned next to the card header title */
+.ck-arrow--step {
+  position: absolute;
+  /* .ck-step-wrap has internal gutters; card starts after 48px padding. */
+  left: 14px;
+  top: 18px;
+  font-size: 34px;
+}
+
+.ck-agreement-helper-text {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  pointer-events: none;
+}
+
+.ck-agreement-helper-text--bottom {
+  margin-top: -0.25rem;
+}
+
+.ck-checkbox-helper-text {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  pointer-events: none;
+}

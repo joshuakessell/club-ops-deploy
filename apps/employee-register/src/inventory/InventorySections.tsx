@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo } from 'react';
 import { RoomStatus } from '@club-ops/shared';
 import type { AlertLevel, DetailedLocker, DetailedRoom } from './types';
 import {
@@ -10,16 +10,6 @@ import {
   groupRooms,
   sortGroupedRooms,
 } from './utils';
-
-const INVENTORY_COLUMN_HEADER_STYLE: CSSProperties = {
-  fontWeight: 700,
-  marginBottom: '0.5rem',
-  paddingBottom: '0.25rem',
-  borderBottom: '1px solid #334155',
-  minHeight: '28px',
-  display: 'flex',
-  alignItems: 'center',
-};
 
 interface InventorySectionProps {
   title: string;
@@ -85,12 +75,11 @@ export function InventorySection({
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div className="u-flex u-flex-col u-gap-12">
         {/* Occupied */}
-        <div style={{ minWidth: 0 }}>
+        <div className="u-min-w-0">
           <div
-            className="er-inv-column-title er-inv-column-title--occupied"
-            style={{ ...INVENTORY_COLUMN_HEADER_STYLE }}
+            className="er-inv-column-title er-inv-column-title--occupied er-inv-column-header"
           >
             🔒 Occupied
           </div>
@@ -108,13 +97,13 @@ export function InventorySection({
               />
             ))
           ) : (
-            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+            <div className="er-inv-empty">None</div>
           )}
         </div>
 
         {/* Dirty / Cleaning */}
-        <div style={{ minWidth: 0 }}>
-          <div className="er-inv-column-title" style={{ ...INVENTORY_COLUMN_HEADER_STYLE }}>
+        <div className="u-min-w-0">
+          <div className="er-inv-column-title er-inv-column-header">
             🧹 Dirty / Cleaning
           </div>
           {cleaning.map(({ room }) => (
@@ -138,12 +127,12 @@ export function InventorySection({
             />
           ))}
           {cleaning.length === 0 && dirty.length === 0 && (
-            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+            <div className="er-inv-empty">None</div>
           )}
         </div>
 
         {/* Available */}
-        <div style={{ minWidth: 0 }}>
+        <div className="u-min-w-0">
           <div className="er-inv-column-title er-inv-column-title--available">✓ Available</div>
           {availableForDisplay.length > 0 ? (
             availableForDisplay.map(({ room, isWaitlistMatch }) => (
@@ -163,7 +152,7 @@ export function InventorySection({
               />
             ))
           ) : (
-            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+            <div className="er-inv-empty">None</div>
           )}
         </div>
       </div>
@@ -231,62 +220,31 @@ function RoomItem({
           <div className="er-inv-occupied-checkout">
             <div className="er-inv-occupied-time">{checkoutTime ?? '—'}</div>
             <div
-              className="er-inv-occupied-duration"
-              style={{
-                color: duration?.isOverdue ? '#ef4444' : 'rgba(148, 163, 184, 0.95)',
-              }}
+              className={`er-inv-occupied-duration ${
+                duration?.isOverdue ? 'er-inv-duration--late' : 'er-inv-duration'
+              }`}
             >
               {duration ? (duration.isOverdue ? `Late ${duration.label}` : duration.label) : '—'}
             </div>
           </div>
         </div>
       ) : (
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '0.75rem',
-          }}
-        >
-          <div style={{ minWidth: 0, overflow: 'hidden' }}>
-            <div
-              className="er-text-lg"
-              style={{
-                fontWeight: 800,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {room.number}
-            </div>
+        <div className="u-flex u-justify-between u-items-center u-gap-12">
+          <div className="u-min-w-0 u-overflow-hidden">
+            <div className="er-text-lg u-fw-800 u-truncate">{room.number}</div>
             {!isCleaning && !isDirty && isWaitlistMatch && (
-              <div
-                className="er-text-sm"
-                style={{ color: '#f59e0b', marginTop: '0.25rem', fontWeight: 800 }}
-              >
+              <div className="er-text-sm er-inv-status er-inv-status--warning">
                 Upgrade Request
               </div>
             )}
             {isCleaning && (
-              <div
-                className="er-text-sm"
-                style={{ color: '#94a3b8', marginTop: '0.25rem', fontWeight: 800 }}
-              >
-                Cleaning
-              </div>
+              <div className="er-text-sm er-inv-status er-inv-status--muted">Cleaning</div>
             )}
             {!isCleaning && isDirty && (
-              <div
-                className="er-text-sm"
-                style={{ color: '#ef4444', marginTop: '0.25rem', fontWeight: 900 }}
-              >
-                Dirty
-              </div>
+              <div className="er-text-sm er-inv-status er-inv-status--danger">Dirty</div>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div className="u-flex u-items-center u-gap-12">
             {isSelected && <span className="er-text-xl">✓</span>}
           </div>
         </div>
@@ -368,11 +326,10 @@ export function LockerSection({
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        <div style={{ minWidth: 0 }}>
+      <div className="u-flex u-flex-col u-gap-12">
+        <div className="u-min-w-0">
           <div
-            className="er-inv-column-title er-inv-column-title--occupied"
-            style={{ ...INVENTORY_COLUMN_HEADER_STYLE }}
+            className="er-inv-column-title er-inv-column-title--occupied er-inv-column-header"
           >
             🔒 Occupied
           </div>
@@ -409,10 +366,9 @@ export function LockerSection({
                     <div className="er-inv-occupied-checkout">
                       <div className="er-inv-occupied-time">{checkoutTime ?? '—'}</div>
                       <div
-                        className="er-inv-occupied-duration"
-                        style={{
-                          color: duration?.isOverdue ? '#ef4444' : 'rgba(148, 163, 184, 0.95)',
-                        }}
+                        className={`er-inv-occupied-duration ${
+                          duration?.isOverdue ? 'er-inv-duration--late' : 'er-inv-duration'
+                        }`}
                       >
                         {duration
                           ? duration.isOverdue
@@ -426,51 +382,42 @@ export function LockerSection({
               );
             })
           ) : (
-            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+            <div className="er-inv-empty">None</div>
           )}
         </div>
 
-        <div style={{ minWidth: 0 }}>
+        <div className="u-min-w-0">
           <div className="er-inv-column-title er-inv-column-title--available">✓ Available</div>
           {availableLockers.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.5rem' }}>
+            <div className="er-inv-locker-grid">
               {availableLockers.map((locker) => {
                 const isSelected = selectedItem?.type === 'locker' && selectedItem.id === locker.id;
                 const isHighlighted = highlightId === locker.id;
+                const isDisabled = disableSelection || occupancyLookupMode;
                 return (
                   <div
                     key={locker.id}
                     onClick={() => {
-                      if (disableSelection || occupancyLookupMode) return;
+                      if (isDisabled) return;
                       onSelectLocker(locker);
                     }}
-                    style={{
-                      padding: '0.5rem',
-                      background: isSelected ? '#3b82f6' : '#0f172a',
-                      border: isSelected
-                        ? '2px solid #60a5fa'
-                        : isHighlighted
-                          ? '2px solid rgba(255,255,255,0.55)'
-                          : '1px solid #475569',
-                      borderRadius: '4px',
-                      textAlign: 'center',
-                      fontSize: '0.875rem',
-                      cursor: disableSelection || occupancyLookupMode ? 'default' : 'pointer',
-                      minHeight: '44px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column',
-                    }}
+                    className={[
+                      'er-inv-locker-item',
+                      isSelected ? 'er-inv-locker-item--selected' : '',
+                      !isSelected && isHighlighted ? 'er-inv-locker-item--highlight' : '',
+                      isDisabled ? 'er-inv-locker-item--disabled' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                   >
-                    <div style={{ fontWeight: 600 }}>{locker.number}</div>
-                    {isSelected && <div style={{ fontSize: '1rem', marginTop: '0.25rem' }}>✓</div>}
+                    <div className="u-fw-600">{locker.number}</div>
+                    {isSelected && <div className="er-text-md u-mt-4">✓</div>}
                   </div>
                 );
               })}
             </div>
           ) : (
-            <div style={{ padding: '0.75rem', color: '#94a3b8', textAlign: 'center' }}>None</div>
+            <div className="er-inv-empty">None</div>
           )}
         </div>
       </div>

@@ -1,0 +1,362 @@
+.er-details-card {
+  padding: 0.9rem;
+}
+
+.er-details-title {
+  font-weight: 950;
+  font-size: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.er-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.65rem 0.9rem;
+  align-items: start;
+}
+
+.er-details-label {
+  margin-bottom: 0.15rem;
+}
+
+.er-profile-card {
+  padding: 0.9rem;
+}
+
+.er-profile-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+.er-profile-title {
+  font-weight: 950;
+  font-size: 1rem;
+}
+
+.er-profile-grid {
+  margin-top: 0.6rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.65rem 0.9rem;
+  align-items: start;
+}
+
+.er-profile-marker {
+  margin-top: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.er-waitlist-card {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  border-radius: 10px;
+  color: #92400e;
+}
+
+.er-waitlist-title {
+  font-weight: 900;
+  margin-bottom: 0.35rem;
+}
+
+.er-profile-footer {
+  margin-top: 0.85rem;
+  display: flex;
+  justify-content: center;
+}
+
+.er-waitlist-popover {
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.er-waitlist-popover-card {
+  position: absolute;
+  right: 0;
+  z-index: 1500;
+  width: 320px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.er-waitlist-popover-header {
+  padding: 0.75rem;
+  border-bottom: 1px solid #1f2937;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.er-waitlist-popover-title {
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.er-waitlist-popover-close {
+  font-size: 0.9rem;
+  padding: 0.25rem 0.6rem;
+}
+
+.er-waitlist-popover-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.er-waitlist-popover-list--disabled {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.er-waitlist-empty {
+  padding: 0.75rem;
+  color: var(--er-text-muted);
+}
+
+.er-waitlist-row {
+  padding: 0.75rem;
+  border-bottom: 1px solid #1f2937;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.er-waitlist-item-title {
+  font-weight: 600;
+}
+
+.er-waitlist-item-subtitle {
+  font-size: 0.85rem;
+  color: var(--er-text-muted);
+}
+
+.er-waitlist-action {
+  padding: 0.4rem 0.55rem;
+  font-weight: 700;
+}
+
+.er-waitlist-more {
+  padding: 0.75rem;
+  border-top: 1px solid #1f2937;
+  color: #f59e0b;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.er-waitlist-disabled-reason {
+  padding: 0.65rem 0.75rem;
+  color: #f59e0b;
+  font-size: 0.85rem;
+  border-top: 1px solid #1f2937;
+}
+
+.er-checkout-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #1e293b;
+  border-bottom: 2px solid #3b82f6;
+  z-index: 1000;
+  padding: 1rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.er-checkout-banner-item {
+  padding: 1rem;
+  margin-bottom: 0.5rem;
+  background: #0f172a;
+  border: 2px solid #3b82f6;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.er-checkout-banner-item:hover {
+  background: #1e293b;
+}
+
+.er-checkout-banner-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.er-checkout-banner-title {
+  font-weight: 600;
+  font-size: 1.125rem;
+  margin-bottom: 0.25rem;
+}
+
+.er-checkout-banner-btn {
+  padding: 0.2rem 0.55rem;
+  min-height: unset;
+  font-weight: 900;
+}
+
+.er-checkout-banner-meta {
+  font-size: 0.875rem;
+  color: var(--er-text-muted);
+}
+
+.er-checkout-banner-meta--spaced {
+  margin-top: 0.25rem;
+}
+
+.er-checkout-banner-late {
+  color: #f59e0b;
+}
+
+.er-checkout-banner-fee {
+  font-size: 0.875rem;
+  color: #f59e0b;
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+.er-checkout-banner-claim {
+  padding: 0.5rem 1rem;
+  background: #3b82f6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.er-toast-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 1rem;
+}
+
+.er-toast-card {
+  width: min(520px, 92vw);
+  color: #fff;
+  padding: 1rem;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.er-toast-card--success {
+  background: #10b981;
+}
+
+.er-toast-card--danger {
+  background: #ef4444;
+}
+
+.er-toast-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 0.5rem;
+  gap: 1rem;
+}
+
+.er-toast-title {
+  font-weight: 900;
+}
+
+.er-toast-dismiss {
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.2rem 0.55rem;
+  line-height: 1;
+}
+
+.er-toast-message {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.er-bottom-toast-stack {
+  position: fixed;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 2200;
+  width: min(680px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.er-bottom-toast {
+  pointer-events: auto;
+  color: #fff;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.er-bottom-toast--info {
+  background: #111827;
+  border: 1px solid #334155;
+}
+
+.er-bottom-toast--warning {
+  background: #f59e0b;
+  border: 1px solid #f59e0b;
+}
+
+.er-bottom-toast-message {
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+.er-bottom-toast-dismiss {
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0.25rem 0.6rem;
+  line-height: 1;
+}
+
+.er-register-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: nowrap;
+  padding: 0.75rem 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.er-register-header__left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.er-register-header__badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.er-register-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.er-card-pad-14 {
+  padding: 0.85rem;
+}
+

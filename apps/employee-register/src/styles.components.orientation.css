@@ -1,0 +1,17 @@
+/* Landscape-only layout */
+@media (orientation: portrait) {
+  .register-sign-in-container {
+    display: none;
+  }
+
+  .register-sign-in-container::before {
+    content: 'Please rotate your device to landscape mode';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.5rem;
+    text-align: center;
+    z-index: 10000;
+  }
+}

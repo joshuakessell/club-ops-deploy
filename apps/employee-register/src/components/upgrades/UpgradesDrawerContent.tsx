@@ -49,36 +49,23 @@ export function UpgradesDrawerContent({
   const offered = waitlistEntries.filter((e) => e.status === 'OFFERED');
 
   return (
-    <div
-      className="er-surface"
-      style={{
-        padding: '1rem',
-        borderRadius: 8,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <div className="er-surface er-upgrades-drawer">
       <PanelHeader title="Upgrade Waitlist" spacing="sm" action={headerRightSlot} />
 
       <div
-        style={{
-          marginTop: '1rem',
-          flex: 1,
-          overflowY: 'auto',
-          display: waitlistEntries.length === 0 ? 'flex' : 'block',
-          alignItems: waitlistEntries.length === 0 ? 'center' : undefined,
-          justifyContent: waitlistEntries.length === 0 ? 'center' : undefined,
-        }}
+        className={[
+          'er-upgrades-body',
+          waitlistEntries.length === 0 ? 'er-upgrades-body--empty' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
       >
         {waitlistEntries.length === 0 ? (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ color: '#94a3b8', fontWeight: 800, fontSize: '1.05rem' }}>
-              No active waitlist entries
-            </div>
+          <div className="er-upgrades-empty">
+            <div className="er-upgrades-empty-text">No active waitlist entries</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div className="u-flex u-flex-col u-gap-16">
             {(
               [
                 ['OFFERED', offered],
@@ -90,18 +77,17 @@ export function UpgradesDrawerContent({
               return (
                 <section key={status}>
                   <h3
-                    style={{
-                      margin: 0,
-                      marginBottom: '0.5rem',
-                      fontSize: '1rem',
-                      fontWeight: 700,
-                      color: status === 'OFFERED' ? '#f59e0b' : '#94a3b8',
-                    }}
+                    className={[
+                      'er-upgrades-section-title',
+                      status === 'OFFERED'
+                        ? 'er-upgrades-section-title--offered'
+                        : 'er-upgrades-section-title--active',
+                    ].join(' ')}
                   >
                     {status === 'OFFERED' ? '⚠️ Offered' : '⏳ Active'} ({entries.length})
                   </h3>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <div className="er-upgrades-list">
                     {entries.map((entry) => {
                       const customerLabel = entry.customerName || entry.displayIdentifier;
                       const eligible = isEntryOfferEligible(
@@ -114,31 +100,13 @@ export function UpgradesDrawerContent({
                       return (
                         <div
                           key={entry.id}
-                          className="er-surface"
-                          style={{
-                            padding: '1rem',
-                            borderRadius: 8,
-                            border: '1px solid rgba(148, 163, 184, 0.18)',
-                          }}
+                          className="er-surface er-upgrades-card"
                         >
                           <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'start',
-                              gap: '0.75rem',
-                              marginBottom: '0.75rem',
-                            }}
+                            className="er-upgrades-card-header"
                           >
                             <div>
-                              <div
-                                style={{
-                                  fontWeight: 700,
-                                  marginBottom: '0.25rem',
-                                  display: 'flex',
-                                  gap: '0.5rem',
-                                }}
-                              >
+                              <div className="er-upgrades-card-title">
                                 <button
                                   type="button"
                                   disabled={!canOpenCustomer}
@@ -146,14 +114,14 @@ export function UpgradesDrawerContent({
                                     if (!entry.customerId) return;
                                     onOpenCustomerAccount?.(entry.customerId, customerLabel);
                                   }}
-                                  className="cs-liquid-button cs-liquid-button--secondary"
-                                  style={{
-                                    padding: '0.3rem 0.6rem',
-                                    minHeight: 'unset',
-                                    fontSize: '0.85rem',
-                                    fontWeight: 800,
-                                    opacity: canOpenCustomer ? 1 : 0.6,
-                                  }}
+                                  className={[
+                                    'cs-liquid-button',
+                                    'cs-liquid-button--secondary',
+                                    'er-upgrades-customer-btn',
+                                    !canOpenCustomer ? 'er-upgrades-customer-btn--disabled' : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' ')}
                                   title={
                                     canOpenCustomer
                                       ? 'Open Customer Account'
@@ -162,12 +130,12 @@ export function UpgradesDrawerContent({
                                 >
                                   {customerLabel}
                                 </button>
-                                <span aria-hidden="true" style={{ color: '#94a3b8' }}>
+                                <span aria-hidden="true" className="er-text-muted">
                                   →
                                 </span>
                                 <span>{entry.desiredTier}</span>
                               </div>
-                              <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+                              <div className="er-upgrades-meta">
                                 Assigned: {entry.displayIdentifier} • Backup: {entry.backupTier} •
                                 Current: {entry.currentRentalType} • Check-in:{' '}
                                 {entry.checkinAt
@@ -189,39 +157,25 @@ export function UpgradesDrawerContent({
                                 eligible
                                   ? 'cs-liquid-button--success'
                                   : 'cs-liquid-button--secondary',
+                                'er-upgrades-action-btn',
                               ].join(' ')}
                               disabled={!eligible || isSubmitting}
-                              style={{
-                                padding: '0.5rem 1rem',
-                                fontSize: '0.875rem',
-                                fontWeight: 700,
-                              }}
                             >
                               Offer Upgrade
                             </button>
                           ) : (
-                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <div className="er-upgrades-actions">
                               <button
                                 onClick={() => onStartPayment(entry)}
-                                className="cs-liquid-button"
                                 disabled={!eligible || isSubmitting}
-                                style={{
-                                  padding: '0.5rem 0.9rem',
-                                  fontSize: '0.875rem',
-                                  fontWeight: 700,
-                                }}
+                                className="cs-liquid-button er-upgrades-action-btn"
                               >
                                 Start Payment
                               </button>
                               <button
                                 onClick={() => onCancelOffer(entry.id)}
-                                className="cs-liquid-button cs-liquid-button--danger"
                                 disabled={isSubmitting}
-                                style={{
-                                  padding: '0.5rem 0.9rem',
-                                  fontSize: '0.875rem',
-                                  fontWeight: 700,
-                                }}
+                                className="cs-liquid-button cs-liquid-button--danger er-upgrades-action-btn"
                               >
                                 Cancel Offer
                               </button>

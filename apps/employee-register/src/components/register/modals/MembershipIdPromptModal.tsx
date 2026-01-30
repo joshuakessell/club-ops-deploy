@@ -29,14 +29,14 @@ export function MembershipIdPromptModal({
 }: MembershipIdPromptModalProps) {
   return (
     <ModalFrame isOpen={isOpen} title="Enter Membership ID" onClose={onNotNow} maxWidth="520px">
-      <p style={{ marginBottom: '1rem', color: '#94a3b8' }}>
+      <p className="er-text-muted u-mb-16">
         Payment was accepted for a 6 month membership. Scan or type the membership number from the
         physical card, then press Enter.
       </p>
 
       {membershipPurchaseIntent === 'RENEW' && membershipNumber ? (
-        <div style={{ marginBottom: '0.75rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+        <div className="u-mb-12">
+          <div className="u-flex u-gap-8 u-mb-12">
             <button
               onClick={() => onModeChange('KEEP_EXISTING')}
               disabled={isSubmitting}
@@ -44,15 +44,11 @@ export function MembershipIdPromptModal({
                 'cs-liquid-button',
                 'cs-liquid-button--secondary',
                 membershipIdMode === 'KEEP_EXISTING' ? 'cs-liquid-button--selected' : '',
+                'er-modal-button--compact',
+                'u-flex-1',
               ]
                 .filter(Boolean)
                 .join(' ')}
-              style={{
-                flex: 1,
-                padding: '0.6rem',
-                fontWeight: 700,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              }}
             >
               Keep Same ID
             </button>
@@ -63,32 +59,18 @@ export function MembershipIdPromptModal({
                 'cs-liquid-button',
                 'cs-liquid-button--secondary',
                 membershipIdMode === 'ENTER_NEW' ? 'cs-liquid-button--selected' : '',
+                'er-modal-button--compact',
+                'u-flex-1',
               ]
                 .filter(Boolean)
                 .join(' ')}
-              style={{
-                flex: 1,
-                padding: '0.6rem',
-                fontWeight: 700,
-                cursor: isSubmitting ? 'not-allowed' : 'pointer',
-              }}
             >
               Enter New ID
             </button>
           </div>
 
           {membershipIdMode === 'KEEP_EXISTING' && (
-            <div
-              className="cs-liquid-card"
-              style={{
-                padding: '0.75rem',
-                color: 'white',
-                fontSize: '1.25rem',
-                letterSpacing: '0.04em',
-              }}
-            >
-              {membershipNumber}
-            </div>
+            <div className="cs-liquid-card er-membership-number">{membershipNumber}</div>
           )}
         </div>
       ) : null}
@@ -114,20 +96,13 @@ export function MembershipIdPromptModal({
           }}
           placeholder="Membership ID"
           disabled={isSubmitting}
-          className="cs-liquid-input"
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            fontSize: '1.25rem',
-            letterSpacing: '0.04em',
-            marginBottom: '0.75rem',
-          }}
+          className="cs-liquid-input er-membership-input"
         />
       )}
 
-      {error && <div style={{ color: '#fecaca', marginBottom: '0.75rem' }}>{error}</div>}
+      {error && <div className="er-modal-error-text">{error}</div>}
 
-      <div style={{ display: 'flex', gap: '0.75rem' }}>
+      <div className="u-flex u-gap-12">
         <button
           onClick={() =>
             onConfirm(
@@ -142,26 +117,14 @@ export function MembershipIdPromptModal({
               ? !membershipNumber
               : !membershipIdInput.trim())
           }
-          className="cs-liquid-button"
-          style={{
-            flex: 1,
-            padding: '0.75rem',
-            fontSize: '1rem',
-            fontWeight: 700,
-          }}
+          className="cs-liquid-button er-modal-button er-modal-button--bold u-flex-1"
         >
           {isSubmitting ? 'Saving…' : 'Save Membership'}
         </button>
         <button
           onClick={onNotNow}
           disabled={isSubmitting}
-          className="cs-liquid-button cs-liquid-button--secondary"
-          style={{
-            padding: '0.75rem 1rem',
-            fontSize: '1rem',
-            fontWeight: 600,
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-          }}
+          className="cs-liquid-button cs-liquid-button--secondary er-modal-button"
         >
           Not now
         </button>

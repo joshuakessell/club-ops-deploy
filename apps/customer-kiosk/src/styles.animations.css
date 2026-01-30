@@ -1,0 +1,131 @@
+/* Animation keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes logoFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ckGlowPulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    text-shadow:
+      0 0 0 rgba(255, 255, 255, 0),
+      0 0 0 rgba(255, 255, 255, 0);
+  }
+  50% {
+    opacity: 1;
+    text-shadow:
+      0 0 10px rgba(255, 255, 255, 0.55),
+      0 0 18px rgba(255, 255, 255, 0.35);
+  }
+}
+
+@keyframes ckBounceInX {
+  0%,
+  100% {
+    transform: translateY(-50%) translateX(calc(var(--toward, 1) * -6px));
+  }
+  50% {
+    transform: translateY(-50%) translateX(calc(var(--toward, 1) * 10px));
+  }
+}
+
+@keyframes ckBounceDown {
+  0%,
+  100% {
+    transform: translateY(-6px);
+  }
+  50% {
+    transform: translateY(10px);
+  }
+}
+
+@keyframes ckBounceRight {
+  0%,
+  100% {
+    transform: translateX(-6px);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+}
+
+@keyframes ckCardPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(255, 255, 255, 0),
+      0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(255, 255, 255, 0.25),
+      0 0 22px rgba(255, 255, 255, 0.22),
+      0 18px 40px rgba(0, 0, 0, 0.45);
+  }
+}
+
+@keyframes ckDotPulse {
+  0%,
+  20% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes bounceDown {
+  0%,
+  100% {
+    transform: translateY(-50%) translateY(0);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translateY(-50%) translateY(10px);
+    opacity: 1;
+  }
+}

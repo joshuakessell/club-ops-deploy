@@ -22,21 +22,14 @@ export function CustomerConfirmationPendingModal({
       onClose={() => {}}
       closeOnOverlayClick={false}
     >
-      <p style={{ marginBottom: '1.5rem', lineHeight: '1.6' }}>
+      <p className="er-modal-copy">
         Staff selected a different option: {data.selected} {data.number}. Waiting for customer to
         accept or decline on their device.
       </p>
       {onCancel && (
         <button
           onClick={onCancel}
-          className="cs-liquid-button cs-liquid-button--danger"
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            fontSize: '1rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-          }}
+          className="cs-liquid-button cs-liquid-button--danger er-modal-action-btn"
         >
           Cancel
         </button>

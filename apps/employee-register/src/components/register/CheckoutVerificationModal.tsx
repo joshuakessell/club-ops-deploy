@@ -85,60 +85,34 @@ export function CheckoutVerificationModal({
   const canOpenCustomer = Boolean(request.customerId && onOpenCustomerAccount);
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.8)',
-        zIndex: 2000,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2rem',
-      }}
-    >
+    <div className="er-checkout-verify-overlay">
       <div
-        className="cs-liquid-card"
-        style={{
-          padding: '2rem',
-          maxWidth: '600px',
-          width: '100%',
-          maxHeight: '80vh',
-          overflowY: 'auto',
-        }}
+        className="cs-liquid-card er-checkout-verify-card"
         ref={modalRef}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
       >
-        <h2 style={{ marginBottom: '1.5rem', fontSize: '1.5rem', fontWeight: 600 }}>
-          Checkout Verification
-        </h2>
+        <h2 className="er-checkout-verify-title">Checkout Verification</h2>
 
-        <div style={{ marginBottom: '1.5rem' }}>
+        <div className="er-checkout-verify-section">
           {/* Display order (required):
               1) Room/Locker Number
               2) Customer name
               3) Expected Check Out time
               4) Delta (remaining/late) with 15-min floor rounding
           */}
-          <div
-            className="cs-liquid-card glass-effect"
-            style={{ padding: '1rem', marginBottom: '1rem' }}
-          >
-            <div style={{ fontWeight: 900, fontSize: '2rem', letterSpacing: '0.01em' }}>
+          <div className="cs-liquid-card glass-effect er-checkout-verify-info">
+            <div className="er-checkout-verify-number">
               {numberLabel} {number}
             </div>
-            <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: 800 }}>
+            <div className="er-checkout-verify-customer">
               {canOpenCustomer ? (
                 <button
                   type="button"
                   className="cs-liquid-button cs-liquid-button--secondary"
                   onClick={() => onOpenCustomerAccount?.(request.customerId!, request.customerName)}
-                  style={{ padding: '0.25rem 0.65rem', minHeight: 'unset', fontWeight: 900 }}
+                  className="cs-liquid-button cs-liquid-button--secondary er-compact-pill"
                   title="Open Customer Account"
                 >
                   {request.customerName}
@@ -148,7 +122,7 @@ export function CheckoutVerificationModal({
                 <>
                   {request.customerName}
                   {request.membershipNumber && (
-                    <span style={{ fontWeight: 700, color: '#94a3b8' }}>
+                    <span className="er-checkout-verify-customer-muted">
                       {' '}
                       ({request.membershipNumber})
                     </span>
@@ -156,23 +130,24 @@ export function CheckoutVerificationModal({
                 </>
               )}
             </div>
-            <div style={{ marginTop: '0.5rem', color: '#cbd5e1', fontWeight: 700 }}>
+            <div className="er-checkout-verify-expected">
               Expected Check Out:{' '}
-              <span style={{ fontWeight: 800 }}>{scheduled.toLocaleString()}</span>
+              <span className="er-checkout-verify-expected-time">{scheduled.toLocaleString()}</span>
             </div>
             <div
-              style={{
-                marginTop: '0.35rem',
-                fontWeight: 900,
-                color: delta.status === 'late' ? '#f59e0b' : '#10b981',
-              }}
+              className={[
+                'er-checkout-verify-delta',
+                delta.status === 'late'
+                  ? 'er-checkout-verify-delta--late'
+                  : 'er-checkout-verify-delta--ontime',
+              ].join(' ')}
             >
               {deltaLabel}
             </div>
           </div>
 
           {request.lateFeeAmount > 0 && (
-            <div style={{ marginBottom: '0.5rem', color: '#f59e0b', fontWeight: 600 }}>
+            <div className="er-checkout-verify-fee">
               <strong>Late Fee:</strong> ${request.lateFeeAmount.toFixed(2)}
               {request.banApplied && ' • 30-day ban applied'}
             </div>
@@ -180,41 +155,25 @@ export function CheckoutVerificationModal({
         </div>
 
         <div
-          className="cs-liquid-card"
-          style={{
-            marginBottom: '1.5rem',
-            padding: '1rem',
-            borderRadius: '8px',
-          }}
+          className="cs-liquid-card er-checkout-verify-checklist"
         >
-          <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>Customer Checklist:</div>
-          <div style={{ fontSize: '0.875rem', color: '#94a3b8' }}>
+          <div className="er-checkout-verify-checklist-title">Customer Checklist:</div>
+          <div className="er-checkout-verify-checklist-subtitle">
             (Items customer marked as returned)
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1rem',
-            marginBottom: '1.5rem',
-          }}
-        >
+        <div className="u-flex u-flex-col u-gap-16 u-mb-24">
           <button
             onClick={onConfirmItems}
             disabled={checkoutItemsConfirmed}
             className={[
               'cs-liquid-button',
               checkoutItemsConfirmed ? 'cs-liquid-button--selected' : '',
+              'er-modal-button',
             ]
               .filter(Boolean)
               .join(' ')}
-            style={{
-              padding: '0.75rem',
-              cursor: checkoutItemsConfirmed ? 'default' : 'pointer',
-              fontWeight: 600,
-            }}
           >
             {checkoutItemsConfirmed ? '✓ Items Confirmed' : 'Confirm Items Returned'}
           </button>
@@ -223,14 +182,13 @@ export function CheckoutVerificationModal({
             <button
               onClick={onMarkFeePaid}
               disabled={checkoutFeePaid}
-              className={['cs-liquid-button', checkoutFeePaid ? 'cs-liquid-button--selected' : '']
+              className={[
+                'cs-liquid-button',
+                checkoutFeePaid ? 'cs-liquid-button--selected' : '',
+                'er-modal-button',
+              ]
                 .filter(Boolean)
                 .join(' ')}
-              style={{
-                padding: '0.75rem',
-                cursor: checkoutFeePaid ? 'default' : 'pointer',
-                fontWeight: 600,
-              }}
             >
               {checkoutFeePaid ? '✓ Fee Marked Paid' : 'Mark Late Fee Paid'}
             </button>
@@ -243,15 +201,7 @@ export function CheckoutVerificationModal({
               (request.lateFeeAmount > 0 && !checkoutFeePaid) ||
               isSubmitting
             }
-            className="cs-liquid-button"
-            style={{
-              padding: '0.75rem',
-              cursor:
-                !checkoutItemsConfirmed || (request.lateFeeAmount > 0 && !checkoutFeePaid)
-                  ? 'not-allowed'
-                  : 'pointer',
-              fontWeight: 600,
-            }}
+            className="cs-liquid-button er-modal-button"
           >
             {isSubmitting ? 'Processing...' : 'Complete Checkout'}
           </button>
@@ -259,12 +209,7 @@ export function CheckoutVerificationModal({
 
         <button
           onClick={onCancel}
-          className="cs-liquid-button cs-liquid-button--danger"
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            cursor: 'pointer',
-          }}
+          className="cs-liquid-button cs-liquid-button--danger er-modal-action-btn"
         >
           Cancel
         </button>

@@ -24,23 +24,12 @@ export function RegisterHeader({
   onCloseOut,
 }: RegisterHeaderProps) {
   return (
-    <header
-      className="header er-surface-strong"
-      style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        gap: '1rem',
-        flexWrap: 'nowrap',
-        padding: '0.75rem 1.5rem',
-        marginBottom: '1.5rem',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-        <h1 className="er-title" style={{ margin: 0 }}>
+    <header className="header er-surface-strong er-register-header">
+      <div className="er-register-header__left">
+        <h1 className="er-title u-mt-0 u-mb-0">
           Employee Register
         </h1>
-        <div className="status-badges" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="status-badges er-register-header__badges">
           <span
             className={`cs-badge ${health?.status === 'ok' ? 'cs-badge--success' : 'cs-badge--error'}`}
           >
@@ -56,7 +45,7 @@ export function RegisterHeader({
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginLeft: 'auto' }}>
+      <div className="er-register-header__actions">
         <button
           onClick={() => void onSignOut()}
           className="cs-liquid-button cs-liquid-button--secondary er-header-action-btn"

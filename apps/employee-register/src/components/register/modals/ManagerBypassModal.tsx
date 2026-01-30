@@ -26,19 +26,12 @@ export function ManagerBypassModal({
 }: ManagerBypassModalProps) {
   return (
     <ModalFrame isOpen={isOpen} title="Manager Bypass" onClose={onCancel}>
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-          Select Manager
-        </label>
+      <div className="u-mb-16">
+        <label className="er-modal-label">Select Manager</label>
         <select
           value={managerId}
           onChange={(e) => onChangeManagerId(e.target.value)}
-          className="cs-liquid-input"
-          style={{
-            width: '100%',
-            padding: '0.75rem',
-            fontSize: '1rem',
-          }}
+          className="cs-liquid-input er-modal-select"
         >
           <option value="">Select a manager...</option>
           {managers.map((manager) => (
@@ -48,10 +41,8 @@ export function ManagerBypassModal({
           ))}
         </select>
       </div>
-      <div style={{ marginBottom: '1.5rem' }}>
-        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-          PIN
-        </label>
+      <div className="u-mb-24">
+        <label className="er-modal-label">PIN</label>
         <LiquidGlassPinInput
           length={6}
           value={managerPin}
@@ -67,28 +58,17 @@ export function ManagerBypassModal({
           displayAriaLabel="Manager PIN"
         />
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="u-flex u-gap-8">
         <button
           onClick={onBypass}
           disabled={isSubmitting || !managerId || managerPin.trim().length !== 6}
-          className="cs-liquid-button"
-          style={{
-            flex: 1,
-            padding: '0.75rem',
-            fontSize: '1rem',
-            fontWeight: 600,
-          }}
+          className="cs-liquid-button er-modal-button u-flex-1"
         >
           {isSubmitting ? 'Processing...' : 'Bypass'}
         </button>
         <button
           onClick={onCancel}
-          className="cs-liquid-button cs-liquid-button--danger"
-          style={{
-            flex: 1,
-            padding: '0.75rem',
-            cursor: 'pointer',
-          }}
+          className="cs-liquid-button cs-liquid-button--danger er-modal-button u-flex-1"
         >
           Cancel
         </button>

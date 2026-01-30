@@ -140,14 +140,7 @@ export function AccountPanel() {
   if (currentSessionId && customerName) {
     return (
       <PanelShell align="top" scroll="hidden">
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem',
-            minHeight: 0,
-          }}
-        >
+        <div className="er-account-stack">
           <PanelHeader title="Customer Account" spacing="none" />
           <CustomerProfileCard
             name={customerName}
@@ -164,14 +157,8 @@ export function AccountPanel() {
               checkinStage ? (
                 <button
                   type="button"
-                  className="cs-liquid-button cs-liquid-button--danger"
+                  className="cs-liquid-button cs-liquid-button--danger er-account-clear-btn"
                   onClick={() => void handleClearSession().then(() => selectHomeTab('scan'))}
-                  style={{
-                    width: '100%',
-                    maxWidth: 320,
-                    padding: '0.7rem',
-                    fontWeight: 900,
-                  }}
                 >
                   Clear Session
                 </button>

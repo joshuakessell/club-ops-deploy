@@ -29,7 +29,7 @@ export function SessionRoot({ children }: { children: ReactNode }) {
       {!registerSession ? (
         <div />
       ) : !session ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: '#fff' }}>Loading...</div>
+        <div className="u-p-32 u-text-center u-text-white">Loading...</div>
       ) : (
         children
       )}

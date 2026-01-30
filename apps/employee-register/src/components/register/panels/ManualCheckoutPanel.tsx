@@ -237,38 +237,18 @@ export function ManualCheckoutPanel({
       <PanelHeader title={title} spacing="none" />
 
       {candidatesError && (
-        <div
-          style={{
-            marginTop: '0.75rem',
-            padding: '0.75rem',
-            background: 'rgba(239, 68, 68, 0.18)',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            borderRadius: 12,
-            color: '#fecaca',
-            fontWeight: 700,
-          }}
-        >
+        <div className="er-modal-error u-mt-12">
           {candidatesError}
         </div>
       )}
 
       {showCancelWarning && (
-        <div
-          className="er-surface"
-          style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: 12 }}
-        >
-          <div style={{ fontWeight: 900, marginBottom: '0.5rem' }}>Cancel checkout?</div>
-          <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.75rem' }}>
+        <div className="er-surface er-surface-card u-mt-12">
+          <div className="u-fw-900 u-mb-8">Cancel checkout?</div>
+          <div className="er-text-sm er-text-muted u-mb-12">
             You are on the confirm step. Canceling will discard the current checkout confirmation.
           </div>
-          <div
-            style={{
-              display: 'flex',
-              gap: '0.75rem',
-              justifyContent: 'flex-end',
-              flexWrap: 'wrap',
-            }}
-          >
+          <div className="u-flex u-gap-12 u-justify-end u-flex-wrap">
             <button
               type="button"
               className="cs-liquid-button cs-liquid-button--secondary"
@@ -290,22 +270,15 @@ export function ManualCheckoutPanel({
         </div>
       )}
 
-      <div style={{ marginTop: '0.75rem' }}>
+      <div className="u-mt-12">
         {step === 'select' ? (
           <>
             {entryMode === 'direct-confirm' ? (
-              <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading checkout…</div>
+              <div className="u-p-12 er-text-muted">Loading checkout…</div>
             ) : (
               <>
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '0.75rem',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div className="cs-liquid-search" style={{ flex: 1, minWidth: 280 }}>
+                <div className="u-flex u-gap-12 u-items-center u-flex-wrap">
+                  <div className="cs-liquid-search er-search-flex">
                     <input
                       className="cs-liquid-input cs-liquid-search__input"
                       placeholder="Enter room/locker number…"
@@ -331,17 +304,15 @@ export function ManualCheckoutPanel({
                 </div>
 
                 <div className="er-checkout-list">
-                  <div className="er-card-subtitle" style={{ marginBottom: '0.5rem' }}>
+                  <div className="er-card-subtitle u-mb-8">
                     Or select from occupied units
                   </div>
                   {loadingCandidates ? (
-                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading…</div>
+                    <div className="u-p-12 er-text-muted">Loading…</div>
                   ) : candidates.length === 0 ? (
-                    <div style={{ padding: '0.75rem', color: '#94a3b8' }}>
-                      No occupied rooms/lockers
-                    </div>
+                    <div className="u-p-12 er-text-muted">No occupied rooms/lockers</div>
                   ) : (
-                    <div style={{ display: 'grid', gap: '0.5rem' }}>
+                    <div className="u-grid u-gap-8">
                       {candidates.map((c) => {
                         const selected = selectedOccupancyIds.includes(c.occupancyId);
                         const label = `${c.resourceType === 'ROOM' ? 'Room' : 'Locker'} ${c.number}`;
@@ -399,110 +370,76 @@ export function ManualCheckoutPanel({
         ) : (
           <>
             {confirmQueue.length === 0 ? (
-              <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading…</div>
+              <div className="u-p-12 er-text-muted">Loading…</div>
             ) : (
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
-                <div
-                  className="er-text-sm"
-                  style={{ color: '#94a3b8', fontWeight: 900, textAlign: 'center' }}
-                >
+              <div className="u-grid u-gap-12">
+                <div className="er-text-sm er-text-muted u-fw-900 u-text-center">
                   {confirmIndex + 1} of {confirmQueue.length}
                 </div>
-                <div style={{ textAlign: 'center', fontSize: '1.5rem', fontWeight: 900 }}>
+                <div className="u-text-center er-text-1p5 u-fw-900">
                   {confirmQueue[confirmIndex]?.customerName || '—'}
                 </div>
 
-                <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                  <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.25rem' }}>
+                <div className="er-surface er-surface-card">
+                  <div className="er-text-sm er-text-muted u-mb-4">
                     Checkout
                   </div>
-                  <div style={{ fontWeight: 900 }}>
+                  <div className="u-fw-900">
                     {confirmQueue[confirmIndex]?.resourceType === 'ROOM' ? 'Room' : 'Locker'}{' '}
                     {confirmQueue[confirmIndex]?.number}
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                    gap: '0.75rem',
-                  }}
-                >
-                  <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div
-                      className="er-text-sm"
-                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                    >
+                <div className="er-grid-2col">
+                  <div className="er-surface er-surface-card">
+                    <div className="er-text-sm er-text-muted u-mb-4">
                       Check-in
                     </div>
-                    <div style={{ fontWeight: 900 }}>
+                    <div className="u-fw-900">
                       {formatClockTime(confirmQueue[confirmIndex]!.checkinAt)}
                     </div>
                   </div>
-                  <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div
-                      className="er-text-sm"
-                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                    >
+                  <div className="er-surface er-surface-card">
+                    <div className="er-text-sm er-text-muted u-mb-4">
                       Scheduled checkout
                     </div>
-                    <div style={{ fontWeight: 900 }}>
+                    <div className="u-fw-900">
                       {formatClockTime(confirmQueue[confirmIndex]!.scheduledCheckoutAt)}
                     </div>
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                    gap: '0.75rem',
-                  }}
-                >
-                  <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div
-                      className="er-text-sm"
-                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                    >
+                <div className="er-grid-2col">
+                  <div className="er-surface er-surface-card">
+                    <div className="er-text-sm er-text-muted u-mb-4">
                       Late
                     </div>
-                    <div style={{ fontWeight: 900 }}>
+                    <div className="u-fw-900">
                       {confirmQueue[confirmIndex]!.lateMinutes > 0
                         ? formatLateDuration(confirmQueue[confirmIndex]!.lateMinutes)
                         : '—'}
                     </div>
                   </div>
-                  <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div
-                      className="er-text-sm"
-                      style={{ color: '#94a3b8', marginBottom: '0.25rem' }}
-                    >
+                  <div className="er-surface er-surface-card">
+                    <div className="er-text-sm er-text-muted u-mb-4">
                       Fee
                     </div>
-                    <div style={{ fontWeight: 900 }}>
+                    <div className="u-fw-900">
                       ${confirmQueue[confirmIndex]!.fee.toFixed(2)}
                     </div>
                   </div>
                 </div>
 
                 {confirmQueue[confirmIndex]!.banApplied && (
-                  <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-                    <div style={{ fontWeight: 900, color: '#f59e0b' }}>⚠️ Ban applied</div>
-                    <div className="er-text-sm" style={{ color: '#94a3b8' }}>
+                  <div className="er-surface er-surface-card">
+                    <div className="u-fw-900 u-text-warning">⚠️ Ban applied</div>
+                    <div className="er-text-sm er-text-muted">
                       The account is now blocked from check-in until cleared.
                     </div>
                   </div>
                 )}
 
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: '0.75rem',
-                    justifyContent: 'flex-end',
-                    flexWrap: 'wrap',
-                  }}
-                >
+                <div className="u-flex u-gap-12 u-justify-end u-flex-wrap">
                   <button
                     type="button"
                     className="cs-liquid-button"

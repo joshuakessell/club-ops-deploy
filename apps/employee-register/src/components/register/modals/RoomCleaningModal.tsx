@@ -135,47 +135,28 @@ export function RoomCleaningModal({
   return (
     <ModalFrame isOpen={isOpen} title="Room Cleaning" onClose={onClose} maxWidth="760px">
       {error && (
-        <div
-          style={{
-            marginBottom: '0.75rem',
-            padding: '0.75rem',
-            background: 'rgba(239, 68, 68, 0.18)',
-            border: '1px solid rgba(239, 68, 68, 0.35)',
-            borderRadius: 12,
-            color: '#fecaca',
-            fontWeight: 700,
-          }}
-        >
+        <div className="er-modal-error u-mb-12">
           {error}
         </div>
       )}
 
-      <div style={{ fontWeight: 900, marginBottom: '0.75rem' }}>
+      <div className="u-fw-900 u-mb-12">
         Select rooms to begin or finish cleaning
       </div>
 
       {loading ? (
-        <div style={{ padding: '0.75rem', color: '#94a3b8' }}>Loading…</div>
+        <div className="u-p-12 er-text-muted">Loading…</div>
       ) : dirtyRooms.length === 0 && cleaningRooms.length === 0 ? (
-        <div style={{ padding: '0.75rem', color: '#94a3b8' }}>No DIRTY or CLEANING rooms</div>
+        <div className="u-p-12 er-text-muted">No DIRTY or CLEANING rooms</div>
       ) : (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            gap: '0.75rem',
-          }}
-        >
+        <div className="er-cleaning-grid">
           <div>
-            <div
-              className="er-text-sm"
-              style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}
-            >
+            <div className="er-text-sm er-text-muted u-fw-800 u-mb-8">
               DIRTY (ready to begin cleaning)
             </div>
-            <div style={{ display: 'grid', gap: '0.5rem' }}>
+            <div className="er-cleaning-list">
               {dirtyRooms.length === 0 ? (
-                <div style={{ padding: '0.5rem', color: '#94a3b8' }}>None</div>
+                <div className="er-cleaning-empty">None</div>
               ) : (
                 dirtyRooms.map((r) => {
                   const selected = selectedRoomIds.has(r.id);
@@ -191,10 +172,14 @@ export function RoomCleaningModal({
                       aria-pressed={selected}
                       disabled={disabled}
                       onClick={() => toggleRoom(r.id, 'DIRTY')}
-                      style={{ justifyContent: 'space-between', padding: '0.75rem' }}
+                      className={[
+                        'cs-liquid-button',
+                        selected ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                        'er-cleaning-row',
+                      ].join(' ')}
                     >
-                      <span style={{ fontWeight: 900 }}>Room {r.number}</span>
-                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>
+                      <span className="u-fw-900">Room {r.number}</span>
+                      <span className="er-cleaning-status">
                         {selected ? 'Selected' : 'DIRTY'}
                       </span>
                     </button>
@@ -205,15 +190,12 @@ export function RoomCleaningModal({
           </div>
 
           <div>
-            <div
-              className="er-text-sm"
-              style={{ color: '#94a3b8', fontWeight: 800, marginBottom: '0.5rem' }}
-            >
+            <div className="er-text-sm er-text-muted u-fw-800 u-mb-8">
               CLEANING (ready to finish cleaning)
             </div>
-            <div style={{ display: 'grid', gap: '0.5rem' }}>
+            <div className="er-cleaning-list">
               {cleaningRooms.length === 0 ? (
-                <div style={{ padding: '0.5rem', color: '#94a3b8' }}>None</div>
+                <div className="er-cleaning-empty">None</div>
               ) : (
                 cleaningRooms.map((r) => {
                   const selected = selectedRoomIds.has(r.id);
@@ -229,10 +211,14 @@ export function RoomCleaningModal({
                       aria-pressed={selected}
                       disabled={disabled}
                       onClick={() => toggleRoom(r.id, 'CLEANING')}
-                      style={{ justifyContent: 'space-between', padding: '0.75rem' }}
+                      className={[
+                        'cs-liquid-button',
+                        selected ? 'cs-liquid-button--selected' : 'cs-liquid-button--secondary',
+                        'er-cleaning-row',
+                      ].join(' ')}
                     >
-                      <span style={{ fontWeight: 900 }}>Room {r.number}</span>
-                      <span style={{ color: 'rgba(148, 163, 184, 0.95)' }}>
+                      <span className="u-fw-900">Room {r.number}</span>
+                      <span className="er-cleaning-status">
                         {selected ? 'Selected' : 'CLEANING'}
                       </span>
                     </button>
@@ -245,22 +231,17 @@ export function RoomCleaningModal({
       )}
 
       {selectedRooms.length > 0 && (
-        <div
-          className="er-surface"
-          style={{ padding: '0.75rem', borderRadius: 12, marginTop: '0.75rem' }}
-        >
-          <div className="er-text-sm" style={{ fontWeight: 900, marginBottom: '0.25rem' }}>
+        <div className="er-surface er-surface-card u-mt-12">
+          <div className="er-text-sm u-fw-900 u-mb-4">
             Selected:
           </div>
-          <div className="er-text-sm" style={{ color: '#94a3b8' }}>
+          <div className="er-text-sm er-text-muted">
             {selectedRooms.map((r) => `Room ${r.number}`).join(', ')}
           </div>
         </div>
       )}
 
-      <div
-        style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1rem' }}
-      >
+      <div className="u-flex u-justify-end u-gap-8 u-mt-16">
         <button
           type="button"
           className="cs-liquid-button cs-liquid-button--secondary"

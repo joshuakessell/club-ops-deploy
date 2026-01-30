@@ -134,3 +134,8 @@
   font-weight: 600;
   min-height: 56px;
 }
+
+.ck-modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

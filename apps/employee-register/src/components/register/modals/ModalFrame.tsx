@@ -1,6 +1,22 @@
 import { ReactNode, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
+const MODAL_WIDTH_CLASS: Record<string, string> = {
+  '420px': 'er-modal-frame--w-420',
+  '500px': 'er-modal-frame--w-500',
+  '520px': 'er-modal-frame--w-520',
+  '560px': 'er-modal-frame--w-560',
+  '640px': 'er-modal-frame--w-640',
+  '720px': 'er-modal-frame--w-720',
+  '760px': 'er-modal-frame--w-760',
+};
+
+const MODAL_HEIGHT_CLASS: Record<string, string> = {
+  '50vh': 'er-modal-frame--h-50vh',
+  '70vh': 'er-modal-frame--h-70vh',
+  '80vh': 'er-modal-frame--h-80vh',
+};
+
 export interface ModalFrameProps {
   isOpen: boolean;
   title: string;
@@ -82,62 +98,32 @@ export function ModalFrame({
 
   if (!isOpen) return null;
 
+  const widthClass = MODAL_WIDTH_CLASS[maxWidth];
+  const heightClass = maxHeight ? MODAL_HEIGHT_CLASS[maxHeight] : undefined;
+
   const modal = (
     <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'rgba(0, 0, 0, 0.68)',
-        backdropFilter: 'blur(2px)',
-        WebkitBackdropFilter: 'blur(2px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 4000,
-      }}
+      className="er-modal-overlay"
       role="presentation"
       onClick={closeOnOverlayClick ? onClose : undefined}
     >
       <div
         ref={modalRef}
-        className="cs-liquid-card"
-        style={{
-          maxWidth,
-          width: '90%',
-          maxHeight,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
+        className={['cs-liquid-card', 'er-modal-frame', widthClass, heightClass]
+          .filter(Boolean)
+          .join(' ')}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
       >
-        <div style={{ padding: '2rem', paddingBottom: '1rem', flex: '0 0 auto' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 600 }}>{title}</h2>
+        <div className="er-modal-header">
+          <div className="er-modal-header-row">
+            <h2 className="er-modal-title">{title}</h2>
             {showCloseButton && (
               <button
                 onClick={onClose}
-                className="cs-liquid-button cs-liquid-button--secondary"
-                style={{
-                  fontSize: '1.5rem',
-                  cursor: 'pointer',
-                  padding: '0.25rem 0.5rem',
-                  lineHeight: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                className="cs-liquid-button cs-liquid-button--secondary er-modal-close"
                 aria-label="Close"
               >
                 ×
@@ -146,12 +132,9 @@ export function ModalFrame({
           </div>
         </div>
         <div
-          style={{
-            padding: '0 2rem 2rem',
-            overflowY: maxHeight ? 'auto' : undefined,
-            flex: maxHeight ? '1 1 auto' : undefined,
-            minHeight: maxHeight ? 0 : undefined,
-          }}
+          className={['er-modal-body', maxHeight ? 'er-modal-body--scroll' : '']
+            .filter(Boolean)
+            .join(' ')}
         >
           {children}
         </div>

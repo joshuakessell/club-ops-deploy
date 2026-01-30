@@ -62,17 +62,17 @@ export default function EventLogOverlay() {
   if (!show) return null;
 
   return (
-    <div style={outer}>
-      <div style={header}>
+    <div className="cs-event-log">
+      <div className="cs-event-log__header">
         <strong>Event Log</strong>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="cs-event-log__controls">
           <input
             placeholder="Search…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            style={input}
+            className="cs-event-log__input"
           />
-          <label style={pill}>
+          <label className="cs-event-log__pill">
             <input
               type="checkbox"
               checked={filterWSIn}
@@ -80,7 +80,7 @@ export default function EventLogOverlay() {
             />{' '}
             WS In
           </label>
-          <label style={pill}>
+          <label className="cs-event-log__pill">
             <input
               type="checkbox"
               checked={filterWSOut}
@@ -88,7 +88,7 @@ export default function EventLogOverlay() {
             />{' '}
             WS Out
           </label>
-          <label style={pill}>
+          <label className="cs-event-log__pill">
             <input
               type="checkbox"
               checked={filterDB}
@@ -96,35 +96,43 @@ export default function EventLogOverlay() {
             />{' '}
             DB
           </label>
-          <button onClick={() => setPaused((p) => !p)} style={btn}>
+          <button onClick={() => setPaused((p) => !p)} className="cs-event-log__button">
             {paused ? 'Resume' : 'Pause'}
           </button>
           <button
             onClick={() => void navigator.clipboard.writeText(JSON.stringify(filtered, null, 2))}
-            style={btn}
+            className="cs-event-log__button"
           >
             Copy
           </button>
-          <button onClick={() => setEvents([])} style={btn}>
+          <button onClick={() => setEvents([])} className="cs-event-log__button">
             Clear
           </button>
-          <button onClick={() => setShow(false)} style={btn}>
+          <button onClick={() => setShow(false)} className="cs-event-log__button">
             Hide
           </button>
         </div>
       </div>
 
-      <div style={list}>
+      <div className="cs-event-log__list">
         {filtered.map((e) => (
-          <div key={e.id} style={{ ...row, borderLeft: `4px solid ${colorFor(e.kind)}` }}>
-            <div style={rowTop}>
-              <span style={tag(colorFor(e.kind))}>{e.kind}</span>
-              <span style={{ opacity: 0.8 }}>{new Date(e.ts).toLocaleTimeString()}</span>
-              {e.channel && <span style={{ opacity: 0.8 }}>· {e.channel}</span>}
+          <div
+            key={e.id}
+            className="cs-event-log__row"
+            style={{ '--event-color': colorFor(e.kind) } as React.CSSProperties}
+          >
+            <div className="cs-event-log__row-top">
+              <span className="cs-event-log__tag">{e.kind}</span>
+              <span className="cs-event-log__meta">
+                {new Date(e.ts).toLocaleTimeString()}
+              </span>
+              {e.channel && <span className="cs-event-log__meta">· {e.channel}</span>}
               <strong>· {e.title}</strong>
             </div>
 
-            {e.payload !== undefined && <pre style={pre}>{safeStringify(e.payload)}</pre>}
+            {e.payload !== undefined && (
+              <pre className="cs-event-log__payload">{safeStringify(e.payload)}</pre>
+            )}
           </div>
         ))}
         <div ref={bottomRef} />
@@ -133,104 +141,10 @@ export default function EventLogOverlay() {
   );
 }
 
-const outer: React.CSSProperties = {
-  position: 'fixed',
-  right: 12,
-  bottom: 12,
-  width: 420,
-  maxHeight: '60vh',
-  background: 'rgba(20,20,24,0.9)',
-  color: '#fff',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 12,
-  borderRadius: 8,
-  boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
-  backdropFilter: 'blur(6px)',
-  overflow: 'hidden',
-  zIndex: 999999,
-};
-
-const header: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '8px 10px',
-  background: 'rgba(255,255,255,0.06)',
-};
-
-const list: React.CSSProperties = {
-  overflow: 'auto',
-  maxHeight: 'calc(60vh - 42px)',
-  padding: 8,
-};
-
-const row: React.CSSProperties = {
-  padding: '6px 8px',
-  marginBottom: 6,
-  background: 'rgba(255,255,255,0.04)',
-  borderRadius: 6,
-};
-
-const rowTop: React.CSSProperties = {
-  display: 'flex',
-  gap: 8,
-  alignItems: 'center',
-  marginBottom: 4,
-  flexWrap: 'wrap',
-};
-
-const pre: React.CSSProperties = {
-  margin: 0,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  background: 'rgba(0,0,0,0.35)',
-  padding: 6,
-  borderRadius: 4,
-};
-
-const input: React.CSSProperties = {
-  height: 24,
-  borderRadius: 6,
-  border: '1px solid rgba(255,255,255,0.2)',
-  background: 'rgba(0,0,0,0.4)',
-  color: '#fff',
-  padding: '0 8px',
-};
-
-const btn: React.CSSProperties = {
-  height: 24,
-  borderRadius: 6,
-  border: '1px solid rgba(255,255,255,0.2)',
-  background: 'rgba(255,255,255,0.08)',
-  color: '#fff',
-  padding: '0 8px',
-  cursor: 'pointer',
-};
-
-const pill: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  background: 'rgba(255,255,255,0.08)',
-  padding: '2px 6px',
-  borderRadius: 999,
-};
-
 function colorFor(k: LogEvent['kind']) {
   if (k === 'ws-in') return '#79ffa1';
   if (k === 'ws-out') return '#7db3ff';
   return '#ffd279';
-}
-
-function tag(bg: string): React.CSSProperties {
-  return {
-    background: bg,
-    color: '#111',
-    fontWeight: 700,
-    padding: '2px 6px',
-    borderRadius: 999,
-    textTransform: 'uppercase',
-  };
 }
 
 function safeStringify(v: unknown) {

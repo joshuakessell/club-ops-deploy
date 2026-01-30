@@ -99,10 +99,6 @@ export function WaitlistModal({
                     .join(' ')}
                   onClick={() => onBackupSelection(rental)}
                   disabled={!isAvailable || isSubmitting}
-                  style={{
-                    opacity: isAvailable ? 1 : 0.5,
-                    cursor: isAvailable && !isSubmitting ? 'pointer' : 'not-allowed',
-                  }}
                 >
                   {getRentalDisplayName(rental, customerPrimaryLanguage)}
                   {!isAvailable && ` ${t(customerPrimaryLanguage, 'waitlist.unavailableSuffix')}`}

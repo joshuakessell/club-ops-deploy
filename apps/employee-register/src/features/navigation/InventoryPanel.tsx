@@ -25,7 +25,7 @@ export function InventoryPanel() {
 
   return (
     <PanelShell align="top" scroll="hidden">
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div className="u-flex-1 u-min-h-0 u-overflow-hidden">
         <InventoryDrawer
           lane={lane}
           sessionToken={session.sessionToken}

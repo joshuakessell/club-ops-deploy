@@ -79,9 +79,7 @@ export function PaymentRoot() {
               ))}
             </div>
           ) : (
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 700 }}>
-              No charges yet today.
-            </div>
+            <div className="er-text-sm er-text-muted u-fw-700">No charges yet today.</div>
           )}
           {typeof ledgerTotal === 'number' ? (
             <div className="er-renewal-ledger__total">

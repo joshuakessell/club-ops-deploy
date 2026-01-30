@@ -1,0 +1,84 @@
+.er-account-grid {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.er-account-card {
+  padding: 0.85rem;
+}
+
+.er-account-card--success {
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.er-account-card--error {
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+  font-weight: 800;
+}
+
+.er-account-card-title {
+  font-weight: 950;
+  margin-bottom: 0.35rem;
+}
+
+.er-account-card-subtext {
+  color: #cbd5e1;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.er-account-details {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.er-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.er-account-row-group {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.er-account-actions {
+  display: flex;
+  justify-content: center;
+  flex: 1;
+  min-width: 220px;
+}
+
+.er-account-action-btn {
+  width: 100%;
+  max-width: 260px;
+  padding: 0.7rem;
+  font-weight: 900;
+}
+
+.er-account-action-btn--wide {
+  max-width: 320px;
+}
+
+.er-account-action-btn--full {
+  width: 100%;
+  padding: 0.75rem;
+  font-weight: 900;
+}
+
+.er-account-stack {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}

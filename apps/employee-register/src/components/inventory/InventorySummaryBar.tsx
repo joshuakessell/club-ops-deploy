@@ -37,39 +37,25 @@ export function InventorySummaryBar({ counts, onOpenInventorySection }: Inventor
   const Button = (props: { label: string; ratio: string; section: InventorySummarySection }) => (
     <button
       type="button"
-      className="cs-liquid-button cs-liquid-button--secondary cs-liquid-button--pill"
-      style={{
-        padding: '0.55rem 0.85rem',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-        gap: '0.75rem',
-        width: '100%',
-        textAlign: 'left',
-        opacity: disabled ? 0.65 : 1,
-      }}
+      className={[
+        'cs-liquid-button',
+        'cs-liquid-button--secondary',
+        'cs-liquid-button--pill',
+        'er-inv-summary-button',
+        disabled ? 'er-inv-summary-button--disabled' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       disabled={disabled}
       onClick={() => onOpenInventorySection(props.section)}
     >
-      <span style={{ fontWeight: 800 }}>{props.label}</span>
-      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800, marginLeft: 'auto' }}>
-        {props.ratio}
-      </span>
+      <span className="er-inv-summary-label">{props.label}</span>
+      <span className="er-inv-summary-ratio">{props.ratio}</span>
     </button>
   );
 
   return (
-    <div
-      className="cs-liquid-card"
-      style={{
-        padding: '0.75rem',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.75rem',
-        alignItems: 'stretch',
-      }}
-      aria-label="Inventory summary"
-    >
+    <div className="cs-liquid-card er-inv-summary" aria-label="Inventory summary">
       <Button label="Lockers" ratio={formatRatio(lockers, lockers)} section="LOCKER" />
       <Button label="Standard" ratio={formatRatio(xStandard, yStandard)} section="STANDARD" />
       <Button label="Double" ratio={formatRatio(xDouble, yDouble)} section="DOUBLE" />

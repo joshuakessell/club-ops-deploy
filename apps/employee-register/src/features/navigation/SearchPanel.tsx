@@ -31,19 +31,10 @@ export function SearchPanel() {
         disabled={isSubmitting}
       />
       {customerSearchLoading && (
-        <div className="er-text-sm" style={{ marginTop: '0.25rem', color: '#94a3b8' }}>
-          Searching...
-        </div>
+        <div className="er-text-sm er-text-muted u-mt-4">Searching...</div>
       )}
       {customerSuggestions.length > 0 && (
-        <div
-          className="cs-liquid-card"
-          style={{
-            marginTop: '0.5rem',
-            maxHeight: '180px',
-            overflowY: 'auto',
-          }}
-        >
+        <div className="cs-liquid-card er-search-suggestions">
           {customerSuggestions.map(
             (s: {
               id: string;
@@ -57,32 +48,15 @@ export function SearchPanel() {
                 <button
                   key={s.id}
                   type="button"
-                  className="cs-liquid-button cs-liquid-button--secondary"
+                  className="cs-liquid-button cs-liquid-button--secondary er-search-suggestion"
                   onClick={() => {
                     openCustomerAccount(s.id, label);
                     setCustomerSearch('');
                     setCustomerSuggestions([]);
                   }}
-                  style={{
-                    padding: '0.5rem 0.75rem',
-                    width: '100%',
-                    textAlign: 'left',
-                    borderRadius: 0,
-                    border: 'none',
-                    borderBottom: '1px solid #1f2937',
-                    justifyContent: 'space-between',
-                  }}
                 >
-                  <div style={{ fontWeight: 600 }}>{label}</div>
-                  <div
-                    className="er-text-sm"
-                    style={{
-                      color: '#94a3b8',
-                      display: 'flex',
-                      gap: '0.75rem',
-                      flexWrap: 'wrap',
-                    }}
-                  >
+                  <div className="u-fw-600">{label}</div>
+                  <div className="er-text-sm er-text-muted u-flex u-gap-12 u-flex-wrap">
                     {s.dobMonthDay && <span>DOB: {s.dobMonthDay}</span>}
                     {s.membershipNumber && <span>Membership: {s.membershipNumber}</span>}
                   </div>

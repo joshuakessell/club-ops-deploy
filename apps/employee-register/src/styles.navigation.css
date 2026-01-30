@@ -1,0 +1,51 @@
+.er-search-suggestions {
+  margin-top: 0.5rem;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.er-search-suggestion {
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  text-align: left;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid #1f2937;
+  justify-content: space-between;
+}
+
+.er-search-suggestion:last-child {
+  border-bottom: none;
+}
+
+.er-scan-icon {
+  font-size: 4rem;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.er-scan-session {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.er-scan-action-btn {
+  width: 100%;
+  padding: 0.75rem;
+  font-weight: 900;
+}
+
+.er-account-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.er-account-clear-btn {
+  width: 100%;
+  max-width: 320px;
+  padding: 0.7rem;
+  font-weight: 900;
+}

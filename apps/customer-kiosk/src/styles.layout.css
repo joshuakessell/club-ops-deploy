@@ -1,0 +1,82 @@
+/* Layout helpers + grid clusters */
+.membership-option-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rental-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+.rental-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+.membership-buttons,
+.experience-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+.ck-option-highlight {
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.55),
+    0 0 28px rgba(255, 255, 255, 0.18);
+}
+
+.proceed-section {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+  animation: fadeInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.6s both;
+}
+
+.package-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  width: 100%;
+  animation: fadeInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.4s both;
+}
+
+.package-option {
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  animation: fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) both;
+  /* Background, border, border-radius, box-shadow handled by cs-liquid-card */
+  /* Keep only sizing/layout/animation properties */
+}
+
+.package-option:nth-child(1) {
+  animation-delay: 0.5s;
+}
+
+.package-option:nth-child(2) {
+  animation-delay: 0.6s;
+}
+
+.package-option:nth-child(3) {
+  animation-delay: 0.7s;
+}
+
+.package-option:nth-child(4) {
+  animation-delay: 0.8s;
+}
+
+.package-option:hover {
+  transform: translateY(-2px);
+  /* Other hover effects handled by cs-liquid-card */
+}
+
+.package-name {
+  font-size: clamp(1.125rem, 2vw, 1.5rem);
+  font-weight: 500;
+  color: var(--text);
+}

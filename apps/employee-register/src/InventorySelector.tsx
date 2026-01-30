@@ -517,11 +517,11 @@ export function InventorySelector({
   }, [query, filteredLockers, roomsByTier, setExpandedSection]);
 
   if (loading) {
-    return <div style={{ padding: '1rem', textAlign: 'center' }}>Loading inventory...</div>;
+    return <div className="u-p-16 u-text-center">Loading inventory...</div>;
   }
 
   if (error) {
-    return <div style={{ padding: '1rem', color: '#ef4444' }}>Error: {error}</div>;
+    return <div className="u-p-16 u-text-danger">Error: {error}</div>;
   }
 
   if (!inventory) {
@@ -532,21 +532,14 @@ export function InventorySelector({
 
   return (
     <>
-      <div
-        style={{
-          height: '100%',
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+      <div className="u-h-full u-min-h-0 u-flex u-flex-col">
         <PanelHeader title="Rentals" />
 
         {!occupancyLookupMode && !disableSelection && selectedItem && onClearSelection && (
           <button
             className="cs-liquid-button cs-liquid-button--secondary"
             onClick={onClearSelection}
-            style={{ width: '100%', marginBottom: '0.75rem', padding: '0.6rem', fontWeight: 800 }}
+            className="cs-liquid-button cs-liquid-button--secondary er-inv-clear-btn"
           >
             Clear selection (currently {selectedItem.type === 'room' ? 'Room' : 'Locker'}{' '}
             {selectedItem.number})
@@ -554,17 +547,8 @@ export function InventorySelector({
         )}
 
         {/* Single card layout: left buttons + right scrollable list pane */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(140px, 40%) minmax(0, 1fr)',
-            gap: '1.5rem',
-            flex: 1,
-            minHeight: 0,
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', minWidth: 0 }}>
+        <div className="er-inv-layout">
+          <div className="er-inv-sidebar">
             {(
               [
                 ['LOCKER', 'Lockers'],
@@ -583,26 +567,20 @@ export function InventorySelector({
                     activeSection === tier
                       ? 'cs-liquid-button--selected'
                       : 'cs-liquid-button--secondary',
+                    'er-inv-nav-button',
                   ].join(' ')}
                   onClick={() => setActiveSection(tier)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '0.9rem 0.85rem',
-                    fontWeight: 900,
-                    minHeight: '74px',
-                  }}
                 >
                   <div className="er-inv-nav">
                     <div className="er-inv-nav-label">{label}</div>
                     <div
-                      className="er-inv-nav-stats er-inv-meta"
-                      style={{
-                        color:
-                          activeSection === tier
-                            ? 'rgba(255,255,255,0.92)'
-                            : 'rgba(148,163,184,0.95)',
-                      }}
+                      className={[
+                        'er-inv-nav-stats',
+                        'er-inv-meta',
+                        activeSection === tier
+                          ? 'er-inv-nav-stats--active'
+                          : 'er-inv-nav-stats--inactive',
+                      ].join(' ')}
                     >
                       <div>Available {counts.available}</div>
                       <div>Nearing Checkout {counts.nearing}</div>
@@ -614,10 +592,8 @@ export function InventorySelector({
             })}
 
             {/* Search directly beneath the Special button */}
-            <div style={{ marginTop: '0.5rem' }}>
-              <div className="er-inv-search-label" style={{ marginBottom: '0.35rem' }}>
-                Search
-              </div>
+            <div className="u-mt-8">
+              <div className="er-inv-search-label">Search</div>
               <div className="cs-liquid-search">
                 <input
                   className="cs-liquid-input cs-liquid-search__input"
@@ -656,17 +632,8 @@ export function InventorySelector({
             </div>
           </div>
 
-          <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-            <div
-              className="cs-liquid-card"
-              style={{
-                padding: '0.85rem',
-                flex: 1,
-                minHeight: 0,
-                overflowY: 'auto',
-                paddingRight: '0.65rem',
-              }}
-            >
+          <div className="u-min-w-0 u-min-h-0 u-flex u-flex-col">
+            <div className="cs-liquid-card er-inv-pane">
               {activeSection === 'LOCKER' ? (
                 <LockerSection
                   lockers={filteredLockers}
@@ -721,19 +688,13 @@ export function InventorySelector({
         maxHeight="50vh"
       >
         {occupancyDetails && (
-          <div style={{ display: 'grid', gap: '0.75rem' }}>
-            <div
-              style={{
-                textAlign: 'center',
-                fontSize: '1.5rem',
-                fontWeight: 600,
-              }}
-            >
+          <div className="u-grid u-gap-12">
+            <div className="u-text-center er-text-1p5 u-fw-600">
               {occupancyDetails.customerId && onOpenCustomerAccount ? (
                 <button
                   type="button"
                   className="cs-liquid-button cs-liquid-button--secondary"
-                  style={{ padding: '0.35rem 0.7rem', minHeight: 'unset', fontWeight: 900 }}
+                  className="cs-liquid-button cs-liquid-button--secondary er-compact-pill"
                   onClick={() =>
                     onOpenCustomerAccount(
                       occupancyDetails.customerId!,
@@ -748,29 +709,29 @@ export function InventorySelector({
               )}
             </div>
 
-            <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-              <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.25rem' }}>
+            <div className="er-surface er-surface-card">
+              <div className="er-text-sm er-text-muted u-mb-4">
                 Check-in
               </div>
-              <div style={{ fontWeight: 800 }}>
+              <div className="u-fw-800">
                 {occupancyDetails.checkinAt
                   ? new Date(occupancyDetails.checkinAt).toLocaleString()
                   : '—'}
               </div>
             </div>
 
-            <div className="er-surface" style={{ padding: '0.75rem', borderRadius: 12 }}>
-              <div className="er-text-sm" style={{ color: '#94a3b8', marginBottom: '0.25rem' }}>
+            <div className="er-surface er-surface-card">
+              <div className="er-text-sm er-text-muted u-mb-4">
                 Checkout
               </div>
-              <div style={{ fontWeight: 800 }}>
+              <div className="u-fw-800">
                 {occupancyDetails.checkoutAt
                   ? new Date(occupancyDetails.checkoutAt).toLocaleString()
                   : '—'}
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div className="u-flex u-justify-center">
               <button
                 type="button"
                 className="cs-liquid-button"

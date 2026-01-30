@@ -109,36 +109,25 @@ export function CustomerAccountPanel(props: {
         spacing="none"
         action={
           props.customerLabel ? (
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-              {props.customerLabel}
-            </div>
+            <div className="er-text-sm er-text-muted u-fw-800">{props.customerLabel}</div>
           ) : null
         }
       />
 
       {state.mode === 'ALREADY_VISITING' ? (
         <div
-          className="er-account-already-visiting"
-          style={{ marginTop: '0.75rem', display: 'grid', gap: '0.75rem' }}
+          className="er-account-already-visiting er-account-grid"
         >
           <div
-            className="cs-liquid-card"
-            style={{
-              padding: '0.85rem',
-              border: '1px solid rgba(34, 197, 94, 0.35)',
-              background: 'rgba(34, 197, 94, 0.10)',
-            }}
+            className="cs-liquid-card er-account-card er-account-card--success"
           >
-            <div style={{ fontWeight: 950, marginBottom: '0.35rem' }}>Currently Checked In</div>
-            <div
-              className="er-text-sm"
-              style={{ color: '#cbd5e1', fontWeight: 700, lineHeight: 1.45 }}
-            >
+            <div className="er-account-card-title">Currently Checked In</div>
+            <div className="er-text-sm er-account-card-subtext">
               This customer already has an active visit.
             </div>
           </div>
 
-          <div className="cs-liquid-card" style={{ padding: '0.85rem' }}>
+          <div className="cs-liquid-card er-account-card">
             {(() => {
               const renewalEligibility = getRenewalEligibility(state.activeCheckin);
               const showRenewal =
@@ -147,49 +136,35 @@ export function CustomerAccountPanel(props: {
                 (renewalEligibility.allowTwoHour || renewalEligibility.allowSixHour);
 
               return (
-            <div style={{ display: 'grid', gap: '0.6rem' }}>
+            <div className="er-account-details">
               <div>
-                <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-                  Assigned
-                </div>
-                <div style={{ fontWeight: 900 }}>
+                <div className="er-text-sm er-text-muted u-fw-800">Assigned</div>
+                <div className="u-fw-900">
                   {state.activeCheckin.assignedResourceType &&
                   state.activeCheckin.assignedResourceNumber
                     ? `${state.activeCheckin.assignedResourceType === 'room' ? 'Room' : 'Locker'} ${
                         state.activeCheckin.assignedResourceNumber
-                      }`
+                  }`
                     : '—'}
                 </div>
               </div>
 
               <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '0.75rem',
-                  flexWrap: 'wrap',
-                }}
+                className="er-account-row"
               >
-                <div
-                  style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}
-                >
+                <div className="er-account-row-group">
                   <div>
-                    <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-                      Check-in
-                    </div>
-                    <div style={{ fontWeight: 800 }}>
+                    <div className="er-text-sm er-text-muted u-fw-800">Check-in</div>
+                    <div className="u-fw-800">
                       {formatLocal(state.activeCheckin.checkinAt)}
                     </div>
                   </div>
                   <div>
-                    <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-                      Checkout
-                    </div>
-                    <div style={{ fontWeight: 800 }}>
+                    <div className="er-text-sm er-text-muted u-fw-800">Checkout</div>
+                    <div className="u-fw-800">
                       {formatLocal(state.activeCheckin.checkoutAt)}{' '}
                       {state.activeCheckin.overdue ? (
-                        <span style={{ color: '#f59e0b' }}>(overdue)</span>
+                        <span className="u-text-warning">(overdue)</span>
                       ) : null}
                     </div>
                   </div>
@@ -197,7 +172,6 @@ export function CustomerAccountPanel(props: {
 
                 <div
                   className="er-account-actions"
-                  style={{ display: 'flex', justifyContent: 'center', flex: 1, minWidth: 220 }}
                 >
                   <button
                     type="button"
@@ -205,7 +179,7 @@ export function CustomerAccountPanel(props: {
                     onClick={() =>
                       props.onStartCheckout({ number: state.activeCheckin.assignedResourceNumber })
                     }
-                    style={{ width: '100%', maxWidth: 260, padding: '0.7rem', fontWeight: 900 }}
+                    className="cs-liquid-button er-account-action-btn"
                   >
                     Checkout
                   </button>
@@ -214,12 +188,7 @@ export function CustomerAccountPanel(props: {
                       type="button"
                       className="cs-liquid-button cs-liquid-button--secondary"
                       onClick={() => props.onStartRenewal?.(state.activeCheckin)}
-                      style={{
-                        width: '100%',
-                        maxWidth: 260,
-                        padding: '0.7rem',
-                        fontWeight: 900,
-                      }}
+                      className="cs-liquid-button cs-liquid-button--secondary er-account-action-btn"
                     >
                       Renew Checkin
                     </button>
@@ -229,10 +198,8 @@ export function CustomerAccountPanel(props: {
 
               {state.activeCheckin.waitlist ? (
                 <div>
-                  <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-                    Pending upgrade request
-                  </div>
-                  <div style={{ fontWeight: 900 }}>
+                  <div className="er-text-sm er-text-muted u-fw-800">Pending upgrade request</div>
+                  <div className="u-fw-900">
                     {state.activeCheckin.waitlist.desiredTier} (backup:{' '}
                     {state.activeCheckin.waitlist.backupTier}) •{' '}
                     {state.activeCheckin.waitlist.status}
@@ -245,37 +212,23 @@ export function CustomerAccountPanel(props: {
           </div>
         </div>
       ) : state.mode === 'ERROR' ? (
-        <div style={{ marginTop: '0.75rem' }}>
+        <div className="u-mt-12">
           <div
-            className="cs-liquid-card"
-            style={{
-              padding: '0.85rem',
-              border: '1px solid rgba(239, 68, 68, 0.35)',
-              background: 'rgba(239, 68, 68, 0.12)',
-              color: '#fecaca',
-              fontWeight: 800,
-            }}
+            className="cs-liquid-card er-account-card er-account-card--error"
           >
             {state.errorMessage}
           </div>
           <button
             type="button"
             onClick={retry}
-            className="cs-liquid-button"
-            style={{ marginTop: '0.75rem', width: '100%', padding: '0.75rem', fontWeight: 900 }}
+            className="cs-liquid-button er-account-action-btn--full u-mt-12"
           >
             Retry
           </button>
         </div>
       ) : (
         <div
-          style={{
-            marginTop: '0.75rem',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem',
-            minHeight: 0,
-          }}
+          className="er-account-stack"
         >
           {props.currentSessionId && props.customerName ? (
             <>
@@ -296,7 +249,7 @@ export function CustomerAccountPanel(props: {
                       type="button"
                       className="cs-liquid-button cs-liquid-button--danger"
                       onClick={props.onClearSession}
-                      style={{ width: '100%', maxWidth: 320, padding: '0.7rem', fontWeight: 900 }}
+                      className="cs-liquid-button cs-liquid-button--danger er-account-action-btn er-account-action-btn--wide"
                     >
                       Clear Session
                     </button>
@@ -336,7 +289,7 @@ export function CustomerAccountPanel(props: {
               />
             </>
           ) : (
-            <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
+            <div className="er-text-sm er-text-muted u-fw-800">
               {state.isStarting ? 'Starting check-in…' : 'Waiting for lane session…'}
             </div>
           )}

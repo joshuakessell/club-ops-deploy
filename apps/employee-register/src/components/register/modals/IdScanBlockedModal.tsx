@@ -17,9 +17,9 @@ export function IdScanBlockedModal({ isOpen, issue, onClose }: IdScanBlockedModa
 
   return (
     <ModalFrame isOpen={isOpen} title={title} onClose={onClose} closeOnOverlayClick={false}>
-      <div style={{ display: 'grid', gap: '0.75rem' }}>
-        <div style={{ color: '#fca5a5', fontWeight: 800 }}>{message}</div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div className="u-grid u-gap-12">
+        <div className="er-modal-alert">{message}</div>
+        <div className="u-flex u-justify-end">
           <button type="button" className="cs-liquid-button" onClick={onClose}>
             OK
           </button>

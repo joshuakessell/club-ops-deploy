@@ -16,7 +16,7 @@ export function ScanPanel() {
 
   return (
     <PanelShell align="center">
-      <div style={{ fontSize: '4rem', lineHeight: 1, marginBottom: '0.5rem' }} aria-hidden="true">
+      <div className="er-scan-icon" aria-hidden="true">
         📷
       </div>
       <PanelHeader
@@ -37,19 +37,19 @@ export function ScanPanel() {
         disabled={!scanInputEnabled}
         {...scanInputHandlers}
       />
-      <div className="er-text-sm" style={{ marginTop: '0.5rem', color: '#94a3b8' }}>
+      <div className="er-text-sm er-text-muted u-mt-8">
         {scanReady ? 'Scanner ready' : `Scanner paused: ${scanBlockedReason || 'Unavailable'}`}
       </div>
       {currentSessionId && customerName ? (
-        <div style={{ marginTop: '1rem', display: 'grid', gap: '0.5rem' }}>
-          <div className="er-text-sm" style={{ color: '#94a3b8', fontWeight: 800 }}>
-            Active lane session: <span style={{ color: '#e2e8f0' }}>{customerName}</span>
+        <div className="er-scan-session">
+          <div className="er-text-sm er-text-muted u-fw-800">
+            Active lane session: <span className="er-text-soft">{customerName}</span>
           </div>
           <button
             type="button"
             className="cs-liquid-button"
             onClick={() => selectHomeTab('account')}
-            style={{ width: '100%', padding: '0.75rem', fontWeight: 900 }}
+            className="cs-liquid-button er-scan-action-btn"
           >
             Open Customer Account
           </button>

@@ -48,21 +48,12 @@ export function InventoryDrawer({
     forcedExpandedSection !== undefined ? forcedExpandedSection : uncontrolledExpanded;
 
   return (
-    <div
-      style={{
-        height: '100%',
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '0.75rem',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="u-h-full u-min-h-0 u-flex u-flex-col u-gap-12 u-overflow-hidden">
       {/*
         Main inventory content should never force the drawer itself to scroll.
         Each expanded category is responsible for its own internal scrolling.
       */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <div className="u-flex-1 u-min-h-0 u-overflow-hidden">
         <InventorySelector
           customerSelectedType={customerSelectedType}
           waitlistDesiredTier={waitlistDesiredTier}

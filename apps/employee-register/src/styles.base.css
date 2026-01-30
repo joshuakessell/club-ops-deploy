@@ -1,0 +1,174 @@
+.er-surface {
+  background: var(--er-surface);
+  border: 1px solid var(--er-border);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.er-surface-strong {
+  background: var(--er-surface-strong);
+  border: 1px solid var(--er-border);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.er-title {
+  color: #fff;
+}
+
+.er-text {
+  color: var(--er-text);
+}
+
+.er-text-muted {
+  color: var(--er-text-muted);
+}
+
+.er-text-soft {
+  color: #e2e8f0;
+}
+
+.er-text-weak {
+  color: #cbd5e1;
+}
+
+/* ------------------------------------------------------------
+   Employee Register: text utilities (avoid inline fontSize)
+------------------------------------------------------------ */
+
+.er-text-xs {
+  font-size: 12px;
+}
+
+.er-text-sm {
+  font-size: 14px;
+}
+
+.er-text-1p5 {
+  font-size: 1.5rem;
+}
+
+.er-text-2rem {
+  font-size: 2rem;
+}
+
+.er-text-4rem {
+  font-size: 4rem;
+}
+
+.er-text-md {
+  font-size: 16px;
+}
+
+.er-text-lg {
+  font-size: 18px;
+}
+
+.er-text-xl {
+  font-size: 20px;
+}
+
+.er-text-2xl {
+  font-size: 26px;
+}
+
+.er-header-action-btn {
+  /* Ensure Sign Out + Close Out match exactly (size/shape), only color differs by variant */
+  padding: 0.45rem 0.85rem;
+  min-height: 44px;
+  font-weight: 800;
+  border-radius: 9999px;
+}
+
+.er-ui-tweaks .er-header-action-btn {
+  /* Header is a toolbar cluster: keep both buttons the same text size regardless of variant class. */
+  font-size: var(--er-font-btn) !important;
+  line-height: 1.1 !important;
+}
+
+/* Background: let the Blink bridge/theme decide the base color */
+body {
+  background-color: var(--bg);
+  position: relative;
+}
+
+/* Prevent page scroll (internal panels may scroll as needed) */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Fixed background image layer (keeps background still while UI scrolls) */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: none;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Background overlay removed per UX request (keep only the photo). */
+body::after {
+  content: none;
+}
+
+/* Ensure app content always renders above the fixed overlay */
+#root {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
+.container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Let internal panels control scrolling; keep the overall app pinned to the viewport. */
+  padding: 0 var(--er-right-safe) 0 var(--er-left-safe);
+  background: transparent;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.er-search-section-half {
+  width: min(50%, 840px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (max-width: 900px) {
+  .er-search-section-half {
+    width: 100%;
+  }
+}
+
+.er-search-help {
+  color: #94a3b8;
+  font-size: 0.875rem;
+}
+
+/* Local button variants missing from shared stylesheet */
+.cs-liquid-button--warning {
+  background: color-mix(in oklch, var(--color-warning) 16%, transparent);
+  border-color: color-mix(in oklch, var(--color-warning) 60%, transparent);
+}
+.cs-liquid-button--warning:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-warning) 28%, transparent);
+}
+
+.cs-liquid-button--success {
+  background: color-mix(in oklch, var(--color-success) 16%, transparent);
+  border-color: color-mix(in oklch, var(--color-success) 60%, transparent);
+}
+.cs-liquid-button--success:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-success) 28%, transparent);
+}
+

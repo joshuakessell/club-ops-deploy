@@ -1,0 +1,354 @@
+/* Inventory cards (rooms/lockers) */
+.er-inv-item {
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    filter 150ms ease,
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.er-inv-item--highlight {
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.45);
+}
+
+.er-inv-item:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.er-inv-item:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.er-inv-item--selected {
+  border-color: rgba(96, 165, 250, 0.9);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 2px rgba(96, 165, 250, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.er-inv-item--warning {
+  border-color: rgba(245, 158, 11, 0.7);
+  background: linear-gradient(145deg, rgba(245, 158, 11, 0.18), rgba(255, 255, 255, 0.06));
+}
+
+.er-inv-item--danger {
+  border-color: rgba(239, 68, 68, 0.7);
+  background: linear-gradient(145deg, rgba(239, 68, 68, 0.18), rgba(255, 255, 255, 0.06));
+}
+
+.er-inv-item--waitlist {
+  border-color: rgba(245, 158, 11, 0.7);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 2px rgba(245, 158, 11, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.er-inv-meta {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.er-inv-column-header {
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #334155;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.er-inv-empty {
+  padding: 0.75rem;
+  color: var(--er-text-muted);
+  text-align: center;
+}
+
+.er-inv-status {
+  margin-top: 0.25rem;
+  font-weight: 800;
+}
+
+.er-inv-status--warning {
+  color: #f59e0b;
+}
+
+.er-inv-status--muted {
+  color: var(--er-text-muted);
+}
+
+.er-inv-status--danger {
+  color: #ef4444;
+  font-weight: 900;
+}
+
+.er-inv-duration {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.er-inv-duration--late {
+  color: #ef4444;
+}
+
+.er-inv-locker-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+}
+
+.er-inv-locker-item {
+  padding: 0.5rem;
+  background: #0f172a;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.875rem;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.er-inv-locker-item--selected {
+  background: #3b82f6;
+  border: 2px solid #60a5fa;
+}
+
+.er-inv-locker-item--highlight {
+  border: 2px solid rgba(255, 255, 255, 0.55);
+}
+
+.er-inv-locker-item--disabled {
+  cursor: default;
+}
+
+.er-inv-clear-btn {
+  width: 100%;
+  margin-bottom: 0.75rem;
+  padding: 0.6rem;
+  font-weight: 800;
+}
+
+.er-inv-pane {
+  padding: 0.85rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.65rem;
+}
+
+.er-surface-card {
+  padding: 0.75rem;
+  border-radius: 12px;
+}
+
+.er-compact-pill {
+  padding: 0.35rem 0.7rem;
+  min-height: unset;
+  font-weight: 900;
+}
+
+.er-inv-summary {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.er-inv-summary-button {
+  padding: 0.55rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+}
+
+.er-inv-summary-button--disabled {
+  opacity: 0.65;
+}
+
+.er-inv-summary-label {
+  font-weight: 800;
+}
+
+.er-inv-summary-ratio {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  margin-left: auto;
+}
+
+.er-inv-nav {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  justify-items: stretch;
+}
+
+.er-inv-layout {
+  display: grid;
+  grid-template-columns: minmax(140px, 40%) minmax(0, 1fr);
+  gap: 1.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.er-inv-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.er-inv-nav-button {
+  width: 100%;
+  text-align: left;
+  padding: 0.9rem 0.85rem;
+  font-weight: 900;
+  min-height: 74px;
+}
+
+.er-inv-nav-label {
+  min-width: 0;
+  text-align: left;
+  justify-self: start;
+  font-size: 1.18rem;
+  font-weight: 900;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.er-inv-nav-stats {
+  text-align: right;
+  justify-self: end;
+  font-weight: 800;
+  line-height: 1.2;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.er-inv-nav-stats--active {
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.er-inv-nav-stats--inactive {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.er-inv-search-label {
+  font-weight: 900;
+  font-size: 1.05rem;
+  color: #60a5fa;
+  margin-bottom: 0.35rem;
+}
+
+.er-inv-section-header {
+  margin-bottom: 0.75rem;
+}
+
+.er-inv-section-title {
+  font-weight: 900;
+  font-size: 1.35rem;
+}
+
+.er-inv-section-meta {
+  font-weight: 800;
+  margin-top: 0.25rem;
+  font-size: 1rem;
+  color: #60a5fa;
+}
+
+.er-inv-column-title {
+  font-weight: 900;
+  font-size: 1.02rem;
+  color: #94a3b8;
+}
+
+.er-inv-column-title--occupied {
+  color: #cbd5f5;
+  font-size: 1.05rem;
+}
+
+.er-inv-column-title--available {
+  color: #10b981;
+  font-size: 1.05rem;
+}
+
+.er-inv-occupied-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.er-inv-occupied-number {
+  font-size: 1.2rem;
+  font-weight: 900;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.er-inv-occupied-customer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.er-inv-occupied-customer-btn {
+  padding: 0.25rem 0.6rem;
+  min-height: unset;
+  font-weight: 900;
+}
+
+.er-inv-occupied-customer-text {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: rgba(148, 163, 184, 0.95);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.er-inv-occupied-checkout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.er-inv-occupied-time {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.er-inv-occupied-duration {
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+

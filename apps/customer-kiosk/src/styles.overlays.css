@@ -1,0 +1,100 @@
+/* Overlays + blockers */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.25s ease;
+}
+
+.welcome-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.welcome-overlay-logo {
+  width: clamp(220px, 36vw, 560px);
+  height: auto;
+  filter: brightness(0) invert(1);
+}
+
+.welcome-overlay-message {
+  color: #ffffff;
+  font-size: clamp(1.25rem, 3vw, 2rem);
+  font-weight: 600;
+}
+
+.orientation-blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: #000;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.orientation-blocker h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  margin-bottom: 0.75rem;
+}
+
+.orientation-blocker p {
+  font-size: clamp(1rem, 2.5vw, 1.25rem);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.ck-pending-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4500;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.ck-pending-overlay__text {
+  color: #ffffff;
+  font-size: clamp(1.5rem, 3.6vw, 2.25rem);
+  font-weight: 800;
+  text-align: center;
+  text-shadow: 0 0 22px rgba(255, 255, 255, 0.15);
+}
+
+.ck-ellipsis {
+  display: inline-flex;
+  width: 3ch;
+  justify-content: flex-start;
+  margin-left: 0.15ch;
+}
+
+.ck-dot {
+  display: inline-block;
+  width: 1ch;
+  text-align: left;
+  opacity: 0.15;
+  animation: ckDotPulse 1.2s ease-in-out infinite;
+}
+
+.ck-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.ck-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}

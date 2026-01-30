@@ -1,0 +1,112 @@
+/* Base tokens + resets + kiosk shell */
+:root {
+  --bg: var(--cs-bg);
+  --text: var(--cs-text);
+  --text-muted: var(--cs-text-muted);
+  --border: var(--cs-border);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: #000;
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* iPad kiosk hardening (scoped) */
+#root,
+#root * {
+  -webkit-touch-callout: none;
+}
+
+#root {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#root input,
+#root textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+#root button,
+#root a,
+#root [role='button'] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cs-screen-overlay {
+  background: transparent;
+  z-index: 2;
+}
+
+/* Kiosk-specific background layers */
+.cs-kiosk-bg,
+.cs-kiosk-bg--steamroom1,
+.cs-kiosk-bg--steamroom2,
+.cs-kiosk-bg--none {
+  background-image: none;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: #000;
+}
+
+.cs-kiosk-watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 3;
+  transition:
+    opacity 200ms ease,
+    filter 200ms ease;
+}
+
+.cs-kiosk-watermark__img {
+  width: min(82vw, 1100px);
+  opacity: 0.6;
+  filter: blur(0.1px);
+}
+
+.cs-kiosk-watermark--under {
+  z-index: 1;
+  opacity: 0.25;
+  filter: blur(0.4px);
+}
+
+.cs-kiosk-watermark--over {
+  z-index: 3;
+  opacity: 0.55;
+}
+
+.cs-kiosk-stage {
+  position: relative;
+  z-index: 10;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}

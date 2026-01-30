@@ -1,0 +1,143 @@
+/* Shared design tokens are imported in main.tsx */
+:root {
+  --primary: var(--cs-secondary);
+  --primary-dark: var(--cs-secondary-dark);
+  --bg: #000;
+  --bg-card: var(--cs-bg-card);
+  --text: var(--cs-text);
+  --text-muted: var(--cs-text-muted);
+  --success: var(--cs-success);
+  --warning: var(--cs-warning);
+  --error: var(--cs-error);
+  --border: var(--cs-border);
+
+  /* Employee Register local surfaces (neutral dark glass; avoid legacy blue tint) */
+  --er-surface: rgba(18, 18, 18, 0.55);
+  --er-surface-strong: rgba(10, 10, 10, 0.72);
+  --er-border: rgba(255, 255, 255, 0.14);
+  --er-text: rgba(255, 255, 255, 0.92);
+  --er-text-muted: #94a3b8;
+
+  /* Employee Register: keep typography close to baseline liquid-glass defaults */
+  --er-text-downshift: 0px;
+  --er-text-upshift: 0px;
+  --er-search-text-downshift: 0px;
+
+  /* Employee Register: consistent control sizes (slightly larger than inventory card text) */
+  --er-font-btn: 18px;
+  --er-font-label: 16px;
+  --er-font-input: 18px;
+  --er-font-help: 14px;
+  --er-font-icon: 22px;
+
+  /* Employee Register: edge safe area to avoid drawer tab overlap */
+  --er-edge-safe: 0px;
+  --er-drawer-tab-width: 54px;
+  /* Main content gutter (header + right panel content). */
+  --er-body-gutter: 1rem;
+  /* Left edge should be flush so the left tabs can hit the screen edge. */
+  --er-left-safe: 0px;
+  --er-right-safe: 0.75rem;
+
+  /* Fixed top bar (employee + register number) */
+  --er-topbar-height: 60px;
+  /* Minimum breathing room between toolbar/content and content/bottom edge */
+  --er-viewport-gap: 16px;
+  /* Small inset so tabs/rails don't touch the toolbar or bottom edge */
+  --er-rail-gap: 12px;
+  /* Left home rail width (fixed-position, like right drawer tabs) */
+  --er-home-rail-width: 210px;
+  /* Space between left rail buttons and the right-side card content */
+  --er-home-content-gap: 16px;
+}
+
+/* ------------------------------------------------------------
+   Employee Register ONLY: Tablet usability tweaks (runtime-gated)
+
+   We add `.er-ui-tweaks` to `#root` only after measuring baseline
+   computed font sizes (see `useEmployeeRegisterTabletUiTweaks`).
+------------------------------------------------------------ */
+
+.er-ui-tweaks {
+  /* Keep app text consistent; buttons/inputs override explicitly below. */
+  font-size: 1rem;
+}
+
+.er-ui-tweaks .cs-liquid-button {
+  font-size: var(--er-font-btn) !important;
+  line-height: 1.15 !important;
+  padding: 0.7rem 1rem !important;
+  min-height: 56px !important;
+  white-space: nowrap;
+  gap: 0.65rem !important;
+}
+
+.er-ui-tweaks .cs-liquid-button.cs-liquid-button--secondary {
+  font-size: var(--er-font-btn) !important;
+}
+
+.er-ui-tweaks label {
+  font-size: var(--er-font-label) !important;
+  line-height: 1.2 !important;
+}
+
+/* Search Customer bar text: input + helper text */
+.er-ui-tweaks #customer-search {
+  font-size: var(--er-font-input) !important;
+  line-height: 1.2 !important;
+  padding: 0.75rem 1rem !important;
+}
+
+.er-ui-tweaks .typeahead-section span {
+  line-height: 1.2;
+}
+
+/* Search helper text is treated as part of "Search Customer bar text" */
+.er-ui-tweaks .er-search-help {
+  font-size: var(--er-font-help) !important;
+}
+
+/* Action buttons (icon + label) */
+.er-ui-tweaks .action-buttons {
+  /* Prevent long single-line labels from wrapping by giving more room */
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.er-ui-tweaks .action-btn {
+  /* Uses column layout; keep text on one line */
+  white-space: nowrap;
+  font-size: var(--er-font-btn) !important;
+  padding: 1.5rem !important;
+  gap: 0.75rem !important;
+}
+
+.er-ui-tweaks .btn-icon {
+  font-size: var(--er-font-icon) !important;
+  line-height: 1 !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.er-ui-tweaks .cs-liquid-button svg {
+  width: 1.35em;
+  height: 1.35em;
+}
+
+/* Search Customer bar: roughly half width, centered */
+.er-search-half {
+  position: relative;
+  width: 100%;
+}
+
+.er-search-half__center {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.er-search-half__input {
+  width: 50%;
+  min-width: 220px;
+  max-width: 520px;
+}

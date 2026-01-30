@@ -171,7 +171,6 @@ export function RequiredTenderOutcomeModal({
     : resolvedCardAmount !== null &&
       resolvedCashAmount !== null &&
       roundToCents(resolvedCardAmount + resolvedCashAmount) === roundToCents(splitBaseTotal);
-  const stepIndex = step === 'main' ? 0 : 1;
   const displayTotal = effectiveTotal;
 
   const handleProcessCard = async () => {
@@ -248,8 +247,12 @@ export function RequiredTenderOutcomeModal({
         {details ? <div className="er-required-modal__details">{details}</div> : null}
 
         <div
-          className="er-required-modal__carousel"
-          style={{ transform: `translateX(-${stepIndex * 100}%)` }}
+          className={[
+            'er-required-modal__carousel',
+            step === 'split' ? 'er-required-modal__carousel--split' : 'er-required-modal__carousel--main',
+          ]
+            .filter(Boolean)
+            .join(' ')}
         >
           <div className="er-required-modal__panel">
             <div className="er-required-modal__options" role="radiogroup" aria-label="Tender outcome">

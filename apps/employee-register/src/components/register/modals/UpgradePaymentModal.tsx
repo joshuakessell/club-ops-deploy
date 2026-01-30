@@ -39,37 +39,24 @@ export function UpgradePaymentModal({
 
   return (
     <ModalFrame isOpen={isOpen} title="Upgrade Payment Quote" onClose={onClose} maxWidth="560px">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ color: '#cbd5e1' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{customerLabel}</div>
+      <div className="er-upgrade-stack">
+        <div className="er-upgrade-header">
+          <div className="er-upgrade-header-name">{customerLabel}</div>
           {(newRoomNumber || offeredRoomNumber) && (
-            <div style={{ fontSize: '0.9rem', color: '#94a3b8' }}>
+            <div className="er-upgrade-header-sub">
               Upgrade to room {newRoomNumber || offeredRoomNumber}
             </div>
           )}
         </div>
 
-        <div
-          className="cs-liquid-card"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.5rem',
-            padding: '0.75rem',
-          }}
-        >
-          <div style={{ fontWeight: 700, color: '#e2e8f0' }}>Already Paid</div>
+        <div className="cs-liquid-card er-upgrade-card">
+          <div className="er-upgrade-card-title">Already Paid</div>
           {originalCharges.length > 0 ? (
             <>
               {originalCharges.map((item, idx) => (
                 <div
                   key={`${item.description}-${idx}`}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    color: '#94a3b8',
-                    fontStyle: 'italic',
-                  }}
+                  className="er-upgrade-row er-upgrade-row-muted"
                 >
                   <span>{item.description}</span>
                   <span>${item.amount.toFixed(2)}</span>
@@ -77,13 +64,7 @@ export function UpgradePaymentModal({
               ))}
               {originalTotal !== null && (
                 <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    color: '#94a3b8',
-                    fontStyle: 'italic',
-                    fontWeight: 600,
-                  }}
+                  className="er-upgrade-row er-upgrade-row-muted er-upgrade-row-strong"
                 >
                   <span>Original total</span>
                   <span>${originalTotal.toFixed(2)}</span>
@@ -91,30 +72,13 @@ export function UpgradePaymentModal({
               )}
             </>
           ) : (
-            <div style={{ color: '#94a3b8', fontStyle: 'italic' }}>
-              All prior charges are settled.
-            </div>
+            <div className="er-upgrade-row-muted">All prior charges are settled.</div>
           )}
         </div>
 
-        <div
-          className="cs-liquid-card"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.5rem',
-            padding: '0.75rem',
-          }}
-        >
-          <div style={{ fontWeight: 700, color: '#e2e8f0' }}>New Charge</div>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              color: '#f8fafc',
-              fontWeight: 600,
-            }}
-          >
+        <div className="cs-liquid-card er-upgrade-card">
+          <div className="er-upgrade-card-title">New Charge</div>
+          <div className="er-upgrade-row er-upgrade-row-bright">
             <span>Upgrade Fee</span>
             <span>
               ${upgradeFee !== null && Number.isFinite(upgradeFee) ? upgradeFee.toFixed(2) : '—'}
@@ -122,68 +86,41 @@ export function UpgradePaymentModal({
           </div>
         </div>
 
-        <div
-          className="cs-liquid-card"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '0.75rem',
-          }}
-        >
-          <div style={{ fontWeight: 700, color: '#e2e8f0' }}>Total Due</div>
-          <div style={{ fontWeight: 800, color: '#f59e0b' }}>${totalDue.toFixed(2)}</div>
+        <div className="cs-liquid-card er-upgrade-total">
+          <div className="er-upgrade-card-title">Total Due</div>
+          <div className="er-upgrade-total-amount">${totalDue.toFixed(2)}</div>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-            gap: '0.5rem',
-          }}
-        >
+        <div className="er-upgrade-actions">
           <button
             onClick={onPayCreditSuccess}
             disabled={isSubmitting || !canComplete}
-            className="cs-liquid-button"
-            style={{
-              padding: '0.75rem 1rem',
-              fontWeight: 700,
-            }}
+            className="cs-liquid-button er-upgrade-action-btn"
           >
             Credit Success
           </button>
           <button
             onClick={onPayCashSuccess}
             disabled={isSubmitting || !canComplete}
-            className="cs-liquid-button"
-            style={{
-              padding: '0.75rem 1rem',
-              fontWeight: 700,
-            }}
+            className="cs-liquid-button er-upgrade-action-btn"
           >
             Cash Success
           </button>
           <button
             onClick={onDecline}
             disabled={isSubmitting}
-            className="cs-liquid-button cs-liquid-button--danger"
-            style={{
-              padding: '0.75rem 1rem',
-              fontWeight: 700,
-            }}
+            className="cs-liquid-button cs-liquid-button--danger er-upgrade-action-btn"
           >
             Credit Decline
           </button>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="er-upgrade-footer">
           <div
-            style={{
-              fontSize: '0.9rem',
-              color: paymentStatus === 'PAID' ? '#10b981' : '#f59e0b',
-              fontWeight: 700,
-            }}
+            className={[
+              'er-upgrade-status',
+              paymentStatus === 'PAID' ? 'er-upgrade-status--paid' : 'er-upgrade-status--due',
+            ].join(' ')}
           >
             Status: {paymentStatus === 'PAID' ? 'Paid' : 'Payment Due'}
           </div>
@@ -195,11 +132,8 @@ export function UpgradePaymentModal({
               paymentStatus === 'PAID'
                 ? 'cs-liquid-button--selected'
                 : 'cs-liquid-button--secondary',
+              'er-upgrade-complete-btn',
             ].join(' ')}
-            style={{
-              padding: '0.75rem 1.25rem',
-              fontWeight: 700,
-            }}
           >
             Complete Upgrade
           </button>

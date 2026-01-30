@@ -1,0 +1,62 @@
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Second bar (Employee Register + Sign Out/Close Out): centered with small gutters */
+.header.er-surface-strong {
+  margin-left: var(--er-body-gutter);
+  margin-right: var(--er-body-gutter);
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
+.header.er-surface-strong {
+  /* Narrow override: avoid pulling blue-tinted global border tokens into the top toolbar */
+  border-bottom: 1px solid var(--er-border);
+}
+
+.header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.status-badges {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  min-height: 0;
+  overflow: hidden;
+  padding-left: var(--er-body-gutter);
+  padding-right: var(--er-body-gutter);
+  /* Guarantee at least 5px between toolbar and the top of the active card,
+     and at least 5px between the bottom of the active card and the viewport bottom. */
+  padding-top: var(--er-viewport-gap);
+  padding-bottom: var(--er-viewport-gap);
+}
+
+/* Make the home actions area occupy the remaining height so the left rail is height-stable
+   (Clear Session stays pinned to the bottom regardless of right-panel content height). */
+.actions-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.actions-panel > .er-home-layout {
+  flex: 1;
+  min-height: 0;
+}

@@ -1,0 +1,162 @@
+.er-checkout-verify-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.er-checkout-verify-card {
+  padding: 2rem;
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.er-checkout-verify-title {
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.er-checkout-verify-section {
+  margin-bottom: 1.5rem;
+}
+
+.er-checkout-verify-info {
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.er-checkout-verify-number {
+  font-weight: 900;
+  font-size: 2rem;
+  letter-spacing: 0.01em;
+}
+
+.er-checkout-verify-customer {
+  margin-top: 0.35rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.er-checkout-verify-customer-muted {
+  font-weight: 700;
+  color: var(--er-text-muted);
+}
+
+.er-checkout-verify-expected {
+  margin-top: 0.5rem;
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.er-checkout-verify-expected-time {
+  font-weight: 800;
+}
+
+.er-checkout-verify-delta {
+  margin-top: 0.35rem;
+  font-weight: 900;
+}
+
+.er-checkout-verify-delta--late {
+  color: #f59e0b;
+}
+
+.er-checkout-verify-delta--ontime {
+  color: #10b981;
+}
+
+.er-checkout-verify-fee {
+  margin-bottom: 0.5rem;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.er-checkout-verify-checklist {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.er-checkout-verify-checklist-title {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.er-checkout-verify-checklist-subtitle {
+  font-size: 0.875rem;
+  color: var(--er-text-muted);
+}
+
+.er-cleaning-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.er-cleaning-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.er-cleaning-empty {
+  padding: 0.5rem;
+  color: var(--er-text-muted);
+}
+
+.er-cleaning-row {
+  justify-content: space-between;
+  padding: 0.75rem;
+}
+
+.er-cleaning-status {
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.er-search-flex {
+  flex: 1;
+  min-width: 280px;
+}
+
+.er-grid-2col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.er-checkout-candidate {
+  justify-content: space-between;
+  padding: 0.75rem;
+}
+
+.er-checkout-candidate--overdue {
+  border-color: rgba(239, 68, 68, 0.65);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.er-checkout-candidate-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.er-checkout-candidate-label {
+  font-weight: 900;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.er-surface-card-lg {
+  padding: 1rem;
+  border-radius: 12px;
+}

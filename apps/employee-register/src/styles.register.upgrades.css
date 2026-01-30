@@ -1,0 +1,99 @@
+.er-upgrades-drawer {
+  padding: 1rem;
+  border-radius: 8px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.er-upgrades-body {
+  margin-top: 1rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.er-upgrades-body--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.er-upgrades-empty {
+  text-align: center;
+}
+
+.er-upgrades-empty-text {
+  color: var(--er-text-muted);
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.er-upgrades-section-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.er-upgrades-section-title--offered {
+  color: #f59e0b;
+}
+
+.er-upgrades-section-title--active {
+  color: var(--er-text-muted);
+}
+
+.er-upgrades-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.er-upgrades-card {
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.er-upgrades-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.er-upgrades-card-title {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.er-upgrades-customer-btn {
+  padding: 0.3rem 0.6rem;
+  min-height: unset;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.er-upgrades-customer-btn--disabled {
+  opacity: 0.6;
+}
+
+.er-upgrades-meta {
+  font-size: 0.875rem;
+  color: var(--er-text-muted);
+}
+
+.er-upgrades-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.er-upgrades-action-btn {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+

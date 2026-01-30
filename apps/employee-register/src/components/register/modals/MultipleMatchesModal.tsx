@@ -34,57 +34,28 @@ export function MultipleMatchesModal({
       maxHeight="70vh"
       closeOnOverlayClick={false}
     >
-      <div style={{ display: 'grid', gap: '0.75rem' }}>
-        <div style={{ color: '#94a3b8' }}>Select the correct customer to continue.</div>
+      <div className="u-grid u-gap-12">
+        <div className="er-text-muted">Select the correct customer to continue.</div>
 
         {errorMessage ? (
-          <div
-            style={{
-              padding: '0.75rem',
-              background: 'rgba(239, 68, 68, 0.18)',
-              border: '1px solid rgba(239, 68, 68, 0.35)',
-              borderRadius: 12,
-              color: '#fecaca',
-              fontWeight: 800,
-            }}
-          >
-            {errorMessage}
-          </div>
+          <div className="er-modal-error">{errorMessage}</div>
         ) : null}
 
-        <div
-          className="cs-liquid-card"
-          style={{
-            padding: 0,
-            overflow: 'hidden',
-          }}
-        >
+        <div className="cs-liquid-card er-matches-card">
           {candidates.length === 0 ? (
-            <div style={{ padding: '1rem', color: '#94a3b8' }}>No candidates.</div>
+            <div className="er-matches-empty">No candidates.</div>
           ) : (
-            <div style={{ display: 'grid' }}>
+            <div className="u-grid">
               {candidates.map((c) => (
                 <button
                   key={c.id}
                   type="button"
                   onClick={() => onSelect(c.id)}
                   disabled={isSubmitting}
-                  className="cs-liquid-button cs-liquid-button--secondary"
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '1rem',
-                    borderRadius: 0,
-                    border: 'none',
-                    borderBottom: '1px solid rgba(148, 163, 184, 0.18)',
-                    display: 'grid',
-                    gap: '0.35rem',
-                  }}
+                  className="cs-liquid-button cs-liquid-button--secondary er-matches-button"
                 >
-                  <div style={{ fontWeight: 900, fontSize: '1.05rem' }}>{c.name}</div>
-                  <div
-                    style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', color: '#94a3b8' }}
-                  >
+                  <div className="er-matches-name">{c.name}</div>
+                  <div className="er-matches-meta">
                     {c.dob && <span>DOB: {c.dob}</span>}
                     {c.membershipNumber && <span>Membership: {c.membershipNumber}</span>}
                   </div>
@@ -94,7 +65,7 @@ export function MultipleMatchesModal({
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div className="u-flex u-justify-end">
           <button
             className="cs-liquid-button cs-liquid-button--danger"
             onClick={onCancel}

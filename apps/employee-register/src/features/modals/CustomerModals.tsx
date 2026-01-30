@@ -106,42 +106,34 @@ export function CustomerModals() {
         maxWidth="640px"
         closeOnOverlayClick={false}
       >
-        <div style={{ display: 'grid', gap: '0.75rem' }}>
-          <div style={{ color: '#94a3b8' }}>
+        <div className="u-grid u-gap-12">
+          <div className="er-text-muted">
             An existing customer already matches this First Name, Last Name, and Date of Birth. Do
             you want to continue?
           </div>
 
           {manualExistingPrompt?.matchCount && manualExistingPrompt.matchCount > 1 ? (
-            <div style={{ color: '#f59e0b', fontWeight: 800 }}>
+            <div className="u-text-warning u-fw-800">
               {manualExistingPrompt.matchCount} matching customers found. Showing best match:
             </div>
           ) : null}
 
           {manualExistingPrompt ? (
-            <div className="cs-liquid-card" style={{ padding: '1rem' }}>
-              <div style={{ fontWeight: 900, fontSize: '1.1rem' }}>
+            <div className="cs-liquid-card u-p-16">
+              <div className="u-fw-900 er-text-lg">
                 {manualExistingPrompt.bestMatch.name}
               </div>
-              <div
-                style={{
-                  marginTop: '0.25rem',
-                  color: '#94a3b8',
-                  display: 'flex',
-                  gap: '0.75rem',
-                  flexWrap: 'wrap',
-                }}
-              >
+              <div className="u-mt-4 er-text-muted u-flex u-gap-12 u-flex-wrap">
                 <span>
                   DOB:{' '}
-                  <strong style={{ color: 'white' }}>
+                  <strong className="u-text-white">
                     {manualExistingPrompt.bestMatch.dob || manualExistingPrompt.dobIso}
                   </strong>
                 </span>
                 {manualExistingPrompt.bestMatch.membershipNumber ? (
                   <span>
                     Membership:{' '}
-                    <strong style={{ color: 'white' }}>
+                    <strong className="u-text-white">
                       {manualExistingPrompt.bestMatch.membershipNumber}
                     </strong>
                   </span>
@@ -151,28 +143,10 @@ export function CustomerModals() {
           ) : null}
 
           {manualExistingPromptError ? (
-            <div
-              style={{
-                padding: '0.75rem',
-                background: 'rgba(239, 68, 68, 0.18)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                borderRadius: 12,
-                color: '#fecaca',
-                fontWeight: 800,
-              }}
-            >
-              {manualExistingPromptError}
-            </div>
+            <div className="er-modal-error">{manualExistingPromptError}</div>
           ) : null}
 
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '0.5rem',
-              flexWrap: 'wrap',
-            }}
-          >
+          <div className="u-flex u-justify-end u-gap-8 u-flex-wrap">
             <button
               type="button"
               className="cs-liquid-button cs-liquid-button--secondary"
@@ -298,50 +272,39 @@ export function CustomerModals() {
         maxWidth="720px"
         closeOnOverlayClick={false}
       >
-        <div style={{ display: 'grid', gap: '0.75rem' }}>
-          <div style={{ color: '#94a3b8' }}>
+        <div className="u-grid u-gap-12">
+          <div className="er-text-muted">
             Create a new customer profile using the scanned First Name, Last Name, and DOB.
           </div>
 
           {createFromScanError ? (
-            <div
-              style={{
-                padding: '0.75rem',
-                background: 'rgba(239, 68, 68, 0.18)',
-                border: '1px solid rgba(239, 68, 68, 0.35)',
-                borderRadius: 12,
-                color: '#fecaca',
-                fontWeight: 800,
-              }}
-            >
-              {createFromScanError}
-            </div>
+            <div className="er-modal-error">{createFromScanError}</div>
           ) : null}
 
-          <div className="cs-liquid-card" style={{ padding: '1rem' }}>
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', color: '#94a3b8' }}>
+          <div className="cs-liquid-card u-p-16">
+            <div className="u-flex u-gap-12 u-flex-wrap er-text-muted">
               <span>
                 First:{' '}
-                <strong style={{ color: 'white' }}>
+                <strong className="u-text-white">
                   {pendingCreateFromScan?.extracted.firstName || '—'}
                 </strong>
               </span>
               <span>
                 Last:{' '}
-                <strong style={{ color: 'white' }}>
+                <strong className="u-text-white">
                   {pendingCreateFromScan?.extracted.lastName || '—'}
                 </strong>
               </span>
               <span>
                 DOB:{' '}
-                <strong style={{ color: 'white' }}>
+                <strong className="u-text-white">
                   {pendingCreateFromScan?.extracted.dob || '—'}
                 </strong>
               </span>
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+          <div className="u-flex u-justify-end u-gap-8">
             <button
               className="cs-liquid-button cs-liquid-button--secondary"
               disabled={createFromScanSubmitting || isSubmitting}
