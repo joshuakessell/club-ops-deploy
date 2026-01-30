@@ -377,6 +377,17 @@ CREATE TABLE public.agreements (
 
 
 --
+-- Name: demo_state; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.demo_state (
+    key text NOT NULL,
+    value_json jsonb NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: audit_log; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1179,6 +1190,14 @@ ALTER TABLE ONLY public.agreement_signatures
 
 ALTER TABLE ONLY public.agreements
     ADD CONSTRAINT agreements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: demo_state demo_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.demo_state
+    ADD CONSTRAINT demo_state_pkey PRIMARY KEY (key);
 
 
 --
