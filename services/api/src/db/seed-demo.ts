@@ -1,7 +1,10 @@
+import { loadEnvFromDotEnvIfPresent } from '../env/loadEnv';
 import { closeDatabase, query, transaction } from './index';
 import { randomUUID } from 'crypto';
 import { seedBusySaturdayDemo } from './seed-demo/busy-saturday';
 import { generateAgreementPdf } from '../utils/pdf-generator';
+
+loadEnvFromDotEnvIfPresent();
 
 const DEMO_STATE_KEY = 'busy_saturday_demo_v1';
 const DEMO_SNAPSHOT_VERSION = 1;
