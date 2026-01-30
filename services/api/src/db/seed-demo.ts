@@ -132,22 +132,37 @@ async function ensureSnapshotSchema(client: DbClient) {
   }
 }
 
+async function trySetReplicationRole(client: DbClient, role: 'replica' | 'origin'): Promise<boolean> {
+  try {
+    await client.query(`SET session_replication_role = ${role}`);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `⚠️  Unable to set session_replication_role=${role}. Continuing without it. (${message})`
+    );
+    return false;
+  }
+}
+
 async function createDemoSnapshot(client: DbClient): Promise<void> {
   await ensureSnapshotSchema(client);
-  await client.query('SET session_replication_role = replica');
+  const replicationRoleSet = await trySetReplicationRole(client, 'replica');
   try {
     for (const table of DEMO_SNAPSHOT_TABLES) {
       await client.query(`TRUNCATE demo_snapshot.${table}`);
       await client.query(`INSERT INTO demo_snapshot.${table} SELECT * FROM public.${table}`);
     }
   } finally {
-    await client.query('SET session_replication_role = origin');
+    if (replicationRoleSet) {
+      await trySetReplicationRole(client, 'origin');
+    }
   }
 }
 
 async function restoreDemoSnapshot(client: DbClient): Promise<void> {
   await ensureSnapshotSchema(client);
-  await client.query('SET session_replication_role = replica');
+  const replicationRoleSet = await trySetReplicationRole(client, 'replica');
   try {
     await client.query(
       `TRUNCATE ${DEMO_SNAPSHOT_TABLES.map((t) => `public.${t}`).join(', ')} RESTART IDENTITY CASCADE`
@@ -156,7 +171,9 @@ async function restoreDemoSnapshot(client: DbClient): Promise<void> {
       await client.query(`INSERT INTO public.${table} SELECT * FROM demo_snapshot.${table}`);
     }
   } finally {
-    await client.query('SET session_replication_role = origin');
+    if (replicationRoleSet) {
+      await trySetReplicationRole(client, 'origin');
+    }
   }
 }
 
