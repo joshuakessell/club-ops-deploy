@@ -1,17 +1,23 @@
 import { randomUUID } from 'crypto';
 import {
+  AGREEMENT_LEGAL_BODY_HTML_BY_LANG,
   DOUBLE_ROOM_NUMBERS,
   LOCKER_NUMBERS,
   NONEXISTENT_ROOM_NUMBERS,
   ROOM_NUMBERS,
   ROOMS,
   SPECIAL_ROOM_NUMBERS,
+  RentalType,
+  RoomStatus,
+  RoomType,
+  getRoomTierFromNumber,
 } from '@club-ops/shared';
-import { RentalType, RoomStatus, RoomType, getRoomTierFromNumber } from '@club-ops/shared';
+import { faker } from '@faker-js/faker';
 import { computeIdScanIdentityHash, computeSha256Hex, normalizeScanText } from '../../checkin/identity';
 import { query, transaction } from '../index';
 import { buildCloseoutSnapshot } from '../../money/closeout';
 import { buildReceiptNumber } from '../../money/orderAudit';
+import { generateAgreementPdf } from '../../utils/pdf-generator';
 
 export async function seedBusySaturdayDemo(now: Date): Promise<void> {
   const FIFTEEN_MIN_MS = 15 * 60 * 1000;
@@ -75,52 +81,55 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
     const ACTIVE_LOCKERS_TARGET = 40;
     const occupiedLockerNumbers = LOCKER_NUMBERS.slice(0, ACTIVE_LOCKERS_TARGET); // deterministic
 
-    const firstNames = [
-      'James',
-      'Michael',
-      'Robert',
-      'John',
-      'David',
-      'William',
-      'Richard',
-      'Joseph',
-      'Thomas',
-      'Charles',
-      'Christopher',
-      'Daniel',
-      'Matthew',
-      'Anthony',
-      'Mark',
-      'Steven',
-      'Paul',
-      'Andrew',
-      'Joshua',
-      'Kevin',
-    ];
-    const lastNames = [
-      'Smith',
-      'Johnson',
-      'Williams',
-      'Brown',
-      'Jones',
-      'Garcia',
-      'Miller',
-      'Davis',
-      'Rodriguez',
-      'Martinez',
-      'Hernandez',
-      'Lopez',
-      'Gonzalez',
-      'Wilson',
-      'Anderson',
-      'Thomas',
-      'Taylor',
-      'Moore',
-      'Jackson',
-      'Martin',
-    ];
+    function normalizeNamePart(input: string | null | undefined): string {
+      if (!input) return '';
+      const ascii = input
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      return ascii.replace(/[^A-Za-z'-]/g, '');
+    }
+
+    function normalizeFullName(first: string | null | undefined, last: string | null | undefined) {
+      const cleanFirst = normalizeNamePart(first);
+      const cleanLast = normalizeNamePart(last);
+      if (!cleanFirst || !cleanLast) return null;
+      return `${cleanFirst} ${cleanLast}`;
+    }
+
+    function buildUniqueNameList(total: number): string[] {
+      const reserved = new Set([
+        'Joshua Kessell',
+        'Carlos Ramirez',
+        'Miguel Hernandez',
+        'Anthony Lopez',
+        'David Martinez',
+      ]);
+      const names = new Set<string>();
+
+      faker.seed(0x4e414d45);
+      const maxAttempts = Math.max(total * 50, 1000);
+      let attempts = 0;
+      while (names.size < total && attempts < maxAttempts) {
+        const first = faker.person.firstName('male');
+        const last = faker.person.lastName();
+        const full = normalizeFullName(first, last);
+        attempts += 1;
+        if (!full || reserved.has(full)) continue;
+        names.add(full);
+      }
+
+      if (names.size < total) {
+        throw new Error(`Faker returned only ${names.size} unique male names; needed ${total}.`);
+      }
+
+      return Array.from(names);
+    }
 
     const customerIds: string[] = [];
+
+    const MEMBER_COUNT = 100;
+    const EXTRA_GUEST_COUNT = 200;
 
     await transaction(async (client) => {
       // -------------------------------------------------------------------
@@ -252,21 +261,154 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
       const lockerIdByNumber = new Map<string, string>();
       for (const l of lockersRes.rows) lockerIdByNumber.set(l.number, l.id);
 
+      const customerProfileById = new Map<
+        string,
+        { name: string; dob: Date | null; membershipNumber: string | null }
+      >();
+
+      const agreementResult = await client.query<{
+        id: string;
+        title: string;
+        version: string;
+        body_text: string;
+      }>(`SELECT id, title, version, body_text FROM agreements WHERE active = true ORDER BY created_at DESC LIMIT 1`);
+
+      let agreement = agreementResult.rows[0];
+      if (!agreement) {
+        const fallbackText = AGREEMENT_LEGAL_BODY_HTML_BY_LANG.EN;
+        const inserted = await client.query<{
+          id: string;
+          title: string;
+          version: string;
+          body_text: string;
+        }>(
+          `INSERT INTO agreements (version, title, body_text, active)
+           VALUES ($1, $2, $3, true)
+           RETURNING id, title, version, body_text`,
+          ['demo-v1', 'Club Dallas Entry & Liability Waiver (Demo)', fallbackText]
+        );
+        agreement = inserted.rows[0]!;
+      } else if (!agreement.body_text || agreement.body_text.trim() === '') {
+        const fallbackText = AGREEMENT_LEGAL_BODY_HTML_BY_LANG.EN;
+        await client.query(`UPDATE agreements SET body_text = $1 WHERE id = $2`, [
+          fallbackText,
+          agreement.id,
+        ]);
+        agreement = {
+          ...agreement,
+          body_text: fallbackText,
+        };
+      }
+      if (!agreement) {
+        throw new Error('Failed to load or create an active agreement for demo seeding.');
+      }
+      const activeAgreement = agreement;
+
+      const agreementTextSnapshot =
+        activeAgreement.body_text || AGREEMENT_LEGAL_BODY_HTML_BY_LANG.EN;
+      const agreementTitle = activeAgreement.title?.trim() || 'Club Agreement';
+
+      function getCustomerProfile(customerId: string): {
+        name: string;
+        dob: Date | null;
+        membershipNumber: string | null;
+      } {
+        return (
+          customerProfileById.get(customerId) || {
+            name: 'Customer',
+            dob: null,
+            membershipNumber: null,
+          }
+        );
+      }
+
+      async function insertSignedCheckinBlock(params: {
+        visitId: string;
+        customerId: string;
+        blockType: 'INITIAL' | 'RENEWAL' | 'FINAL2H';
+        startsAt: Date;
+        endsAt: Date;
+        rentalType: RentalType;
+        roomId: string | null;
+        lockerId: string | null;
+        signedAt: Date;
+        createdAt: Date;
+      }): Promise<string> {
+        const { name, dob, membershipNumber } = getCustomerProfile(params.customerId);
+        const signaturePayload = {
+          kind: 'demo',
+          name,
+          signedAt: params.signedAt.toISOString(),
+        };
+
+        const pdfBuffer = await generateAgreementPdf({
+          agreementTitle,
+          agreementVersion: activeAgreement.version,
+          agreementText: agreementTextSnapshot,
+          customerName: name,
+          customerDob: dob,
+          membershipNumber: membershipNumber || undefined,
+          checkinAt: params.startsAt,
+          signedAt: params.signedAt,
+          signatureText: name,
+        });
+
+        const blockId = randomUUID();
+        await client.query(
+          `INSERT INTO checkin_blocks
+           (id, visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, session_id, agreement_signed, agreement_pdf, agreement_signed_at, created_at, updated_at, has_tv_remote, waitlist_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, true, $9, $10, $11, $11, false, NULL)`,
+          [
+            blockId,
+            params.visitId,
+            params.blockType,
+            params.startsAt,
+            params.endsAt,
+            params.rentalType,
+            params.roomId,
+            params.lockerId,
+            pdfBuffer,
+            params.signedAt,
+            params.createdAt,
+          ]
+        );
+
+        await client.query(
+          `INSERT INTO agreement_signatures
+           (agreement_id, checkin_block_id, customer_name, membership_number, signed_at, signature_png_base64, signature_strokes_json, agreement_text_snapshot, agreement_version, device_type, created_at)
+           VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9, $10)`,
+          [
+            activeAgreement.id,
+            blockId,
+            name,
+            membershipNumber,
+            params.signedAt,
+            signaturePayload,
+            agreementTextSnapshot,
+            activeAgreement.version,
+            'KIOSK',
+            params.createdAt,
+          ]
+        );
+
+        return blockId;
+      }
+
       // -------------------------------------------------------------------
       // Customers: seed 100 membership customers + extra guests for active occupancy + historical churn
       // -------------------------------------------------------------------
-      const MEMBER_COUNT = 100;
       // Needs to cover:
       // - 142 concurrently active stays now (54 rooms + 88 lockers)
       // - 142+ completed stays for churn/checkout-quality assertions
-      const EXTRA_GUEST_COUNT = 200; // total customers = 300 (stable stress-test dataset)
+
+      const baseNames = buildUniqueNameList(MEMBER_COUNT + EXTRA_GUEST_COUNT);
 
       // Create exactly 100 membership customers
       for (let i = 1; i <= 100; i++) {
         const idx = i - 1;
         const id = randomUUID();
         const membershipNumber = String(i).padStart(6, '0');
-        const name = `${firstNames[idx % firstNames.length]} ${lastNames[(idx * 7) % lastNames.length]}`;
+        const name = baseNames[idx]!;
         const dob = new Date(1980 + (idx % 25), (idx * 3) % 12, ((idx * 5) % 27) + 1);
 
         await client.query(
@@ -277,13 +419,14 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         );
 
         customerIds.push(id);
+        customerProfileById.set(id, { name, dob, membershipNumber });
       }
 
       // Extra guests (customers only; membership_number is NULL)
       for (let i = 1; i <= EXTRA_GUEST_COUNT; i++) {
         const idx = MEMBER_COUNT + (i - 1);
         const id = randomUUID();
-        const name = `${firstNames[idx % firstNames.length]} ${lastNames[(idx * 7) % lastNames.length]}`;
+        const name = baseNames[idx]!;
         const dob = new Date(1985 + (idx % 20), (idx * 5) % 12, ((idx * 7) % 27) + 1);
         await client.query(
           `INSERT INTO customers
@@ -292,6 +435,7 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           [id, name, dob]
         );
         customerIds.push(id);
+        customerProfileById.set(id, { name, dob, membershipNumber: null });
       }
 
       // Seed a known DL hash for encrypted lookup testing (no change to total count).
@@ -316,6 +460,56 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         ['Joshua Kessell', new Date('1988-07-15'), dlHash, dlNormalized, dlTestCustomerId]
       );
       console.log(`✓ Seeded DL hash test customer: Joshua Kessell (${dlTestCustomerId})`);
+      customerProfileById.set(dlTestCustomerId, {
+        name: 'Joshua Kessell',
+        dob: new Date('1988-07-15'),
+        membershipNumber: customerProfileById.get(dlTestCustomerId)?.membershipNumber ?? null,
+      });
+
+      const demoCustomerSeeds: Array<{
+        key: string;
+        name: string;
+        dob: Date;
+        notes: string;
+      }> = [
+        {
+          key: 'lockerShort',
+          name: 'Carlos Ramirez',
+          dob: new Date('1992-03-12'),
+          notes: 'Demo: locker short-stay (2h) completed',
+        },
+        {
+          key: 'roomRenew2h',
+          name: 'Miguel Hernandez',
+          dob: new Date('1986-09-08'),
+          notes: 'Demo: room renewal (2h) completed 30 min before checkout',
+        },
+        {
+          key: 'roomRenew6h',
+          name: 'Anthony Lopez',
+          dob: new Date('1979-11-21'),
+          notes: 'Demo: room renewal (6h) completed 30 min before checkout',
+        },
+        {
+          key: 'retailAddon',
+          name: 'David Martinez',
+          dob: new Date('1995-06-17'),
+          notes: 'Demo: retail add-on order tied to visit',
+        },
+      ];
+      const demoCustomerIds = new Map<string, string>();
+      for (const seed of demoCustomerSeeds) {
+        const id = randomUUID();
+        await client.query(
+          `INSERT INTO customers
+           (id, name, dob, membership_number, membership_card_type, membership_valid_until, primary_language, past_due_balance, notes, created_at, updated_at)
+           VALUES ($1, $2, $3, NULL, NULL, NULL, 'EN', 0, $4, NOW(), NOW())`,
+          [id, seed.name, seed.dob, seed.notes]
+        );
+        customerIds.push(id);
+        customerProfileById.set(id, { name: seed.name, dob: seed.dob, membershipNumber: null });
+        demoCustomerIds.set(seed.key, id);
+      }
 
       // -------------------------------------------------------------------
       // Current ACTIVE occupancy at NOW
@@ -369,21 +563,79 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
           [visitId, params.checkInAt, params.checkedOutAt, params.customerId]
         );
 
-        const blockId = randomUUID();
-        await client.query(
-          `INSERT INTO checkin_blocks
-           (id, visit_id, block_type, starts_at, ends_at, rental_type, room_id, locker_id, session_id, agreement_signed, agreement_signed_at, created_at, updated_at, has_tv_remote, waitlist_id)
-           VALUES ($1, $2, 'INITIAL', $3, $4, $5, $6, $7, NULL, false, NULL, NOW(), NOW(), false, NULL)`,
-          [
-            blockId,
-            visitId,
-            params.checkInAt,
-            params.scheduledCheckoutAt,
-            params.rentalType,
-            params.roomId,
-            params.lockerId,
-          ]
+        await insertSignedCheckinBlock({
+          visitId,
+          customerId: params.customerId,
+          blockType: 'INITIAL',
+          startsAt: params.checkInAt,
+          endsAt: params.scheduledCheckoutAt,
+          rentalType: params.rentalType,
+          roomId: params.roomId,
+          lockerId: params.lockerId,
+          signedAt: params.checkInAt,
+          createdAt: params.checkInAt,
+        });
+      }
+
+      async function createVisitWithRenewal(params: {
+        customerId: string;
+        checkInAt: Date;
+        initialDurationMinutes: number;
+        renewalHours: 2 | 6;
+        renewalRequestMinutesBefore: number;
+        checkoutDeltaMinutes: number;
+        roomId: string | null;
+        lockerId: string | null;
+        rentalType: RentalType;
+      }): Promise<void> {
+        const initialEndsAt = scheduledCheckoutFromCheckin(
+          params.checkInAt,
+          params.initialDurationMinutes
         );
+        const renewalStartsAt = initialEndsAt;
+        const renewalEndsAt =
+          params.renewalHours === 2
+            ? new Date(renewalStartsAt.getTime() + 2 * 60 * 60 * 1000)
+            : scheduledCheckoutFromCheckin(renewalStartsAt, 6 * 60);
+        const checkedOutAt = new Date(
+          renewalEndsAt.getTime() - params.checkoutDeltaMinutes * 60 * 1000
+        );
+
+        const visitId = randomUUID();
+        await client.query(
+          `INSERT INTO visits (id, started_at, ended_at, created_at, updated_at, customer_id)
+           VALUES ($1, $2, $3, NOW(), NOW(), $4)`,
+          [visitId, params.checkInAt, checkedOutAt, params.customerId]
+        );
+
+        await insertSignedCheckinBlock({
+          visitId,
+          customerId: params.customerId,
+          blockType: 'INITIAL',
+          startsAt: params.checkInAt,
+          endsAt: initialEndsAt,
+          rentalType: params.rentalType,
+          roomId: params.roomId,
+          lockerId: params.lockerId,
+          signedAt: params.checkInAt,
+          createdAt: params.checkInAt,
+        });
+
+        const renewalCreatedAt = new Date(
+          renewalStartsAt.getTime() - params.renewalRequestMinutesBefore * 60 * 1000
+        );
+        await insertSignedCheckinBlock({
+          visitId,
+          customerId: params.customerId,
+          blockType: params.renewalHours === 2 ? 'FINAL2H' : 'RENEWAL',
+          startsAt: renewalStartsAt,
+          endsAt: renewalEndsAt,
+          rentalType: params.rentalType,
+          roomId: params.roomId,
+          lockerId: params.lockerId,
+          signedAt: renewalCreatedAt,
+          createdAt: renewalCreatedAt,
+        });
       }
 
       // 1) Create ACTIVE room stays at NOW (all with future checkout times)
@@ -455,11 +707,11 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         }
       }
 
-      // 3) Create churn: MANY completed stays over the last 24 hours
-      // - Bias check-ins toward NOW (higher density in last ~2-3 hours)
+      // 3) Create churn: MANY completed stays over the last ~48 hours
+      // - Bias check-ins toward NOW (higher density in last ~4-6 hours)
       // - Most checkouts within 0..15 minutes early, some 30..120 minutes early
       // - Never overlap with the current active assignment for the same room/locker
-      const COMPLETED_TARGET = 240; // >= 200 required
+      const COMPLETED_TARGET = 320; // >= 200 required
 
       function completedCustomerIdFor(idx: number): string {
         // Prefer customers not currently used for active stays, but always fall back deterministically.
@@ -481,6 +733,82 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         const lockerId = lockerIdByNumber.get(lockerNumber);
         if (!lockerId) throw new Error(`Missing locker inventory row for ${lockerNumber}`);
         activeCheckInByLockerId.set(lockerId, activeLockerCheckInTimes[i]!);
+      }
+
+      const demoRoomMeta = roomIdByNumber.get(String(freeRoomNumber));
+      if (!demoRoomMeta) throw new Error(`Missing demo room inventory row for ${freeRoomNumber}`);
+      const demoLockerNumbers = LOCKER_NUMBERS.slice(
+        ACTIVE_LOCKERS_TARGET,
+        ACTIVE_LOCKERS_TARGET + 4
+      );
+      const demoLockerIds = demoLockerNumbers.map((n) => {
+        const id = lockerIdByNumber.get(n);
+        if (!id) throw new Error(`Missing demo locker inventory row for ${n}`);
+        return id;
+      });
+
+      const demoLockerShortId = demoCustomerIds.get('lockerShort');
+      if (demoLockerShortId) {
+        const checkInAt = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+        const scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, 120);
+        const checkedOutAt = new Date(scheduledCheckoutAt.getTime() - 5 * 60 * 1000);
+        await createVisitStay({
+          customerId: demoLockerShortId,
+          checkInAt,
+          scheduledCheckoutAt,
+          checkedOutAt,
+          roomId: null,
+          lockerId: demoLockerIds[0]!,
+          rentalType: RentalType.LOCKER,
+        });
+      }
+
+      const demoRoomRenew2hId = demoCustomerIds.get('roomRenew2h');
+      if (demoRoomRenew2hId) {
+        const checkInAt = new Date(now.getTime() - 10 * 60 * 60 * 1000);
+        await createVisitWithRenewal({
+          customerId: demoRoomRenew2hId,
+          checkInAt,
+          initialDurationMinutes: 360,
+          renewalHours: 2,
+          renewalRequestMinutesBefore: 30,
+          checkoutDeltaMinutes: 8,
+          roomId: demoRoomMeta.id,
+          lockerId: null,
+          rentalType: rentalTypeForRoomNumber(freeRoomNumber),
+        });
+      }
+
+      const demoRoomRenew6hId = demoCustomerIds.get('roomRenew6h');
+      if (demoRoomRenew6hId) {
+        const checkInAt = new Date(now.getTime() - 20 * 60 * 60 * 1000);
+        await createVisitWithRenewal({
+          customerId: demoRoomRenew6hId,
+          checkInAt,
+          initialDurationMinutes: 360,
+          renewalHours: 6,
+          renewalRequestMinutesBefore: 30,
+          checkoutDeltaMinutes: 12,
+          roomId: demoRoomMeta.id,
+          lockerId: null,
+          rentalType: rentalTypeForRoomNumber(freeRoomNumber),
+        });
+      }
+
+      const demoRetailId = demoCustomerIds.get('retailAddon');
+      if (demoRetailId) {
+        const checkInAt = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+        const scheduledCheckoutAt = scheduledCheckoutFromCheckin(checkInAt, 240);
+        const checkedOutAt = new Date(scheduledCheckoutAt.getTime() - 6 * 60 * 1000);
+        await createVisitStay({
+          customerId: demoRetailId,
+          checkInAt,
+          scheduledCheckoutAt,
+          checkedOutAt,
+          roomId: demoRoomMeta.id,
+          lockerId: null,
+          rentalType: rentalTypeForRoomNumber(freeRoomNumber),
+        });
       }
 
       function pickCompletedResource(idx: number): {
@@ -512,8 +840,8 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         const resource = pickCompletedResource(idx);
 
         // Bias check-ins toward NOW using squared distribution (more density near now)
-        // ageHours in [0..24], but rng^2 biases toward 0 (recent)
-        const ageHours = rng() * rng() * 24;
+        // ageHours in [0..48], but rng^2 biases toward 0 (recent)
+        const ageHours = rng() * rng() * 48;
         let checkInAt = new Date(now.getTime() - ageHours * 60 * 60 * 1000);
 
         const durationMinutes = randInt(120, 360); // 2h..6h
@@ -1133,6 +1461,17 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
         });
       }
 
+      const demoRetailCustomerId = demoCustomerIds.get('retailAddon');
+      if (demoRetailCustomerId) {
+        await insertOrderSeed({
+          seed: 305,
+          createdAt: randomDateBetween(openSessionStart, openSessionEnd),
+          registerSessionId: openRegisterSessionId,
+          customerId: demoRetailCustomerId,
+          staffId: primaryStaff.id,
+        });
+      }
+
       const closeoutSnapshot = await buildCloseoutSnapshot(
         client,
         {
@@ -1193,6 +1532,20 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
     // XOR violations (must be zero)
     const bothInBlocks = await query<{ count: string }>(
       `SELECT COUNT(*)::text as count FROM checkin_blocks WHERE room_id IS NOT NULL AND locker_id IS NOT NULL`
+    );
+
+    const unsignedBlocks = await query<{ count: string }>(
+      `SELECT COUNT(*)::text as count
+       FROM checkin_blocks
+       WHERE agreement_signed = false
+          OR agreement_signed_at IS NULL
+          OR agreement_pdf IS NULL`
+    );
+    const unsignedSignatures = await query<{ count: string }>(
+      `SELECT COUNT(*)::text as count
+       FROM checkin_blocks cb
+       LEFT JOIN agreement_signatures sig ON sig.checkin_block_id = cb.id
+       WHERE sig.id IS NULL`
     );
 
     // Current occupancy at NOW: inventory assignments
@@ -1289,6 +1642,14 @@ export async function seedBusySaturdayDemo(now: Date): Promise<void> {
     if (asInt(bothInBlocks.rows[0]!) !== 0)
       throw new Error(
         `Exclusive assignment violated in checkin_blocks (${bothInBlocks.rows[0]!.count})`
+      );
+    if (asInt(unsignedBlocks.rows[0]!) !== 0)
+      throw new Error(
+        `Expected all check-in blocks to be signed with PDFs; missing=${unsignedBlocks.rows[0]!.count}`
+      );
+    if (asInt(unsignedSignatures.rows[0]!) !== 0)
+      throw new Error(
+        `Expected agreement signatures for all check-in blocks; missing=${unsignedSignatures.rows[0]!.count}`
       );
 
     // Current occupancy at NOW

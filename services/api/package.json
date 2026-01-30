@@ -21,6 +21,7 @@
     "@club-ops/shared": "workspace:*",
     "@fastify/cors": "^8.5.0",
     "@fastify/websocket": "^8.3.1",
+    "@faker-js/faker": "^9.3.0",
     "@simplewebauthn/server": "^9.0.0",
     "@simplewebauthn/types": "^9.0.0",
     "@zxing/library": "^0.21.0",

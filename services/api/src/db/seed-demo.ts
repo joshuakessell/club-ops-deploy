@@ -1,19 +1,275 @@
-import { closeDatabase, query } from './index';
+import { closeDatabase, query, transaction } from './index';
 import { randomUUID } from 'crypto';
 import { seedBusySaturdayDemo } from './seed-demo/busy-saturday';
+import { generateAgreementPdf } from '../utils/pdf-generator';
+
+const DEMO_STATE_KEY = 'busy_saturday_demo_v1';
+const DEMO_SNAPSHOT_VERSION = 1;
+const DEMO_FORCE_RESEED = process.env.DEMO_FORCE_RESEED === 'true';
+const DEMO_SHIFT_REGENERATE_PDFS = process.env.DEMO_SHIFT_REGENERATE_PDFS !== 'false';
+const DEMO_RESET_ON_STARTUP = process.env.DEMO_RESET_ON_STARTUP !== 'false';
+
+const DEMO_SNAPSHOT_TABLES = [
+  'agreements',
+  'customers',
+  'rooms',
+  'lockers',
+  'key_tags',
+  'visits',
+  'checkin_blocks',
+  'agreement_signatures',
+  'waitlist',
+  'inventory_reservations',
+  'checkout_requests',
+  'late_checkout_events',
+  'lane_sessions',
+  'payment_intents',
+  'charges',
+  'register_sessions',
+  'cash_drawer_sessions',
+  'cash_drawer_events',
+  'orders',
+  'order_line_items',
+  'receipts',
+  'external_provider_refs',
+  'employee_shifts',
+  'timeclock_sessions',
+  'staff_break_sessions',
+  'employee_documents',
+] as const;
+
+const DEMO_TIMESTAMP_TABLES = [
+  'agreements',
+  'customers',
+  'rooms',
+  'lockers',
+  'visits',
+  'checkin_blocks',
+  'agreement_signatures',
+  'waitlist',
+  'inventory_reservations',
+  'checkout_requests',
+  'late_checkout_events',
+  'lane_sessions',
+  'payment_intents',
+  'charges',
+  'register_sessions',
+  'cash_drawer_sessions',
+  'cash_drawer_events',
+  'orders',
+  'receipts',
+  'external_provider_refs',
+  'employee_shifts',
+  'timeclock_sessions',
+  'staff_break_sessions',
+  'employee_documents',
+] as const;
+
+async function ensureDemoStateTable(): Promise<void> {
+  await query(
+    `CREATE TABLE IF NOT EXISTS demo_state (
+      key text PRIMARY KEY,
+      value_json jsonb NOT NULL,
+      updated_at timestamptz DEFAULT now() NOT NULL
+    )`
+  );
+}
+
+async function loadDemoState(): Promise<{
+  seedAnchorIso: string;
+  snapshotVersion: number;
+  lastShiftedIso?: string;
+} | null> {
+  const res = await query<{
+    value_json: { seedAnchorIso?: string; snapshotVersion?: number; lastShiftedIso?: string };
+  }>(
+    `SELECT value_json FROM demo_state WHERE key = $1`,
+    [DEMO_STATE_KEY]
+  );
+  if (res.rows.length === 0) return null;
+  const value = res.rows[0]!.value_json || {};
+  if (!value.seedAnchorIso || typeof value.snapshotVersion !== 'number') return null;
+  return {
+    seedAnchorIso: value.seedAnchorIso,
+    snapshotVersion: value.snapshotVersion,
+    lastShiftedIso: value.lastShiftedIso,
+  };
+}
+
+async function saveDemoState(params: { seedAnchor: Date; lastShifted?: Date }): Promise<void> {
+  const lastShifted = params.lastShifted ?? params.seedAnchor;
+  await query(
+    `INSERT INTO demo_state (key, value_json, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (key)
+     DO UPDATE SET value_json = EXCLUDED.value_json, updated_at = NOW()`,
+    [
+      DEMO_STATE_KEY,
+      {
+        seedAnchorIso: params.seedAnchor.toISOString(),
+        lastShiftedIso: lastShifted.toISOString(),
+        snapshotVersion: DEMO_SNAPSHOT_VERSION,
+      },
+    ]
+  );
+}
+
+type DbClient = {
+  query: <T = unknown>(sql: string, params?: unknown[]) => Promise<{ rows: T[] }>;
+};
+
+async function ensureSnapshotSchema(client: DbClient) {
+  await client.query(`CREATE SCHEMA IF NOT EXISTS demo_snapshot`);
+  for (const table of DEMO_SNAPSHOT_TABLES) {
+    await client.query(
+      `CREATE TABLE IF NOT EXISTS demo_snapshot.${table}
+       (LIKE public.${table} INCLUDING ALL)`
+    );
+  }
+}
+
+async function createDemoSnapshot(client: DbClient): Promise<void> {
+  await ensureSnapshotSchema(client);
+  await client.query('SET session_replication_role = replica');
+  try {
+    for (const table of DEMO_SNAPSHOT_TABLES) {
+      await client.query(`TRUNCATE demo_snapshot.${table}`);
+      await client.query(`INSERT INTO demo_snapshot.${table} SELECT * FROM public.${table}`);
+    }
+  } finally {
+    await client.query('SET session_replication_role = origin');
+  }
+}
+
+async function restoreDemoSnapshot(client: DbClient): Promise<void> {
+  await ensureSnapshotSchema(client);
+  await client.query('SET session_replication_role = replica');
+  try {
+    await client.query(
+      `TRUNCATE ${DEMO_SNAPSHOT_TABLES.map((t) => `public.${t}`).join(', ')} RESTART IDENTITY CASCADE`
+    );
+    for (const table of DEMO_SNAPSHOT_TABLES) {
+      await client.query(`INSERT INTO public.${table} SELECT * FROM demo_snapshot.${table}`);
+    }
+  } finally {
+    await client.query('SET session_replication_role = origin');
+  }
+}
+
+async function shiftDemoTimestamps(client: DbClient, deltaMs: number): Promise<void> {
+  if (deltaMs === 0) return;
+  const interval = `${deltaMs} milliseconds`;
+  for (const table of DEMO_TIMESTAMP_TABLES) {
+    const cols = await client.query<{ column_name: string }>(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = $1
+         AND data_type = 'timestamp with time zone'`,
+      [table]
+    );
+    if (cols.rows.length === 0) continue;
+    const assignments = cols.rows.map(
+      (c) => `${c.column_name} = ${c.column_name} + $1::interval`
+    );
+    await client.query(`UPDATE public.${table} SET ${assignments.join(', ')}`, [interval]);
+  }
+}
+
+async function regenerateAgreementPdfs(client: DbClient): Promise<void> {
+  const rows = await client.query<{
+    id: string;
+    starts_at: Date;
+    agreement_signed_at: Date | null;
+    agreement_text_snapshot: string;
+    agreement_version: string;
+    customer_name: string;
+    membership_number: string | null;
+    dob: Date | null;
+    agreement_title: string | null;
+  }>(
+    `SELECT
+       cb.id,
+       cb.starts_at,
+       cb.agreement_signed_at,
+       sig.agreement_text_snapshot,
+       sig.agreement_version,
+       COALESCE(sig.customer_name, c.name) as customer_name,
+       COALESCE(sig.membership_number, c.membership_number) as membership_number,
+       c.dob,
+       a.title as agreement_title
+     FROM checkin_blocks cb
+     JOIN agreement_signatures sig ON sig.checkin_block_id = cb.id
+     JOIN visits v ON v.id = cb.visit_id
+     JOIN customers c ON c.id = v.customer_id
+     LEFT JOIN agreements a ON a.id = sig.agreement_id`
+  );
+
+  for (const row of rows.rows) {
+    const signedAt = row.agreement_signed_at ?? row.starts_at;
+    const pdfBuffer = await generateAgreementPdf({
+      agreementTitle: row.agreement_title || 'Club Agreement',
+      agreementVersion: row.agreement_version,
+      agreementText: row.agreement_text_snapshot,
+      customerName: row.customer_name,
+      customerDob: row.dob,
+      membershipNumber: row.membership_number ?? undefined,
+      checkinAt: row.starts_at,
+      signedAt,
+      signatureText: row.customer_name,
+    });
+    await client.query(`UPDATE checkin_blocks SET agreement_pdf = $1 WHERE id = $2`, [
+      pdfBuffer,
+      row.id,
+    ]);
+  }
+}
 
 /**
  * Demo mode seeding for shifts and timeclock sessions.
  * Seeds shifts for past 14 days and next 14 days (28-day window).
- * Only runs when DEMO_MODE=true and demo data is not already present.
+ * In DEMO_MODE, restores a snapshot + shifts timestamps forward on startup
+ * to keep demo data current without regenerating PDFs every run.
  */
-export async function seedDemoData(): Promise<void> {
+export async function seedDemoData(options: { forceReseed?: boolean } = {}): Promise<void> {
   if (process.env.DEMO_MODE !== 'true') {
     return;
   }
 
   try {
     const now = new Date();
+    await ensureDemoStateTable();
+
+    const forceReseed = options.forceReseed ?? DEMO_FORCE_RESEED;
+    const existingState = await loadDemoState();
+    const canRestore =
+      DEMO_RESET_ON_STARTUP &&
+      !forceReseed &&
+      existingState?.snapshotVersion === DEMO_SNAPSHOT_VERSION;
+
+    if (canRestore && existingState) {
+      const seedAnchor = new Date(existingState.seedAnchorIso);
+      const deltaMs = now.getTime() - seedAnchor.getTime();
+
+      await transaction(async (client) => {
+        await restoreDemoSnapshot(client);
+        await shiftDemoTimestamps(client, deltaMs);
+        if (DEMO_SHIFT_REGENERATE_PDFS) {
+          await regenerateAgreementPdfs(client);
+        }
+      });
+
+      await saveDemoState({ seedAnchor, lastShifted: now });
+      console.log(
+        `✅ Demo snapshot restored and shifted by ${Math.round(deltaMs / 60000)} minute(s).`
+      );
+      return;
+    }
+
+    if (forceReseed) {
+      console.log('⚠️  DEMO_FORCE_RESEED enabled: rebuilding demo dataset from scratch.');
+    }
+
     await seedBusySaturdayDemo(now);
 
     // -----------------------------------------------------------------------
@@ -350,10 +606,16 @@ export async function seedDemoData(): Promise<void> {
       }
     }
 
+    await transaction(async (client) => {
+      await createDemoSnapshot(client);
+    });
+    await saveDemoState({ seedAnchor: now, lastShifted: now });
+
     console.log(`✅ Demo data seeded successfully:`);
     console.log(`   - ${shiftsCreated.length} shifts created`);
     console.log(`   - ${timeclockSessionsCreated.length} timeclock sessions created`);
     console.log(`   - ${documentsCreated.length} employee documents created`);
+    console.log(`   - snapshot stored for fast restore on next demo start`);
   } catch (error) {
     console.error('❌ Demo seed failed:', error);
     throw error;
