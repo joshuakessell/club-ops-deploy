@@ -39,3 +39,11 @@ Thumbs.db
 *.tsbuildinfo
 
 services/api/tests/_artifacts/agreement.generated.pdf
+
+# Terraform
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/tfplan
+**/*.tfplan
