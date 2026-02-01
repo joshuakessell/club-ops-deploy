@@ -1,0 +1,81 @@
+name: Deploy (dev)
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy dev (API + frontends)
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        run: echo "path=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy API (App Runner)
+        env:
+          AWS_REGION: us-east-1
+          APP_RUNNER_SERVICE_ARN: ${{ secrets.APP_RUNNER_SERVICE_ARN }}
+          ECR_REPO_URI: ${{ secrets.ECR_REPO_URI }}
+          KIOSK_TOKEN: ${{ secrets.KIOSK_TOKEN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: scripts/aws/deploy-api.sh
+
+      - name: Deploy employee-register
+        env:
+          VITE_API_BASE_URL: https://api-demo.joshuakessell.com
+          VITE_KIOSK_TOKEN: ${{ secrets.VITE_KIOSK_TOKEN }}
+          EMPLOYEE_BUCKET: ${{ secrets.EMPLOYEE_BUCKET }}
+          EMPLOYEE_DISTRIBUTION_ID: ${{ secrets.EMPLOYEE_DISTRIBUTION_ID }}
+        run: scripts/aws/deploy-employee-register.sh
+
+      - name: Deploy customer-kiosk
+        env:
+          VITE_API_BASE_URL: https://api-demo.joshuakessell.com
+          VITE_KIOSK_TOKEN: ${{ secrets.VITE_KIOSK_TOKEN }}
+          CUSTOMER_BUCKET: ${{ secrets.CUSTOMER_BUCKET }}
+          CUSTOMER_DISTRIBUTION_ID: ${{ secrets.CUSTOMER_DISTRIBUTION_ID }}
+        run: scripts/aws/deploy-customer-kiosk.sh
+
+      - name: Deployment summary
+        run: |
+          echo "### Dev deploy complete" >> $GITHUB_STEP_SUMMARY
+          echo "- API: https://api-demo.joshuakessell.com" >> $GITHUB_STEP_SUMMARY
+          echo "- Employee: https://employee-demo.joshuakessell.com" >> $GITHUB_STEP_SUMMARY
+          echo "- Customer: https://customer-demo.joshuakessell.com" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,17 @@
+.git
+.gitignore
+.github
+node_modules
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/.cache
+**/coverage
+**/.env
+**/.env.*
+**/.DS_Store
+**/tmp
+**/logs
+**/*.log
+**/pnpm-debug.log
