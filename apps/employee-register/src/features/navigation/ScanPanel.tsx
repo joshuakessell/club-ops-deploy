@@ -28,7 +28,7 @@ export function ScanPanel() {
       <textarea
         ref={scanInputRef}
         className="er-scan-input"
-        aria-hidden="true"
+        aria-label="Scan input"
         tabIndex={-1}
         autoComplete="off"
         autoCorrect="off"

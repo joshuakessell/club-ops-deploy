@@ -37,6 +37,7 @@ export function useScanState({
   const [scanOverlayActive, setScanOverlayActive] = useState(false);
   const [scanToastMessage, setScanToastMessage] = useState<string | null>(null);
   const [scanProcessing, setScanProcessing] = useState(false);
+  const scanProcessingRef = useRef(false);
   const scanOverlayHideTimerRef = useRef<number | null>(null);
   const scanOverlayShownAtRef = useRef<number | null>(null);
   const SCAN_OVERLAY_MIN_VISIBLE_MS = 250;
@@ -46,8 +47,7 @@ export function useScanState({
     !!session?.sessionToken &&
     !isSubmitting &&
     !manualEntry &&
-    !blockingModalOpen &&
-    !scanProcessing;
+    !blockingModalOpen;
 
   const scanBlockedReason = !session?.sessionToken
     ? 'Not authenticated'
@@ -128,6 +128,7 @@ export function useScanState({
 
   const handleCapture = useCallback(
     async (raw: string) => {
+      if (scanProcessingRef.current) return;
       const normalized = normalizeScanText(raw);
       if (!normalized) {
         return;
@@ -154,6 +155,10 @@ export function useScanState({
     },
     [normalizeScanText, resolution]
   );
+
+  useEffect(() => {
+    scanProcessingRef.current = scanProcessing;
+  }, [scanProcessing]);
 
   const scanInput = useScanCaptureInput({
     enabled: scanEnabled,
