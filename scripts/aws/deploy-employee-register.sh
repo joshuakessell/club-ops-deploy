@@ -37,7 +37,7 @@ fi
 
 VITE_API_BASE_URL="$VITE_API_BASE_URL" \
 VITE_KIOSK_TOKEN="$VITE_KIOSK_TOKEN" \
-  pnpm turbo run build --filter @club-ops/employee-register
+  pnpm turbo run build --filter @club-ops/employee-register --force
 
 aws s3 sync apps/employee-register/dist "s3://${EMPLOYEE_BUCKET}" --delete
 aws cloudfront create-invalidation --distribution-id "$EMPLOYEE_DISTRIBUTION_ID" --paths "/*"

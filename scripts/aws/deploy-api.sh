@@ -113,4 +113,18 @@ JSON
 
 aws apprunner update-service --cli-input-json file://"$TMP_JSON"
 
+# Wait for App Runner to become RUNNING
+for i in {1..60}; do
+  status="$(aws apprunner describe-service --service-arn "$APP_RUNNER_SERVICE_ARN" --query 'Service.Status' --output text)"
+  echo "App Runner status: $status"
+  if [[ "$status" == "RUNNING" ]]; then
+    break
+  fi
+  if [[ "$status" == "CREATE_FAILED" || "$status" == "DELETE_FAILED" || "$status" == "OPERATION_FAILED" ]]; then
+    echo "ERROR: App Runner entered failure state: $status" >&2
+    exit 1
+  fi
+  sleep 10
+done
+
 echo "✓ App Runner update submitted for ${APP_RUNNER_SERVICE_ARN}"
