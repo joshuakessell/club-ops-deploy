@@ -9,6 +9,7 @@ type ScanCaptureOptions = {
   onCancel?: () => void;
   idleTimeoutMs?: number;
   getIdleTimeoutMs?: (value: string) => number;
+  keepFocus?: boolean;
 };
 
 type ScanCaptureHandlers = {
@@ -25,10 +26,12 @@ export function useScanCaptureInput({
   onCancel,
   idleTimeoutMs = 220,
   getIdleTimeoutMs,
+  keepFocus = true,
 }: ScanCaptureOptions) {
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const timerRef = useRef<number | null>(null);
   const capturingRef = useRef(false);
+  const refocusQueuedRef = useRef(false);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -59,6 +62,15 @@ export function useScanCaptureInput({
       el.focus();
     }
   }, []);
+
+  const queueRefocus = useCallback(() => {
+    if (refocusQueuedRef.current) return;
+    refocusQueuedRef.current = true;
+    window.requestAnimationFrame(() => {
+      refocusQueuedRef.current = false;
+      focusInput();
+    });
+  }, [focusInput]);
 
   const finalize = useCallback(() => {
     const raw = inputRef.current?.value ?? '';
@@ -133,6 +145,25 @@ export function useScanCaptureInput({
       resetValue();
     };
   }, [enabled, focusInput, resetValue, stopCapture]);
+
+  useEffect(() => {
+    if (!enabled || !keepFocus) return;
+    const onFocusIn = (event: FocusEvent) => {
+      const el = inputRef.current;
+      if (!el) return;
+      if (event.target === el || el.contains(event.target as Node)) return;
+      queueRefocus();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') queueRefocus();
+    };
+    document.addEventListener('focusin', onFocusIn, true);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('focusin', onFocusIn, true);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [enabled, keepFocus, queueRefocus]);
 
   const handlers: ScanCaptureHandlers = {
     onBlur: handleBlur,

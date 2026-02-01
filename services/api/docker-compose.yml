@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:15-alpine
+    platform: ${DOCKER_DEFAULT_PLATFORM:-linux/arm64}
     container_name: club-ops-demo-db
     ports:
       - "5433:5432"

@@ -300,7 +300,8 @@ export function CustomerModals() {
       >
         <div style={{ display: 'grid', gap: '0.75rem' }}>
           <div style={{ color: '#94a3b8' }}>
-            Create a new customer profile using the scanned First Name, Last Name, and DOB.
+            Create a new customer profile using the scanned details. Review the captured data below
+            for troubleshooting.
           </div>
 
           {createFromScanError ? (
@@ -339,6 +340,86 @@ export function CustomerModals() {
                 </strong>
               </span>
             </div>
+            <div
+              style={{
+                marginTop: '0.75rem',
+                display: 'grid',
+                gap: '0.35rem',
+                color: '#94a3b8',
+                fontSize: '0.9rem',
+              }}
+            >
+              <div>
+                Full Name:{' '}
+                <strong style={{ color: 'white' }}>
+                  {pendingCreateFromScan?.extracted.fullName || '—'}
+                </strong>
+              </div>
+              <div>
+                ID Number:{' '}
+                <strong style={{ color: 'white' }}>
+                  {pendingCreateFromScan?.extracted.idNumber || '—'}
+                </strong>
+              </div>
+              <div>
+                Issuer / State:{' '}
+                <strong style={{ color: 'white' }}>
+                  {pendingCreateFromScan?.extracted.issuer ||
+                    pendingCreateFromScan?.extracted.jurisdiction ||
+                    pendingCreateFromScan?.extracted.idState ||
+                    '—'}
+                </strong>
+              </div>
+              <div>
+                Expiration:{' '}
+                <strong style={{ color: 'white' }}>
+                  {pendingCreateFromScan?.extracted.idExpirationDate || '—'}
+                </strong>
+              </div>
+              <div>
+                Address:{' '}
+                <strong style={{ color: 'white' }}>
+                  {pendingCreateFromScan?.extracted.addressLine1 || '—'}
+                </strong>
+              </div>
+              <div>
+                City/State/ZIP:{' '}
+                <strong style={{ color: 'white' }}>
+                  {[
+                    pendingCreateFromScan?.extracted.city,
+                    pendingCreateFromScan?.extracted.state,
+                    pendingCreateFromScan?.extracted.postalCode,
+                  ]
+                    .filter(Boolean)
+                    .join(' ') || '—'}
+                </strong>
+              </div>
+              <div>
+                Scan Hash:{' '}
+                <strong style={{ color: 'white' }}>
+                  {pendingCreateFromScan?.idScanHash || '—'}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="cs-liquid-card" style={{ padding: '0.75rem' }}>
+            <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '0.35rem' }}>
+              Normalized scan text
+            </div>
+            <pre
+              style={{
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                color: '#e2e8f0',
+                fontSize: '0.75rem',
+                maxHeight: '220px',
+                overflowY: 'auto',
+              }}
+            >
+              {pendingCreateFromScan?.idScanValue || '—'}
+            </pre>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>

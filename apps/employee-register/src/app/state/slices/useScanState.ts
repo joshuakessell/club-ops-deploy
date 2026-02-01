@@ -157,6 +157,7 @@ export function useScanState({
 
   const scanInput = useScanCaptureInput({
     enabled: scanEnabled,
+    keepFocus: true,
     idleTimeoutMs: 260,
     getIdleTimeoutMs: computeIdleTimeout,
     onCaptureStart: () => {
